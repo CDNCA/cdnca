@@ -278,8 +278,9 @@ describe('StreamListPage internationalization', () => {
     expect(enUS.streams.values.publishUnknown).toBe('v{{version}} delivery status unknown')
     expect(zhCN.streams.values.publishSucceeded).toBe('v{{version}} 已生效')
     expect(enUS.streams.values.publishSucceeded).toBe('v{{version}} active')
-    expect(zhCN.streams.confirm.stateDescription).not.toContain('待下发')
-    expect(enUS.streams.confirm.stateDescription).not.toMatch(/pending delivery/i)
+    // 确认框正文只写用户可观察的后果，不写修订号/幂等身份/发布意图。
+    for (const copy of strings(zhCN.streams.confirm)) expect(copy).not.toMatch(/修订|幂等|意图|禁用/u)
+    for (const copy of strings(enUS.streams.confirm)) expect(copy).not.toMatch(/revision|idempoten|intent/iu)
     for (const notice of strings(zhCN.streams.notices)) expect(notice).not.toContain('待下发')
     for (const notice of strings(enUS.streams.notices)) expect(notice).not.toMatch(/pending delivery/i)
   })
@@ -302,10 +303,26 @@ describe('StreamListPage internationalization', () => {
 
     await user.click(screen.getByRole('button', { name: 'Forwarding action menu' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Disable' }))
-    const confirmation = await screen.findByRole('dialog', { name: 'Disable forwarding' })
-    await user.click(within(confirmation).getByRole('button', { name: 'Confirm' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Disable TCP 18100' })
+    expect(within(confirmation).queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
+    await user.click(within(confirmation).getByRole('button', { name: 'Disable' }))
 
     expect(await screen.findByText('Another operation modified this rule. Refresh and try again.')).toBeInTheDocument()
     expect(screen.queryByText('internal stream revision detail')).not.toBeInTheDocument()
+  })
+
+  it('names the delete confirm button Delete in English and marks it danger', async () => {
+    await changeLocale('en-US')
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(listResponse()))
+    const user = userEvent.setup()
+
+    renderWithProviders(<StreamListPage />, ['/stream/list'])
+    await screen.findByText('TCP gateway')
+    await user.click(screen.getByRole('button', { name: 'Forwarding action menu' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete TCP 18100' })
+    expect(within(confirmation).getByRole('button', { name: 'Delete' })).toHaveClass('ant-btn-dangerous')
+    expect(within(confirmation).queryByRole('button', { name: /^Confirm/u })).not.toBeInTheDocument()
   })
 })

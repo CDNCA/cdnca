@@ -105,6 +105,12 @@ func ValidateStaticHTML(body []byte) error {
 // in the errorpagestyle canonical grammar, and class attributes that name only
 // classes that style declares.
 func ValidateThemedHTML(body []byte) error {
+	return validateThemedHTML(body, "")
+}
+
+// validateThemedHTML is ValidateThemedHTML that, for href != "", also accepts
+// <a> elements whose one href is exactly href (the email action link).
+func validateThemedHTML(body []byte, href string) error {
 	if err := checkStaticBytes(body); err != nil {
 		return err
 	}
@@ -112,7 +118,7 @@ func ValidateThemedHTML(body []byte) error {
 	if err != nil {
 		return ErrUnsafePage
 	}
-	theme := &themedPage{}
+	theme := &themedPage{href: href}
 	if err := inspectStaticHTML(document, theme); err != nil {
 		return err
 	}
@@ -172,6 +178,8 @@ func checkStaticBytes(body []byte) error {
 }
 
 type themedPage struct {
+	// href is the one link target the page may carry ("" for none).
+	href    string
 	styles  int
 	sheet   errorpagestyle.Sheet
 	classes []string
@@ -217,14 +225,23 @@ func inspectStaticHTML(document *html.Node, theme *themedPage) error {
 			if theme != nil && node.Data == "style" {
 				return theme.acceptStyle(node)
 			}
-			if _, ok := allowedStaticElements[strings.ToLower(node.Data)]; !ok {
+			link := theme != nil && theme.href != "" && node.Data == "a"
+			if _, ok := allowedStaticElements[strings.ToLower(node.Data)]; !ok && !link {
 				return ErrUnsafePage
 			}
+			hrefs := 0
 			for _, attribute := range node.Attr {
-				if theme == nil || attribute.Namespace != "" || attribute.Key != "class" {
+				switch {
+				case link && attribute.Namespace == "" && attribute.Key == "href" && attribute.Val == theme.href:
+					hrefs++
+				case theme == nil || attribute.Namespace != "" || attribute.Key != "class":
 					return ErrUnsafePage
+				default:
+					theme.classes = append(theme.classes, attribute.Val)
 				}
-				theme.classes = append(theme.classes, attribute.Val)
+			}
+			if link && hrefs != 1 {
+				return ErrUnsafePage
 			}
 		default:
 			return ErrUnsafePage

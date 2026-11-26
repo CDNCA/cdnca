@@ -205,7 +205,7 @@ describe('AdminMessageQueryPage', () => {
     expect(screen.getByTitle('其他消息（brand.new.event）')).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent('旧版')
     expect(screen.queryByTitle('套餐即将到期（旧版）')).not.toBeInTheDocument()
-    await user.click(screen.getByTitle('回源级别自动切换'))
+    await user.click(screen.getByTitle('回源级别自动判定'))
 
     await waitFor(() => {
       const url = new URL(String(fetchSpy.mock.calls.at(-1)?.[0]), 'http://localhost')
@@ -450,7 +450,7 @@ describe('AdminMessageQueryPage', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(page(kinds.map((type, i) => (
       { ...message, id: `88888888-8888-4888-8888-${String(i).padStart(12, '0')}`, type })))))
     renderWithProviders(<AdminMessageQueryPage />, ['/sys/message'])
-    expect(await screen.findByText('回源级别自动切换')).toBeInTheDocument()
+    expect(await screen.findByText('回源级别自动判定')).toBeInTheDocument()
     expect(screen.getByText('直结充值到账报告被市场拒收')).toBeInTheDocument()
     expect(screen.getByText('账号已迁移到新平台')).toBeInTheDocument()
     expect(screen.getByText('工单用户回复（运营）')).toBeInTheDocument()

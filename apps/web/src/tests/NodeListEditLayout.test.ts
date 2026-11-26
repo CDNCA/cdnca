@@ -17,8 +17,10 @@ it('keeps every edit-node row as label + control instead of wrapping the control
 
 it('does not double the modal padding, so the five tabs fit like the reference', function editModalPadding() {
   expect(rule('.node-list-modal .ant-modal-body')).toMatch(/padding:\s*22px 0 8px;/)
-  // 字体更宽时 tab 横向滚动，不再折叠成 "…" 下拉。
-  expect(rule('.node-list-modal .ant-tabs-nav-operations')).toMatch(/display:\s*none !important;/)
+  // 五个页签放不下时交回 rc-tabs（「更多页签」可达末项），不再自加原生横滚。
+  expect(rule('.node-list-modal .ant-tabs-nav-operations')).toBeUndefined()
+  expect(rule('.node-list-modal .ant-tabs-nav-wrap')).toBeUndefined()
+  expect(rule('.node-list-modal .ant-tabs-nav-list')).toBeUndefined()
 })
 
 // 节点设置顶部蓝色提示框字号过大（antd 带 description 时标题 16px），

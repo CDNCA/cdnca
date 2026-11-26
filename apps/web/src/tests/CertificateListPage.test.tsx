@@ -1,9 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App as AntApp, ConfigProvider } from 'antd'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { beforeEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
 
 import { ApiError } from '../api/auth'
 import {
@@ -659,7 +659,9 @@ describe('CertificateListPage', () => {
     // 默认就是 HTTP-01，不用再选。
     expect(within(dialog).getByText('HTTP-01（文件验证）')).toBeInTheDocument()
     expect(within(dialog).queryByLabelText('DNS 服务商')).not.toBeInTheDocument()
-    expect(within(dialog).getByText('域名需已解析到本平台（CNAME 到站点线路组），所有节点都写入验证文件后才会请求签发机构验证。')).toBeInTheDocument()
+    // 只要求 80 端口能到接入节点，A/AAAA/CNAME 都行，不把 CNAME 当必需。
+    expect(within(dialog).getByText('域名的 HTTP 80 端口须能访问到本平台接入节点，A/AAAA/CNAME 解析均可；所有节点都写入验证文件后才会请求签发机构验证。')).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent('CNAME 到站点线路组')
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
     expect(create.mock.calls[0][1]).toEqual({ domains: ['www.example.com'], challenge_type: 'http-01', auto_renew: true })
@@ -787,12 +789,36 @@ describe('CertificateListPage', () => {
 		expect(unbind.mock.calls[0].slice(1, 4)).toEqual([asset.id, binding.site_id, { expected_revision: 1 }])
 	})
 
-	it('allows binding only active versions', async () => {
+	it('binds a never-activated first version (an issued ACME certificate) straight from the detail', async () => {
+		authenticate()
+		vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [asset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } })
+		const issued = { ...assetDetail.versions[0], status: 'default' as const }
+		vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({ ...assetDetail, versions: [issued] })
+		vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [] })
+		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, version_id: issued.id, default: false })
+		const user = userEvent.setup()
+		renderWithProviders(<CertificateListPage />, ['/site/cert'])
+
+		expect(await screen.findByText('边缘站点证书')).toBeInTheDocument()
+		await user.click(screen.getByRole('button', { name: '查看详情' }))
+		const detailDialog = await findDialog('证书详情')
+		expect(within(detailDialog).getByText('还没有网站使用这张证书')).toBeInTheDocument()
+		const bindButton = within(detailDialog).getByRole('button', { name: '绑定网站' })
+		expect(bindButton).toBeEnabled()
+		await user.click(bindButton)
+		const bindDialog = await findDialog('绑定网站')
+		await user.type(within(bindDialog).getByLabelText('网站'), binding.site_id)
+		await user.click(within(bindDialog).getByRole('button', { name: '确认绑定' }))
+		await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))
+		expect(bind.mock.calls[0][2]).toMatchObject({ site_id: binding.site_id, version_id: issued.id })
+	})
+
+	it('keeps binding disabled for a default version once another version was activated', async () => {
 		authenticate()
 		vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [asset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } })
 		vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({
 			...assetDetail,
-			versions: [{ ...assetDetail.versions[0], status: 'default' }],
+			versions: [{ ...assetDetail.versions[0], status: 'default' }, { ...pendingVersion, status: 'superseded' }],
 		})
 		const user = userEvent.setup()
 		renderWithProviders(<CertificateListPage />, ['/site/cert'])
@@ -1995,8 +2021,10 @@ describe('CertificateListPage', () => {
       dns_provider_id: provider.id,
       auto_renew: true,
     })
+    // 受理只弹短 toast，不再有常驻的成功提示。
     expect(await screen.findByText('证书申请已提交')).toBeInTheDocument()
-    expect(screen.getByText('系统已受理申请并进入待签发流程，请在列表中查看后续状态。')).toBeInTheDocument()
+    expect(screen.getByText('证书申请已提交').closest('.ant-message')).not.toBeNull()
+    expect(document.querySelector('.ant-alert-success')).toBeNull()
     expect(screen.queryByText('证书签发成功')).not.toBeInTheDocument()
   })
 
@@ -3587,5 +3615,170 @@ describe('CertificateListPage E5 visibility', () => {
     const refresh = screen.getByRole('button', { name: '刷新' })
     expect(clippedBy(tab)).toEqual([])
     expect(clippedBy(refresh)).toEqual([])
+  })
+})
+
+// 申请进行中时有界轮询、签发后证书列表随之重读、
+// 轮询不让整表闪加载中；受理只弹一次 toast。
+describe('CertificateListPage request status', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.spyOn(certificatesApi, 'listAssetBindings').mockResolvedValue({ items: [] })
+    vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue(issuedDetail)
+    vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [] })
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  const zeroCounts = { all: 0, normal: 0, expiring: 0, expired: 0, auto_renew: 0, manual_renew: 0 }
+  const acmeAsset: CertificateAsset = { ...asset, source: 'acme', name: 'ACME 新证书' }
+  const issuedDetail: CertificateAssetDetail = { asset: acmeAsset, versions: [{ ...assetDetail.versions[0]!, acme_order_id: activeOrder.id }] }
+  const noAssets = { items: [], total: 0, counts: zeroCounts }
+  const oneAsset = { items: [acmeAsset], total: 1, counts: { ...zeroCounts, all: 1, normal: 1, auto_renew: 1 } }
+  const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+  const scroll = () => screen.getByTestId('certificate-table-scroll')
+  const pendingOrder = (createdAt = new Date(Date.now() - 60_000).toISOString()): CertificateOrder => ({
+    ...activeOrder, domains: ['example.com'], status: 'pending', not_after: undefined, created_at: createdAt, updated_at: createdAt,
+  })
+  const issuedOrder = (order: CertificateOrder): CertificateOrder => ({
+    ...order, status: 'issued', issued_asset_id: acmeAsset.id, issued_version_id: assetDetail.versions[0]!.id,
+  })
+
+  it('polls an in-flight order about every 4 seconds, re-reads the certificates once it is issued, then stops', async () => {
+    authenticate(['certificates.read'])
+    const order = pendingOrder()
+    const list = vi.spyOn(certificatesApi, 'list')
+      .mockResolvedValueOnce({ items: [order] })
+      .mockResolvedValue({ items: [issuedOrder(order)] })
+    const listAssets = vi.spyOn(certificatesApi, 'listAssets').mockResolvedValueOnce(noAssets).mockResolvedValue(oneAsset)
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+
+    expect(await screen.findByText('有 1 个证书申请中')).toBeInTheDocument()
+    expect(list).toHaveBeenCalledTimes(1)
+    const assetReads = listAssets.mock.calls.length
+
+    await advance(4_100)
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText(acmeAsset.name)).toBeInTheDocument()
+    expect(listAssets).toHaveBeenCalledTimes(assetReads + 1)
+    expect(screen.queryByText('有 1 个证书申请中')).not.toBeInTheDocument()
+
+    await advance(12_000)
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(listAssets).toHaveBeenCalledTimes(assetReads + 1)
+  })
+
+  it('does not poll while the page is hidden or when the in-flight order is older than an hour', async () => {
+    authenticate(['certificates.read'])
+    const list = vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [pendingOrder()] })
+    vi.spyOn(certificatesApi, 'listAssets').mockResolvedValue(noAssets)
+    const hidden = renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    expect(await screen.findByText('有 1 个证书申请中')).toBeInTheDocument()
+    act(() => { focusManager.setFocused(false) })
+    try {
+      await advance(12_000)
+      expect(list).toHaveBeenCalledTimes(1)
+    } finally {
+      hidden.unmount()
+      focusManager.setFocused(undefined)
+    }
+
+    list.mockClear()
+    list.mockResolvedValue({ items: [pendingOrder(new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())] })
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    expect(await screen.findByText('有 1 个证书申请中')).toBeInTheDocument()
+    await advance(12_000)
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the request rows on screen while polling and shows loading only for a manual refresh', async () => {
+    authenticate(['certificates.read'])
+    const order = pendingOrder()
+    const poll = deferred<{ items: CertificateOrder[] }>()
+    const list = vi.spyOn(certificatesApi, 'list').mockResolvedValueOnce({ items: [order] }).mockReturnValueOnce(poll.promise)
+    vi.spyOn(certificatesApi, 'listAssets').mockResolvedValue(noAssets)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    await openOrderHistory(user)
+    expect(await within(scroll()).findByText('example.com')).toBeInTheDocument()
+
+    await advance(4_100)
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    expect(scroll().querySelector('.ant-spin-spinning')).toBeNull()
+    expect(scroll()).toHaveAttribute('aria-busy', 'false')
+    expect(within(scroll()).getByText('example.com')).toBeInTheDocument()
+    await act(async () => poll.resolve({ items: [order] }))
+
+    const manual = deferred<{ items: CertificateOrder[] }>()
+    list.mockReturnValue(manual.promise)
+    await user.click(screen.getByRole('button', { name: '刷新' }))
+    await waitFor(() => expect(scroll().querySelector('.ant-spin-spinning')).not.toBeNull())
+    expect(within(scroll()).getByText('example.com')).toBeInTheDocument()
+    await act(async () => manual.resolve({ items: [order] }))
+    await waitFor(() => expect(scroll().querySelector('.ant-spin-spinning')).toBeNull())
+  })
+
+  it('re-reads the certificates when a manual refresh of 申请记录 reads an issued order', async () => {
+    authenticate(['certificates.read'])
+    // 早于轮询窗口：只有手动刷新会重读。
+    const order = pendingOrder('2026-07-22T12:00:00Z')
+    vi.spyOn(certificatesApi, 'list').mockResolvedValueOnce({ items: [order] }).mockResolvedValue({ items: [issuedOrder(order)] })
+    const listAssets = vi.spyOn(certificatesApi, 'listAssets').mockResolvedValue(noAssets)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    await openOrderHistory(user)
+    expect(await within(scroll()).findByText('待处理')).toBeInTheDocument()
+    const before = listAssets.mock.calls.length
+
+    await user.click(screen.getByRole('button', { name: '刷新' }))
+    expect(await within(scroll()).findByText('已签发')).toBeInTheDocument()
+    await waitFor(() => expect(listAssets).toHaveBeenCalledTimes(before + 1))
+  })
+
+  it('toasts an accepted request once, re-reads the certificates when the first read is already issued, and never re-sends the create', async () => {
+    authenticate()
+    const receipt: CertificateOrder = { ...pendingOrder(), domains: ['www.example.com'] }
+    vi.spyOn(certificatesApi, 'list').mockResolvedValueOnce({ items: [] }).mockResolvedValue({ items: [issuedOrder(receipt)] })
+    const listAssets = vi.spyOn(certificatesApi, 'listAssets').mockResolvedValueOnce(noAssets).mockResolvedValue(oneAsset)
+    const create = vi.spyOn(certificatesApi, 'create').mockResolvedValue(receipt)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    await openOrderHistory(user)
+    await screen.findByText('暂无证书申请')
+    const assetReads = listAssets.mock.calls.length
+    // 申请记录页不再重复“申请记录 / 全部证书的自动申请记录”说明。
+    expect(document.querySelector('.certificate-orders-heading')).toBeNull()
+    expect(screen.queryByText('全部证书的自动申请记录')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '申请证书' }))
+    const dialog = getDialog('申请证书')
+    await user.type(within(dialog).getByLabelText('域名'), 'www.example.com')
+    await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+
+    expect(await screen.findByText('证书申请已提交')).toBeInTheDocument()
+    expect(screen.getByText('证书申请已提交').closest('.ant-message')).not.toBeNull()
+    expect(document.querySelector('.ant-alert-success')).toBeNull()
+    expect(screen.queryByText('系统已受理申请并进入待签发流程，请在列表中查看后续状态。')).not.toBeInTheDocument()
+    await waitFor(() => expect(listAssets).toHaveBeenCalledTimes(assetReads + 1))
+
+    await advance(12_000)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(listAssets).toHaveBeenCalledTimes(assetReads + 1)
+    expect(document.querySelector('.ant-alert-success')).toBeNull()
+  })
+
+  it('titles the certificate type choice without a repeated explanation and keeps the wildcard DNS-01 coverage note', async () => {
+    authenticate()
+    vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
+    vi.spyOn(certificatesApi, 'listAssets').mockResolvedValue(noAssets)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    await user.click(await screen.findByRole('button', { name: '添加证书' }))
+    const dialog = await findDialog('添加证书')
+    expect(within(dialog).getByRole('heading', { name: '证书类型' })).toHaveTextContent(/^证书类型$/)
+    expect(dialog).not.toHaveTextContent('选择证书来源，自动申请需要后续完成域名验证。')
+    await user.type(within(dialog).getByLabelText('域名'), '*.example.com')
+    expect(await within(dialog).findByText('通配符证书只能用 DNS 验证，已切换为 DNS 验证')).toBeInTheDocument()
+    expect(within(dialog).getByText(/\*\.example\.com 仅覆盖一层子域名/)).toBeInTheDocument()
   })
 })

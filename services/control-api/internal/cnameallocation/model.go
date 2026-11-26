@@ -64,6 +64,9 @@ const (
 	// line group (migration 533) and allocates in the default CNAME zone.
 	FailureNoDefaultLineGroup = "cname_no_default_line_group"
 	FailureNoDefaultZone      = "cname_no_default_zone"
+	// A package site whose package has no CNAME domain, while the scope has
+	// no default or random-allocation zone to use instead.
+	FailurePackageCNAMEDomainMissing = "cname_package_domain_missing"
 
 	// The platform DNS configuration exists but could not be copied into the
 	// tenant scope (credentials unavailable, no active member, name clash).

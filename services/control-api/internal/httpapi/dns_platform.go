@@ -82,6 +82,34 @@ func (s *Server) handleSavePlatformDNSConfig(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, result)
 }
 
+// handleDisconnectPlatformDNSConfig is 断开 DNS 服务商: the saved credentials
+// are removed and the tenant provider copies disabled; CNAME domains and the
+// records already written stay. The response is the configuration read back.
+func (s *Server) handleDisconnectPlatformDNSConfig(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePermission(w, r, "dns.manage")
+	if !ok {
+		return
+	}
+	key, ok := s.idempotencyKey(w, r)
+	if !ok {
+		return
+	}
+	version, err := parseIfMatch(r.Header.Get("If-Match"))
+	if err != nil {
+		s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "If-Match must contain a quoted positive version")
+		return
+	}
+	result, err := s.dnsacme.DisconnectPlatformConfig(r.Context(), dnsActor(principal), dnsacme.DisconnectPlatformConfigRequest{
+		ExpectedRevision: version, IdempotencyKey: key, RequestID: requestID(r.Context()),
+	})
+	if err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+	w.Header().Set("ETag", quoteVersion(result.Revision))
+	writeJSON(w, http.StatusOK, result)
+}
+
 // handleTestPlatformDNSConnection is 连接测试: it verifies the entered (or,
 // without credentials, the saved) credentials and reports which CNAME domains
 // the account hosts. Read-only: nothing is saved and no record is written.
@@ -149,7 +177,10 @@ func (s *Server) handleStartPlatformDNSOperation(w http.ResponseWriter, r *http.
 	case errors.Is(err, dnsmaintenance.ErrNoTenant):
 		s.writeAPIError(w, r, http.StatusConflict, "dns_no_tenant", "no user holds the DNS configuration yet")
 		return
-	case errors.Is(err, dnsmaintenance.ErrProviderListed) || errors.Is(err, dnsmaintenance.ErrNotConfigured):
+	case errors.Is(err, dnsmaintenance.ErrNotConfigured):
+		s.writeError(w, r, dnsacme.ErrPlatformNotConfigured)
+		return
+	case errors.Is(err, dnsmaintenance.ErrProviderListed):
 		s.writeAPIError(w, r, http.StatusBadGateway, "dns_provider_unavailable", "the DNS provider records could not be listed")
 		return
 	case err != nil:
@@ -159,6 +190,13 @@ func (s *Server) handleStartPlatformDNSOperation(w http.ResponseWriter, r *http.
 	targets := make([]dnssettings.PlatformTarget, len(jobs))
 	for index, job := range jobs {
 		targets[index] = dnssettings.PlatformTarget{TenantID: job.TenantID, ScopeID: job.ScopeID, Items: job.Items}
+		for _, item := range job.Items {
+			if record, ok := job.Records[item]; ok {
+				targets[index].CleanupRecords = append(targets[index].CleanupRecords, dnssettings.PlatformCleanupRecord{
+					ItemID: item, ZoneID: record.ZoneID, Name: record.Name, Type: record.Type, Value: record.Value,
+					RecordID: record.RecordID})
+			}
+		}
 	}
 	operations, replayed, err := s.dnsSettings.StartPlatformOperation(r.Context(), principal.UserID, principal.ScopeID,
 		targets, dnssettings.OperationRequest{

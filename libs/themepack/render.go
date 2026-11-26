@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,34 +53,78 @@ type Rendered struct {
 	email     compiledTemplate
 	errorPage compiledTemplate
 	declared  map[string]struct{}
+	// emailLinks: the email template outputs {{action_url}}; without it the
+	// action address is appended to the lines as text.
+	emailLinks bool
 }
+
+// DefaultErrorPage is one node default page and its words per locale.
+type DefaultErrorPage struct {
+	Category string
+	Status   int
+	Title    I18nText
+	Message  I18nText
+}
+
+// DefaultErrorPageLocale is the language the default pages are published in
+// a page carries one language, and the
+// control plane keeps no site or tenant language, so it is zh-CN.
+const DefaultErrorPageLocale = "zh-CN"
 
 // DefaultErrorPages are the node default pages a theme renders: the edge's
 // own connect failures, its own block responses (edge_route 403/429: the
 // node's security modules refused the request; sec-followup P13) and the
-// requests no site answers. A page carries Chinese and English. Origin responses
-// and per-site rules stay with the error page system (ADR 0007 §7.3).
-var DefaultErrorPages = []struct {
-	Category string
-	Status   int
-	Title    string
-	Message  string
-}{
-	{CategoryEdgeConnect, 502, "502 网关错误", "节点暂时无法连接源站，请稍后重试。"},
-	{CategoryEdgeConnect, 503, "503 服务暂不可用", "源站暂时无法提供服务，请稍后重试。"},
-	{CategoryEdgeConnect, 504, "504 网关超时", "节点等待源站响应超时，请稍后重试。"},
-	{CategoryEdgeRoute, 403, "403 访问被拦截 / Access blocked",
-		"您的请求触发了站点的安全策略，已被拦截。如有疑问请联系站点管理员。 Your request was blocked by the site's security policy. Contact the site administrator if you believe this is a mistake."},
-	{CategoryEdgeRoute, 429, "429 请求过于频繁 / Too many requests",
-		"您的请求过于频繁，请稍后重试。 Too many requests. Please wait a moment and try again."},
-	{CategoryNoHost, 400, "400 请求无效", "请求缺少有效的 Host，节点无法处理。"},
-	{CategoryUnknownSite, 404, "404 站点不存在", "该域名未接入本平台或尚未生效。"},
+// requests no site answers. Origin responses and per-site rules stay with
+// the error page system (ADR 0007 §7.3).
+var DefaultErrorPages = []DefaultErrorPage{
+	{CategoryEdgeConnect, 502, I18nText{"zh-CN": "502 网关错误", "en-US": "502 Bad gateway"},
+		I18nText{"zh-CN": "节点暂时无法连接源站，请稍后重试。", "en-US": "The edge node cannot reach the origin right now. Please try again later."}},
+	{CategoryEdgeConnect, 503, I18nText{"zh-CN": "503 服务暂不可用", "en-US": "503 Service unavailable"},
+		I18nText{"zh-CN": "源站暂时无法提供服务，请稍后重试。", "en-US": "The origin cannot serve the request right now. Please try again later."}},
+	{CategoryEdgeConnect, 504, I18nText{"zh-CN": "504 网关超时", "en-US": "504 Gateway timeout"},
+		I18nText{"zh-CN": "节点等待源站响应超时，请稍后重试。", "en-US": "The origin did not answer the edge node in time. Please try again later."}},
+	{CategoryEdgeRoute, 403, I18nText{"zh-CN": "403 访问被拦截", "en-US": "403 Access blocked"},
+		I18nText{"zh-CN": "您的请求触发了站点的安全策略，已被拦截。如有疑问请联系站点管理员。",
+			"en-US": "Your request was blocked by the site's security policy. Contact the site administrator if you believe this is a mistake."}},
+	{CategoryEdgeRoute, 429, I18nText{"zh-CN": "429 请求过于频繁", "en-US": "429 Too many requests"},
+		I18nText{"zh-CN": "您的请求过于频繁，请稍后重试。", "en-US": "Too many requests. Please wait a moment and try again."}},
+	{CategoryNoHost, 400, I18nText{"zh-CN": "400 请求无效", "en-US": "400 Bad request"},
+		I18nText{"zh-CN": "请求缺少有效的 Host，节点无法处理。", "en-US": "The request has no valid Host header, so the edge node cannot handle it."}},
+	{CategoryUnknownSite, 404, I18nText{"zh-CN": "404 站点不存在", "en-US": "404 Site not found"},
+		I18nText{"zh-CN": "该域名未接入本平台或尚未生效。", "en-US": "This domain is not configured on this platform or is not active yet."}},
+}
+
+// In is the text in locale; a locale the text does not carry gets zh-CN
+// (the one a package must carry).
+func (text I18nText) In(locale string) string {
+	if value, ok := text[locale]; ok && strings.TrimSpace(value) != "" {
+		return value
+	}
+	return text["zh-CN"]
 }
 
 var (
 	errorPageVariables = templateVariables{"status": false, "title": false, "message": false, "footer_text": false}
-	emailVariables     = templateVariables{"subject": false, "lines": true, "footer_text": false}
+	// action_url/action_label are empty for an email without an
+	// action; a template that names neither still renders (RenderEmailAction).
+	emailVariables = templateVariables{"subject": false, "lines": true, "footer_text": false, "action_url": false, "action_label": false}
 )
+
+// EmailActionHref is the one href a package string may carry (scanStrings):
+// the email template's link to the server-built action address.
+const EmailActionHref = `href="{{action_url}}"`
+
+// EmailAction is the link an email carries (account recovery, member
+// invitations): URL is an https address the server built, Label the link
+// text. The zero value is no action.
+type EmailAction struct {
+	URL   string
+	Label string
+}
+
+// sampleEmailAction is what a template is checked with at load, so a
+// template that misplaces the link is refused before any mail is sent.
+var sampleEmailAction = EmailAction{URL: "https://example.invalid/action#token=a&context=b", Label: "示例操作"}
 
 type renderedBrand struct {
 	URL      string `json:"url"`
@@ -351,23 +396,38 @@ func (result *Rendered) renderTemplates(templates Templates) error {
 		return withField(err, "templates.error_page")
 	}
 	result.errorPage, result.declared = errorPage, declared
-	footer := result.Package.Layout.FooterText["zh-CN"]
-	for _, page := range DefaultErrorPages {
-		body, err := finishPage(errorPage.render(TemplateContext{
-			"status": strconv.Itoa(page.Status), "title": page.Title, "message": page.Message, "footer_text": footer,
-		}), style, declared, "templates.error_page")
-		if err != nil {
-			return err
-		}
-		result.ErrorPages = append(result.ErrorPages, ErrorPage{Category: page.Category, Status: page.Status, SHA256: digestHex(body), Body: body})
+	if result.ErrorPages, err = result.ErrorPagesIn(DefaultErrorPageLocale); err != nil {
+		return err
 	}
 	if result.email, err = compileTemplate(templates.Email, emailVariables); err != nil {
 		return withField(err, "templates.email")
 	}
+	result.emailLinks = usesVariable(result.email.nodes, "action_url")
 	if _, err := result.RenderEmail("通知", []string{"示例正文"}); err != nil {
 		return err
 	}
+	if _, err := result.RenderEmailAction("通知", []string{"示例正文"}, sampleEmailAction); err != nil {
+		return err
+	}
 	return nil
+}
+
+// ErrorPagesIn renders the DefaultErrorPages with the theme's error page
+// template, title, message and footer in locale only (others: zh-CN).
+// Rendered.ErrorPages are these in DefaultErrorPageLocale.
+func (result Rendered) ErrorPagesIn(locale string) ([]ErrorPage, error) {
+	pages := make([]ErrorPage, 0, len(DefaultErrorPages))
+	footer := result.Package.Layout.FooterText.In(locale)
+	for _, page := range DefaultErrorPages {
+		body, err := finishPage(result.errorPage.render(TemplateContext{
+			"status": strconv.Itoa(page.Status), "title": page.Title.In(locale), "message": page.Message.In(locale), "footer_text": footer,
+		}), result.StyleText, result.declared, "templates.error_page")
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, ErrorPage{Category: page.Category, Status: page.Status, SHA256: digestHex(body), Body: body})
+	}
+	return pages, nil
 }
 
 // RenderErrorPage renders one page with the theme's error page template, as
@@ -384,12 +444,52 @@ func (result Rendered) RenderErrorPage(status, title, message string) ([]byte, e
 
 // RenderEmail renders the theme's email layout around a plain-text message.
 func (result Rendered) RenderEmail(subject string, lines []string) ([]byte, error) {
+	return result.RenderEmailAction(subject, lines, EmailAction{})
+}
+
+// RenderEmailAction is RenderEmail with an action link. A template
+// that outputs {{action_url}} gets it as action_url/action_label and the page
+// may link to exactly that address; any other template gets the address as a
+// last text line, so packages written before the variables existed keep
+// working. The lines stay text: no address in them becomes a link.
+func (result Rendered) RenderEmailAction(subject string, lines []string, action EmailAction) ([]byte, error) {
 	if len(result.email.nodes) == 0 {
 		return nil, invalid("template_missing", "templates.email")
 	}
-	return finishPage(result.email.render(TemplateContext{
-		"subject": subject, "lines": lines, "footer_text": result.Package.Layout.FooterText["zh-CN"],
-	}), result.StyleText, nil, "templates.email")
+	if action != (EmailAction{}) && !validEmailAction(action) {
+		return nil, invalid("email_action", "")
+	}
+	context := TemplateContext{"subject": subject, "lines": lines, "footer_text": result.Package.Layout.FooterText["zh-CN"],
+		"action_url": "", "action_label": ""}
+	switch {
+	case action.URL == "":
+	case result.emailLinks:
+		context["action_url"], context["action_label"] = action.URL, action.Label
+	default:
+		context["lines"] = append(append([]string(nil), lines...), "", action.URL)
+	}
+	return finishEmail(result.email.render(context), result.StyleText, action.URL)
+}
+
+// validEmailAction accepts an absolute https address with a host and no
+// credentials or control/space characters, and a one-line label.
+func validEmailAction(action EmailAction) bool {
+	if action.URL == "" || action.Label == "" || len(action.URL) > 4096 || len(action.Label) > 64 ||
+		strings.ContainsFunc(action.URL+action.Label, func(r rune) bool { return r < 0x20 || r == 0x7f }) ||
+		strings.ContainsRune(action.URL, ' ') {
+		return false
+	}
+	parsed, err := url.Parse(action.URL)
+	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil && parsed.Opaque == ""
+}
+
+func usesVariable(nodes []templateNode, name string) bool {
+	for _, node := range nodes {
+		if node.variable == name || usesVariable(node.children, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // finishPage inserts the generated <style> before the template's single
@@ -406,6 +506,19 @@ func finishPage(page, style string, declared map[string]struct{}, field string) 
 	}
 	if err := ValidateThemedHTML([]byte(page)); err != nil {
 		return nil, invalid("template_unsafe", field)
+	}
+	return []byte(page), nil
+}
+
+// finishEmail is finishPage for the email template: the page may also link
+// to href (the action address), and to nothing else.
+func finishEmail(page, style, href string) ([]byte, error) {
+	if strings.Count(page, "</head>") != 1 || strings.Contains(strings.ToLower(page), "<style") {
+		return nil, invalid("template_head", "templates.email")
+	}
+	page = strings.Replace(page, "</head>", "<style>"+style+"</style></head>", 1)
+	if err := validateThemedHTML([]byte(page), href); err != nil {
+		return nil, invalid("template_unsafe", "templates.email")
 	}
 	return []byte(page), nil
 }

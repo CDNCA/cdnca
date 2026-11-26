@@ -42,7 +42,7 @@ func TestSecurityBanControlToOpenResty(t *testing.T) {
 	}
 	carrier := &transport{}
 	distributor, err := securityban.NewDistributor(securityban.DistributorConfig{Pool: pool, Transport: carrier, KeyID: "edge-publish",
-		Sign: func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(private, payload), nil },
+		Sign:     func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(private, payload), nil },
 		Interval: time.Minute})
 	if err != nil {
 		t.Fatal(err)

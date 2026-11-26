@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Input, Modal, Popconfirm, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Input, Modal, Popconfirm, Tag, Typography, type InputRef } from 'antd'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -9,10 +9,19 @@ import { domainOwnershipApi, type ClaimSuspension, type DomainOwnership, type Ow
 import { useSessionStore } from '../../auth/session'
 import '../../i18n/domainTrust'
 import { DomainOwnershipPanel } from './DomainOwnershipPanel'
-import { useFeedback, FeedbackWhen, PageSection } from '@cdnca/ui'
+import { isDomainName } from '../streamForm'
+import { useFeedback, FeedbackWhen, PageSection, Table } from '@cdnca/ui'
 
 function codeOf(error: unknown): string {
   return error instanceof ApiError ? error.code : 'request_failed'
+}
+
+// 提交前拦截明显无效的域名（单标签、空标签、端口路径等），合法 IDN 与末尾点放行；
+// 服务端仍按自己的规则规范化与校验。
+function validDomain(value: string): boolean {
+  if (!isDomainName(value)) return false
+  const labels = value.replace(/\.$/u, '').split('.')
+  return labels.length >= 2 && labels.every((label) => label.length > 0 && label.length <= 63)
 }
 
 function date(value?: string) {
@@ -27,6 +36,10 @@ export default function AccountDomainsPage() {
   const client = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [domain, setDomain] = useState('')
+  // Shown after leaving the field or a server refusal of the domain: on the input, never a second dialog.
+  const [domainError, setDomainError] = useState(false)
+  const domainInput = useRef<InputRef>(null)
+  const domainValid = validDomain(domain)
   const [open, setOpen] = useState<string | null>(null)
   // The latest record per row after "立即检查", so the expanded panel shows its result.
   const [checked, setChecked] = useState<Record<string, DomainOwnership>>({})
@@ -58,7 +71,7 @@ export default function AccountDomainsPage() {
       <Typography.Paragraph type="secondary">{t('user.subtitle')}</Typography.Paragraph>
       {disabled ? <Alert type="info" showIcon message={t('errors.domain_ownership_disabled')} />
         : list.error ? <FeedbackWhen title={t('errors.load', { code: codeOf(list.error) })} /> : null}
-      <Button type="primary" icon={<Plus size={14} />} style={{ marginBottom: 12 }} onClick={() => { setDomain(''); setAdding(true) }}>{t('user.add')}</Button>
+      <Button type="primary" icon={<Plus size={14} />} style={{ marginBottom: 12 }} onClick={() => { setDomain(''); setDomainError(false); setAdding(true) }}>{t('user.add')}</Button>
       <Table<DomainOwnership> rowKey="id" size="small" loading={list.isLoading} dataSource={list.data ?? []} scroll={{ x: 760 }}
         expandable={{ expandedRowKeys: open ? [open] : [], showExpandColumn: false,
           expandedRowRender: (item) => {
@@ -94,9 +107,16 @@ export default function AccountDomainsPage() {
           ]} />
       </> : null}
       <Modal open={adding} title={t('user.add')} footer={null} onCancel={() => setAdding(false)} destroyOnHidden width={620}>
-        <Input value={domain} placeholder={t('user.domainPlaceholder')} aria-label={t('user.domain')} style={{ marginBottom: 12 }}
-          onChange={(event) => setDomain(event.target.value.trim())} />
-        {domain.includes('.') ? <DomainOwnershipPanel key={domain} domain={domain} /> : null}
+        <Input ref={domainInput} value={domain} placeholder={t('user.domainPlaceholder')} aria-label={t('user.domain')}
+          style={{ marginBottom: domainError ? 4 : 12 }} status={domainError ? 'error' : undefined}
+          aria-invalid={domainError || undefined} aria-describedby={domainError ? 'domain-trust-add-error' : undefined}
+          onChange={(event) => { setDomain(event.target.value.trim()); setDomainError(false) }}
+          onBlur={() => setDomainError(Boolean(domain) && !domainValid)}
+          onPressEnter={() => setDomainError(Boolean(domain) && !domainValid)} />
+        {domainError ? <Typography.Paragraph id="domain-trust-add-error" type="danger" role="alert" style={{ marginBottom: 12 }}>
+          {t('errors.validation_error')}</Typography.Paragraph> : null}
+        {domainValid && !domainError ? <DomainOwnershipPanel key={domain} domain={domain}
+          onDomainInvalid={() => { setDomainError(true); domainInput.current?.focus() }} /> : null}
       </Modal>
     </PageSection>
   )

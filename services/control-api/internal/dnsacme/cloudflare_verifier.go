@@ -37,7 +37,7 @@ func (e *providerVerificationRetryError) Error() string {
 func (e *providerVerificationRetryError) Unwrap() error { return ErrProviderVerificationRateLimited }
 
 func NewCloudflareProviderVerifier() *CloudflareProviderVerifier {
-	return newCloudflareProviderVerifier(cloudflareAPIBaseURL, http.DefaultClient, cloudflareVerifyTimeout)
+	return newCloudflareProviderVerifier(cloudflareAPIBaseURL, providerAPIClient(), cloudflareVerifyTimeout)
 }
 
 func newCloudflareProviderVerifier(baseURL string, client *http.Client, timeout time.Duration) *CloudflareProviderVerifier {

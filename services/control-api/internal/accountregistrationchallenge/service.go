@@ -25,6 +25,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/phonenumber"
+	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -53,6 +54,7 @@ var (
 	otpDigestDomain         = []byte("account-registration-challenge:v1:otp\x00")
 	createDigestDomain      = []byte("account-registration-challenge:v1:create-request\x00")
 	verifyDigestDomain      = []byte("account-registration-challenge:v1:verify-request\x00")
+	bindingDomain           = []byte("account-registration-challenge:v1:browser-binding\x00")
 )
 
 type Service struct {
@@ -87,7 +89,6 @@ type normalizedVerify struct {
 	Destination       string
 	SubjectDigest     [32]byte
 	DestinationDigest [32]byte
-	SourceDigest      [32]byte
 }
 
 type storedChallenge struct {
@@ -169,6 +170,9 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 	if err != nil {
 		return CreateResult{}, err
 	}
+	if input.Username, err = service.username(ctx, input.ScopeID, input.Username, input.Email, input.Phone, phoneCode); err != nil {
+		return CreateResult{}, err
+	}
 	normalized, err := normalizeCreateInput(input, service.digestKey, phoneCode)
 	if err != nil {
 		return CreateResult{}, err
@@ -181,7 +185,8 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 	newWrite := false
 	var replay CreateResult
 	var outcomeErr error
-	err = pgx.BeginTxFunc(ctx, service.pool, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
+	err = service.serializable(ctx, func(tx pgx.Tx) error {
+		state, newWrite, replay, outcomeErr = "", false, CreateResult{}, nil
 		var storedDigest []byte
 		err := tx.QueryRow(ctx, `SELECT request_digest,state
 			FROM account_registration_challenge_writes_163
@@ -230,7 +235,11 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return CreateResult{}, ErrHumanInvalid
+			reason := HumanReasonWriteConflict
+			if strings.Contains(pgErr.ConstraintName, "human_token_digest") {
+				reason = HumanReasonTokenReused
+			}
+			return CreateResult{}, refusalreason.Wrap(ErrHumanInvalid, reason)
 		}
 		return CreateResult{}, ErrChallengeUnavailable
 	}
@@ -238,10 +247,12 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 		return CreateResult{}, outcomeErr
 	}
 	if replay.ChallengeID != uuid.Nil {
+		replay.Binding = service.browserBinding(replay.ChallengeID)
 		return replay, nil
 	}
+	var humanErr error
 	if newWrite {
-		humanErr := service.human.Verify(ctx, HumanVerification{
+		humanErr = service.human.Verify(ctx, HumanVerification{
 			Token: normalized.HumanToken, Source: normalized.Source, IdempotencyKey: normalized.IdempotencyKey,
 		})
 		nextState := "human_verified"
@@ -263,9 +274,17 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 	}
 	switch state {
 	case "human_verified":
-		return service.finalizeCreate(ctx, normalized, requestDigest)
+		result, err := service.finalizeCreate(ctx, normalized, requestDigest)
+		if err == nil {
+			result.Binding = service.browserBinding(result.ChallengeID)
+		}
+		return result, err
 	case "human_rejected":
-		return CreateResult{}, ErrHumanInvalid
+		if humanErr != nil {
+			// This request's verifier said why (refusalreason).
+			return CreateResult{}, humanErr
+		}
+		return CreateResult{}, refusalreason.Wrap(ErrHumanInvalid, HumanReasonRejectedReplay)
 	case "human_unknown", "human_verifying":
 		return CreateResult{}, ErrHumanUnavailable
 	default:
@@ -288,7 +307,7 @@ func (service *Service) finalizeCreate(
 		}
 	}
 	var result CreateResult
-	err := pgx.BeginTxFunc(ctx, service.pool, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
+	err := service.serializable(ctx, func(tx pgx.Tx) error {
 		var storedDigest []byte
 		var state string
 		var humanVerifiedAt *time.Time
@@ -354,13 +373,13 @@ func (service *Service) finalizeCreate(
 			Destination:       input.Destination,
 			DestinationDigest: input.DestinationDigest, OTP: otp, ExpiresAt: expiresAt, RequestID: input.RequestID,
 		}); err != nil {
-			return ErrContactUnavailable
+			return retryable(err, ErrContactUnavailable)
 		}
 		command, err := tx.Exec(ctx, `UPDATE account_registration_challenge_writes_163
 			SET state='queued',updated_at=$3 WHERE scope_id=$1 AND idempotency_key=$2 AND state='human_verified'`,
 			input.ScopeID, input.IdempotencyKey, now)
 		if err != nil || command.RowsAffected() != 1 {
-			return ErrChallengeUnavailable
+			return retryable(err, ErrChallengeUnavailable)
 		}
 		result = CreateResult{ChallengeID: challengeID, ExpiresAt: expiresAt}
 		return nil
@@ -375,12 +394,47 @@ func (service *Service) finalizeCreate(
 	return result, nil
 }
 
+// serializableAttempts: a transaction that lost a serialization conflict to
+// a parallel request (two sign-up tabs of one browser sending or checking
+// codes at once, counted against the same source) runs again instead of
+// answering 503.
+const serializableAttempts = 3
+
+// serializable runs one SERIALIZABLE transaction of Create / Verify; run
+// resets what it reports, so a retried attempt starts clean.
+func (service *Service) serializable(ctx context.Context, run func(pgx.Tx) error) error {
+	for attempt := 1; ; attempt++ {
+		err := pgx.BeginTxFunc(ctx, service.pool, pgx.TxOptions{IsoLevel: pgx.Serializable}, run)
+		if attempt < serializableAttempts && serializationFailure(err) {
+			continue
+		}
+		return err
+	}
+}
+
+func serializationFailure(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "40001"
+}
+
+// retryable keeps a serialization failure, so serializable runs the
+// transaction again, and is fallback for any other error.
+func retryable(err, fallback error) error {
+	if serializationFailure(err) {
+		return err
+	}
+	return fallback
+}
+
 func (service *Service) Verify(ctx context.Context, input VerifyInput) (VerifyResult, error) {
 	if service == nil || service.pool == nil || service.proofs == nil || !validEnvelopeKeyring(service.proofKeys) {
 		return VerifyResult{}, ErrChallengeUnavailable
 	}
 	phoneCode, err := service.phoneCountryCode(ctx, input.ScopeID, input.Phone)
 	if err != nil {
+		return VerifyResult{}, err
+	}
+	if input.Username, err = service.username(ctx, input.ScopeID, input.Username, input.Email, input.Phone, phoneCode); err != nil {
 		return VerifyResult{}, err
 	}
 	normalized, err := normalizeVerifyInput(input, service.digestKey, phoneCode)
@@ -393,7 +447,10 @@ func (service *Service) Verify(ctx context.Context, input VerifyInput) (VerifyRe
 	requestDigest := verifyRequestDigest(service.digestKey, normalized)
 	var result VerifyResult
 	var outcomeErr error
-	err = pgx.BeginTxFunc(ctx, service.pool, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
+	// A retried attempt (serialization failure) may leave the proof the
+	// failed one issued unreferenced; it is never handed out and expires.
+	err = service.serializable(ctx, func(tx pgx.Tx) error {
+		result, outcomeErr = VerifyResult{}, nil
 		challenge, err := loadChallenge(ctx, tx, normalized.ChallengeID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -402,7 +459,7 @@ func (service *Service) Verify(ctx context.Context, input VerifyInput) (VerifyRe
 			}
 			return err
 		}
-		if !validChallengeBinding(challenge, normalized) {
+		if !validChallengeBinding(challenge, normalized) || !service.validBrowserBinding(challenge.id, normalized.Binding) {
 			outcomeErr = ErrOTPInvalid
 			return nil
 		}
@@ -453,7 +510,7 @@ func (service *Service) Verify(ctx context.Context, input VerifyInput) (VerifyRe
 				SET failed_attempts=failed_attempts+1
 				WHERE id=$1 AND state='queued' AND failed_attempts=$2`, challenge.id, challenge.failedAttempts)
 			if err != nil || command.RowsAffected() != 1 {
-				return ErrChallengeUnavailable
+				return retryable(err, ErrChallengeUnavailable)
 			}
 			outcome := "invalid"
 			outcomeErr = ErrOTPInvalid
@@ -477,7 +534,11 @@ func (service *Service) Verify(ctx context.Context, input VerifyInput) (VerifyRe
 			issued.Proof.Channel != normalized.Channel || issued.Proof.Destination != normalized.Destination {
 			return ErrChallengeUnavailable
 		}
-		aad := proofReferenceAAD(challenge.id, issued.Proof.EvidenceID, normalized.SubjectDigest, normalized.SourceDigest)
+		// sealed for the challenge's own source digest, as replayProof opens it
+		// (the verifying request may come from another source)
+		var sourceDigest [32]byte
+		copy(sourceDigest[:], challenge.sourceDigest)
+		aad := proofReferenceAAD(challenge.id, issued.Proof.EvidenceID, normalized.SubjectDigest, sourceDigest)
 		sealed, err := service.proofKeys.Seal([]byte(issued.Reference), aad)
 		if err != nil {
 			return err
@@ -488,7 +549,7 @@ func (service *Service) Verify(ctx context.Context, input VerifyInput) (VerifyRe
 			WHERE id=$1 AND state='queued'`, challenge.id, now, issued.Proof.EvidenceID,
 			sealed.KeyID, sealed.Nonce, sealed.Ciphertext, issued.Proof.ExpiresAt)
 		if err != nil || command.RowsAffected() != 1 {
-			return ErrChallengeUnavailable
+			return retryable(err, ErrChallengeUnavailable)
 		}
 		if err := insertVerifyReceipt(ctx, tx, challenge.id, normalized.IdempotencyKey,
 			requestDigest, "verified", now); err != nil {
@@ -589,11 +650,46 @@ func insertVerifyReceipt(
 	return err
 }
 
+// validChallengeBinding: the code is checked for the registration details
+// (username, email, phone) and contact it was sent for. The request source
+// is not compared (behind a CDN without origin
+// authentication sending and checking come from different edges); the
+// browser binding cookie (validBrowserBinding) ties the check to the browser.
 func validChallengeBinding(challenge storedChallenge, input normalizedVerify) bool {
 	return challenge.id == input.ChallengeID && challenge.scopeID == input.ScopeID && challenge.channel == input.Channel &&
 		hmac.Equal(challenge.subjectDigest, input.SubjectDigest[:]) &&
-		hmac.Equal(challenge.destinationDigest, input.DestinationDigest[:]) &&
-		hmac.Equal(challenge.sourceDigest, input.SourceDigest[:])
+		hmac.Equal(challenge.destinationDigest, input.DestinationDigest[:])
+}
+
+// browserBinding is the browser binding of a challenge: keyed by the digest
+// key, so only the browser the create response went to (or an exact replay
+// of that request) holds it, and nothing has to be stored.
+func (service *Service) browserBinding(challengeID uuid.UUID) string {
+	digest := keyedDigest(service.digestKey, bindingDomain, []byte(challengeID.String()))
+	return base64.RawURLEncoding.EncodeToString(digest[:])
+}
+
+func (service *Service) validBrowserBinding(challengeID uuid.UUID, binding string) bool {
+	return binding != "" && hmac.Equal([]byte(service.browserBinding(challengeID)), []byte(binding))
+}
+
+// username is the username a code is bound to: the one
+// given, or, left empty while the platform does not require one, the one
+// registration derives from the same contacts (accountregistration.
+// ResolveUsername), so the proof matches the registration that uses it.
+func (service *Service) username(ctx context.Context, scopeID uuid.UUID, username, email, phone, phoneCode string) (string, error) {
+	if service.policy == nil || strings.TrimSpace(username) != "" {
+		return username, nil
+	}
+	if scopeID == uuid.Nil {
+		return "", ErrPolicyUnavailable
+	}
+	policy, err := service.policy.GetPublic(ctx, scopeID)
+	if err != nil {
+		return "", ErrPolicyUnavailable
+	}
+	resolved, _ := accountregistration.ResolveUsername(service.digestKey, policy, username, email, phone, phoneCode)
+	return resolved, nil
 }
 
 // phoneCountryCode reads the platform default calling code for a bare phone
@@ -652,23 +748,36 @@ func normalizeVerifyInput(input VerifyInput, key []byte, phoneCode string) (norm
 	return normalizedVerify{
 		VerifyInput: input, Destination: destination, SubjectDigest: subjectDigest,
 		DestinationDigest: keyedDigest(key, destinationDigestDomain, []byte(destination)),
-		SourceDigest:      keyedDigest(key, sourceDigestDomain, []byte(source)),
 	}, nil
 }
 
 func normalizeSubject(username, email, phone, channel, source, phoneCode string) (string, string, string, string, string, error) {
 	username = strings.ToLower(strings.TrimSpace(username))
 	email = strings.ToLower(strings.TrimSpace(email))
-	phone, err := phonenumber.Normalize(phone, phoneCode)
-	if err != nil || !usernamePattern.MatchString(username) || len(email) > 254 {
+	phone = strings.TrimSpace(phone)
+	if phone != "" {
+		var err error
+		phone, err = phonenumber.Normalize(phone, phoneCode)
+		if err != nil {
+			return "", "", "", "", "", ErrInvalidInput
+		}
+	}
+	if !usernamePattern.MatchString(username) || len(email) > 254 {
 		return "", "", "", "", "", ErrInvalidInput
 	}
-	address, err := mail.ParseAddress(email)
-	if err != nil || address.Address != email {
-		return "", "", "", "", "", ErrInvalidInput
+	// an SMS code may be sent for a sign-up without an email (
+	// phone-only verification with the email optional)
+	if email != "" || channel != accountregistration.VerificationSMS {
+		address, err := mail.ParseAddress(email)
+		if err != nil || address.Address != email {
+			return "", "", "", "", "", ErrInvalidInput
+		}
 	}
 	destination := email
 	if channel == accountregistration.VerificationSMS {
+		if phone == "" {
+			return "", "", "", "", "", ErrInvalidInput
+		}
 		destination = phone
 	} else if channel != accountregistration.VerificationEmail {
 		return "", "", "", "", "", ErrInvalidInput
@@ -704,7 +813,6 @@ func createRequestDigest(key []byte, input normalizedCreate) [32]byte {
 	writeDigestValue(value, input.Email)
 	writeDigestValue(value, input.Phone)
 	writeDigestValue(value, input.Channel)
-	writeDigestValue(value, input.Source)
 	writeDigestValue(value, base64.RawURLEncoding.EncodeToString(input.HumanTokenDigest[:]))
 	return keyedDigest(key, createDigestDomain, value.Bytes())
 }
@@ -713,7 +821,7 @@ func verifyRequestDigest(key []byte, input normalizedVerify) [32]byte {
 	value := bytes.NewBuffer(nil)
 	for _, item := range []string{
 		input.ScopeID.String(), input.ChallengeID.String(), input.Username, input.Email, input.Phone,
-		input.Channel, input.Source, input.OTP,
+		input.Channel, input.OTP,
 	} {
 		writeDigestValue(value, item)
 	}

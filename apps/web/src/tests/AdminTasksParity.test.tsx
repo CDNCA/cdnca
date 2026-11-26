@@ -63,7 +63,9 @@ describe('AdminTasksPage parity facts', () => {
     renderWithProviders(<AdminTasksPage />)
 
     expect(await screen.findByText('共 0 条')).toBeInTheDocument()
-    for (const name of ['优先级', '名称', '依赖']) expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '依赖' })).toBeInTheDocument()
+    // 名称列与类型/资源列重复已去掉；空页没有需要人工关注的调度方式，不显示优先级列
+    for (const name of ['优先级', '名称']) expect(screen.queryByRole('columnheader', { name })).not.toBeInTheDocument()
     await user.click(screen.getByRole('combobox', { name: '任务类型' }))
     expect(await screen.findByText('缓存刷新/预热')).toBeInTheDocument()
     expect(screen.getByText('DNS 记录修复')).toBeInTheDocument()
@@ -106,7 +108,12 @@ describe('AdminTasksPage parity facts', () => {
     renderWithProviders(<AdminTasksPage />)
 
     expect(await screen.findByText('按就绪顺序')).toBeInTheDocument()
-    expect(screen.getByText('CNAME 分配 · site:example.test')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '优先级' })).toBeInTheDocument()
+    // 不再有「类型 · 资源」拼成的名称列，类型与资源各在本列
+    const row = screen.getByText('按就绪顺序').closest('tr')!
+    expect(within(row).getByText('CNAME 分配')).toBeInTheDocument()
+    expect(within(row).getByText('site:example.test')).toBeInTheDocument()
+    expect(screen.queryByText('CNAME 分配 · site:example.test')).not.toBeInTheDocument()
     expect(screen.getByText(dependencyID)).toBeInTheDocument()
     expect(screen.queryByText('无依赖')).not.toBeInTheDocument()
     expect(screen.queryByText('20')).not.toBeInTheDocument()
@@ -133,7 +140,9 @@ describe('AdminTasksPage parity facts', () => {
     expect(within(queuedRow).getByText('待执行')).toBeInTheDocument()
     expect(within(queuedRow).getByRole('button', { name: '取消任务' })).toHaveTextContent('取消')
     expect(within(queuedRow).getByRole('button', { name: '取消任务' })).toBeEnabled()
-    expect(within(queuedRow).getByText('由任务生产方调度')).toHaveClass('jobs-badge--priority')
+    // 由任务生产方调度无需人工设置：全页都是这种任务时不铺优先级列（详情里仍显示）
+    expect(screen.queryByRole('columnheader', { name: '优先级' })).not.toBeInTheDocument()
+    expect(screen.queryByText('由任务生产方调度')).not.toBeInTheDocument()
     const succeededRow = screen.getByText(succeeded.task_id).closest('tr')!
     expect(within(succeededRow).getByText('0秒')).toHaveClass('jobs-badge--duration')
     expect(within(succeededRow).getByText(/^结束 /)).toBeInTheDocument()
@@ -163,7 +172,7 @@ describe('AdminTasksPage parity facts', () => {
     vi.spyOn(jobsApi, 'deadLetters').mockResolvedValue({ data: [], page: {} })
     renderWithProviders(<AdminTasksPage />, [`/sys/task?task_id=${job.task_id.toUpperCase()}`])
 
-    const dialog = await screen.findByRole('dialog', { name: '子任务详情' })
+    const dialog = await screen.findByRole('dialog', { name: '任务详情' })
     await waitFor(() => expect(detail).toHaveBeenCalledWith('task-reader', 'platform', job.task_id))
     expect(vi.mocked(jobsApi.list).mock.calls.at(-1)![2].taskID).toBe(job.task_id)
     expect(screen.getByLabelText('任务ID')).toHaveValue(job.task_id)
@@ -201,7 +210,7 @@ describe('AdminTasksPage parity facts', () => {
     renderWithProviders(<AdminTasksPage />)
 
     await user.click(await screen.findByRole('button', { name: '详情' }))
-    const dialog = await screen.findByRole('dialog', { name: '子任务详情' })
+    const dialog = await screen.findByRole('dialog', { name: '任务详情' })
     for (const name of ['ID', '资源', '操作项目', '开始时间', '耗时', '状态', '失败次数', '操作']) {
       expect(within(dialog).getAllByRole('columnheader', { name }).length).toBeGreaterThan(0)
     }

@@ -12,7 +12,7 @@ func TestCertificateTargetPolicyRequiresAutomaticHealthyEligibleNodes47(t *testi
 	policy := CertificateTargetPolicy{
 		PolicyRevision: 4, NodeIDs: []uuid.UUID{uuid.New()},
 		RequiredCapabilities: certificatePublicationCapabilities(),
-		ActivationTimeout: 30 * time.Second, ObservationWindow: 15 * time.Second,
+		ActivationTimeout:    30 * time.Second, ObservationWindow: 15 * time.Second,
 		RequiredConsecutiveSuccesses: 2, Deadline: time.Now().Add(time.Minute),
 	}
 	if !validCertificateTargetPolicy(policy, time.Now()) {

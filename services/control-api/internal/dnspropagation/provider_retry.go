@@ -293,7 +293,8 @@ func boundedRetryDelay(policy ProviderRetryPolicy, hint time.Duration) time.Dura
 func transientProviderCode(code dnsproviderremote.ErrorCode) bool {
 	switch code {
 	case dnsproviderremote.CodeRateLimited, dnsproviderremote.CodeUnavailable,
-		dnsproviderremote.CodeSourceUnavailable, dnsproviderremote.CodeTimeout:
+		dnsproviderremote.CodeSourceUnavailable, dnsproviderremote.CodeTimeout,
+		dnsproviderremote.CodeProxyUnavailable:
 		return true
 	default:
 		return false

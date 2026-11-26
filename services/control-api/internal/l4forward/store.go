@@ -189,7 +189,10 @@ func (s *Store) insertForward(ctx context.Context, tx pgx.Tx, actor Actor, reque
 	if err != nil {
 		return Forward{}, err
 	}
-	item.EligibilityState = EligibilityEligible
+	// The package passed LockRuntimeLimits; a suspended one still reads ineligible.
+	if err := refreshEligibility(ctx, tx, &item, false); err != nil {
+		return Forward{}, err
+	}
 	intent, err := s.appendPublishIntent(ctx, tx, actor.UserID, item, "create")
 	if err != nil {
 		return Forward{}, err
@@ -337,7 +340,9 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 		if err != nil {
 			return err
 		}
-		item.EligibilityState = EligibilityEligible
+		if err := refreshEligibility(ctx, tx, &item, false); err != nil {
+			return err
+		}
 		intent, err := s.appendPublishIntent(ctx, tx, actor.UserID, item, "update")
 		if err != nil {
 			return err
@@ -882,38 +887,51 @@ func refreshEligibility(ctx context.Context, query rowQuerier, item *Forward, lo
 		item.EligibilityState = EligibilityEligible
 		return nil
 	}
-	state, err := packageEligibility(ctx, query, item.ScopeID, *item.PackageSubscriptionID, lock)
+	state, reason, err := packageEligibility(ctx, query, item.ScopeID, *item.PackageSubscriptionID, lock)
 	if err != nil {
 		return err
 	}
-	item.EligibilityState = state
+	item.EligibilityState, item.IneligibleReason = state, reason
 	return nil
 }
 
+// packageEligibility: the forward's package is in effect as publication
+// requires it (edgepublish packageInEffectSQL: enabled, not deleted, active,
+// not suspended), within its term and with an active entitlement. A
+// cancelled one is ineligible with IneligiblePackageCancelled and a suspended
+// one with IneligiblePackageSuspended, ranked as the site's reasons (a
+// deleted package first, then a cancelled one, before its suspension).
 func packageEligibility(
 	ctx context.Context,
 	query rowQuerier,
 	scopeID, subscriptionID uuid.UUID,
 	lock bool,
-) (EligibilityState, error) {
-	statement := `SELECT clock_timestamp(),lifecycle_status,starts_at,ends_at,admin_enabled,deleted_at IS NOT NULL
+) (EligibilityState, string, error) {
+	statement := `SELECT clock_timestamp(),lifecycle_status,starts_at,ends_at,admin_enabled,deleted_at IS NOT NULL,
+		suspended_at IS NOT NULL
 		FROM package_subscriptions WHERE tenant_scope_id=$1 AND id=$2`
 	if lock {
 		statement += ` FOR UPDATE`
 	}
 	var evaluatedAt, startsAt, endsAt time.Time
 	var lifecycle string
-	var adminEnabled, deleted bool
+	var adminEnabled, deleted, suspended bool
 	if err := query.QueryRow(ctx, statement, scopeID, subscriptionID).Scan(
-		&evaluatedAt, &lifecycle, &startsAt, &endsAt, &adminEnabled, &deleted,
+		&evaluatedAt, &lifecycle, &startsAt, &endsAt, &adminEnabled, &deleted, &suspended,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return EligibilityIneligible, nil
+			return EligibilityIneligible, "", nil
 		}
-		return EligibilityIneligible, err
+		return EligibilityIneligible, "", err
 	}
-	if lifecycle != "active" || !adminEnabled || deleted || evaluatedAt.Before(startsAt) || !evaluatedAt.Before(endsAt) {
-		return EligibilityIneligible, nil
+	if !deleted && lifecycle != "active" {
+		return EligibilityIneligible, IneligiblePackageCancelled, nil
+	}
+	if !adminEnabled || deleted || evaluatedAt.Before(startsAt) || !evaluatedAt.Before(endsAt) {
+		return EligibilityIneligible, "", nil
+	}
+	if suspended {
+		return EligibilityIneligible, IneligiblePackageSuspended, nil
 	}
 	var active bool
 	if err := query.QueryRow(ctx, `SELECT EXISTS(
@@ -922,12 +940,12 @@ func packageEligibility(
 		  AND entitlement.revision=package_subscription_effective_entitlement_revision($1,$3)
 		  AND entitlement.entitlement_status='active'
 	)`, subscriptionID, scopeID, evaluatedAt).Scan(&active); err != nil {
-		return EligibilityIneligible, err
+		return EligibilityIneligible, "", err
 	}
 	if !active {
-		return EligibilityIneligible, nil
+		return EligibilityIneligible, "", nil
 	}
-	return EligibilityEligible, nil
+	return EligibilityEligible, "", nil
 }
 
 // rejectStreamSocketConflict checks a saved stream's live sockets against its
@@ -1276,7 +1294,7 @@ var forwardSelect = `SELECT ` +
 	forwardGroupReferences + `, ` +
 	`pi.id, pi.version, pi.operation, pi.desired_state, pi.resource_revision, pi.configuration_source_revision, ` +
 	`pi.runtime_spec, pi.created_at, automatic.request_id, automatic.state, ` +
-	`automatic.publication_id, automatic.rollout_id, automatic.terminal_code, subscription.product_snapshot->>'name', subscription.ends_at, ` + additionalListenersJSON + `, ` +
+	`automatic.publication_id, automatic.rollout_id, automatic.terminal_code, subscription_current.product_snapshot->>'name', subscription.ends_at, ` + additionalListenersJSON + `, ` +
 	`line.region_id, COALESCE((SELECT name FROM region_catalog WHERE id=line.region_id), ''), ` +
 	`line.node_group_id, COALESCE((SELECT name FROM node_line_groups WHERE id=line.node_group_id AND deleted_at IS NULL LIMIT 1), ''), ` +
 	`line.backup_node_group_id, COALESCE((SELECT name FROM node_line_groups WHERE id=line.backup_node_group_id AND deleted_at IS NULL LIMIT 1), ''), ` +
@@ -1287,6 +1305,8 @@ var forwardSelect = `SELECT ` +
 
 const forwardFrom = `FROM l4_forwards f JOIN users u ON u.id = f.owner_user_id ` +
 	`LEFT JOIN package_subscriptions subscription ON subscription.id = f.package_subscription_id AND subscription.tenant_scope_id = f.scope_id ` +
+	// The package as in force now (701: a changed package moves its line, CNAME and name).
+	`LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id, now()) AS product_snapshot) subscription_current ON true ` +
 	streamOwnCNAMEJoins +
 	`JOIN LATERAL (SELECT * FROM l4_publish_intents WHERE stream_id = f.id AND scope_id=f.scope_id ORDER BY version DESC LIMIT 1) pi ON true ` +
 	`LEFT JOIN LATERAL (` +
@@ -1303,8 +1323,8 @@ const forwardFrom = `FROM l4_forwards f JOIN users u ON u.id = f.owner_user_id `
 	`LEFT JOIN LATERAL (SELECT ` + effectiveLineColumns + `) line ON true ` +
 	`LEFT JOIN LATERAL (SELECT ` +
 	// The package snapshot names its mode per_site / shared (packagecatalog).
-	`COALESCE(f.cname_mode, CASE subscription.product_snapshot#>>'{spec,cname,mode}' WHEN 'shared' THEN 'package' ELSE 'site' END) AS mode, ` +
-	`COALESCE(f.cname_domain, NULLIF(subscription.product_snapshot#>>'{spec,cname,domain}','')) AS domain` +
+	`COALESCE(f.cname_mode, CASE subscription_current.product_snapshot#>>'{spec,cname,mode}' WHEN 'shared' THEN 'package' ELSE 'site' END) AS mode, ` +
+	`COALESCE(f.cname_domain, NULLIF(subscription_current.product_snapshot#>>'{spec,cname,domain}','')) AS domain` +
 	`) cn ON true ` +
 	`LEFT JOIN LATERAL (SELECT claim.hostname, allocation.state FROM cname_allocations allocation ` +
 	`LEFT JOIN cname_hostname_claims claim ON claim.id = allocation.lkg_claim_id ` +
@@ -1314,12 +1334,12 @@ const forwardFrom = `FROM l4_forwards f JOIN users u ON u.id = f.owner_user_id `
 // effectiveLineColumns is a stream's line (alias f, its package subscription
 // alias subscription): its own region / group / backup group, else the
 // package snapshot's.
-const effectiveLineColumns = `COALESCE(f.region_id, NULLIF(subscription.product_snapshot#>>'{spec,region_id}','')::uuid) AS region_id, ` +
-	`COALESCE(f.node_group_id, NULLIF(subscription.product_snapshot#>>'{spec,node_group_id}','')::uuid, ` +
+const effectiveLineColumns = `COALESCE(f.region_id, NULLIF(subscription_current.product_snapshot#>>'{spec,region_id}','')::uuid) AS region_id, ` +
+	`COALESCE(f.node_group_id, NULLIF(subscription_current.product_snapshot#>>'{spec,node_group_id}','')::uuid, ` +
 	// community edition: a stream without a package is on the platform default line group
 	`(SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default ` +
 	`AND platform_default.deleted_at IS NULL AND f.package_subscription_id IS NULL)) AS node_group_id, ` +
-	`COALESCE(f.backup_node_group_id, NULLIF(subscription.product_snapshot#>>'{spec,backup_node_group_id}','')::uuid) AS backup_node_group_id`
+	`COALESCE(f.backup_node_group_id, NULLIF(subscription_current.product_snapshot#>>'{spec,backup_node_group_id}','')::uuid) AS backup_node_group_id`
 
 // streamOwnCNAMEJoins: a stream's own CNAME allocation and latest intent
 // (migration 505), joined only while the stream carries its override.

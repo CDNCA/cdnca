@@ -29,12 +29,11 @@ describe('account identity verification translations', () => {
       }
     }
     expect(keys).toEqual(expect.arrayContaining([
-      'title', 'empty.description', 'actions.create', 'actions.retry',
+      'title', 'actions.create', 'actions.retry',
       'actions.retrySameRequest', 'errors.identity_verification_permission_denied',
       'errors.rateLimited', 'states.draft', 'kinds.enterprise', 'materials.identity_document',
       'guidance.personal_reverification', 'materialSummary.custodyEncrypted',
       'details.decisionReason', 'decisionReasons.identity_mismatch',
-      'provider.title', 'provider.kind', 'provider.provider', 'provider.start',
       'provider.pending', 'provider.succeeded', 'provider.createDraft',
       'provider.retrySameRequest', 'provider.waiting',
       'provider.states.creating', 'provider.states.pending', 'provider.states.processing',

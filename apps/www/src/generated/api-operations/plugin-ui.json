@@ -11,7 +11,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Any authenticated session. Only plugins enabled on this installation (and still served by the license service) are listed, filtered by the page role (platform scope = admin), its required_permission (no platform.admin fallback) and its required_module (lease). The web app mounts each page in <iframe sandbox=\"allow-scripts allow-forms\"> on the plugin origin.",
+   "description": "Any authenticated session. Only plugins enabled on this installation (and still served by the license service) are listed, filtered by the page role (platform scope = admin), its required_permission (no platform.admin fallback) and its required_module (lease). The web app mounts each page in <iframe sandbox=\"allow-scripts allow-forms\"> on the plugin origin. unavailable lists the menu and plugin_settings pages of this principal's role it cannot open now, with a stable reason: the platform scope gets not_licensed, not_installed, disabled, uninstalled or permission_denied; a tenant only not_enabled or permission_denied, and only for plugins whose installation covers it. Pages nobody may confirm to this principal are not listed (the web app treats them as not found). A failed reason read leaves unavailable empty instead of failing the list.",
    "responses": [
     {
      "status": "200",
@@ -20,6 +20,11 @@
       {
        "name": "items",
        "type": "array<PluginUIPage>",
+       "required": true
+      },
+      {
+       "name": "unavailable",
+       "type": "array<PluginUIUnavailablePage>",
        "required": true
       }
      ]

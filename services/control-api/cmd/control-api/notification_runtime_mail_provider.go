@@ -136,7 +136,7 @@ func newConfiguredEmailTransport(
 		transport := pluginproviders.MailTransport{Clients: plugins, PluginID: config.Mail.PluginID}
 		if html != nil {
 			transport.HTML = func(ctx context.Context, message notificationruntime.ProviderMessage) string {
-				rendered, _ := html.Render(ctx, message.ScopeID, message.Subject, message.Body)
+				rendered, _ := html.Render(ctx, message.ScopeID, message.Subject, message.Body, smtpEmailAction(message))
 				return string(rendered)
 			}
 		}
@@ -226,7 +226,7 @@ func (transport *officialMailTransport) Send(ctx context.Context, message notifi
 	}
 	outgoing := mail.Message{To: message.Contact, Subject: message.Subject, Text: text, ID: message.IdempotencyKey}
 	if transport.html != nil {
-		if rendered, ok := transport.html.Render(ctx, message.ScopeID, message.Subject, message.Body); ok {
+		if rendered, ok := transport.html.Render(ctx, message.ScopeID, message.Subject, message.Body, smtpEmailAction(message)); ok {
 			outgoing.HTML = string(rendered)
 		}
 	}

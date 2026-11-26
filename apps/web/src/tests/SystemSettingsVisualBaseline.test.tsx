@@ -42,8 +42,9 @@ describe('system settings visual baseline', () => {
     expect(page.style.getPropertyValue('border')).toBe('1px solid transparent')
     expect(page.style.getPropertyValue('border-radius')).toBe('10px')
 
-    const topTabWrap = lastStyleRule('.system-settings-baseline-page.sys-setting > .ant-tabs .ant-tabs-nav-wrap')
-    expect(topTabWrap.style.getPropertyValue('overflow-x')).toBe('auto')
+    // rc-tabs scrolls the tab list itself (minus 更多); a native overflow-x on
+    // top of it hid half of the selected 其它配置 under 更多 at 390px.
+    expect(() => lastStyleRule('.system-settings-baseline-page.sys-setting > .ant-tabs .ant-tabs-nav-wrap')).toThrow()
 
     const topTab = lastStyleRule('.system-settings-baseline-page.sys-setting > .ant-tabs .ant-tabs-tab')
     expect(topTab.style.getPropertyValue('margin')).toBe('0 6px 0 0')
@@ -80,14 +81,6 @@ describe('system settings visual baseline', () => {
     expect(brandCard.style.getPropertyValue('padding')).toBe('14px')
     expect(brandCard.style.getPropertyValue('border')).toBe('1px solid var(--setting-border-strong)')
     expect(brandCard.style.getPropertyValue('border-radius')).toBe('8px')
-
-    const paymentGrid = lastStyleRule('.system-settings-baseline-page.sys-setting .system-settings-payment-grid')
-    expect(paymentGrid.style.getPropertyValue('grid-template-columns')).toBe('repeat(3, minmax(0, 1fr))')
-    expect(paymentGrid.style.getPropertyValue('gap')).toBe('12px')
-    const paymentCard = lastStyleRule('.system-settings-baseline-page.sys-setting .system-settings-payment-card')
-    expect(paymentCard.style.getPropertyValue('padding')).toBe('14px')
-    expect(paymentCard.style.getPropertyValue('border')).toBe('1px solid var(--setting-border)')
-    expect(paymentCard.style.getPropertyValue('border-radius')).toBe('6px')
   })
 
   it('switches the form to a full-width stacked layout on narrow screens', () => {
@@ -99,7 +92,5 @@ describe('system settings visual baseline', () => {
     expect(control?.style.getPropertyValue('width')).toBe('100%')
     const brandGrid = mobileStyleRule('.system-settings-baseline-page.sys-setting .system-settings-brand-grid')
     expect(brandGrid?.style.getPropertyValue('grid-template-columns')).toBe('minmax(0, 1fr)')
-    const paymentGrid = mobileStyleRule('.system-settings-baseline-page.sys-setting .system-settings-payment-grid')
-    expect(paymentGrid?.style.getPropertyValue('grid-template-columns')).toBe('minmax(0, 1fr)')
   })
 })

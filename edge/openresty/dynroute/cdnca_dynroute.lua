@@ -630,6 +630,14 @@ function _M.access()
         if cdnca_sched302 and site.schedule302 then
             cdnca_sched302.access(schedule302_opts(site))
         end
+    elseif site and not hop then
+        -- an internal pass after ngx.exec (cache variant, origin follow,
+        -- unbuffered location): the client pass decided; only the HTTP
+        -- policy's response header state comes back (nginx cleared ngx.ctx)
+        local result = cdnca_security.resume(site)
+        if result ~= nil then
+            return result
+        end
     end
     -- plain fetch (content rewrite, RUM sampling): decided on the client pass, committed
     -- after the cache dispatch

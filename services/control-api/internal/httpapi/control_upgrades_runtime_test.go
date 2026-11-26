@@ -27,11 +27,22 @@ func TestDecodeControlUpgradeCreateIsStrict(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("decodeControlUpgradeCreate() = (%#v,%v), want %#v", got, err, want)
 	}
+	// the console's create asks for the start once ready.
+	starting := want
+	starting.StartWhenReady = true
+	startEncoded, _ := json.Marshal(starting)
+	startRequest := httptest.NewRequest("POST", "/v1/admin/control-upgrade-rollouts", bytes.NewReader(startEncoded))
+	startRequest.Header.Set("Content-Type", "application/json")
+	if got, err := decodeControlUpgradeCreate(startRequest); err != nil || !got.StartWhenReady {
+		t.Fatalf("start_when_ready create = (%#v,%v)", got, err)
+	}
 	for name, body := range map[string]string{
 		"unknown":   string(encoded[:len(encoded)-1]) + `,"component":"edge-agent"}`,
 		"duplicate": `{"schema":"cdnca.control-upgrade-rollout.create/v1","schema":"cdnca.control-upgrade-rollout.create/v1","node_ids":[],"canary_node_ids":[],"batch_size":1,"automatic_rollback":true}`,
 		"trailing":  string(encoded) + `{}`,
 		"null":      `{"schema":null,"node_ids":null,"canary_node_ids":null,"batch_size":null,"automatic_rollback":null}`,
+		// start_when_ready is omitted when false, so an explicit false is not canonical.
+		"explicit false start": string(encoded[:len(encoded)-1]) + `,"start_when_ready":false}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := httptest.NewRequest("POST", "/v1/admin/control-upgrade-rollouts", bytes.NewBufferString(body))
@@ -297,6 +308,8 @@ func TestControlUpgradeStableErrorMapping(t *testing.T) {
 		{controlupgrade.ErrInvalidPlanTransition, http.StatusConflict, "control_upgrade_rollout_invalid_transition"},
 		{controlupgrade.ErrPlanBlocked, http.StatusConflict, "control_upgrade_rollout_blocked"},
 		{controlupgrade.ErrCohortIncompatible, http.StatusConflict, "control_upgrade_cohort_incompatible"},
+		{fmt.Errorf("prepare control upgrade action: %w", controlupgrade.ErrRolloutPreparing),
+			http.StatusConflict, "control_upgrade_rollout_preparing"},
 		{controlupgrade.ErrGrantInvalid, http.StatusBadGateway, "control_upgrade_grant_invalid"},
 		{controlupgrade.ErrExecutionInvalid, http.StatusBadGateway, "control_upgrade_execution_invalid"},
 		{controlupgrade.ErrLicenseOutcomeUnknown, http.StatusServiceUnavailable, "control_upgrade_license_outcome_unknown"},
@@ -315,5 +328,28 @@ func TestControlUpgradeStableErrorMapping(t *testing.T) {
 		if response.Code != test.status || !strings.Contains(response.Body.String(), `"code":"`+test.code+`"`) {
 			t.Errorf("%v response = %d %s", test.err, response.Code, response.Body.String())
 		}
+	}
+}
+
+// a create answers with its preparation, and the
+// list always carries the open preparations (an empty array, never null).
+func TestControlUpgradePreparationResponseShape(t *testing.T) {
+	at := time.Date(2026, 11, 25, 1, 2, 3, 0, time.UTC)
+	encoded, err := json.Marshal(controlUpgradePreparationResponse{Data: controlupgrade.RolloutPreparation{
+		ID: "00000000-0000-4000-8000-000000000021", PlanID: "00000000-0000-4000-8000-000000000022",
+		State: controlupgrade.PreparationPreparing, Phase: controlupgrade.PreparationDownloading, StartWhenReady: true,
+		NodeIDs: []string{"00000000-0000-4000-8000-000000000023"}, CreatedAt: at, UpdatedAt: at}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"data":{"id":"00000000-0000-4000-8000-000000000021","plan_id":"00000000-0000-4000-8000-000000000022",` +
+		`"state":"preparing","phase":"downloading","start_when_ready":true,"node_ids":["00000000-0000-4000-8000-000000000023"],` +
+		`"created_at":"2026-11-25T01:02:03Z","updated_at":"2026-11-25T01:02:03Z"},"replayed":false}`
+	if string(encoded) != want {
+		t.Fatalf("preparation response = %s", encoded)
+	}
+	list, err := json.Marshal(controlUpgradeRolloutList(controlupgrade.ListRolloutsResponse{Page: 1, PageSize: 10}))
+	if err != nil || !bytes.Contains(list, []byte(`"preparations":[]`)) {
+		t.Fatalf("list = %s, %v", list, err)
 	}
 }

@@ -1,17 +1,20 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { FeedbackDialog, type FeedbackAction } from '@cdnca/ui'
 import { CircleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import '../../i18n/siteCnameRegeneration'
-import { cnameFailureNeedsDnsConfig, cnameFailureNeedsLine, cnameFailureNeedsPlatform, dnsConfigPath, lineGroupsPath, tenantTicketPathFor } from './cnameFailureText'
+import {
+  cnameFailureNeedsDnsConfig, cnameFailureNeedsLine, cnameFailureNeedsPlatform, cnameRegenerateBlockedForTenant,
+  dnsConfigPath, lineGroupsPath, tenantTicketPathFor,
+} from './cnameFailureText'
 
 // The CNAME failure in place, shared by the site list (CNAME column) and the
 // site edit page (CNAME field): a 「生成失败」 mark that opens a dialog with
 // the reason, 去 DNS 配置 (platform admins, DNS configuration codes), 去线路组
 // (platform admins, missing line), 联系管理员 (tenants, platform-side gaps),
-// 重新生成 and 知道了. The reason code (as a short Chinese label, 10-27 用户) and
+// 重新生成 (not for a tenant when only the platform can fix it) and 知道了. The reason code (as a short Chinese label, 10-27 用户) and
 // extra detail sit in the dialog.
 export default function CnameFailureActions({ code, reason, admin, onRegenerate, regenerateDisabled, extraDetail, siteID }: {
   code: string | null | undefined
@@ -27,25 +30,29 @@ export default function CnameFailureActions({ code, reason, admin, onRegenerate,
   const { t } = useTranslation('siteCnameRegeneration')
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const reasonID = useId()
   const actions: FeedbackAction[] = []
   if (admin && cnameFailureNeedsDnsConfig(code)) actions.push({ label: t('cell.goDnsConfig'), primary: true, onClick: () => navigate(dnsConfigPath) })
   // FLOW001：缺线路时管理员去线路组；普通用户遇到平台侧缺失只给工单入口，不指向他没有的菜单。
   if (admin && cnameFailureNeedsLine(code)) actions.push({ label: t('cell.goLineGroups'), primary: true, onClick: () => navigate(lineGroupsPath) })
   if (!admin && (cnameFailureNeedsLine(code) || cnameFailureNeedsPlatform(code))) actions.push({ label: t('cell.contactAdmin'), primary: true, onClick: () => navigate(tenantTicketPathFor(siteID)) })
-  if (onRegenerate && !regenerateDisabled) actions.push({ label: t('cell.regenerate'), onClick: onRegenerate })
+  if (onRegenerate && !regenerateDisabled && (admin || !cnameRegenerateBlockedForTenant(code))) actions.push({ label: t('cell.regenerate'), onClick: onRegenerate })
   return (
     <>
       <button
         type="button"
         className="site-cname-failure-mark"
         aria-haspopup="dialog"
-        aria-label={t('cell.failedMarkLabel', { reason })}
+        aria-label={t('cell.failedMarkLabel')}
+        aria-describedby={reasonID}
         title={reason}
         onClick={() => setOpen(true)}
       >
         <CircleAlert size={14} aria-hidden="true" />
         <span>{t('cell.failedMark')}</span>
       </button>
+      {/* 53 补充：名称只说“CNAME 生成失败”，具体原因作为说明朗读。 */}
+      <span id={reasonID} hidden>{reason}</span>
       <FeedbackDialog
         open={open}
         type="error"

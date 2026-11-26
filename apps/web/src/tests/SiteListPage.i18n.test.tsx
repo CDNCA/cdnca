@@ -232,9 +232,15 @@ describe('SiteListPage internationalization', () => {
     const t = i18n.getFixedT('qps-ploc', 'sites')
     authenticate('user')
     const pending = deferred<Response>()
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
-      .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValueOnce(listResponse([]))
+    // By URL: the first list read waits, later ones are empty; other reads (notices) get an empty list too.
+    let firstListRead = true
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (String(input).startsWith('/v1/sites?') && firstListRead) {
+        firstListRead = false
+        return pending.promise
+      }
+      return Promise.resolve(listResponse([]))
+    })
     const user = userEvent.setup()
     const recoveryView = renderWithProviders(<SiteListPage />, ['/site/list'])
 
@@ -274,7 +280,8 @@ describe('SiteListPage internationalization', () => {
     expect(await screen.findByText(t('errors.forbiddenTitle'))).toBeInTheDocument()
     expect(screen.getByText(t('errors.forbiddenDescription'))).toBeInTheDocument()
     expect(screen.queryByText('private qps authorization row')).not.toBeInTheDocument()
-    expect(apiFetch).toHaveBeenCalledOnce()
+    // The forbidden list is not retried (other reads, e.g. a notice, may still run).
+    expect(apiFetch.mock.calls.filter(([url]) => String(url).startsWith('/v1/sites?'))).toHaveLength(1)
   })
 
   it.each(['en-US', 'qps-ploc'] as const)(

@@ -249,7 +249,7 @@ func cancelReceiptAuditEvent(scopeID, operationID uuid.UUID, receipt CancelRecei
 		RequestID: "cache-cancel-receipt:" + receipt.EventID.String(), Result: "success",
 		Payload: map[string]any{
 			"settled_at": receipt.SettledAt.UTC().Format(time.RFC3339Nano),
-			"cancel_id": receipt.DeliveryID.String(), "node_id": receipt.NodeID.String(),
+			"cancel_id":  receipt.DeliveryID.String(), "node_id": receipt.NodeID.String(),
 			"lease_id": receipt.LeaseID.String(), "attempt": receipt.Attempt,
 			"outcome":           string(receipt.Outcome),
 			"succeeded_targets": receipt.SucceededTargets, "failed_targets": receipt.FailedTargets,

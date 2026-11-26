@@ -45,7 +45,8 @@ paths:
   /v1/admin/system-mail-settings/tests:
     post:
       summary: Send a test mail with the provider on the page
-      description: Sends one test mail through value.mail_provider without saving anything, so a provider can be checked before switching. An official provider uses mail_secret or, only for the same provider, the stored credential; SMTP uses the page's SMTP fields with the stored SMTP password (smtp_password_configured), filling gaps from NOTIFICATION_SMTP_* only under smtp_tls/smtp_starttls; what is still missing comes back as code config_incomplete with missing. The attempt is audited without the credential.
+      x-summary-zh: "用当前页面的邮件服务发送测试邮件"
+      description: Sends one test mail through value.mail_provider without saving anything, so a provider can be checked before switching. An official provider uses mail_secret or, only for the same provider, the stored credential; SMTP uses the page's SMTP fields with the stored SMTP password (smtp_password_configured), filling gaps from NOTIFICATION_SMTP_* only under smtp_tls/smtp_starttls; what is still missing comes back as 422 system_mail_settings_config_incomplete with details.missing. A send the provider refused or that could not be made is 502 system_mail_settings_test_failed with details.reason; only a sent mail is 200. The attempt is audited without the credential.
       operationId: testPlatformSystemMailSettings
       x-required-permissions: [system_configuration.manage]
       parameters:
@@ -64,7 +65,7 @@ paths:
                 to: {type: string, format: email, maxLength: 254}
       responses:
         '200':
-          description: The send was attempted; ok tells whether the provider accepted it.
+          description: The provider accepted the test mail.
           content:
             application/json:
               schema:
@@ -72,19 +73,34 @@ paths:
                 additionalProperties: false
                 required: [ok, provider]
                 properties:
-                  ok: {type: boolean}
+                  ok: {type: boolean, enum: [true]}
                   provider: {type: string}
                   message_id: {type: string}
-                  missing:
-                    type: array
-                    items: {type: string}
-                    description: 'With code config_incomplete: the save body fields the SMTP sender still lacks (value.smtp_address, value.smtp_user, smtp_password, value.smtp_from).'
-                    x-description-zh: code 为 config_incomplete 时，SMTP 发信还缺的保存字段（value.smtp_address、value.smtp_user、smtp_password、value.smtp_from）。
-                  code: {type: string, description: 'Stable failure code (libs/mail): config_incomplete (see missing), config_invalid, credential_rejected, sender_rejected, recipient_rejected, provider_rate_limited, provider_unavailable, provider_rejected, provider_response_unknown, tls_required, or a plugin error code.'}
-        '400': {description: Validation error}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied, or the chosen official mail service's module (module.mail.<provider>) is not licensed (system_mail_settings_module_not_licensed)}
-        '503': {description: 'The notification runtime is forced off (NOTIFICATION_RUNTIME_ENABLED=off). Unset, auto or false turn it on at start when this page holds a complete sender.'}
+        '400':
+          description: 'system_mail_settings_validation_error: the body is not valid JSON or has unknown fields, value or mail_secret is refused, or the recipient is refused. A missing or empty to is details {field: to, reason: required}; a to that is not one plain mail address (no display name, at most 254 characters) is details {field: to, reason: invalid_format}. Nothing was sent.'
+          x-description-zh: 'system_mail_settings_validation_error：请求体不是合法 JSON 或含未知字段、value 或 mail_secret 无效，或收件人无效。to 缺失或为空时 details 为 {field: to, reason: required}；to 不是单个纯邮箱地址（不带显示名、最长 254 个字符）时 details 为 {field: to, reason: invalid_format}。未发送。'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {error: {code: system_mail_settings_validation_error, message: 发信配置字段无效, request_id: system-mail-test-3, details: {field: to, reason: invalid_format}}}
+        '401': {description: Unauthenticated (system_mail_settings_unauthenticated), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '403': {description: Permission denied (system_mail_settings_permission_denied), or the chosen official mail service's module (module.mail.<provider>) is not licensed (system_mail_settings_module_not_licensed), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422':
+          description: 'system_mail_settings_config_incomplete: the SMTP sender still lacks fields; details.missing names them as save body fields (value.smtp_address, value.smtp_user, smtp_password, value.smtp_from). Nothing was sent.'
+          x-description-zh: system_mail_settings_config_incomplete：SMTP 发信还缺字段，details.missing 按保存请求体路径列出（value.smtp_address、value.smtp_user、smtp_password、value.smtp_from），未发送。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {error: {code: system_mail_settings_config_incomplete, message: 发信配置不完整, request_id: system-mail-test-1, details: {provider: smtp, missing: [value.smtp_address, smtp_password]}}}
+        '502':
+          description: 'system_mail_settings_test_failed: the provider refused the mail or could not be reached; details.reason is the stable code (libs/mail): config_invalid, credential_rejected, sender_rejected, recipient_rejected, provider_rate_limited, provider_unavailable, provider_rejected, provider_response_unknown, tls_required, or a plugin error code.'
+          x-description-zh: system_mail_settings_test_failed：服务商拒收或无法连接，details.reason 为稳定原因码（libs/mail）或插件错误码。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {error: {code: system_mail_settings_test_failed, message: 测试邮件发送失败, request_id: system-mail-test-2, details: {provider: smtp, reason: credential_rejected}}}
+        '500': {description: Unexpected internal failure (system_mail_settings_unavailable), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {description: 'system_mail_settings_test_unavailable: the notification runtime is forced off (NOTIFICATION_RUNTIME_ENABLED=off); unset, auto or false turn it on at start when this page holds a complete sender. system_mail_settings_unavailable: settings storage or policy is unavailable.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -107,15 +123,28 @@ components:
             message: {type: string}
             request_id: {type: string}
             details:
-              description: On a 400 system_mail_settings_validation_error that names the refused field of the save body (value.<field>, sms_access_key_secret, mail_secret, smtp_password or sms_auth_token) and a machine reason.
-              x-description-zh: 能定位字段的 400 system_mail_settings_validation_error 附带 field（保存请求体路径 value.<字段>、sms_access_key_secret、mail_secret、smtp_password、sms_auth_token）与 reason 机器码。
-              type: object
-              additionalProperties: false
-              required: [field, reason]
-              properties:
-                field: {type: string}
-                reason: {type: string}
-              example: {field: value.smtp_port, reason: out_of_range}
+              description: 'On a 400 system_mail_settings_validation_error that names the refused field of the save or test body (value.<field>, sms_access_key_secret, mail_secret, smtp_password, sms_auth_token, or the test recipient to): field and a machine reason. On a test mail 422: provider and missing. On a test mail 502: provider and reason.'
+              x-description-zh: 能定位字段的 400 system_mail_settings_validation_error 附带 field（保存或测试请求体路径 value.<字段>、sms_access_key_secret、mail_secret、smtp_password、sms_auth_token、测试收件人 to）与 reason 机器码；测试邮件 422 附带 provider 与 missing；测试邮件 502 附带 provider 与 reason。
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [field, reason]
+                  properties:
+                    field: {type: string}
+                    reason: {type: string}
+                  example: {field: value.smtp_port, reason: out_of_range}
+                - type: object
+                  additionalProperties: false
+                  required: [provider, missing]
+                  properties:
+                    provider: {type: string}
+                    missing: {type: array, minItems: 1, items: {type: string}}
+                - type: object
+                  additionalProperties: false
+                  required: [provider, reason]
+                  properties:
+                    provider: {type: string}
+                    reason: {type: string}
     SecretReference:
       type: string
       maxLength: 1024

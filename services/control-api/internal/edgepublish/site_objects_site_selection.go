@@ -50,11 +50,12 @@ func siteServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs
 		FROM sites site
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=site.scope_id AND route.site_id=site.id
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
 		     site.node_group_id,
-		     (subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
-		     (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
 		     route.line_group_id, route.next_group_id)
 		LEFT JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision
@@ -67,15 +68,16 @@ func siteServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs
 		JOIN site_origin_pools pool ON pool.site_id=site.id AND pool.l2_mode<>'off'
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN node_line_groups line_group ON pool.l2_mode='package' AND line_group.deleted_at IS NULL
-		 AND line_group.id=COALESCE(site.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+		 AND line_group.id=COALESCE(site.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 		JOIN l2_topology_configs config ON config.deleted_at IS NULL AND (
 		     pool.l2_mode='custom' AND config.tenant_scope_id=site.scope_id AND config.id=pool.l2_config_id OR
 		     pool.l2_mode='package' AND config.tenant_scope_id=line_group.tenant_scope_id AND config.id=line_group.l2_config_id)
 		JOIN l2_topology_nodes member ON member.tenant_scope_id=config.tenant_scope_id AND member.config_id=config.id
 		 AND member.enabled AND member.deleted_at IS NULL
 		WHERE site.scope_id=$1 AND site.id=ANY($2::uuid[]) AND site.deleted_at IS NULL
-		  AND COALESCE(subscription.product_snapshot#>>'{spec,limits,l2_origin}','')<>'false'`, scopeID, ids)
+		  AND COALESCE(subscription_current.product_snapshot#>>'{spec,limits,l2_origin}','')<>'false'`, scopeID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("%w: read website line group nodes", ErrPersistence)
 	}

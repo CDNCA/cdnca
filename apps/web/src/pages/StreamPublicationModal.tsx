@@ -2,6 +2,7 @@ import { Button, Descriptions, Modal } from 'antd'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
+import '../i18n/streamPublicationFailures'
 import type { Stream, StreamPublishIntent } from '../api/streams'
 
 // A3-04：已知失败码给中文/英文说明，未知的原样显示失败码。

@@ -38,7 +38,7 @@ func TestDeliveryOfShowsTheWorstLeaf(t *testing.T) {
 		"paused": {[]LeafBanDelivery{{State: "rejected", Reason: bansync.ErrCodePaused}}, DeliveryRefused, bansync.ErrCodePaused, 0},
 		"node failed": {[]LeafBanDelivery{{State: "accepted", Accepted: map[uuid.UUID]bool{entry: true},
 			Nodes: bansync.Nodes{State: bansync.NodesFailed, Reason: "runtime_unavailable"}}}, DeliveryFailed, "runtime_unavailable", 0},
-		"no leaf node": {[]LeafBanDelivery{accepted(bansync.NodesNone)}, DeliveryNoNodes, "", 0},
+		"no leaf node":          {[]LeafBanDelivery{accepted(bansync.NodesNone)}, DeliveryNoNodes, "", 0},
 		"leaf distribution off": {[]LeafBanDelivery{accepted(bansync.NodesOff)}, DeliveryNoNodes, bansync.NodesOff, 0},
 	} {
 		got := deliveryOf(entry, 0, c.leaves)

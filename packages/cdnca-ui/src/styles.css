@@ -421,6 +421,9 @@ samp {
 .cdnca-feedback .cdnca-feedback-hint { margin-top: 8px; color: var(--cdnca-color-text-secondary); font-size: 12px; }
 .cdnca-feedback .cdnca-feedback-request-id { margin-top: 8px; font-size: 12px; line-height: 18px; }
 .cdnca-feedback .cdnca-feedback-request-id .ant-typography { color: var(--cdnca-color-text-secondary); font-size: 12px; }
+/* 诊断详情 (error code, request ID): collapsed under the reason, opened by its summary. */
+.cdnca-feedback .cdnca-feedback-request-id > summary { width: fit-content; color: var(--cdnca-color-text-secondary); cursor: pointer; }
+.cdnca-feedback .cdnca-feedback-request-id > div { margin-top: 4px; }
 
 .cdnca-feedback .ant-modal-footer { margin-top: 20px; }
 .cdnca-feedback .cdnca-feedback-footer,

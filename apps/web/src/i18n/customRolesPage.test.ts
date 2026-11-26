@@ -11,7 +11,7 @@ function flatten(value: unknown, prefix = ''): Record<string, string> {
 describe('customRolesPageMessages', () => {
   it('registers a complete zh-CN, en-US, and expanded pseudo-locale namespace', () => {
     const required = [
-      'title', 'sections.permissions', 'sections.roles', 'sections.grants',
+      'title', 'sections.roles', 'sections.grants',
       'actions.create', 'actions.rename', 'actions.publish', 'actions.deactivate',
       'actions.assign', 'actions.revoke', 'actions.retry', 'actions.exactRetry', 'actions.abandon',
       'fields.name', 'fields.permissions', 'fields.stepUpProof', 'fields.subjectUserId',

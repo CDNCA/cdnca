@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Drawer, Progress, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Drawer, Progress, Space, Tag, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { marketApi, marketUnavailable, type MarketNodeOverload, type MarketOfferListing, type MarketOfferSubscriber } from '../../api/market'

@@ -12,11 +12,11 @@ import {
   Result,
   Select,
   Space,
-  Table,
   Tag,
+  Typography,
   type TableColumnsType,
 } from 'antd'
-import { Ban, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Ban, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useInRouterContext, useSearchParams } from 'react-router-dom'
@@ -44,7 +44,8 @@ import i18n from '../i18n'
 import '../i18n/jobSettlement'
 import '../i18n/siteCnameRegeneration'
 import './AdminTasksPage.css'
-import { useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 const pageSizes = [10, 20, 50, 100] as const
 const childPageSize = 20
@@ -61,7 +62,7 @@ const knownFailureCodes = new Set([
 const platformFailureCodes = new Set([
   'cname_no_default_line_group', 'node_group_unavailable', 'node_targets_unavailable',
   'dns_provider_not_configured', 'cname_zone_not_configured', 'cname_zone_provider_mismatch',
-  'cname_no_default_zone', 'platform_dns_sync_failed', 'domain_blocked',
+  'cname_no_default_zone', 'cname_package_domain_missing', 'platform_dns_sync_failed', 'domain_blocked',
 ])
 type JobStatusFilter = 'success' | 'failure' | 'pending' | 'running'
 const jobStatusFilters: Record<JobStatusFilter, JobState[]> = {
@@ -257,6 +258,11 @@ function settlementRetryAllowed(error: unknown): boolean {
 // TASK-CAUSE-01: a job item's own stable code (a CNAME allocation's failure
 // code, persisted per item) reads as that feature's words instead of
 // "unknown"; codes nobody translates still show the generic text.
+// Long resource references (UUIDs, paths) shortened for a confirmation; the full value is the title.
+function shortReference(value: string): string {
+  return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-6)}` : value
+}
+
 function failureText(code: string | undefined, placeholder: string, t: TFunction<'jobs'>): string {
   if (!code) return placeholder
   if (knownFailureCodes.has(code)) return t(`failures.${code}`)
@@ -307,10 +313,10 @@ function StateTag({ state, dot = false }: { state: JobState | JobAttemptState | 
 function durationText(
   value: { started_at?: string; completed_at?: string }, locale: string, t: TFunction<'jobs'>,
 ): string {
-  if (!value.started_at) return t('values.noFact')
+  if (!value.started_at) return t('values.placeholder')
   const started = Date.parse(value.started_at)
   const ended = value.completed_at ? Date.parse(value.completed_at) : Date.now()
-  if (!Number.isFinite(started) || !Number.isFinite(ended) || ended < started) return t('values.noFact')
+  if (!Number.isFinite(started) || !Number.isFinite(ended) || ended < started) return t('values.placeholder')
   const seconds = Math.floor((ended - started) / 1000)
   if (seconds < 60) return t('duration.seconds', { count: formatNumber(seconds, locale) })
   if (seconds < 3600) return t('duration.minutes', { count: formatNumber(seconds / 60, locale) })
@@ -373,6 +379,7 @@ function AdminTasksPageContent({
 }: AdminTasksContentProps) {
   const linkedTaskID = deepLinkTaskID(taskQuery)
   const { t, i18n } = useTranslation('jobs')
+  const namedRows = useNamedRowSelection()
   const parityText = useMemo(() => adminTasksParityText(i18n.resolvedLanguage), [i18n.resolvedLanguage])
   const { t: settlementT } = useTranslation('jobSettlement')
   const queryClient = useQueryClient()
@@ -735,7 +742,7 @@ function AdminTasksPageContent({
   }
 
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
-  const placeholder = t('values.noFact')
+  const placeholder = t('values.placeholder')
   const resetPages = () => {
     setPageIndex(0)
     setPageCursors([undefined])
@@ -761,6 +768,14 @@ function AdminTasksPageContent({
   }
   const kindNames = new Map((kindsQuery.data?.data ?? []).map((entry) => [entry.kind, t(entry.name_key.slice(5))]))
   const kindLabel = (kind: string) => kindNames.get(kind) ?? kind
+  // 详情里的类型：未接入目录的枚举显示「未知任务类型」，原始码作为排障信息附在旁边。
+  const detailKind = (kind: string) => {
+    const name = kindNames.get(kind)
+    if (name) return name
+    return <span className="jobs-detail-kind-unknown" title={kind}>
+      {t('kindNames.unknown')} <Typography.Text type="secondary" code>{kind}</Typography.Text>
+    </span>
+  }
   const kindOptions = Array.from(new Set([
     ...(kindsQuery.data?.data.map((entry) => entry.kind) ?? []),
     ...(listQuery.data?.data.map((job) => job.kind) ?? []),
@@ -768,7 +783,7 @@ function AdminTasksPageContent({
   ])).map((value) => ({ value, label: kindLabel(value) }))
   const kindSelectOptions = kindOptions.length > 0
     ? [{ value: '', label: t('filters.allKinds') }, ...kindOptions]
-    : [{ value: '__no_fact__', label: t('values.noFact'), disabled: true }]
+    : [{ value: '__no_fact__', label: t('values.placeholder'), disabled: true }]
   const numberedPage = listQuery.data?.page && 'number' in listQuery.data.page ? listQuery.data.page : null
   const metadata = new Map((listQuery.data?.task_metadata ?? []).map((entry) => [entry.task_id, entry]))
   const pageWindowStart = numberedPage ? Math.max(1, Math.min(pageIndex, numberedPage.total_pages - 2)) : 1
@@ -940,29 +955,29 @@ function AdminTasksPageContent({
     )
   }
 
+  // 调度方式「由任务生产方调度」无需人工设置，不在列表每行铺开（详情里简短呈现）；
+  // 本页有真正按优先级/就绪顺序调度或未确认的任务时才显示这一列。
+  const priorityPolicy = (taskID: string) => metadata.get(taskID)?.priority.policy ?? 'unknown'
+  const showPriorityColumn = (listQuery.data?.data ?? []).some((job) => priorityPolicy(job.task_id) !== 'producer_managed')
   const columns: TableColumnsType<BackgroundJob> = [
-    { title: t('columns.id'), dataIndex: 'task_id', width: 150, ellipsis: true },
+    // 任务 ID 只在这一列出现并可复制；资源与任务 ID 相同时资源列不再重复。
     {
+      title: t('columns.id'), dataIndex: 'task_id', width: 150, ellipsis: true,
+      render: (value: string) => <Typography.Text className="jobs-task-id-cell" copyable={{ text: value }}>{value}</Typography.Text>,
+    },
+    ...(showPriorityColumn ? [{
       title: t('columns.priority'), key: 'priority', width: 145,
-      render: (_, job) => <span className="jobs-badge jobs-badge--priority">
-        {t(`taskFacts.priority.${metadata.get(job.task_id)?.priority.policy ?? 'unknown'}`)}
-      </span>,
-    },
-    {
-      title: t('columns.name'), key: 'name', width: 220, ellipsis: true,
-      render: (_, job) => {
-        const name = metadata.get(job.task_id)?.name
-        return name ? <span className="jobs-task-name-cell">
-          {t('taskFacts.name', { kind: t(name.name_key.slice(5)), resource: name.resource })}
-        </span> : placeholder
-      },
-    },
+      render: (_: unknown, job: BackgroundJob) => priorityPolicy(job.task_id) === 'producer_managed'
+        ? placeholder
+        : <span className="jobs-badge jobs-badge--priority">{t(`taskFacts.priority.${priorityPolicy(job.task_id)}`)}</span>,
+    }] : []),
     { title: t('columns.kind'), dataIndex: 'kind', width: 160, ellipsis: true, render: kindLabel },
     {
       title: t('columns.resource'),
       dataIndex: ['related_resource', 'reference'],
       width: 140,
       ellipsis: true,
+      render: (value: string, job) => value && value !== job.task_id ? value : placeholder,
     },
     {
       title: t('columns.dependency'), key: 'dependencies', width: 180,
@@ -1014,13 +1029,15 @@ function AdminTasksPageContent({
       title: t('columns.actions'),
       key: 'actions',
       width: 170,
+      // Pinned right so 详情/取消/重试 stay reachable without scrolling the wide table on a phone.
+      fixed: 'right',
       render: (_, job) => renderCommandActions(job, true),
     },
   ]
-  const rowSelection = canManage ? {
+  const rowSelection = canManage ? namedRows<BackgroundJob>({
     selectedRowKeys: selectedTaskIDs,
     onChange: (keys: Key[]) => setSelectedTaskIDs(keys.map(String)),
-  } : undefined
+  }, (job) => job.task_id, t('selectionScope')) : undefined
   const attemptColumns: TableColumnsType<JobAttempt> = [
     { title: t('attempts.number'), dataIndex: 'number', width: 80 },
     { title: t('columns.status'), dataIndex: 'status', width: 120, render: (value: JobAttemptState) => <StateTag state={value} /> },
@@ -1159,10 +1176,10 @@ function AdminTasksPageContent({
             onChange={(event) => setDraft((current) => ({ ...current, resource: event.target.value }))}
             onPressEnter={() => apply()}
           />
+          <Button className="jobs-query-button" icon={<Search size={15} aria-hidden="true" />} onClick={() => apply()}>
+            {t('actions.query')}
+          </Button>
         </div>
-        <Button className="visually-hidden" onClick={() => apply()}>
-          {t('actions.query')}
-        </Button>
       </div>
 
       {validationError ? <Alert className="identity-alert" type="error" showIcon message={validationError} /> : null}
@@ -1231,7 +1248,7 @@ function AdminTasksPageContent({
           disabled={pageIndex === 0 || listQuery.isFetching}
           onClick={() => setPageIndex((current) => current - 1)}
         />
-        {numberedPage ? visiblePageNumbers.map((number, index) => <span className="jobs-page-number" key={number}>
+        {numberedPage ? visiblePageNumbers.map((number, index) => <span className={`jobs-page-number${number === pageIndex + 1 ? ' is-current' : ''}`} key={number}>
           {index > 0 && number - visiblePageNumbers[index - 1] > 1 ? <span aria-hidden="true">…</span> : null}
           <Button
             aria-label={t('pagination.page', { page: formatNumber(number, locale) })}
@@ -1328,7 +1345,10 @@ function AdminTasksPageContent({
         <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
           <Descriptions.Item label={t('columns.id')} span="filled">{detail?.task_id ?? selectedTaskID ?? placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('columns.status')}>{detailStatus}</Descriptions.Item>
-          <Descriptions.Item label={t('columns.kind')}>{detail?.kind ?? placeholder}</Descriptions.Item>
+          <Descriptions.Item label={t('columns.kind')}>{detail ? detailKind(detail.kind) : placeholder}</Descriptions.Item>
+          {detail && metadata.get(detail.task_id) ? (
+            <Descriptions.Item label={t('columns.priority')}>{t(`taskFacts.priority.${priorityPolicy(detail.task_id)}`)}</Descriptions.Item>
+          ) : null}
           <Descriptions.Item label={t('columns.tenant')} span="filled">{detail?.tenant_id ?? placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('columns.resource')} span="filled">{detail?.related_resource.reference ?? placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('details.requestID')}>{detail?.request_id ?? placeholder}</Descriptions.Item>
@@ -1338,7 +1358,9 @@ function AdminTasksPageContent({
           <Descriptions.Item label={t('details.updatedAt')}>{detail ? formatDateTime(detail.updated_at, locale) : placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('details.completedAt')}>{detail?.completed_at ? formatDateTime(detail.completed_at, locale) : placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('columns.attempt')}>{detail ? `${formatNumber(detail.attempt, locale)} / ${formatNumber(detail.max_attempts, locale)}` : placeholder}</Descriptions.Item>
-          <Descriptions.Item label={t('columns.failureCode')}>{failureText(detail?.failure_code, placeholder, t)}</Descriptions.Item>
+          {detail?.failure_code ? (
+            <Descriptions.Item label={t('columns.failureCode')}>{failureText(detail.failure_code, placeholder, t)}</Descriptions.Item>
+          ) : null}
         </Descriptions>
 
         <section className="jobs-detail-section" aria-labelledby="jobs-progress-title">
@@ -1488,15 +1510,24 @@ function AdminTasksPageContent({
       </Modal>
       <Modal
         open={canManage && commandConfirmation !== null}
-        title={commandConfirmation ? t(`confirm.${commandConfirmation.action}Title`) : undefined}
+        title={commandConfirmation ? commandConfirmation.action === 'retry'
+          ? t('confirm.retryTitleNamed', { kind: kindLabel(commandConfirmation.job.kind) }) : t('confirm.cancelTitle') : undefined}
         okText={commandConfirmation ? t('actions.confirm') : undefined}
         cancelText={commandConfirmation ? t('actions.close') : undefined}
-        okButtonProps={{ disabled: !canManage }}
+        okButtonProps={{ disabled: !canManage, ...(commandConfirmation?.action === 'retry'
+          ? { 'aria-label': t('confirm.retryConfirmNamed', { kind: kindLabel(commandConfirmation.job.kind) }) } : {}) }}
         onOk={confirmCommand}
         onCancel={() => setCommandConfirmation(null)}
         destroyOnHidden
       >
         {commandConfirmation ? <p>{t(`confirm.${commandConfirmation.action}Description`)}</p> : null}
+        {/* Which task is retried: its resource (or task ID), current state and why it failed. */}
+        {commandConfirmation?.action === 'retry' ? <Descriptions size="small" column={1} items={[
+          { key: 'resource', label: t('columns.resource'), children: <span title={commandConfirmation.job.related_resource.reference || commandConfirmation.job.task_id}>
+            {shortReference(commandConfirmation.job.related_resource.reference || commandConfirmation.job.task_id)}</span> },
+          { key: 'status', label: t('columns.status'), children: <StateTag state={commandConfirmation.job.status} /> },
+          { key: 'failure', label: t('columns.failureCode'), children: failureText(commandConfirmation.job.failure_code, placeholder, t) },
+        ]} /> : null}
       </Modal>
     </section>
   )

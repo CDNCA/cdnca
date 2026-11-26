@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -31,7 +33,7 @@ func TestNativeVerifierTracksLiveVersionAndOnlyResumesExactDurablePlan(t *testin
 	status := controlplaneupgrade.NativeStandaloneStatus{Ready: true, Reason: "ready", Phase: "idle",
 		InstallationID: installationID, ProtocolVersion: 2, ArtifactFormat: controlplaneupgrade.NativeManifestSchema, CurrentVersion: "1.4.0"}
 	runner := nativeVerifierRunner{probe: func(context.Context) (controlplaneupgrade.NativeStandaloneStatus, error) { return status, nil }}
-	verify := newNativePlanVerifier(t.Context(), trust, installationID, 2, store, runner, func() time.Time { return now })
+	verify := newNativePlanVerifier(t.Context(), trust, installationID, 2, store, runner, func() time.Time { return now }, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	first := nativeSignedPlan(t, signer, installationID, "1.4.0", "1.5.0", 42, now)
 	if err := verify(first); err != nil {
 		t.Fatalf("first version rejected: %v", err)

@@ -120,6 +120,8 @@ type fakeTargets struct {
 	targets           map[string]RepairTarget
 	serving           map[string]cnameallocation.TargetValues
 	claimed           map[string]bool
+	// plans are the records stored with cleanup items (by item text).
+	plans map[string]CleanupRecord
 }
 
 func (targets *fakeTargets) PendingTenants(context.Context) ([]uuid.UUID, error) {
@@ -156,6 +158,11 @@ func (targets *fakeTargets) ZoneApex(_ context.Context, target RepairTarget, _ s
 
 func (targets *fakeTargets) ClaimedHostnames(context.Context, []uuid.UUID) (map[string]bool, error) {
 	return targets.claimed, nil
+}
+
+func (targets *fakeTargets) CleanupPlanRecord(_ context.Context, _, _ uuid.UUID, itemID string) (CleanupRecord, bool, error) {
+	record, ok := targets.plans[itemID]
+	return record, ok, nil
 }
 
 type fakePlatform struct {

@@ -1,7 +1,7 @@
 import i18n from '../i18n'
 
 const zhCN = {
-  actions: { moreRow: '更多', manage: '管理' },
+  actions: { moreRow: '更多' },
   editModal: {
     title: '编辑节点',
     advancedDetails: '高级详情',
@@ -132,7 +132,7 @@ const zhCN = {
 }
 
 const enUS: typeof zhCN = {
-  actions: { moreRow: 'More', manage: 'Manage' },
+  actions: { moreRow: 'More' },
   editModal: {
     title: 'Edit node',
     advancedDetails: 'Advanced details',

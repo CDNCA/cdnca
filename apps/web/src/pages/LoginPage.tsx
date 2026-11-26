@@ -433,7 +433,7 @@ export function LoginPage() {
               </Form.Item>
               <div className="login-links">
                 <Link to="/forgot-password">{t('forgotPassword')}</Link>
-                {canRegister ? <Link to="/register">{t('register')}</Link> : null}
+                {canRegister ? <a href="/register/">{t('register')}</a> : null}
               </div>
             </Form>
           </div>

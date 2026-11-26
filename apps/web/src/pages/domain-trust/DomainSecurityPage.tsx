@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Checkbox, Form, Input, Modal, Popconfirm, Radio, Result, Select, Space, Table, Tabs, Tag, Typography } from 'antd'
+import { Alert, App, Button, Checkbox, Form, Input, Modal, Popconfirm, Radio, Result, Select, Space, Tag, Typography } from 'antd'
+import { Tabs } from '../../components/Tabs'
 import { Download, Plus, ShieldOff, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -12,7 +13,9 @@ import {
 import { sitesApi } from '../../api/sites'
 import { useSessionStore } from '../../auth/session'
 import '../../i18n/domainTrust'
-import { useFeedback, FeedbackWhen, PageSection } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, PageSection, Table } from '@cdnca/ui'
+import { useNamedRowSelection } from '../../components/namedRowSelection'
+import { SearchInput } from '../../components/SearchInput'
 
 function codeOf(error: unknown): string {
   return error instanceof ApiError ? error.code : 'request_failed'
@@ -122,7 +125,7 @@ function BlocklistTab() {
   }
   return <>
     <Space wrap style={{ marginBottom: 12 }}>
-      <Input.Search allowClear placeholder={t('blocklist.search')} aria-label={t('blocklist.search')} onSearch={setSearch} style={{ width: 240 }} />
+      <SearchInput allowClear placeholder={t('blocklist.search')} aria-label={t('blocklist.search')} onSearch={setSearch} style={{ width: 240 }} />
       <Button type="primary" icon={<Plus size={14} />} onClick={() => setEditing({ entry: null })}>{t('blocklist.add')}</Button>
       <Button icon={<Upload size={14} />} onClick={() => setImporting(true)}>{t('blocklist.import')}</Button>
       <Button icon={<Download size={14} />} onClick={() => { void exportCSV() }}>{t('blocklist.export')}</Button>
@@ -148,6 +151,7 @@ function BlocklistTab() {
 
 function HitsTab() {
   const { t } = useTranslation('domainTrust')
+  const namedRows = useNamedRowSelection()
   const { message } = App.useApp()
   const feedback = useFeedback()
   const token = useSessionStore((state) => state.accessToken) ?? ''
@@ -176,8 +180,8 @@ function HitsTab() {
       onClick={() => disable.mutate(chosen)}>{t('hits.disable')}</Button>
     {query.error ? <FeedbackWhen title={t('errors.load', { code: codeOf(query.error) })} /> : null}
     <Table<BlocklistHit> rowKey="site_id" size="small" loading={query.isLoading} dataSource={hits} locale={{ emptyText: t('hits.none') }}
-      rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]),
-        getCheckboxProps: (hit) => ({ disabled: !hit.enabled }) }}
+      rowSelection={namedRows<BlocklistHit>({ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]),
+        getCheckboxProps: (hit) => ({ disabled: !hit.enabled }) }, (hit) => hit.domain, t('hits.selectionScope'))}
       columns={[
         { title: t('hits.site'), dataIndex: 'display_id' },
         { title: t('hits.domain'), dataIndex: 'domain' },
@@ -207,7 +211,7 @@ function OwnershipsTab() {
   })
   return <>
     <Space wrap style={{ marginBottom: 12 }}>
-      <Input.Search allowClear placeholder={t('ownership.apex')} aria-label={t('ownership.apex')} onSearch={setApex} style={{ width: 220 }} />
+      <SearchInput allowClear placeholder={t('ownership.apex')} aria-label={t('ownership.apex')} onSearch={setApex} style={{ width: 220 }} />
       <Select<OwnershipStatus | ''> value={status} onChange={setStatus} style={{ width: 160 }} aria-label={t('ownership.filterStatus')}
         options={[{ value: '', label: t('ownership.all') }, ...(['pending', 'verified', 'expired', 'revoked'] as const).map((value) => ({ value, label: t(`statuses.${value}`) }))]} />
     </Space>

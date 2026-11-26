@@ -15,7 +15,7 @@ import (
 // essential: resource writers acquire subscription before scope. A concurrent
 // writer must cause a retry, never a reversed-lock wait or a stale publication.
 func checkPackageRuntime(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, at time.Time, override *securityBindingFact) error {
-	rows, err := tx.Query(ctx, `SELECT s.id FROM package_subscriptions s
+	rows, err := tx.Query(ctx, `SELECT s.id,NOT (`+packageInEffectSQL("s")+`) FROM package_subscriptions s
 		WHERE s.tenant_scope_id=$1 AND (
 		 EXISTS(SELECT 1 FROM sites r WHERE r.scope_id=$1 AND r.package_subscription_id=s.id
 		  AND r.deleted_at IS NULL AND r.enabled)
@@ -25,11 +25,29 @@ func checkPackageRuntime(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, at t
 	if err != nil {
 		return packagePublicationLockError(err)
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	type subscription struct {
+		id         uuid.UUID
+		outOfForce bool
+	}
+	subscriptions, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (subscription, error) {
+		var item subscription
+		return item, row.Scan(&item.id, &item.outOfForce)
+	})
 	if err != nil {
 		return packagePublicationLockError(err)
 	}
-	for _, id := range ids {
+	for _, item := range subscriptions {
+		id := item.id
+		// A subscription not in effect (suspended, cancelled, disabled or
+		// deleted: packageInEffectSQL) has its sites and forwards left out of
+		// the publication (loadSiteFacts, loadStreamFacts): its limits do not
+		// apply, and its state must not refuse the rest of the scope (a
+		// suspended, then cancelled package refused every system republication
+		// of its tenant as package_subscription_inactive). Unsuspending or
+		// rebinding republishes the scope and checks it again.
+		if item.outOfForce {
+			continue
+		}
 		// Exclude suspended sites unless a recovery job will include them. Locking
 		// all enabled subscriptions above still serializes recovery with mutation.
 		var included bool

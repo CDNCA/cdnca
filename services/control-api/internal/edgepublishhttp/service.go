@@ -231,7 +231,10 @@ func (s *Service) ListPublications(
 		switch failure.Reason {
 		case edgepublish.AutomaticFailureNoTargetNodes, edgepublish.AutomaticFailureNodeCapability,
 			edgepublish.AutomaticFailureNodeArtifactsSyncing, edgepublish.AutomaticFailureNodeScopeConflict,
-			edgepublish.AutomaticFailureSiteConfigInvalid:
+			edgepublish.AutomaticFailureSiteConfigInvalid, edgepublish.AutomaticFailurePackageSubscriptionInactive,
+			edgepublish.AutomaticFailurePackageQuotaExceeded, edgepublish.AutomaticFailurePackageFeatureDenied,
+			edgepublish.AutomaticFailureModuleNotEntitled, edgepublish.AutomaticFailureSiteL2Unavailable,
+			edgepublish.AutomaticFailureRulePackOutOfProfile, edgepublish.AutomaticFailureSDKShieldPortShared:
 		default:
 			return PublicationPageView{}, ErrInvalidResponse
 		}
@@ -626,6 +629,12 @@ func publicationView(item edgepublish.PublishResult, audience string) (Publicati
 		result.Target.Kind = TargetNodes
 	} else {
 		result.Target.Kind = TargetLineGroup
+	}
+	if item.NodeSettingsRefusal != "" {
+		if !edgepublish.NodeSettingsRefusalCode(item.NodeSettingsRefusal) {
+			return PublicationView{}, ErrInvalidResponse
+		}
+		result.Kind, result.ContentRefusal = edgepublish.PublicationKindNodeSettings, item.NodeSettingsRefusal
 	}
 	if audience == AudiencePlatform {
 		scopeID := item.ConfigurationScopeID

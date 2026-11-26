@@ -23,6 +23,7 @@ paths:
         - $ref: '#/components/parameters/ResourceType'
         - $ref: '#/components/parameters/ResourceID'
         - $ref: '#/components/parameters/Change'
+        - $ref: '#/components/parameters/HideSessionRefresh'
         - $ref: '#/components/parameters/AuditBoundary'
         - $ref: '#/components/parameters/AfterAuditBoundary'
         - $ref: '#/components/parameters/Limit'
@@ -56,6 +57,7 @@ paths:
         - $ref: '#/components/parameters/ResourceType'
         - $ref: '#/components/parameters/ResourceID'
         - $ref: '#/components/parameters/Change'
+        - $ref: '#/components/parameters/HideSessionRefresh'
       responses:
         '200':
           description: At most 10000 rows and 8 MiB. X-Content-SHA256 authenticates exact bytes.
@@ -129,6 +131,7 @@ components:
     ResourceType: {name: resource_type, in: query, schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}}
     ResourceID: {name: resource_id, in: query, schema: {type: string, maxLength: 256}}
     Change: {name: change, in: query, schema: {type: string, maxLength: 256}}
+    HideSessionRefresh: {name: hide_session_refresh, in: query, description: Drops successful auth.refresh rows (session renewals); renewal failures stay. Bound to the cursor like the other filters., schema: {type: string, enum: ['true']}}
     AuditBoundary:
       name: audit_boundary
       in: query

@@ -12,6 +12,7 @@ import nodeListCSS from '../pages/NodeListPage.css?raw'
 import nodeListSource from '../pages/NodeListPage.tsx?raw'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { tabPanelOf } from '../test/tabs'
 
 const scopeID = '22222222-2222-4222-8222-222222222222'
 beforeEach(() => {
@@ -545,7 +546,6 @@ describe('NodeListPage', () => {
       expect(screen.getByRole('columnheader', { name: heading })).toBeInTheDocument()
     }
     expect(screen.getByRole('columnheader', { name: /^月流量/ })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: '操作' })).not.toHaveClass('ant-table-cell-fix-right')
     const installButton = screen.getByRole('button', { name: '安装节点' })
     expect(installButton).toHaveTextContent('安装节点')
     expect(installButton.querySelector('svg')).toBeInTheDocument()
@@ -565,7 +565,7 @@ describe('NodeListPage', () => {
     expect(within(installDialog).queryByRole('combobox')).not.toBeInTheDocument()
     expect(within(installDialog).getByRole('heading', { name: '2. 节点初始化' })).toBeInTheDocument()
     // NET-UX-6: one short step line; the IP details fold away.
-    expect(within(installDialog).getByText(/点击「初始化」才会上线、同步配置并加入 DNS 解析/)).toBeInTheDocument()
+    expect(within(installDialog).getByText(/点击「初始化」后上线并同步配置；在线路分组「配置解析」加入节点 IP 后才进入 DNS 解析/)).toBeInTheDocument()
     expect(within(installDialog).getByText('节点 IP 如何确定').closest('details')).not.toHaveAttribute('open')
     expect(installDialog.querySelector('.ant-modal-footer')).not.toBeInTheDocument()
     await user.click(installDialog.querySelector('.ant-modal-close')!)
@@ -582,7 +582,8 @@ describe('NodeListPage', () => {
     expect(mobileCSS).toMatch(/\.node-toolbar-filters > \.ant-select,[\s\S]*?width:\s*200px;[\s\S]*?flex:\s*0 0 200px;/)
     expect(mobileCSS).toMatch(/\.node-search\s*\{[\s\S]*?width:\s*170px;[\s\S]*?flex-basis:\s*170px;/)
     expect(nodeListCSS).toMatch(/\.node-tabs \.ant-tabs-tab \+ \.ant-tabs-tab\s*\{[\s\S]*?margin-left:\s*0 !important;/)
-    expect(mobileCSS).toMatch(/\.node-tabs \.ant-tabs-nav-operations\s*\{[\s\S]*?display:\s*none !important;/)
+    // 窄屏交回 rc-tabs（选中项与键盘焦点移入可见区、「更多」可用），不再自加原生横滚。
+    expect(mobileCSS).not.toMatch(/\.node-tabs \.ant-tabs-nav-(?:operations|list|wrap)\s*\{/)
     expect(mobileCSS).toMatch(/\.node-install-modal\s*\{[\s\S]*?top:\s*100px;[\s\S]*?width:\s*calc\(100% - 20px\) !important;/)
     expect(mobileCSS).toMatch(/\.node-install-command \.ant-input\s*\{[\s\S]*?min-height:\s*328px;/)
     expect(nodeListCSS).toMatch(/\.node-list-bandwidth-control > \.ant-select \.ant-select-selector\s*\{[\s\S]*?overflow:\s*hidden;/)
@@ -617,6 +618,31 @@ describe('NodeListPage', () => {
     expect(nodeListCSS).not.toMatch(/\.node-table-scroll \.ant-table\s*\{[^}]*min-width:\s*1330px;/)
     expect(nodeListSource).toContain("title: t('columns.region'), dataIndex: 'region', width: 140")
     expect(nodeListSource).toContain("scroll={{ x: nodeTab === 'list' ? 1330 : nodeTab === 'pending' ? 630 : 580 }}")
+  })
+
+  // 工具栏、列表与分页在选中页签 aria-controls 指向的面板里，切换后跟着走。
+  it('renders each tab’s toolbar and table inside the panel its tab controls', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(
+      String(input).startsWith('/v1/regions') ? json({ count: 0, data: [] }) : json({ items: [] }),
+    ))
+    const user = userEvent.setup({ delay: null })
+
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+    await screen.findByText('暂无节点')
+    expect(within(tabPanelOf('节点列表')).getByRole('table')).toBeInTheDocument()
+    expect(within(tabPanelOf('节点列表')).getByText('暂无节点')).toBeInTheDocument()
+    expect(within(tabPanelOf('节点列表')).getByRole('combobox', { name: '每页节点数' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '待初始化' }))
+    expect(await within(tabPanelOf('待初始化')).findByText('暂无待初始化节点')).toBeInTheDocument()
+    expect(within(tabPanelOf('待初始化')).getByRole('button', { name: '刷新' })).toBeInTheDocument()
+    expect(tabPanelOf('节点列表')).toBeEmptyDOMElement()
+
+    await user.click(screen.getByRole('tab', { name: '区域管理' }))
+    expect(await within(tabPanelOf('区域管理')).findByText('暂无区域')).toBeInTheDocument()
+    expect(within(tabPanelOf('区域管理')).getByRole('button', { name: '新增区域' })).toBeInTheDocument()
+    expect(tabPanelOf('待初始化')).toBeEmptyDOMElement()
   })
 
   it('renders every observed node status and the real empty region catalog', async () => {
@@ -876,6 +902,30 @@ describe('NodeListPage', () => {
     ))
   })
 
+  // 操作列固定右侧，每行一个只读详情入口，编辑走节点名
+  it('pins the row actions to the right with one detail entry distinct from editing', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [node] }))
+    const user = userEvent.setup({ delay: null })
+
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+
+    const nameButton = await screen.findByRole('button', { name: node.name })
+    const row = nameButton.closest('tr')!
+    const detail = within(row).getByRole('link', { name: '高级详情' })
+    expect(detail).toHaveAttribute('href', `/node/list/${node.id}`)
+    expect(detail.closest('td')).toHaveClass('ant-table-cell-fix-right')
+    expect(screen.getByRole('columnheader', { name: '操作' })).toHaveClass('ant-table-cell-fix-right')
+    expect(within(row).queryByRole('button', { name: '管理' })).not.toBeInTheDocument()
+    expect(within(row).getAllByRole('link', { name: '高级详情' })).toHaveLength(1)
+    await user.click(within(row).getByRole('button', { name: '更多' }))
+    expect(await screen.findByRole('menuitem', { name: '编辑' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '高级详情' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(nameButton)
+    expect(await screen.findByRole('dialog', { name: '编辑节点' })).toBeInTheDocument()
+  })
+
   it('opens the baseline editor read-only and keeps the advanced detail as an explicit link', async () => {
     authenticate(['nodes.read'])
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [node] }))
@@ -887,7 +937,7 @@ describe('NodeListPage', () => {
     expect(within(row).queryByRole('link', { name: '线路组' })).not.toBeInTheDocument()
     expect(within(row).getByRole('link', { name: '高级详情' }))
       .toHaveAttribute('href', `/node/list/${node.id}`)
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    await user.click(within(row).getByRole('button', { name: node.name }))
     const dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     expect(within(dialog).getByRole('button', { name: '确定' })).toBeDisabled()
     expect(within(row).queryByRole('button', { name: '编辑' })).not.toBeInTheDocument()
@@ -943,7 +993,7 @@ describe('NodeListPage', () => {
     await screen.findByText('节点信息已更新')
     expect(writes.at(-1)).toMatchObject({ ipv4: node.ipv4, ipv6: '2001:db8::20', management_settings: { sort: 100, node_type: 'L2' } })
 
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    await user.click(within(row).getByRole('button', { name: node.name }))
     dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     await user.click(within(dialog).getByRole('tab', { name: '节点设置' }))
     expect(within(dialog).getByLabelText('缓存目录')).toBeInTheDocument()
@@ -965,7 +1015,7 @@ describe('NodeListPage', () => {
     await user.click(within(dialog).getByRole('button', { name: '关闭' }))
     expect(writes).toHaveLength(1)
 
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    await user.click(within(row).getByRole('button', { name: node.name }))
     dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     await user.click(within(dialog).getByRole('tab', { name: 'IP归属' }))
     expect(within(dialog).getByText(/L2 配置里按节点国家代码、省份、城市、ISP 设置的条件/)).toBeInTheDocument()
@@ -978,7 +1028,7 @@ describe('NodeListPage', () => {
     await waitFor(() => expect(writes).toHaveLength(2))
     expect(writes.at(-1)).toMatchObject({ management_settings: { ip_location: { city: '杭州' }, ip_location_manual: ['city'] } })
 
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    await user.click(within(row).getByRole('button', { name: node.name }))
     dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     await user.click(within(dialog).getByRole('tab', { name: '自动禁用' }))
     expect(within(dialog).getByRole('switch', { name: '流量限制' })).toBeChecked()
@@ -1006,7 +1056,7 @@ describe('NodeListPage', () => {
     expect(writes.at(-1)).toMatchObject({ management_settings: { auto_disable: { disabled_periods: '00:00:00-03:00:00', bandwidth_limit: 0 } } })
 
     // A zero bandwidth limit means "no limit" and reads back as an empty field.
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    await user.click(within(row).getByRole('button', { name: node.name }))
     dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     await user.click(within(dialog).getByRole('tab', { name: '自动禁用' }))
     expect(within(dialog).getByPlaceholderText('留空不限制')).toHaveValue('')
@@ -1014,7 +1064,7 @@ describe('NodeListPage', () => {
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
     await waitFor(() => expect(writes).toHaveLength(4))
     expect(writes.at(-1)).toMatchObject({ management_settings: { auto_disable: { bandwidth_limit: 800 } } })
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    await user.click(within(row).getByRole('button', { name: node.name }))
     dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     await user.click(within(dialog).getByRole('tab', { name: '自动禁用' }))
     expect(within(dialog).getByPlaceholderText('留空不限制')).toHaveValue('800')
@@ -1023,7 +1073,7 @@ describe('NodeListPage', () => {
     await waitFor(() => expect(writes).toHaveLength(5))
     expect(writes.at(-1)).toMatchObject({ management_settings: { auto_disable: { bandwidth_limit: 0 } } })
 
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    await user.click(within(row).getByRole('button', { name: node.name }))
     dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     await user.click(within(dialog).getByRole('tab', { name: '添加子IP' }))
     expect(within(dialog).getByLabelText('子IP')).toHaveAttribute('placeholder', '一行一个')
@@ -1033,8 +1083,8 @@ describe('NodeListPage', () => {
     expect(writes.at(-1)).toMatchObject({ management_settings: { secondary_ips: ['198.51.100.10', '2001:db8::20'] } })
     expect((writes.at(-1) as { management_settings: Record<string, unknown> }).management_settings).not.toHaveProperty('schedule302_hostname')
 
-    // 302 direct hostname: an IP is refused, a hostname is lower-cased.
-    await user.click(within(row).getByRole('button', { name: '管理' }))
+    // 302 direct hostname (sched302): an IP is refused, a hostname is lower-cased.
+    await user.click(within(row).getByRole('button', { name: node.name }))
     dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     await user.click(within(dialog).getByRole('tab', { name: '添加子IP' }))
     const hostname = within(dialog).getByLabelText('302 直连域名')
@@ -1190,8 +1240,8 @@ describe('NodeListPage', () => {
     await user.click(screen.getByRole('button', { name: '使用同一请求重试' }))
     await screen.findByText('节点信息已更新')
 
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Shanghai' }))
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Beijing' }))
+    await user.click(screen.getByRole('checkbox', { name: '选择 Edge Shanghai' }))
+    await user.click(screen.getByRole('checkbox', { name: '选择 Edge Beijing' }))
     await openBatchAction(user)
     await user.click(within(await screen.findByRole('dialog', { name: '批量变更状态（2 个节点）' })).getByRole('button', { name: '确认变更' }))
     await screen.findByRole('dialog', { name: '批量操作结果' })
@@ -1229,7 +1279,7 @@ describe('NodeListPage', () => {
     renderWithProviders(<NodeListPage />)
     await screen.findByText('Edge Shanghai')
 
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Shanghai' }))
+    await user.click(screen.getByRole('checkbox', { name: '选择 Edge Shanghai' }))
     await openRowAction(user, screen.getByText('Edge Shanghai').closest('tr')!, '编辑')
     const dialog = await screen.findByRole('dialog', { name: '编辑节点' })
     const description = within(dialog).getByLabelText('备注')
@@ -1240,7 +1290,7 @@ describe('NodeListPage', () => {
     expect(await screen.findByText('操作结果待确认', { selector: '.cdnca-outcome-bar .ant-alert-message' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '安装节点' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '更多' })).toBeDisabled()
-    expect(screen.getByRole('checkbox', { name: 'Edge Shanghai' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: '选择 Edge Shanghai' })).toBeDisabled()
     // 编辑弹窗已关闭；仅剩 OutcomeUnknown 的说明弹窗（它自带 ×）。
     expect(screen.queryAllByRole('button', { name: 'Close' }).filter((button) => !button.closest('.cdnca-feedback'))).toHaveLength(0)
     act(() => useSessionStore.setState({ accessToken: 'token-after-refresh', expiresAt: Date.now() + 60_000 }))
@@ -1639,8 +1689,8 @@ describe('NodeListPage', () => {
     renderWithProviders(<NodeListPage />)
     await screen.findByText('Edge Beijing')
 
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Shanghai' }))
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Beijing' }))
+    await user.click(screen.getByRole('checkbox', { name: '选择 Edge Shanghai' }))
+    await user.click(screen.getByRole('checkbox', { name: '选择 Edge Beijing' }))
     await openBatchAction(user)
     const dialog = await screen.findByRole('dialog', { name: '批量变更状态（2 个节点）' })
     expect(within(dialog).getByText('已禁用')).toBeInTheDocument()
@@ -1706,8 +1756,8 @@ describe('NodeListPage', () => {
     renderWithProviders(<NodeListPage />)
     await screen.findByText('Edge Beijing')
 
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Shanghai' }))
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Beijing' }))
+    await user.click(screen.getByRole('checkbox', { name: '选择 Edge Shanghai' }))
+    await user.click(screen.getByRole('checkbox', { name: '选择 Edge Beijing' }))
     await openBatchAction(user)
     const confirm = await screen.findByRole('dialog', { name: '批量变更状态（2 个节点）' })
     await user.click(within(confirm).getByRole('button', { name: '确认变更' }))

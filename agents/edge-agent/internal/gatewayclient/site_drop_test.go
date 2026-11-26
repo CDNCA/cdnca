@@ -115,7 +115,9 @@ func TestSiteDropReceipt(t *testing.T) {
 		t.Fatalf("runtime failure: %v %v", receipt, err)
 	}
 	for name, mutate := range map[string]func(*agentv1.SiteDropCommand){
-		"digest":     func(c *agentv1.SiteDropCommand) { c.ListSha256 = append([]byte{1}, c.ListSha256[1:]...) },
+		"digest": func(c *agentv1.SiteDropCommand) {
+			c.ListSha256 = append([]byte{c.ListSha256[0] ^ 1}, c.ListSha256[1:]...)
+		},
 		"other node": func(c *agentv1.SiteDropCommand) { c.NodeId = uuid.NewString() },
 		"no event":   func(c *agentv1.SiteDropCommand) { c.Event = nil },
 		"revision 0": func(c *agentv1.SiteDropCommand) { c.Revision = 0 },

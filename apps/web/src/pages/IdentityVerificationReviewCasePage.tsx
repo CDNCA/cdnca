@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Descriptions, Popconfirm, Result, Space, Table, Tag, Typography, type TableColumnsType } from 'antd'
+import { Button, Descriptions, Popconfirm, Result, Space, Tag, Typography, type TableColumnsType } from 'antd'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -18,7 +18,7 @@ import { DataState } from '../components/DataState'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/identityVerificationReviewCase'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 
 type Owner = readonly ['tenant', string, string, string, number]
 interface ClaimAttempt {

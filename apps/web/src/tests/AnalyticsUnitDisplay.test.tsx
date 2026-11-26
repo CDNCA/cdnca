@@ -82,7 +82,7 @@ describe('analytics minimum display units', () => {
       rows: [{ bucket: '2026-09-26T01:00:00Z', node_id: 'node', site_id: 'site', stream_id: 'stream', listener_id: 'listener', protocol: 'tcp', listen_port: 443, sessions: 1, bytes_up: 256, bytes_down: 256, errors: 0 }],
     })
     renderWithProviders(<L4RealtimeMonitorPage />)
-    expect(await within(screen.getByRole('region', { name: '流量' })).findAllByText('0.5 KB')).not.toHaveLength(0)
+    expect(await within(await screen.findByRole('region', { name: '流量' })).findAllByText('0.5 KB')).not.toHaveLength(0)
     expect(within(screen.getByRole('region', { name: '带宽' })).getAllByText('0.07 Kbps')).not.toHaveLength(0)
     await userEvent.setup().click(screen.getByRole('tab', { name: '端口排行' }))
     expect(await screen.findByText('0.5 KB')).toBeInTheDocument()

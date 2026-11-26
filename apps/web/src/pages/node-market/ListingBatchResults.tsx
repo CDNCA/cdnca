@@ -1,8 +1,8 @@
-import { Alert, Button, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Space, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import type { MarketListingBatchItem } from '../../api/market'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
 import { retryNodes, unpublished } from './listingModel'
 
 const color: Record<MarketListingBatchItem['status'], string> = { created: 'success', existing: 'default', failed: 'error', in_progress: 'processing' }

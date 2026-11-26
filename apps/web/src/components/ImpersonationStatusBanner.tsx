@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Button, Space } from 'antd'
 import { LogOut, RotateCcw, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 
 import { ApiError, authApi } from '../api/auth'
 import {
@@ -28,6 +29,7 @@ function outcomeUnknown(error: ApiError): boolean {
 
 export function ImpersonationStatusBanner() {
   const { t, i18n } = useTranslation('adminImpersonation')
+  const navigate = useNavigate()
   const principal = useSessionStore((state) => state.principal)
   const marker = principal?.impersonation
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
@@ -76,7 +78,8 @@ export function ImpersonationStatusBanner() {
       if (ownsAttempt(current)) {
         setAttempt(null)
         setFailure(null)
-        useSessionStore.getState().transitionPrincipal(current.ownerEpoch, restored)
+        // 主动退出代登录：回到管理员服务概览，不停留在租户页面地址上。
+        if (useSessionStore.getState().transitionPrincipal(current.ownerEpoch, restored)) navigate('/admin-home', { replace: true })
       }
     } catch (caught) {
       if (!ownsAttempt(current)) return

@@ -74,8 +74,8 @@ type State struct {
 	Effective *Library                           `json:"effective"`
 	Profiles  []securitypolicy.CRSProfileSummary `json:"profiles"`
 	// Apps are the selectable application types (downloaded packs).
-	Apps []securitypolicy.CRSAppSummary `json:"apps"`
-	UpdatedAt *time.Time                         `json:"updated_at"`
+	Apps      []securitypolicy.CRSAppSummary `json:"apps"`
+	UpdatedAt *time.Time                     `json:"updated_at"`
 	// RulePackSuspensions are the site's ModSecurity rule pack mounts
 	// suspended because the effective profile does not cover them
 	// (rulepackcontrol suspend.go); they come back when it does again.

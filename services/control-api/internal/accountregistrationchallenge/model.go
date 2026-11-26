@@ -43,6 +43,9 @@ type CreateResult struct {
 	ChallengeID uuid.UUID
 	ExpiresAt   time.Time
 	Replayed    bool
+	// Binding is the browser binding of the challenge: the HTTP adapter sets
+	// it as an HttpOnly cookie and sends it back as VerifyInput.Binding.
+	Binding string
 }
 
 type VerifyInput struct {
@@ -53,6 +56,7 @@ type VerifyInput struct {
 	Phone          string
 	Channel        string
 	Source         string
+	Binding        string
 	OTP            string
 	IdempotencyKey string
 	RequestID      string

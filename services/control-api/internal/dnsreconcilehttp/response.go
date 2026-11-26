@@ -65,6 +65,13 @@ type checkView struct {
 	Provider                 providerSnapshotBody `json:"provider"`
 }
 
+// dryRunView is the dry-run result with the provider snapshot it was built
+// on; an apply sends that snapshot back to run exactly the plan shown.
+type dryRunView struct {
+	reconcileResultView
+	Provider providerSnapshotBody `json:"provider"`
+}
+
 type reconcileResultView struct {
 	TenantID         uuid.UUID                   `json:"tenant_id"`
 	SiteID           uuid.UUID                   `json:"site_id"`
@@ -302,6 +309,8 @@ func classifyError(err error, command bool) (int, string, string) {
 		return http.StatusForbidden, "dns_reconcile_entitlement_denied", "DNS reconciliation entitlement is required"
 	case errors.Is(err, ErrInvalidRequest), errors.Is(err, dnsreconcile.ErrInvalidInput), errors.Is(err, dnscheck.ErrInvalidInput):
 		return http.StatusBadRequest, "dns_reconcile_invalid_request", "request fields are invalid"
+	case errors.Is(err, dnsreconcile.ErrZoneNotHosted):
+		return http.StatusNotFound, "dns_reconcile_zone_not_found", "no hosted zone of the site DNS account covers the name"
 	case errors.Is(err, dnsreconcile.ErrNotFound), errors.Is(err, dnscheck.ErrTaskNotFound):
 		return http.StatusNotFound, "dns_reconcile_not_found", "DNS reconciliation task was not found"
 	case errors.Is(err, dnsreconcile.ErrIdempotencyConflict), errors.Is(err, dnscheck.ErrIdempotencyConflict):

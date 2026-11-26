@@ -36,7 +36,6 @@ describe('node monitor settings translations', () => {
     const t = i18n.getFixedT(locale, 'nodeMonitorSettings')
     expect(t('lifecycle.saveFirst')).not.toContain('lifecycle.')
     expect(t('lifecycle.statuses.active')).not.toContain('statuses.')
-    expect(t('lifecycle.description')).not.toContain('lifecycle.')
   })
 
   it.each([

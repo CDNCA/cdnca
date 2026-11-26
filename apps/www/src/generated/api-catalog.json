@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 719,
+ "total": 724,
  "api_key_count": 159,
  "groups": [
   {
@@ -1536,6 +1536,26 @@
    ]
   },
   {
+   "id": "admin-control-origin-auth",
+   "prefix": "/v1/admin/control-origin-auth",
+   "count": 1,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/admin/control-origin-auth",
+     "summary": "Read whether the console behind a CDN gets the visitor address (source IP header, origin authentication)",
+     "summary_zh": "读取主控在 CDN 后是否已取得访客 IP（源IP请求头 / 回源鉴权状态）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "getControlOriginAuthStatus"
+    }
+   ]
+  },
+  {
    "id": "admin-control-upgrade-checks",
    "prefix": "/v1/admin/control-upgrade-checks",
    "count": 1,
@@ -3034,7 +3054,7 @@
   {
    "id": "admin-system-mail-settings",
    "prefix": "/v1/admin/system-mail-settings",
-   "count": 2,
+   "count": 3,
    "api_key_count": 0,
    "operations": [
     {
@@ -3060,6 +3080,18 @@
      "api_key": false,
      "source": "api/control-system-mail-settings.openapi.yaml",
      "operation_id": "updatePlatformSystemMailSettings"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/system-mail-settings/tests",
+     "summary": "Send a test mail with the provider on the page",
+     "summary_zh": "用当前页面的邮件服务发送测试邮件",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-system-mail-settings.openapi.yaml",
+     "operation_id": "testPlatformSystemMailSettings"
     }
    ]
   },
@@ -3888,7 +3920,7 @@
   {
    "id": "auth",
    "prefix": "/v1/auth",
-   "count": 14,
+   "count": 15,
    "api_key_count": 2,
    "operations": [
     {
@@ -3906,8 +3938,8 @@
     {
      "method": "POST",
      "path": "/v1/auth/login-captchas",
-     "summary": "Issue a one-time built-in sign-in CAPTCHA bound to the source address",
-     "summary_zh": "签发绑定来源地址的一次性内置登录验证码",
+     "summary": "Issue a one-time built-in CAPTCHA bound to this browser",
+     "summary_zh": "签发绑定当前浏览器的一次性内置验证码",
      "auth": [
       "none"
      ],
@@ -4067,6 +4099,21 @@
      ],
      "source": "api/openapi/v1/account-registration-challenge.yaml",
      "operation_id": "getAccountRegistrationConfig"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/auth/registration-terms",
+     "summary": "Sign-up terms",
+     "summary_zh": "注册用户协议：系统设置「账号与安全」里的协议标题、正文与当前版本",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "tags": [
+      "Account registration challenge"
+     ],
+     "source": "api/openapi/v1/account-registration-challenge.yaml",
+     "operation_id": "getAccountRegistrationTerms"
     },
     {
      "method": "POST",
@@ -4849,7 +4896,7 @@
   {
    "id": "dns",
    "prefix": "/v1/dns",
-   "count": 31,
+   "count": 32,
    "api_key_count": 7,
    "operations": [
     {
@@ -4966,6 +5013,18 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "savePlatformDNSConfig"
+    },
+    {
+     "method": "DELETE",
+     "path": "/v1/dns/platform-config",
+     "summary": "Disconnect the DNS provider - remove the saved credentials and disable every tenant copy",
+     "summary_zh": "断开 DNS 服务商：撤销已保存的凭据并停用每个租户副本",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "disconnectPlatformDNSConfig"
     },
     {
      "method": "POST",
@@ -5772,7 +5831,7 @@
   {
    "id": "identity-verification",
    "prefix": "/v1/identity-verification",
-   "count": 15,
+   "count": 16,
    "api_key_count": 0,
    "operations": [
     {
@@ -5864,6 +5923,21 @@
      ],
      "source": "api/control-identity-verification.openapi.yaml",
      "operation_id": "withdrawMyIdentityVerificationCase"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/identity-verification/methods",
+     "summary": "Read the verification methods the authenticated user may start",
+     "summary_zh": "读取当前可发起的实名认证方式",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "tags": [
+      "My identity verification"
+     ],
+     "source": "api/control-identity-verification.openapi.yaml",
+     "operation_id": "getMyIdentityVerificationMethods"
     },
     {
      "method": "POST",
@@ -8480,7 +8554,7 @@
      "method": "POST",
      "path": "/v1/sites/{site_id}/dns-reconcile/dry-run",
      "summary": "Build a deterministic repair plan without provider side effects",
-     "summary_zh": "生成确定性的修复计划，不调用服务商",
+     "summary_zh": "生成确定性的修复计划，不写服务商记录",
      "auth": [
       "bearer"
      ],

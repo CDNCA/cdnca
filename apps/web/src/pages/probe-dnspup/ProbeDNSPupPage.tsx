@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Checkbox, Descriptions, Form, Input, Result, Select, Skeleton, Space, Switch, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +13,7 @@ import { useSessionStore } from '../../auth/session'
 import { PurchaseModuleLink } from '../../components/PurchaseModuleLink'
 import '../../i18n/probeDNSPup'
 import { NodeProbeCard } from './NodeProbeCard'
+import { useProbeReason } from './probeErrors'
 import { MatrixCard, OverridesCard, PurposesCard } from './UnifiedCards'
 import { useFeedback, FeedbackWhen, PageHeader, PageSection, useFormSubmitError } from '@cdnca/ui'
 import './ProbeDNSPupPage.css'
@@ -30,14 +31,16 @@ interface FormValues {
 const originSources: OriginProbeSource[] = ['node', 'dnspup', 'controller']
 const edgeSources: EdgeProbeSource[] = ['node', 'dnspup']
 
-function toInput(values: FormValues, clearSecret: boolean): ProbeDNSPupInput {
+// api_secret omitted keeps the stored secret, "" clears it; clearing the key clears the stored secret with it (a
+// secret is only ever sent with the key it was entered for).
+function toInput(values: FormValues, clearSecret: boolean, secretConfigured: boolean): ProbeDNSPupInput {
   const input: ProbeDNSPupInput = {
-    enabled: values.enabled, base_url: values.base_url.trim(), api_key: values.api_key.trim(),
+    enabled: values.enabled, base_url: values.base_url.trim(), api_key: values.api_key?.trim() ?? '',
     source_domain: values.source_domain?.trim() ?? '', origin_sources: values.origin_sources, edge_sources: values.edge_sources,
   }
   const secret = values.api_secret?.trim()
   if (secret) input.api_secret = secret
-  else if (clearSecret) input.api_secret = ''
+  else if (clearSecret || (secretConfigured && !input.api_key)) input.api_secret = ''
   return input
 }
 
@@ -54,9 +57,19 @@ export default function ProbeDNSPupPage() {
   const [form] = Form.useForm<FormValues>()
   const markSubmitError = useFormSubmitError(form)
   const [clearSecret, setClearSecret] = useState(false)
+  // Which button validates: saving needs the key pair only while enabled; the connection test always needs the key.
+  const validating = useRef<'save' | 'test'>('save')
   const status = useQuery({ queryKey: ['probe-dnspup'], queryFn: () => probeDNSPupApi.status(token), enabled: Boolean(token) })
-  const reason = (error: unknown) => t(`errors.${error instanceof ApiError ? error.code : 'request_failed'}`,
-    { defaultValue: error instanceof ApiError ? error.code : t('errors.request_failed') })
+  const reason = useProbeReason(true)
+  const secretConfigured = Boolean(status.data?.secret_configured)
+  const validate = async (mode: 'save' | 'test') => {
+    validating.current = mode
+    try {
+      return await form.validateFields()
+    } finally {
+      validating.current = 'save'
+    }
+  }
 
   useEffect(() => {
     const data = status.data
@@ -67,12 +80,13 @@ export default function ProbeDNSPupPage() {
   }, [status.data, form])
 
   const save = useMutation({
-    mutationFn: async () => probeDNSPupApi.save(token, toInput(await form.validateFields(), clearSecret), newIdempotencyKey('probe-dnspup-save')),
+    mutationFn: async () => probeDNSPupApi.save(token, toInput(await validate('save'), clearSecret, secretConfigured),
+      newIdempotencyKey('probe-dnspup-save')),
     onSuccess: (data: ProbeDNSPupStatus) => { client.setQueryData(['probe-dnspup'], data); void message.success(t('form.saved')) },
     onError: (error) => { markSubmitError(error, () => void feedback.error(reason(error))) },
   })
   const test = useMutation({
-    mutationFn: async () => probeDNSPupApi.test(token, toInput(await form.validateFields(), false), newIdempotencyKey('probe-dnspup-test')),
+    mutationFn: async () => probeDNSPupApi.test(token, toInput(await validate('test'), false, false), newIdempotencyKey('probe-dnspup-test')),
     onSuccess: (result) => {
       void client.invalidateQueries({ queryKey: ['probe-dnspup'] })
       if (result.ok) void message.success(t('form.testOK', { used: result.monthly_used, limit: result.monthly_limit }))
@@ -87,7 +101,7 @@ export default function ProbeDNSPupPage() {
   const licensed = Boolean(data?.licensed)
   const sourceOptions = (values: string[]) => values.map((value) => ({ value, label: t(`sources.${value}`) }))
 
-  // One page card; every block below is a titled section of it (thin border, no nested cards).
+  // one page card; every block below is a titled section of it (thin border, no nested cards).
   // The connection section opens with the account state as a one-row strip, then the fields on the density grid.
   return <PageSection className="probe-dnspup-page">
     <PageHeader title={t('title')} description={t('intro')} />
@@ -109,14 +123,17 @@ export default function ProbeDNSPupPage() {
             </Descriptions.Item> : null}
           </Descriptions> : null}
           <Form form={form} layout="vertical" disabled={!data} requiredMark={false}>
-            <div className="density-form-grid">
+            <div className="density-form-grid probe-dnspup-form-grid">
               <Form.Item name="base_url" label={t('form.baseURL')} rules={[{ required: true, type: 'url' }]}>
                 <Input placeholder="https://api.dnspup.com" autoComplete="off" />
               </Form.Item>
-              <Form.Item name="api_key" label={t('form.apiKey')} rules={[{ required: true, min: 8 }]}>
+              <Form.Item name="api_key" label={t('form.apiKey')} dependencies={['enabled']}
+                rules={[({ getFieldValue }) => ({ required: validating.current === 'test' || Boolean(getFieldValue('enabled')) }), { min: 8 }]}>
                 <Input autoComplete="off" />
               </Form.Item>
-              <Form.Item name="api_secret" label={t('form.apiSecret')} rules={[{ min: 16 }]}
+              <Form.Item name="api_secret" label={t('form.apiSecret')} dependencies={['enabled']}
+                rules={[({ getFieldValue }) => ({ required: validating.current === 'save' && Boolean(getFieldValue('enabled')) &&
+                  (!secretConfigured || clearSecret) }), { min: 16 }]}
                 extra={data?.secret_configured ? <Space size={[12, 0]} wrap>
                   <span>{t('form.secretKeep', { fingerprint: data.secret_fingerprint })}</span>
                   <Checkbox checked={clearSecret} onChange={(event) => setClearSecret(event.target.checked)}>{t('form.clearSecret')}</Checkbox>
@@ -147,8 +164,8 @@ export default function ProbeDNSPupPage() {
           </Form>
         </>}
       </PageSection>
-      {data ? <PurposesCard token={token} /> : null}
-      {data ? <NodeProbeCard token={token} /> : null}
+      {data ? <PurposesCard token={token} connection={data} /> : null}
+      {data ? <NodeProbeCard token={token} connection={data} /> : null}
       {data ? <OverridesCard token={token} /> : null}
       {data ? <MatrixCard token={token} initialNode={new URLSearchParams(window.location.search).get('node') ?? undefined} /> : null}
     </div>

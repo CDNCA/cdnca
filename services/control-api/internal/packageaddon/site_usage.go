@@ -12,7 +12,7 @@ import (
 )
 
 type SiteUsageCounts struct {
-	Domains, RootDomains, HTTPPorts int64
+	Sites, Domains, RootDomains, HTTPPorts int64
 }
 
 type siteAllocation struct {
@@ -62,9 +62,23 @@ func CheckSiteChange(ctx context.Context, tx pgx.Tx, scopeID, subscriptionID, si
 	if err != nil {
 		return err
 	}
-	for _, value := range [][3]int64{{before.Domains, after.Domains, limits.Domains}, {before.RootDomains, after.RootDomains, limits.RootDomains}, {before.HTTPPorts, after.HTTPPorts, limits.HTTPPorts}} {
-		if value[2] >= 0 && value[1] > value[2] && value[1] > value[0] {
-			return ErrQuotaExceeded
+	return siteQuotaRefusal(before, after, limits)
+}
+
+// siteQuotaRefusal names the first resource the change pushes above its limit;
+// a change that does not grow an over-quota resource is admitted.
+func siteQuotaRefusal(before, after SiteUsageCounts, limits RuntimeLimits) error {
+	for _, value := range []struct {
+		resource             string
+		before, after, limit int64
+	}{
+		{QuotaResourceSites, before.Sites, after.Sites, limits.Sites},
+		{QuotaResourceDomains, before.Domains, after.Domains, limits.Domains},
+		{QuotaResourceRootDomains, before.RootDomains, after.RootDomains, limits.RootDomains},
+		{QuotaResourceHTTPPorts, before.HTTPPorts, after.HTTPPorts, limits.HTTPPorts},
+	} {
+		if value.limit >= 0 && value.after > value.limit && value.after > value.before {
+			return &QuotaExceededError{Resource: value.resource, Limit: value.limit, Used: value.before, Requested: value.after - value.before}
 		}
 	}
 	return nil
@@ -129,6 +143,6 @@ func countSiteAllocations(sites []siteAllocation) (SiteUsageCounts, error) {
 		}
 		result.HTTPPorts += int64(len(ports))
 	}
-	result.Domains, result.RootDomains = int64(len(domains)), int64(len(roots))
+	result.Sites, result.Domains, result.RootDomains = int64(len(sites)), int64(len(domains)), int64(len(roots))
 	return result, nil
 }

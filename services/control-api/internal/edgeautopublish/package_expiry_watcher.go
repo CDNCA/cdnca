@@ -89,7 +89,13 @@ func (watcher *PackageExpiryWatcher) RunOnce(ctx context.Context) (bool, error) 
 	}
 	watcher.last = now
 	scopes, err := watcher.SweepOnce(ctx)
-	return len(scopes) > 0, err
+	if err != nil {
+		return false, err
+	}
+	// A package change in effect since its fulfillment (next_cycle) is
+	// published on the same polls.
+	changed, err := watcher.SweepPackageChangesOnce(ctx)
+	return len(scopes) > 0 || len(changed) > 0, err
 }
 
 // SweepOnce returns the scopes it queued, in scope order.

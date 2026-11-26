@@ -44,7 +44,10 @@ describe('AccountRecoveryRequestPage', () => {
     renderWithProviders(<SessionBootstrap><AppRoutes /></SessionBootstrap>, ['/forgot-password'])
 
     // 找回密码页懒加载。
-    expect(await screen.findByRole('heading', { name: 'cdnca' })).toBeInTheDocument()
+    // 一级标题是任务名「找回密码」，品牌名不再作标题。
+    expect(await screen.findByRole('heading', { level: 1, name: '找回密码' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'cdnca' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('找回密码').filter((node) => node.tagName !== 'TITLE')).toHaveLength(1)
     expect(screen.getByRole('button', { name: '发送重置指引' })).toBeInTheDocument()
     expect(fetchSpy).not.toHaveBeenCalled()
   })
@@ -64,11 +67,11 @@ describe('AccountRecoveryRequestPage', () => {
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
-    expect(await screen.findByText('请输入用户名')).toBeInTheDocument()
+    expect(await screen.findByText('请输入用户名或已验证邮箱')).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('用户名'), `  ${'界'.repeat(342)}  `)
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), `  ${'界'.repeat(342)}  `)
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
-    expect(await screen.findByText('用户名不能超过 1024 字节')).toBeInTheDocument()
+    expect(await screen.findByText('用户名或邮箱不能超过 1024 字节')).toBeInTheDocument()
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -77,7 +80,7 @@ describe('AccountRecoveryRequestPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
-    await user.type(screen.getByLabelText('用户名'), '  missing-or-disabled-user  ')
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), '  missing-or-disabled-user  ')
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
 
     expect(await screen.findByText('如账号可用，重置指引将发送至已绑定联系方式')).toBeInTheDocument()
@@ -90,6 +93,21 @@ describe('AccountRecoveryRequestPage', () => {
     expect(screen.queryByText(/不存在|禁用|missing|disabled/i)).not.toBeInTheDocument()
   })
 
+  // 注册可不填用户名，找回也收已验证邮箱，仍放在 username 字段。
+  it('takes a verified email in the same field and answers it alike', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(acceptedResponse())
+    const user = userEvent.setup()
+    renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
+
+    const field = screen.getByLabelText('用户名或已验证邮箱')
+    expect(field).toHaveAttribute('placeholder', '请输入用户名或已验证邮箱')
+    await user.type(field, '  Dana@Example.com ')
+    await user.click(screen.getByRole('button', { name: '发送重置指引' }))
+
+    expect(await screen.findByText('如账号可用，重置指引将发送至已绑定联系方式')).toBeInTheDocument()
+    expect(JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body))).toEqual({ username: 'Dana@Example.com' })
+  })
+
   it('reuses the exact idempotency key and body after an unknown result', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockRejectedValueOnce(new TypeError('connection reset'))
@@ -97,10 +115,10 @@ describe('AccountRecoveryRequestPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
-    await user.type(screen.getByLabelText('用户名'), 'jason')
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), 'jason')
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
     expect(await screen.findByText('无法连接服务，请稍后重试')).toBeInTheDocument()
-    expect(screen.getByLabelText('用户名')).toBeDisabled()
+    expect(screen.getByLabelText('用户名或已验证邮箱')).toBeDisabled()
 
     const firstHeaders = fetchSpy.mock.calls[0]?.[1]?.headers as Record<string, string>
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
@@ -121,7 +139,7 @@ describe('AccountRecoveryRequestPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
-    await user.type(screen.getByLabelText('用户名'), 'jason')
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), 'jason')
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
     // The failure opens the shared feedback dialog (FeedbackWhen) instead of an in-page Alert.
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
@@ -141,14 +159,14 @@ describe('AccountRecoveryRequestPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
-    await user.type(screen.getByLabelText('用户名'), 'jason')
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), 'jason')
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
     expect(await screen.findByText('无法连接服务，请稍后重试')).toBeInTheDocument()
     const firstHeaders = fetchSpy.mock.calls[0]?.[1]?.headers as Record<string, string>
 
     await user.click(screen.getByRole('button', { name: '重新申请' }))
     expect(screen.queryByText('无法连接服务，请稍后重试')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('用户名')).toBeEnabled()
+    expect(screen.getByLabelText('用户名或已验证邮箱')).toBeEnabled()
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
 
     expect(await screen.findByText('如账号可用，重置指引将发送至已绑定联系方式')).toBeInTheDocument()
@@ -175,7 +193,7 @@ describe('AccountRecoveryRequestPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
-    await user.type(screen.getByLabelText('用户名'), 'jason')
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), 'jason')
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
     expect(await screen.findByText('请求过于频繁，请稍后重试')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '重新申请' })).not.toBeInTheDocument()
@@ -198,7 +216,7 @@ describe('AccountRecoveryRequestPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
-    await user.type(screen.getByLabelText('用户名'), 'jason')
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), 'jason')
     const submit = screen.getByRole('button', { name: '发送重置指引' })
     await user.click(submit)
     await waitFor(() => expect(submit).toBeDisabled())
@@ -220,7 +238,7 @@ describe('AccountRecoveryRequestPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
 
-    await user.type(screen.getByLabelText('用户名'), 'jason')
+    await user.type(screen.getByLabelText('用户名或已验证邮箱'), 'jason')
     await user.click(screen.getByRole('button', { name: '发送重置指引' }))
 
     expect(await screen.findByText('请求过于频繁，请稍后重试')).toBeInTheDocument()
@@ -232,6 +250,9 @@ describe('AccountRecoveryRequestPage', () => {
     await i18n.changeLanguage('en-US')
     const view = renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
     expect(screen.getByRole('button', { name: 'Send reset instructions' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Username or verified email')).toHaveAttribute(
+      'placeholder', 'Enter your username or verified email',
+    )
 
     view.unmount()
     await i18n.changeLanguage('qps-ploc')
@@ -247,7 +268,7 @@ describe('AccountRecoveryRequestPage', () => {
 
     const view = renderWithProviders(<AccountRecoveryRequestPage />, ['/forgot-password'])
     expect(view.container.querySelector('.recovery-container')).toBeInTheDocument()
-    expect(screen.getByLabelText('用户名')).toBeEnabled()
+    expect(screen.getByLabelText('用户名或已验证邮箱')).toBeEnabled()
     expect(screen.getByRole('button', { name: '发送重置指引' })).toBeEnabled()
   })
 })

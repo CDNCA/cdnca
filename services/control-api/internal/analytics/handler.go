@@ -61,8 +61,26 @@ type queryMetadata struct {
 }
 
 type analyticsSummaryResponse struct {
-	Data Summary       `json:"data"`
-	Meta queryMetadata `json:"meta"`
+	Data analyticsSummaryData `json:"data"`
+	Meta queryMetadata        `json:"meta"`
+}
+
+// analyticsSummaryData: security_events and security_event_rows are null when
+// the query narrows by domain or listen_port. Their source, the security
+// hourly facts, records neither host nor port, so no count of the same
+// precision exists; a tenant-wide count would be read as the domain's.
+type analyticsSummaryData struct {
+	Summary
+	SecurityEvents    *uint64 `json:"security_events"`
+	SecurityEventRows *uint64 `json:"security_event_rows"`
+}
+
+func summaryResponseData(summary Summary, request QueryRequest) analyticsSummaryData {
+	data := analyticsSummaryData{Summary: summary}
+	if summarySecurityApplicable(request.Domain, request.ListenPort) {
+		data.SecurityEvents, data.SecurityEventRows = &summary.SecurityEvents, &summary.SecurityEventRows
+	}
+	return data
 }
 
 type peakBandwidthResponse struct {
@@ -242,7 +260,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 			handler.writeServiceError(writer, request, requestErr)
 			return
 		}
-		handler.writeResult(writer, request, analyticsSummaryResponse{Data: result, Meta: metadataFor(queryRequest)})
+		handler.writeResult(writer, request, analyticsSummaryResponse{Data: summaryResponseData(result, queryRequest), Meta: metadataFor(queryRequest)})
 	case "blocked_ip_count":
 		result, err := handler.service.BlockedIPCount(ctx, actor, queryRequest)
 		if err != nil {
@@ -453,13 +471,17 @@ func parseHandlerQuery(request *http.Request, route handlerRoute) (QueryRequest,
 		allowed["listen_port"] = true
 		allowed["query_version"] = true
 	}
-	if route.operation == "rank" || route.operation == "waf_overview" {
+	// summary narrows by domain and listen_port exactly as rank does, so the
+	// summary strip and the ranking always cover the same requests.
+	if route.operation == "rank" || route.operation == "summary" || route.operation == "waf_overview" {
 		allowed["domain"] = true
+	}
+	if route.operation == "rank" || route.operation == "summary" {
+		allowed["listen_port"] = true
 	}
 	if route.operation == "rank" {
 		allowed["limit"] = true
 		allowed["cursor"] = true
-		allowed["listen_port"] = true
 	}
 	query := request.URL.Query()
 	for key, values := range query {
@@ -496,7 +518,7 @@ func parseHandlerQuery(request *http.Request, route handlerRoute) (QueryRequest,
 		}
 	}
 	domain := strings.ToLower(strings.TrimSuffix(query.Get("domain"), "."))
-	if route.operation == "rank" {
+	if route.operation == "rank" || route.operation == "summary" {
 		var ok bool
 		domain, ok = normalizeRankDomainFilter(query.Get("domain"))
 		if !ok {
@@ -507,7 +529,7 @@ func parseHandlerQuery(request *http.Request, route handlerRoute) (QueryRequest,
 		Audience: route.audience, TenantID: query.Get("tenant_id"), From: from.UTC(), To: to.UTC(),
 		SiteID: query.Get("site_id"), Domain: domain, NodeID: query.Get("node_id"),
 	}
-	if route.operation == "realtime" || route.operation == "rank" {
+	if route.operation == "realtime" || route.operation == "rank" || route.operation == "summary" {
 		if requestFilter.NodeID != "" {
 			if route.operation == "realtime" {
 				return QueryRequest{}, 0, "", ErrInvalidInput

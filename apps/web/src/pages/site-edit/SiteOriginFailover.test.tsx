@@ -95,7 +95,9 @@ describe('BasicSiteTab origin failover', () => {
     expect(within(list).queryByText('198.51.100.7:8080')).toBeNull()
     const box = screen.getByLabelText('备用源')
     expect(box).toHaveValue('198.51.100.7:8080')
-    expect(screen.getByText(/主源不可用时按从上到下顺序依次切换/)).toBeInTheDocument()
+    // 备用源说明在帮助入口里，仍是输入框的可访问描述。
+    expect(box).toHaveAccessibleDescription(expect.stringContaining('主源不可用时按从上到下顺序依次切换'))
+    expect(screen.getByText(/主源不可用时按从上到下顺序依次切换/)).toHaveClass('visually-hidden')
     await user.clear(box)
     await user.type(box, 'b1.example.com{enter}{enter}198.51.100.9:81')
     const last = onPool.mock.calls.at(-1)?.[0] as SiteOriginPool
@@ -116,6 +118,20 @@ describe('BasicSiteTab origin failover', () => {
     await user.click(screen.getByRole('radio', { name: '手动切回' }))
     expect((onPool.mock.calls.at(-1)?.[0] as SiteOriginPool).failback_mode).toBe('manual')
   })
+
+  // 故障回切只说明当前所选的那一种。
+  it('explains only the chosen failback mode, next to it', async () => {
+    const user = userEvent.setup()
+    render(<Harness onPool={vi.fn()} />)
+    const auto = '拨测确认更高级别的源站恢复后自动切回。'
+    const manual = '保持当前源站并告警，由你点击“切回主源”。'
+    expect(screen.getByText(auto)).toBeInTheDocument()
+    expect(screen.queryByText(manual)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: '手动切回' }))
+    expect(screen.getByText(manual)).toBeInTheDocument()
+    expect(screen.queryByText(auto)).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /自动：拨测确认/ })).not.toBeInTheDocument()
+  })
 })
 
 describe('SiteOriginStatusCard', () => {
@@ -126,6 +142,9 @@ describe('SiteOriginStatusCard', () => {
     const user = userEvent.setup()
     render(<QueryClientProvider client={new QueryClient()}><SiteOriginStatusCard siteId={siteId} accessToken="token" canManage /></QueryClientProvider>)
     expect(await screen.findByText('当前在用')).toBeInTheDocument()
+    // 拨测频率说明在标题旁的帮助入口里
+    expect(screen.getByRole('img', { name: /控制台每 30 秒拨测一次各源站/ })).toBeInTheDocument()
+    expect(screen.queryByText(/控制台每 30 秒拨测一次各源站/)).not.toBeInTheDocument()
     expect(screen.getByText('更高级别的源站已恢复，可以切回。')).toBeInTheDocument()
     const rows = screen.getAllByRole('row')
     expect(within(rows[2]!).getByText('备用源 1')).toBeInTheDocument()

@@ -228,6 +228,10 @@ func controlLabel(operationID uuid.UUID) string {
 	}
 }
 
-func (repository *cacheAlgorithmRepository) automaticScopes(context.Context, time.Time) ([]uuid.UUID, error) { return nil, nil }
+func (repository *cacheAlgorithmRepository) automaticScopes(context.Context, time.Time) ([]uuid.UUID, error) {
+	return nil, nil
+}
 
-func (control *cacheAlgorithmControl) SyncCarryingNodes(context.Context, uuid.UUID, string) (int, error) { return 0, nil }
+func (control *cacheAlgorithmControl) SyncCarryingNodes(context.Context, uuid.UUID, string) (int, error) {
+	return 0, nil
+}

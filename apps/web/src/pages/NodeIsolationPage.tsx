@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Empty, Input, Result, Segmented, Spin, Table, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
+import { Alert, Button, Empty, Result, Segmented, Spin, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -10,7 +10,8 @@ import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/nodeIsolation'
 import './NodeIsolationPage.css'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
+import { SearchInput } from '../components/SearchInput'
 
 type Owner = readonly [string, string, number]
 type Filter = 'all' | NodeIsolationStatus
@@ -114,7 +115,7 @@ function NodeIsolationContent({ owner: fixedOwner, ownerKey }: { owner: Owner; o
           options={(['all', 'isolated', 'active'] as const).map((value) => ({ value, label: t(`filters.${value}`) }))}
           onChange={setFilter}
         />
-        <Input.Search allowClear value={search} aria-label={t('filters.search')} placeholder={t('filters.search')} onChange={(event) => setSearch(event.target.value)} />
+        <SearchInput allowClear value={search} aria-label={t('filters.search')} placeholder={t('filters.search')} onChange={(event) => setSearch(event.target.value)} />
       </div>
       {query.isLoading ? <div className="node-isolation-state"><Spin tip={t('states.loading')} /></div> : null}
       {query.error ? <FeedbackWhen title={t('errors.loadFailed')} detail={t(errorKey(query.error))} action={<Button onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}

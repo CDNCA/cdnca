@@ -8,10 +8,10 @@ import (
 
 func TestComponentNameFrom(t *testing.T) {
 	cases := map[string]string{
-		"  华东线路 ": "华东线路",
-		"a\x00b\n":  "ab",
-		"":          "-",
-		"\t":        "-",
+		"  华东线路 ":  "华东线路",
+		"a\x00b\n": "ab",
+		"":         "-",
+		"\t":       "-",
 	}
 	for in, want := range cases {
 		if got := componentNameFrom(in); got != want {

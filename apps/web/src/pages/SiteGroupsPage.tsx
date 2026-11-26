@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Result, Select, Space, Spin, Table, type TableColumnsType } from 'antd'
-import { useFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { Alert, Button, Form, Input, Modal, Result, Select, Space, Spin, type TableColumnsType } from 'antd'
+import { useFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import { Pencil, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -13,6 +13,7 @@ import { useSessionStore } from '../auth/session'
 import { clearSiteGroupRetry, persistSiteGroupRetry, restoreSiteGroupRetry, type SiteGroupAttempt, type SiteGroupRetry, type SiteGroupRetryOwner } from './siteGroupRetryRecord'
 import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import './SiteGroupsPage.css'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const staleSession = new ApiError('Session changed', 409, 'session_owner_changed')
@@ -57,6 +58,7 @@ function createForState(state: unknown): CreateFor | null {
 function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal: Principal }) {
   const { t } = useTranslation('siteGroups')
   const { t: tu } = useTranslation('unconfirmedClose')
+  const namedRows = useNamedRowSelection()
   const confirmClose = useConfirmUnconfirmedClose()
   const location = useLocation()
   const navigate = useNavigate()
@@ -183,6 +185,8 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
     setPending(true)
     setNotice(null)
     let superseded = journalRef.current.items.some((item) => item.superseded)
+    // 一次提交只有一种操作（新建 / 编辑 / 删除，批量删除同样）。
+    const action = journalRef.current.items[0]?.action
     try {
       for (let index = 0; index < journalRef.current.items.length; index += 1) {
         let input = journalRef.current.items[index]
@@ -237,7 +241,8 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
         setEditor(null)
         setRemoveTargets([])
         setSelectedKeys([])
-        messageApi[ superseded ? 'warning' : 'success' ](t(superseded ? 'messages.superseded' : 'messages.saved'))
+        messageApi[ superseded ? 'warning' : 'success' ](t(superseded ? 'messages.superseded'
+          : action === 'create' ? 'messages.created' : action === 'delete' ? 'messages.deleted' : 'messages.saved'))
       }
     } catch (error) {
       if (!sessionAccess('sites.read')) return
@@ -306,7 +311,7 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
     {!editor && !removeTargets.length ? retryPanel : null}
     {query.isError ? <FeedbackWhen title={t('errors.read')} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
     <Table rowKey={(item) => `${item.scope_id}:${item.id}`} size="small" loading={query.isFetching} columns={columns} dataSource={items}
-      scroll={{ x: 720 }} tableLayout="fixed" rowSelection={{ selectedRowKeys: selectedKeys, onChange: (keys) => setSelectedKeys(keys), columnWidth: 48, getCheckboxProps: () => ({ disabled: !canManage || writeLocked }) }}
+      scroll={{ x: 720 }} tableLayout="fixed" rowSelection={namedRows<SiteGroup>({ selectedRowKeys: selectedKeys, onChange: (keys) => setSelectedKeys(keys), columnWidth: 48, getCheckboxProps: () => ({ disabled: !canManage || writeLocked }) }, (group) => group.name, t('selectionScope'))}
       pagination={{ current: page, pageSize: limit, total: !query.isError ? query.data?.total ?? 0 : 0, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100],
         showTotal: (total) => t('pagination.total', { count: total }), disabled: writeLocked || query.isFetching,
         onChange: (next, size) => { setSelectedKeys([]); setPage(size !== limit ? 1 : next); setLimit(size) } }} locale={{ emptyText: query.isPending ? ' ' : t('empty') }} />

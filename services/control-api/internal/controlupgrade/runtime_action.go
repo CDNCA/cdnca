@@ -174,6 +174,14 @@ func (s *Store) PrepareRolloutAction(ctx context.Context, actor Actor,
 			return err
 		}
 		record, err := readActionPlanTx(ctx, tx, actor.ScopeID, request.PlanID, false)
+		if errors.Is(err, ErrRolloutNotFound) {
+			// The plan of a create still preparing its artifacts does not exist yet.
+			if pending, checkErr := createPreparationPendingTx(ctx, tx, actor.ScopeID, request.PlanID); checkErr != nil {
+				return checkErr
+			} else if pending {
+				return ErrRolloutPreparing
+			}
+		}
 		if err != nil {
 			return err
 		}

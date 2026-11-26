@@ -197,9 +197,9 @@ func validTrendMetricWire(bucket time.Time) map[string]any {
 		"request_count": uint64(2), "request_bytes": uint64(10), "response_bytes": uint64(20),
 		"total_bytes": uint64(30), "average_bandwidth_bps": 1.5,
 		"status_2xx": uint64(2), "status_3xx": uint64(0), "status_4xx": uint64(0), "status_5xx": uint64(0),
-		"security_events":    uint64(1),
+		"security_events":     uint64(1),
 		"security_event_rows": uint64(1),
-		"cache_hit_requests": uint64(1), "cache_hit_bytes": uint64(15), "unique_client_ips": uint64(1),
+		"cache_hit_requests":  uint64(1), "cache_hit_bytes": uint64(15), "unique_client_ips": uint64(1),
 	}
 }
 

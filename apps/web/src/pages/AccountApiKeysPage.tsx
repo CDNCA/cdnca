@@ -14,12 +14,11 @@ import {
   Space,
   Spin,
   Switch,
-  Table,
   Tag,
   Tooltip,
   type TableColumnsType,
 } from 'antd'
-import { MODAL_WIDTH, applyFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { MODAL_WIDTH, applyFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import type { TFunction } from 'i18next'
 import { Copy, Eye, KeyRound, Pencil, RefreshCw, Search, ShieldOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -52,6 +51,8 @@ interface APIKeyFormValues {
 const API_KEY_PAGE_SIZE = 10
 // AA-UI02：距到期不足 7 天时在简单区提示。
 const EXPIRING_SOON_MS = 7 * 24 * 60 * 60 * 1000
+// Lifetime prefilled for the first key created from the status card.
+const DEFAULT_KEY_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000
 const apiKeyIDPattern = /^cfk_[A-Za-z0-9_-]{22}$/
 
 // simple：来自简单版卡片（开关开启 / 重置密钥），一次性密钥用分栏弹窗显示 api_key 与 api_secret。
@@ -475,9 +476,11 @@ function AccountApiKeysContent({
     mutation.mutate(next, { onSettled: () => { submittingRef.current = false } })
   }
 
-  const openCreate = () => {
+  // The first key from the status card defaults to a limited lifetime; scopes are chosen explicitly.
+  const openCreate = (limited = false) => {
     if (writesLocked) return
     setWriteError(null)
+    if (limited) form.setFieldsValue({ expires_at: dateTimeLocalValue(new Date(serverNow() + DEFAULT_KEY_LIFETIME_MS).toISOString()) })
     setEditor({ mode: 'create' })
   }
 
@@ -690,7 +693,6 @@ function AccountApiKeysContent({
         <header className="account-api-key-compatibility-header">
           <div>
             <h1 id="account-api-keys-title">{t('compatibility.title')}</h1>
-            <p>{t('compatibility.description')}</p>
           </div>
           <Tag color={compatibilityQuery.isError ? 'error' : compatibilityEnabled ? 'success' : 'warning'}>
             {compatibilityQuery.isPending
@@ -717,7 +719,7 @@ function AccountApiKeysContent({
           <div className="account-api-key-compatibility-item account-api-key-status-item">
             <div className="account-api-key-compatibility-copy">
               <h2>{t('compatibility.status')}</h2>
-              <p>{primaryKey ? t('compatibility.statusHelp') : t('compatibility.enableHint')}</p>
+              {primaryKey ? <p>{t('compatibility.statusHelp')}</p> : null}
               {expiredKey?.expires_at ? (
                 <p className="account-api-key-compatibility-note account-api-key-expiry-note" role="status">
                   {t('compatibility.expiredHelp', { time: dateTime(expiredKey.expires_at, locale, '') })}
@@ -746,15 +748,30 @@ function AccountApiKeysContent({
                     disabled={writesLocked || compatibilityQuery.isFetching}
                   />
                 </Popconfirm>
+              ) : multipleActiveKeys ? (
+                <Switch checked={compatibilityEnabled} aria-label={t('compatibility.status')} disabled />
               ) : (
-                <Switch
-                  checked={compatibilityEnabled}
-                  loading={mutation.isPending && attempt?.kind === 'create' && Boolean(attempt.simple)}
-                  aria-label={t('compatibility.status')}
-                  disabled={multipleActiveKeys || writesLocked || allScopes.length === 0 ||
-                    compatibilityQuery.isPending || compatibilityQuery.isError}
-                  onChange={(checked) => { if (checked) enableSimple() }}
-                />
+                // the first action creates a scoped, expiring key; the
+                // all-permission, non-expiring compatibility key needs its own confirmation.
+                <Space wrap>
+                  <Button type="primary" icon={<KeyRound size={15} />} onClick={() => openCreate(true)}
+                    disabled={writesLocked || allScopes.length === 0 || compatibilityQuery.isPending || compatibilityQuery.isError}>
+                    {t('actions.create')}
+                  </Button>
+                  <Popconfirm
+                    disabled={writesLocked || allScopes.length === 0 || compatibilityQuery.isPending || compatibilityQuery.isError}
+                    title={t('compatibility.compatibleConfirm')}
+                    description={t('compatibility.compatibleDescription', { count: allScopes.length })}
+                    okText={t('compatibility.createCompatible')}
+                    cancelText={t('actions.cancel')}
+                    onConfirm={enableSimple}
+                  >
+                    <Button loading={mutation.isPending && attempt?.kind === 'create' && Boolean(attempt.simple)}
+                      disabled={writesLocked || allScopes.length === 0 || compatibilityQuery.isPending || compatibilityQuery.isError}>
+                      {t('compatibility.createCompatible')}
+                    </Button>
+                  </Popconfirm>
+                </Space>
               )}
               {multipleActiveKeys ? <span>{activeCountLabel}</span> : null}
             </div>
@@ -764,14 +781,13 @@ function AccountApiKeysContent({
               : null}
           </div>
 
-          <div className="account-api-key-compatibility-item">
+          {/* 未开启时白名单与密钥信息不铺空态，开关即状态 */}
+          {compatibilityEnabled || allowlistOrphaned ? <div className="account-api-key-compatibility-item">
             <div className="account-api-key-compatibility-copy">
               <h2><label htmlFor="api-key-simple-allowlist">{t('compatibility.allowlist')}</label></h2>
-              <p>{t('compatibility.allowlistHelp')}</p>
             </div>
             <div className="account-api-key-compatibility-value" data-testid="api-key-compatibility-allowlist">
-              {compatibilityQuery.isPending ? <Spin size="small" /> : null}
-              {!compatibilityQuery.isPending && primaryKey ? (
+              {primaryKey ? (
                 <div className="account-api-key-allowlist-field">
                   <Input
                     id="api-key-simple-allowlist"
@@ -837,21 +853,16 @@ function AccountApiKeysContent({
                   action={<Button size="small" onClick={() => setAllowlistDraft(null)}>{t('compatibility.allowlistDismiss')}</Button>}
                 />
               ) : null}
-              {!compatibilityQuery.isPending && multipleActiveKeys ? <span>{t('compatibility.multipleHint')}</span> : null}
-              {!compatibilityQuery.isPending && !compatibilityEnabled && !compatibilityQuery.isError
-                ? <span>{t('compatibility.allowlistDisabled')}</span>
-                : null}
+              {multipleActiveKeys ? <span>{t('compatibility.multipleHint')}</span> : null}
             </div>
-          </div>
+          </div> : null}
 
-          <div className="account-api-key-compatibility-item account-api-key-compatibility-wide">
+          {compatibilityEnabled ? <div className="account-api-key-compatibility-item account-api-key-compatibility-wide">
             <div className="account-api-key-compatibility-copy">
               <h2>{t('compatibility.keyInfo')}</h2>
-              <p>{t('compatibility.keyInfoHelp')}</p>
             </div>
             <div className="account-api-key-compatibility-value" data-testid="api-key-compatibility-key-info">
-              {compatibilityQuery.isPending ? <Spin size="small" /> : null}
-              {!compatibilityQuery.isPending && primaryKey ? (
+              {primaryKey ? (
                 <div className="account-api-key-simple-keys">
                   <dl>
                     <div>
@@ -881,14 +892,9 @@ function AccountApiKeysContent({
                   </Popconfirm>
                 </div>
               ) : null}
-              {!compatibilityQuery.isPending && multipleActiveKeys
-                ? <span>{activeCountLabel}</span>
-                : null}
-              {!compatibilityQuery.isPending && !compatibilityEnabled && !compatibilityQuery.isError
-                ? <span>{t('compatibility.keyInfoDisabled')}</span>
-                : null}
+              {multipleActiveKeys ? <span>{activeCountLabel}</span> : null}
             </div>
-          </div>
+          </div> : null}
         </div>
       </div>
 
@@ -905,7 +911,6 @@ function AccountApiKeysContent({
           label: (
             <div className="account-api-key-advanced-heading">
               <h2>{t('compatibility.advancedTitle')}</h2>
-              <p>{t('compatibility.advancedDescription')}</p>
             </div>
           ),
           children: (
@@ -931,7 +936,7 @@ function AccountApiKeysContent({
                   ]}
                   onChange={(value) => { setStatus(value); setPage(1) }}
                 />
-                <Button type="primary" icon={<KeyRound size={15} />} disabled={writesLocked} onClick={openCreate}>
+                <Button type="primary" icon={<KeyRound size={15} />} disabled={writesLocked} onClick={() => openCreate()}>
                   {t('actions.create')}
                 </Button>
               </div>

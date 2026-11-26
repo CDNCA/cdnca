@@ -97,3 +97,58 @@ describe('AppShell mobile navigation trigger', () => {
     expect(rendered.container.querySelector('.app-sidebar')).toHaveClass('is-mobile-open')
   })
 })
+
+function renderShell(path = '/site/waf-rule') {
+  const actor = principal({ permissions: ['identity.self.read', 'sites.read'] })
+  useSessionStore.getState().setSession(authResponse(actor), actor)
+  return renderWithProviders(
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path={path} element={<section aria-label="shell-inert-probe" />} />
+      </Route>
+    </Routes>,
+    [path],
+  )
+}
+
+describe('AppShell mobile drawer inert', () => {
+  it('removes the closed mobile drawer from tab order and restores it when opened', async () => {
+    installMobileMatchMedia()
+    await i18n.changeLanguage('zh-CN')
+    const rendered = renderShell()
+    const sidebar = rendered.container.querySelector('aside.app-sidebar') as HTMLElement
+    const toggle = screen.getByRole('button', { name: i18n.t('common:openNavigation') })
+
+    expect(sidebar.id).not.toBe('')
+    expect(toggle).toHaveAttribute('aria-controls', sidebar.id)
+    expect(sidebar).toHaveAttribute('inert')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(toggle)
+    expect(sidebar).toHaveClass('is-mobile-open')
+    expect(sidebar).not.toHaveAttribute('inert')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common:closeNavigation') }))
+    expect(sidebar).not.toHaveClass('is-mobile-open')
+    expect(sidebar).toHaveAttribute('inert')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveFocus()
+  })
+
+  it('never makes the desktop sidebar inert', async () => {
+    installMobileMatchMedia(1280)
+    await i18n.changeLanguage('zh-CN')
+    const rendered = renderShell()
+    const sidebar = rendered.container.querySelector('aside.app-sidebar') as HTMLElement
+    const toggle = screen.getByRole('button', { name: i18n.t('common:collapseNavigation') })
+
+    expect(sidebar).not.toHaveAttribute('inert')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveAttribute('aria-controls', sidebar.id)
+
+    fireEvent.click(toggle)
+    expect(sidebar).not.toHaveAttribute('inert')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+})

@@ -24,7 +24,9 @@ import (
 
 type storeStub struct{ plugins []ActivePlugin }
 
-func (stub storeStub) ActivePlugins(context.Context) ([]ActivePlugin, error) { return stub.plugins, nil }
+func (stub storeStub) ActivePlugins(context.Context) ([]ActivePlugin, error) {
+	return stub.plugins, nil
+}
 
 type sitesStub struct{ allowed map[uuid.UUID]bool }
 
@@ -205,7 +207,12 @@ func TestProxySignsContextWithoutUserCredentials(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &relayed); err != nil || relayed.Status != 200 || string(relayed.Body) != `{"ok":true}` {
 		t.Fatalf("relayed %+v %v", relayed, err)
 	}
-	if len(f.audit.events) != 1 || f.audit.events[0].Action != "plugin.ui_page.proxy" || f.audit.events[0].Result != "success" {
+	// the page gets the same request id the plugin was signed with and the audit records.
+	if relayed.RequestID == "" || relayed.RequestID != signed.RequestID || outbound.Header.Get("X-Request-ID") != signed.RequestID {
+		t.Fatalf("relayed request id %q, signed %q, outbound header %q", relayed.RequestID, signed.RequestID, outbound.Header.Get("X-Request-ID"))
+	}
+	if len(f.audit.events) != 1 || f.audit.events[0].Action != "plugin.ui_page.proxy" || f.audit.events[0].Result != "success" ||
+		f.audit.events[0].Payload["request_id"] != signed.RequestID {
 		t.Fatalf("audit %+v", f.audit.events)
 	}
 }

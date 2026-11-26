@@ -96,7 +96,6 @@ type storedProof struct {
 	useRevision               int64
 	consumedIdempotencyDigest []byte
 	consumedBindingDigest     []byte
-	databaseNow               time.Time
 }
 
 func NewAuthority(pool *pgxpool.Pool, config Config) (*Authority, error) {
@@ -171,16 +170,15 @@ func (authority *Authority) VerifyAndConsume(
 	ctx context.Context,
 	request accountregistration.RegistrationProofRequest,
 ) (accountregistration.RegistrationProof, error) {
-	if authority == nil || authority.pool == nil || len(authority.digestKey) < 32 {
+	if authority == nil || authority.pool == nil || len(authority.digestKey) < 32 || authority.now == nil {
 		return accountregistration.RegistrationProof{}, ErrAuthorityFailure
 	}
-	destination, source, ok := validateConsumeRequest(request)
+	destination, ok := validateConsumeRequest(request)
 	if !ok {
 		return accountregistration.RegistrationProof{}, accountregistration.ErrProofInvalid
 	}
 	referenceDigest := authorityDigest(authority.digestKey, referenceDigestDomain, []byte(request.Reference))
 	destinationDigest := authorityDigest(authority.digestKey, destinationDigestDomain, []byte(destination))
-	sourceDigest := authorityDigest(authority.digestKey, sourceDigestDomain, []byte(source))
 	idempotencyDigest := authorityDigest(authority.digestKey, idempotencyDigestDomain, []byte(request.IdempotencyKey))
 	var result accountregistration.RegistrationProof
 	err := pgx.BeginTxFunc(ctx, authority.pool, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
@@ -192,8 +190,9 @@ func (authority *Authority) VerifyAndConsume(
 			return err
 		}
 		bindingDigest := consumeBindingDigest(authority.digestKey, request.Channel, stored.attemptRevision,
-			request.SubjectDigest, destinationDigest, sourceDigest)
-		if !validStoredProof(stored, request.Channel, request.SubjectDigest, destinationDigest, sourceDigest) {
+			request.SubjectDigest, destinationDigest)
+		if !validStoredProof(stored, request.Channel, request.SubjectDigest, destinationDigest,
+			canonicalTime(authority.now())) {
 			return accountregistration.ErrProofInvalid
 		}
 		if stored.useRevision == 1 {
@@ -233,28 +232,35 @@ func loadStoredProof(ctx context.Context, tx pgx.Tx, referenceDigest [32]byte) (
 	var proof storedProof
 	err := tx.QueryRow(ctx, `SELECT evidence_id,channel,destination_digest,subject_digest,source_digest,risk_context,
 		human_verified_at,contact_verified_at,expires_at,attempt_revision,use_revision,
-		consumed_idempotency_digest,consumed_binding_digest,clock_timestamp()
+		consumed_idempotency_digest,consumed_binding_digest
 		FROM account_registration_proofs_162 WHERE reference_digest=$1 FOR UPDATE`, referenceDigest[:]).Scan(
 		&proof.evidenceID, &proof.channel, &proof.destinationDigest, &proof.subjectDigest, &proof.sourceDigest,
 		&proof.riskContext, &proof.humanVerifiedAt, &proof.contactVerifiedAt, &proof.expiresAt,
 		&proof.attemptRevision, &proof.useRevision, &proof.consumedIdempotencyDigest,
-		&proof.consumedBindingDigest, &proof.databaseNow,
+		&proof.consumedBindingDigest,
 	)
 	return proof, err
 }
 
+// validStoredProof does not compare the request source with the one the
+// proof was issued for (behind a CDN without origin
+// authentication the code check and the sign-up come from different edges).
+// The reference itself only travels in the HttpOnly proof cookie.
+// now is the authority clock, the one Issue checked and the issuer stamped
+// the verification times with: against the database clock, a proof consumed
+// right after it was issued was refused whenever the database clock ran
+// behind the application's by more than that gap.
 func validStoredProof(
 	proof storedProof,
 	channel string,
 	subjectDigest [32]byte,
 	destinationDigest [32]byte,
-	sourceDigest [32]byte,
+	now time.Time,
 ) bool {
-	now := canonicalTime(proof.databaseNow)
 	return proof.evidenceID != uuid.Nil && proof.channel == channel && validRiskContext(proof.riskContext) &&
 		proof.attemptRevision > 0 && (proof.useRevision == 0 || proof.useRevision == 1) &&
 		hmac.Equal(proof.destinationDigest, destinationDigest[:]) &&
-		hmac.Equal(proof.subjectDigest, subjectDigest[:]) && hmac.Equal(proof.sourceDigest, sourceDigest[:]) &&
+		hmac.Equal(proof.subjectDigest, subjectDigest[:]) && len(proof.sourceDigest) == sha256.Size &&
 		!proof.humanVerifiedAt.IsZero() && !proof.contactVerifiedAt.IsZero() && !proof.expiresAt.IsZero() &&
 		!proof.humanVerifiedAt.After(now) && !proof.contactVerifiedAt.After(now) && proof.expiresAt.After(now) &&
 		!proof.humanVerifiedAt.After(proof.expiresAt) && !proof.contactVerifiedAt.After(proof.expiresAt) &&
@@ -276,10 +282,9 @@ func validateIssueRequest(request IssueRequest, now time.Time, maxTTL time.Durat
 		request.AttemptRevision > 0 && validRiskContext(request.RiskContext) && validTimes
 }
 
-func validateConsumeRequest(request accountregistration.RegistrationProofRequest) (string, string, bool) {
+func validateConsumeRequest(request accountregistration.RegistrationProofRequest) (string, bool) {
 	destination, destinationOK := canonicalDestination(request.Channel, request.Destination)
-	source, sourceOK := canonicalSource(request.Source)
-	return destination, source, validReference(request.Reference) && destinationOK && sourceOK &&
+	return destination, validReference(request.Reference) && destinationOK &&
 		metadataPattern.MatchString(request.IdempotencyKey) &&
 		subtle.ConstantTimeCompare(request.SubjectDigest[:], make([]byte, 32)) == 0
 }
@@ -334,15 +339,13 @@ func consumeBindingDigest(
 	attemptRevision int64,
 	subjectDigest [32]byte,
 	destinationDigest [32]byte,
-	sourceDigest [32]byte,
 ) [32]byte {
-	value := bytes.NewBuffer(make([]byte, 0, len(channel)+1+8+96))
+	value := bytes.NewBuffer(make([]byte, 0, len(channel)+1+8+64))
 	value.WriteString(channel)
 	value.WriteByte(0)
 	_ = binary.Write(value, binary.BigEndian, attemptRevision)
 	value.Write(subjectDigest[:])
 	value.Write(destinationDigest[:])
-	value.Write(sourceDigest[:])
 	return authorityDigest(key, bindingDigestDomain, value.Bytes())
 }
 

@@ -34,12 +34,15 @@ func (signer probeLeaseSigner) Sign(_ context.Context, payload []byte) ([]byte, 
 func TestLocalDisableStopsDNSPupProbing(t *testing.T) {
 	f := newServiceFixture(t)
 	ctx := t.Context()
-	// The revocation LKG is checked against the database clock: run on it (the
-	// fixture's sessions, seeded at its fixed clock, stay valid for 30 days).
+	// The revocation LKG is checked against the database clock: run on it. The
+	// fixture's sessions were seeded at its fixed clock, so they would expire once
+	// the real date passes it: move them with it.
 	if err := f.pool.QueryRow(ctx, `SELECT date_trunc('second',clock_timestamp())`).Scan(&f.now); err != nil {
 		t.Fatal(err)
 	}
 	f.now = f.now.UTC()
+	mustExecTest(t, f.pool, `UPDATE auth_sessions SET created_at=$2, expires_at=$3 WHERE id=ANY($1::uuid[])`,
+		[]uuid.UUID{f.admin.SessionID, f.viewer.SessionID}, f.now.Add(-time.Hour), f.now.Add(30*24*time.Hour))
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)

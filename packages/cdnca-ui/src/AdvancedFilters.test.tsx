@@ -93,6 +93,9 @@ describe('AdvancedFilters', () => {
     expect(onQuery).toHaveBeenLastCalledWith({ domain: 'a.example.test', ip: '', node: '' })
     expect(screen.getByRole('button', { name: '高级筛选' })).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: '已启用的高级条件' })).not.toBeInTheDocument()
+    // the now-disabled button does not drop focus to BODY.
+    expect(screen.getByRole('button', { name: '清空高级条件' })).toBeDisabled()
+    expect(screen.getByLabelText('客户端IP')).toHaveFocus()
   })
 
   it('is reachable by keyboard: native button toggle, focus moves into the panel, Escape closes and returns focus', () => {
@@ -156,5 +159,17 @@ describe('AdvancedFilters', () => {
     expect(onOpenChange.mock.calls).toEqual([[true]])
     fireEvent.click(screen.getByRole('button', { name: '高级筛选' }))
     expect(onOpenChange.mock.calls).toEqual([[true], [false]])
+  })
+})
+
+// 字段即时生效的页面不再显示「应用」。
+describe('AdvancedFilters instant', () => {
+  it('leaves only 清空高级条件 in the panel footer', () => {
+    render(<AdvancedFilters instant primary={null} items={[{ key: 'ip', label: '客户端IP', field: <Input aria-label="客户端IP" />, applied: '192.0.2.1' }]}
+      onQuery={vi.fn()} onClearAdvanced={vi.fn()} onRemove={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '高级筛选 · 1' }))
+    const panel = screen.getByRole('group', { name: '高级筛选' })
+    expect(within(panel).queryByRole('button', { name: '应用' })).toBeNull()
+    expect(within(panel).getByRole('button', { name: '清空高级条件' })).toBeEnabled()
   })
 })

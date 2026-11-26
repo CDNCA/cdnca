@@ -204,10 +204,13 @@ function AccountUserPageSession({
   }
 
   // 资料读到后才读 MFA 状态，避免换身份时用新令牌提前请求。
+  // 代登录时本人 MFA 属敏感动作（identity.mfa.*），
+  // 服务端拒绝；不发请求，展开区说明原因。
+  const impersonating = useSessionStore((state) => Boolean(state.principal?.impersonation))
   const mfaBadgeQueryKey = ['account-user-mfa-badge', owner] as const
   const mfaBadgeQuery = useQuery({
     queryKey: mfaBadgeQueryKey,
-    enabled: Boolean(query.data),
+    enabled: Boolean(query.data) && !impersonating,
     retry: false,
     queryFn: () => {
       if (!currentProfileSessionCan(owner, 'identity.self.read')) {
@@ -443,13 +446,6 @@ function AccountUserPageSession({
               <span className="account-user-info-value">{query.data.username}</span>
             </div>
             <div className="account-user-info-item">
-              <span className="account-user-info-label">{t('profile.compatibility.qq')}</span>
-              <span className="account-user-info-value account-user-muted-value">
-                {t('profile.compatibility.unavailable')}
-                <Pencil className="account-user-edit-icon" size={14} aria-hidden="true" />
-              </span>
-            </div>
-            <div className="account-user-info-item">
               <span className="account-user-info-label">{t('profile.compatibility.registration')}</span>
               <span className="account-user-info-value account-user-muted-value">{dateTime(query.data.created_at, locale)}</span>
             </div>
@@ -478,6 +474,7 @@ function AccountUserPageSession({
                 colon={false}
                 layout="vertical"
                 disabled={passwordControlsDisabled}
+                scrollToFirstError={{ focus: true }}
                 onFinish={(values) => {
                   if (passwordControlsDisabled || !currentProfileSessionCan(owner, 'identity.password.change')) return
                   setPasswordError(null)
@@ -558,6 +555,7 @@ function AccountUserPageSession({
                     disabled={!checkEnabled(titleKey)}
                     aria-expanded={titleKey === 'realName' ? undefined : openedCheck === titleKey}
                     onClick={() => toggleCheck(titleKey)}
+                    aria-label={t('profile.compatibility.actionFor', { action: t(`profile.compatibility.${actionKey}`), item: t(`profile.compatibility.${titleKey}`) })}
                   >{t(`profile.compatibility.${actionKey}`)}</Button>
                 )}
               </div>
@@ -594,9 +592,13 @@ function AccountUserPageSession({
               ) : null}
               {openedCheck === titleKey && titleKey === 'loginSecurityItem' ? (
                 <div className="account-user-bind-form account-user-mfa-form">
-                  <Suspense fallback={<Spin size="small" aria-label={t('loading')} />}>
-                    <AccountMfaPanel />
-                  </Suspense>
+                  {impersonating ? (
+                    <Alert type="info" showIcon role="status" message={t('profile.compatibility.mfaImpersonating')} />
+                  ) : (
+                    <Suspense fallback={<Spin size="small" aria-label={t('loading')} />}>
+                      <AccountMfaPanel />
+                    </Suspense>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -609,7 +611,10 @@ function AccountUserPageSession({
                 <span className="account-user-action-title-line"><span className="account-user-check-title">{t('profile.compatibility.sessionsItem')}</span></span>
                 <span className="account-user-check-desc">{t('profile.compatibility.sessionsDescription')}</span>
               </div>
-              <Button onClick={() => void navigate('/account/sessions')}>{t('profile.compatibility.sessionsOpen')}</Button>
+              <Button onClick={() => void navigate('/account/sessions')}
+                aria-label={t('profile.compatibility.actionFor', { action: t('profile.compatibility.sessionsOpen'), item: t('profile.compatibility.sessionsItem') })}>
+                {t('profile.compatibility.sessionsOpen')}
+              </Button>
             </div>
           </div>
         </section>

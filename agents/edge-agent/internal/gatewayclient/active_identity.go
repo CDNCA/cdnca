@@ -391,11 +391,25 @@ func (c *Client) activeConfigRuntimeUncertain(pointers deployment.Pointers, reco
 		if final.Event == nil {
 			return digestHash(runtimeHash), true
 		}
-		if final.State == agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_ROLLBACK_FAILED {
+		if final.State == agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_ROLLBACK_FAILED && !c.servingAfterRollbackFailure(record) {
 			uncertain = true
 		}
 	}
 	return digestHash(runtimeHash), uncertain
+}
+
+// rollbackFailureServing is a deployment manager that keeps an apply whose
+// rollback failed as its scope's current release because the node verifiably
+// kept serving it.
+type rollbackFailureServing interface {
+	ServingAfterRollbackFailure(deploymentID string, attempt uint32) bool
+}
+
+// servingAfterRollbackFailure: record's apply ended rollback_failed and its
+// manager confirms the release still serves as the scope's current one.
+func (c *Client) servingAfterRollbackFailure(record *durableRecord) bool {
+	serving, ok := c.manager.(rollbackFailureServing)
+	return ok && record != nil && serving.ServingAfterRollbackFailure(record.DeploymentID, record.Attempt)
 }
 
 func digestHash(hash interface{ Sum([]byte) []byte }) [sha256.Size]byte {
@@ -507,7 +521,11 @@ func (c *Client) healthyActiveConfigRecord(record *durableRecord, command *agent
 		}
 		final = statuses[len(statuses)-1]
 	}
-	if final == nil || final.State != agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_HEALTHY ||
+	// A rollback_failed apply counts only while its manager keeps the release
+	// as current because it verifiably still serves.
+	servingAfterFailure := final != nil && final.State == agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_ROLLBACK_FAILED &&
+		len(completing) == 0 && c.servingAfterRollbackFailure(record)
+	if final == nil || final.State != agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_HEALTHY && !servingAfterFailure ||
 		final.DeploymentId != record.DeploymentID || final.Attempt != record.Attempt || final.ConfigVersionId != record.ConfigVersionID {
 		return false
 	}
@@ -515,9 +533,13 @@ func (c *Client) healthyActiveConfigRecord(record *durableRecord, command *agent
 	if !supported {
 		return false
 	}
+	want := deployment.StateHealthy
+	if servingAfterFailure {
+		want = deployment.StateRollbackFailed
+	}
 	result, found, err := lookup.Lookup(record.DeploymentID)
 	return err == nil && found && result.DeploymentID == record.DeploymentID && result.Attempt == record.Attempt &&
-		result.Action == deployment.ActionApply && result.ConfigVersionID == record.ConfigVersionID && result.State == deployment.StateHealthy
+		result.Action == deployment.ActionApply && result.ConfigVersionID == record.ConfigVersionID && result.State == want
 }
 
 func sameDeploymentPointers(left, right deployment.Pointers) bool {

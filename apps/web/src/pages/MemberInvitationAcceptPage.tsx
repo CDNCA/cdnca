@@ -42,8 +42,7 @@ export default function MemberInvitationAcceptPage() {
   }
 
   return (
-    <AccountRecoveryLayout title={t('title')}>
-      <Typography.Title level={3}>{t('title')}</Typography.Title>
+    <AccountRecoveryLayout title={t('title')} heading={t('title')}>
       {!token ? <Alert type="warning" showIcon message={t('missing')} /> : done ? (
         <Alert type="success" showIcon message={t('done')} action={<Link to="/login">{t('login')}</Link>} />
       ) : (

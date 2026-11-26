@@ -30,12 +30,13 @@ type soldPackageLimits struct {
 }
 
 func loadSoldPackageLimits(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (map[uuid.UUID]soldPackageLimits, error) {
-	rows, err := tx.Query(ctx, `SELECT site.id,subscription.id,subscription.product_snapshot#>'{spec,limits}',
-			COALESCE((subscription.product_snapshot->'spec') ? 'market',false),
+	rows, err := tx.Query(ctx, `SELECT site.id,subscription.id,subscription_current.product_snapshot#>'{spec,limits}',
+			COALESCE((subscription_current.product_snapshot->'spec') ? 'market',false),
 			market.node_requests,market.node_bandwidth_bps,market.node_connections,market.node_new_per_second,
 			market.node_qps,market.node_stopped
 		FROM sites site JOIN package_subscriptions subscription
 		ON subscription.id=site.package_subscription_id AND subscription.tenant_scope_id=site.scope_id
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN market_supply_limits market ON market.package_subscription_id=subscription.id
 		WHERE site.scope_id=$1 AND site.deleted_at IS NULL ORDER BY site.id`, scopeID)
 	if err != nil {

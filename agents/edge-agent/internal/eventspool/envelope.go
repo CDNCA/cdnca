@@ -771,21 +771,45 @@ func validOriginTiming(connect, firstByte, total *uint64) bool {
 		(connect == nil || total == nil || *connect <= *total)
 }
 
+// redactURL replaces the value of every sensitive query parameter with the redaction marker. Pairs are split on
+// "&" and ";" (origins and proxies accept both; url.Values silently drops ";" pairs, so a "?a=1;token=x" query
+// kept its secret and the Gateway refused the whole batch). Names that do not decode
+// are read raw. Only sensitive pairs are rewritten, as name=%5BREDACTED%5D (what url.Values.Encode wrote); the
+// rest of the query keeps its bytes and separators.
 func redactURL(value string) (string, error) {
 	parsed, err := url.ParseRequestURI(value)
 	if err != nil {
 		return "", err
 	}
-	query := parsed.Query()
+	if parsed.RawQuery == "" {
+		return parsed.RequestURI(), nil
+	}
+	var query strings.Builder
+	query.Grow(len(parsed.RawQuery))
 	changed := false
-	for name := range query {
-		if sensitiveName(name) {
-			query.Set(name, redactedValue)
+	start := 0
+	for index := 0; index <= len(parsed.RawQuery); index++ {
+		if index < len(parsed.RawQuery) && parsed.RawQuery[index] != '&' && parsed.RawQuery[index] != ';' {
+			continue
+		}
+		pair := parsed.RawQuery[start:index]
+		name, _, _ := strings.Cut(pair, "=")
+		decoded, err := url.QueryUnescape(name)
+		if err != nil {
+			decoded = name
+		}
+		if pair != "" && sensitiveName(decoded) {
+			pair = name + "=" + url.QueryEscape(redactedValue)
 			changed = true
 		}
+		query.WriteString(pair)
+		if index < len(parsed.RawQuery) {
+			query.WriteByte(parsed.RawQuery[index])
+		}
+		start = index + 1
 	}
 	if changed {
-		parsed.RawQuery = query.Encode()
+		parsed.RawQuery = query.String()
 	}
 	return parsed.RequestURI(), nil
 }

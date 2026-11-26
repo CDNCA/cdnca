@@ -1545,6 +1545,37 @@ export interface NodeConfigurationScope {
    * shared node, so the other tenants keep working; '' when it is in.
    */
   telemetry_excluded: '' | 'platform_scope' | 'invalid_config_version' | 'telemetry_site_limit'
+  /**
+   * set while reconciliation_required. The deployment
+   * that left the node's running state unknown, and what the node reported
+   * for the scope: confirmed only for the scope's own report after the
+   * failure on its current session that does not contradict itself
+   * ; reported_config_version_id null with
+   * confirmed means the node runs nothing for the scope. Older control
+   * planes omit it.
+   */
+  reconciliation?: {
+    reason: string
+    source_deployment_id: string
+    source_deployment_attempt: number
+    observation: 'confirmed' | 'unconfirmed'
+    unconfirmed_reason: string | null
+    reported_config_version_id: string | null
+    reported_at: string | null
+  } | null
+  /**
+   * set when the scope, reconciled
+   * operator_confirmed without a version, may still be confirmed once as
+   * serving its source release (no later reconciliation of the scope on the
+   * node, the source artifact verifies; a later deployment does not end it).
+   * Older control planes omit it.
+   */
+  source_confirmation?: {
+    source_deployment_id: string
+    source_deployment_attempt: number
+    config_version_id: string
+    reconciled_at: string
+  } | null
 }
 
 /** A publication refused because it could not share the node with another tenant. */
@@ -1593,7 +1624,22 @@ function configurationScope(value: unknown): value is NodeConfigurationScope {
   if (!record(value)) return false
   const deployment = value.latest_deployment
   const apply = value.last_apply
-  return typeof value.scope_id === 'string' && uuidPattern.test(value.scope_id) &&
+  const reconciliation = value.reconciliation
+  const confirmation = value.source_confirmation
+  return (confirmation === undefined || confirmation === null || (record(confirmation) &&
+      typeof confirmation.source_deployment_id === 'string' && uuidPattern.test(confirmation.source_deployment_id) &&
+      Number.isInteger(confirmation.source_deployment_attempt) &&
+      typeof confirmation.config_version_id === 'string' && uuidPattern.test(confirmation.config_version_id) &&
+      timestamp(confirmation.reconciled_at))) &&
+    (reconciliation === undefined || reconciliation === null || (record(reconciliation) &&
+      typeof reconciliation.reason === 'string' && typeof reconciliation.source_deployment_id === 'string' &&
+      uuidPattern.test(reconciliation.source_deployment_id) && Number.isInteger(reconciliation.source_deployment_attempt) &&
+      (reconciliation.observation === 'confirmed' ? reconciliation.unconfirmed_reason === null
+        : reconciliation.observation === 'unconfirmed' && typeof reconciliation.unconfirmed_reason === 'string' &&
+          reconciliation.reported_config_version_id === null) &&
+      optionalUUID(reconciliation.reported_config_version_id) &&
+      (reconciliation.reported_at === null || timestamp(reconciliation.reported_at)))) &&
+    typeof value.scope_id === 'string' && uuidPattern.test(value.scope_id) &&
     (value.scope_kind === 'platform' || value.scope_kind === 'tenant') && optionalUUID(value.tenant_id) &&
     typeof value.tenant_name === 'string' && optionalUUID(value.current_config_version_id) &&
     optionalUUID(value.previous_config_version_id) && typeof value.reconciliation_required === 'boolean' &&
@@ -1609,6 +1655,36 @@ function configurationScope(value: unknown): value is NodeConfigurationScope {
       typeof apply.state === 'string' && applyStates.has(apply.state) &&
       (apply.error_code === null || typeof apply.error_code === 'string') &&
       (apply.finished_at === null || timestamp(apply.finished_at)) && timestamp(apply.reported_at)))
+}
+
+/**
+ * the version an administrator may confirm the
+ * node still serves: the scope waits for reconciliation of a failed rollback
+ * the node reports unconfirmed, and its last apply on the node is that very
+ * source deployment attempt (rollback_failed). null otherwise.
+ */
+export function nodeScopeSourceVersion(scope: NodeConfigurationScope): string | null {
+  const reconciliation = scope.reconciliation
+  const apply = scope.last_apply
+  if (!scope.reconciliation_required || !reconciliation || reconciliation.observation !== 'unconfirmed' ||
+    !apply || apply.state !== 'rollback_failed' || apply.deployment_id !== reconciliation.source_deployment_id ||
+    apply.attempt !== reconciliation.source_deployment_attempt || !uuidPattern.test(apply.config_version_id)) {
+    return null
+  }
+  return apply.config_version_id
+}
+
+/**
+ * The node still serves the release of its last apply although that apply's
+ * rollback failed: its report names that version as the scope's current one
+ * (while reconciliation waits), or the control plane recorded it as current.
+ */
+export function nodeScopeServingAfterRollbackFailure(scope: NodeConfigurationScope): boolean {
+  const apply = scope.last_apply
+  if (!apply || apply.state !== 'rollback_failed') return false
+  return scope.reconciliation_required
+    ? scope.reconciliation?.observation === 'confirmed' && scope.reconciliation.reported_config_version_id === apply.config_version_id
+    : scope.current_config_version_id === apply.config_version_id
 }
 
 const regressionFeatures = new Set<string>(['cc_proof_of_work', 'waf_crs_module', 'l4_tls_passthrough', 'l4_additional_listeners', 'l4_toa'])
@@ -1657,6 +1733,74 @@ async function getConfigurationScopes(accessToken: string, id: string): Promise<
   }
   // A newer control plane may name features this console cannot explain yet.
   return { ...value, capability_regressions: regressions.filter((item) => regressionFeatures.has(item.feature)) } as unknown as NodeConfigurationScopes
+}
+
+/**
+ * ends a scope's wait for reconciliation. With a
+ * confirmed node report it is agent_observed (the control plane checks the
+ * report again); with an unconfirmed one only the administrator's
+ * confirmation that no configuration of the scope is to be assumed
+ * (operator_confirmed). The failed deployment
+ * stays on record; the publications held in retry_wait then deliver once.
+ * with sourceVersion (the source deployment's
+ * own version, from an unconfirmed report of a failed rollback) the
+ * administrator confirms the node still serves that release:
+ * operator_confirmed with it as the observed version.
+ */
+async function reconcileConfigurationScope(accessToken: string, nodeID: string, scope: NodeConfigurationScope,
+  sourceVersion?: string): Promise<void> {
+  const reconciliation = scope.reconciliation
+  if (!uuidPattern.test(nodeID) || !reconciliation) throw new ApiError('Invalid reconciliation', 400, 'validation_error')
+  const serving = sourceVersion !== undefined && reconciliation.observation === 'unconfirmed'
+  if (serving && sourceVersion !== nodeScopeSourceVersion(scope)) throw new ApiError('Invalid reconciliation', 400, 'validation_error')
+  const requestID = crypto.randomUUID()
+  const hex = (length: number) => Array.from(crypto.getRandomValues(new Uint8Array(length)),
+    (byte) => byte.toString(16).padStart(2, '0')).join('')
+  await request<unknown>(accessToken, '/v1/admin/site-rollouts/reconciliations', {
+    method: 'POST',
+    headers: { 'X-Request-ID': requestID, 'Idempotency-Key': `node-reconcile-${requestID}`, Traceparent: `00-${hex(16)}-${hex(8)}-01` },
+    body: JSON.stringify({
+      configuration_scope_id: scope.scope_id, node_id: nodeID,
+      source_deployment_id: reconciliation.source_deployment_id,
+      source_deployment_attempt: reconciliation.source_deployment_attempt,
+      observed_config_version_id: reconciliation.observation === 'confirmed' ? reconciliation.reported_config_version_id
+        : serving ? sourceVersion : null,
+      resolution: reconciliation.observation === 'confirmed' ? 'agent_observed' : 'operator_confirmed',
+      evidence: reconciliation.observation === 'confirmed'
+        ? `node heartbeat reported current config ${reconciliation.reported_config_version_id ?? 'none'} at ${reconciliation.reported_at ?? 'unknown'}`
+        : serving
+          ? `operator verified on the node that it still serves the source release ${sourceVersion}; node state unconfirmed (${reconciliation.unconfirmed_reason})`
+          : `operator confirmed; node state unconfirmed (${reconciliation.unconfirmed_reason})`,
+    }),
+  })
+}
+
+/**
+ * the administrator, having checked
+ * the node, confirms once that the source release of a scope reconciled
+ * without a version ran there after its rollback failed (the node may serve a
+ * later version now): operator_confirmed
+ * with the source deployment's own version, on the same reconciliation
+ * endpoint.
+ */
+async function confirmConfigurationScopeSource(accessToken: string, nodeID: string, scope: NodeConfigurationScope): Promise<void> {
+  const confirmation = scope.source_confirmation
+  if (!uuidPattern.test(nodeID) || !confirmation) throw new ApiError('Invalid reconciliation', 400, 'validation_error')
+  const requestID = crypto.randomUUID()
+  const hex = (length: number) => Array.from(crypto.getRandomValues(new Uint8Array(length)),
+    (byte) => byte.toString(16).padStart(2, '0')).join('')
+  await request<unknown>(accessToken, '/v1/admin/site-rollouts/reconciliations', {
+    method: 'POST',
+    headers: { 'X-Request-ID': requestID, 'Idempotency-Key': `node-reconcile-${requestID}`, Traceparent: `00-${hex(16)}-${hex(8)}-01` },
+    body: JSON.stringify({
+      configuration_scope_id: scope.scope_id, node_id: nodeID,
+      source_deployment_id: confirmation.source_deployment_id,
+      source_deployment_attempt: confirmation.source_deployment_attempt,
+      observed_config_version_id: confirmation.config_version_id,
+      resolution: 'operator_confirmed',
+      evidence: `supplemental confirmation: operator verified on the node that the source release ${confirmation.config_version_id} ran there after its rollback failed; current version unchanged; reconciled without a version at ${confirmation.reconciled_at}`,
+    }),
+  })
 }
 
 async function getLatestMetrics(accessToken: string, id: string): Promise<NodeMetricsLatest> {
@@ -1910,10 +2054,10 @@ function batchAdminState(
 }
 
 export const nodesApi = {
-  batchAdminState, create, createGatewayPortTransition, gatewayPortTransitionAction, get, getConfigurationScopes,
+  batchAdminState, confirmConfigurationScopeSource, create, createGatewayPortTransition, gatewayPortTransitionAction, get, getConfigurationScopes,
   getGatewayPortTransition, getIPLocation,
   getLatestMetrics, getLatestMetricsBatch, getMetricsHistory, getNodeRealtimeSeries, getNodeRealtimeTop, getNodeTraffic,
-  getRegistrationCredential, issueEnrollmentToken, list, resetRegistrationCredential, update,
+  getRegistrationCredential, issueEnrollmentToken, list, reconcileConfigurationScope, resetRegistrationCredential, update,
 }
 
 export const regionsApi = {

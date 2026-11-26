@@ -25,7 +25,8 @@ type ruleGroupSummary struct {
 // ruleGroupSummary counts system groups from the signed catalog once it has
 // synced (its one installation-wide copy replaces the per-tenant projection,
 // as the page lists them), else from the projection; custom groups are the
-// scope's CC policies.
+// CC policies the session's policy list shows (a tenant its own, a platform
+// operator every tenant's), so the pills match the list below them.
 func (handler *Handler) ruleGroupSummary(ctx context.Context, actor openrestysecurity.Actor, targetScopeID uuid.UUID) (ruleGroupSummary, error) {
 	groups, err := handler.api.RuleGroups(ctx, openrestysecurity.RuleGroupsRequest{Actor: actor, TargetScopeID: targetScopeID})
 	if err != nil {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Collapse, Descriptions, Grid, Input, Popconfirm, Progress, Result, Select, Space, Steps, Table, Tag, Typography,
+  Alert, Button, Collapse, Descriptions, Grid, Input, Popconfirm, Progress, Result, Select, Space, Steps, Tag, Typography,
   type TableColumnsType,
 } from 'antd'
 import { ArrowLeft, Check, CircleCheck, CircleDashed, Play, RefreshCw, Search, X } from 'lucide-react'
@@ -9,22 +9,23 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError, type Principal } from '../api/auth'
+import { dnsHubApi, type DNSHubDomain } from '../api/dnsHub'
 import {
   dnsReconcileApi,
   type DNSReconcileCheckRequest,
   type DNSReconcileCommandIdentity,
+  type DNSReconcileDryRun,
+  type DNSReconcileDryRunRequest,
   type DNSReconcileObservation,
   type DNSReconcileOperationResult,
   type DNSReconcileProviderOperation,
   type DNSReconcileTask,
 } from '../api/dnsReconcile'
-import { dnsApi } from '../api/dns'
-import { dnsZonesApi, type DNSZone } from '../api/dnsZones'
 import { sitesApi, type SiteListItem } from '../api/sites'
 import { useSessionStore } from '../auth/session'
 import { DataState } from '../components/DataState'
 import '../i18n/dnsReconcilePage'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import type { SiteDnsCheckContext } from './SiteDnsCheckPanel'
 import './DnsReconcilePage.css'
 
@@ -32,7 +33,7 @@ type Owner = readonly ['tenant', string, string, string, number]
 type WriteKind = 'apply' | 'commit' | 'cancel'
 type ApplyAttempt = { input: DNSReconcileCheckRequest; identity: DNSReconcileCommandIdentity }
 type CommandAttempt = { kind: 'commit' | 'cancel'; identity: DNSReconcileCommandIdentity }
-type FieldName = 'name' | 'expectedValue' | 'ttl' | 'line' | 'weight' | 'propagationWindow' | 'zoneID' | 'providerRevision'
+type FieldName = 'name' | 'expectedValue' | 'ttl' | 'line' | 'weight' | 'propagationWindow'
 type FieldErrors = Partial<Record<FieldName, string>>
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -57,6 +58,12 @@ function canManage(principal: Principal): boolean {
   return principal.scope_kind === 'tenant' && principal.permissions.includes('dns.manage')
 }
 
+// 刷新托管范围走 DNS 域名的刷新接口：dns.manage 或 dns.records.manage。
+function canRefreshZones(principal: Principal): boolean {
+  return principal.scope_kind === 'tenant' &&
+    (principal.permissions.includes('dns.manage') || principal.permissions.includes('dns.records.manage'))
+}
+
 function currentAccess(ownerKey: string, permission: 'read' | 'manage'): string | null {
   const { accessToken, principal, sessionEpoch } = useSessionStore.getState()
   if (!accessToken || !principal || (permission === 'read' ? !canRead(principal) : !canManage(principal))) return null
@@ -64,8 +71,13 @@ function currentAccess(ownerKey: string, permission: 'read' | 'manage'): string 
   return owner && JSON.stringify(owner) === ownerKey ? accessToken : null
 }
 
+function zoneNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'dns_reconcile_zone_not_found'
+}
+
 function errorKey(error: unknown): string {
   if (!(error instanceof ApiError)) return 'errors.requestFailed'
+  if (zoneNotFound(error)) return 'errors.zoneNotFound'
   if (error.status === 403 || error.code === 'permission_denied' || error.code === 'dns_reconcile_entitlement_denied') return 'errors.forbidden'
   if (error.status === 404 || error.code === 'dns_reconcile_not_found') return 'errors.notFound'
   if (error.status === 409 || error.status === 412 || error.code === 'dns_reconcile_operation_in_flight' || error.code === 'dns_reconcile_commit_not_ready') return 'errors.conflict'
@@ -92,15 +104,24 @@ function newIdentity(kind: WriteKind, revision?: number): DNSReconcileCommandIde
   }
 }
 
-// 域名所在区域：取名称是域名本身或其后缀的区域里最长的一个（www.a.example.com 优先 a.example.com，再 example.com）。
-function matchZone(zones: readonly DNSZone[], domain: string): DNSZone | null {
-  const name = domain.trim().toLowerCase().replace(/\.$/u, '')
-  let best: DNSZone | null = null
-  for (const zone of zones) {
-    const zoneName = zone.name.toLowerCase().replace(/\.$/u, '')
-    if ((name === zoneName || name.endsWith(`.${zoneName}`)) && (!best || zoneName.length > best.name.replace(/\.$/u, '').length)) best = zone
+function baseName(domain: string): string {
+  return domain.trim().toLowerCase().replace(/\.$/u, '').replace(/^\*\./u, '')
+}
+
+// 托管区域：该 DNS 账号域名清单里是域名本身或其上级的最长一个（www.a.example.com 优先 a.example.com，再 example.com），
+// 与服务端检查时的取法一致。
+function matchHostedDomain(domains: readonly DNSHubDomain[], domain: string): DNSHubDomain | null {
+  const name = baseName(domain)
+  let best: DNSHubDomain | null = null
+  for (const item of domains) {
+    if ((name === item.apex || name.endsWith(`.${item.apex}`)) && (!best || item.apex.length > best.apex.length)) best = item
   }
   return best
+}
+
+// 域名清单按子串过滤：任何上级域名都含域名的最后两段。
+function hostedDomainQuery(domain: string): string {
+  return baseName(domain).split('.').slice(-2).join('.')
 }
 
 // 字段级校验：范围与原实现一致（TTL/传播窗口 1–604800，权重 0–100，线路 ≤64 字节、无首尾空格与控制字符，修订 ≥1）。
@@ -145,20 +166,20 @@ function contextFromSite(site: SiteListItem, domain: string): SiteDnsCheckContex
 
 // 每个设置项：可见标签 + 一句帮助 + 字段下方的错误（aria-describedby 关联）。
 function Field({ id, label, help, error, children }: {
-  id: string; label: string; help: string; error?: string; children: (props: { id: string; 'aria-describedby': string; 'aria-invalid': boolean; status?: 'error' }) => ReactNode
+  id: string; label: string; help?: string; error?: string; children: (props: { id: string; 'aria-describedby'?: string; 'aria-invalid': boolean; status?: 'error' }) => ReactNode
 }) {
-  const describedBy = error ? `${id}-help ${id}-error` : `${id}-help`
+  const describedBy = [help ? `${id}-help` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined
   return (
     <div className="dns-fix-field">
       <label className="dns-fix-field-label" htmlFor={id}>{label}</label>
       {children({ id, 'aria-describedby': describedBy, 'aria-invalid': Boolean(error), status: error ? 'error' : undefined })}
-      <span id={`${id}-help`} className="dns-fix-field-help">{help}</span>
+      {help ? <span id={`${id}-help`} className="dns-fix-field-help">{help}</span> : null}
       {error ? <span id={`${id}-error`} className="dns-fix-field-error">{error}</span> : null}
     </div>
   )
 }
 
-function DnsDiagnosis({ context, zone, action, showNext }: { context: SiteDnsCheckContext; zone: string; action: ReactNode; showNext: boolean }) {
+function DnsDiagnosis({ context, zone, action, showNext }: { context: SiteDnsCheckContext; zone: ReactNode; action: ReactNode; showNext: boolean }) {
   const { t } = useTranslation('dnsReconcilePage')
   const diagnosis = diagnose(context)
   return (
@@ -186,61 +207,21 @@ function DnsDiagnosis({ context, zone, action, showNext }: { context: SiteDnsChe
     </section>
   )
 }
-// 无上下文进入：先选域名（下拉带搜索），选中后带着与解析检测同形的上下文重新进入本页，不出现空表单。
-function DomainPicker({ ownerKey, siteID }: { ownerKey: string; siteID: string }) {
+// 多域名网站先选域名：只列本站的域名，选中后带着域名（URL 参数）进入诊断，刷新或后退可恢复。
+function DomainPicker({ siteID, domains }: { siteID: string; domains: readonly string[] }) {
   const { t } = useTranslation('dnsReconcilePage')
   const navigate = useNavigate()
-  const [draft, setDraft] = useState('')
-  const [search, setSearch] = useState('')
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(draft.trim()), 300)
-    return () => window.clearTimeout(timer)
-  }, [draft])
-  const listSites = async (params: Parameters<typeof sitesApi.list>[1]) => {
-    const token = currentAccess(ownerKey, 'read')
-    if (!token) throw staleRead
-    return sitesApi.list(token, params)
-  }
-  const currentQuery = useQuery({
-    queryKey: ['dns-reconcile-picker', ownerKey, 'current', siteID], retry: false, refetchOnWindowFocus: false,
-    queryFn: () => listSites({ page: 1, limit: 1, site_ids: siteID }),
-  })
-  const searchQuery = useQuery({
-    queryKey: ['dns-reconcile-picker', ownerKey, 'search', search], retry: false, refetchOnWindowFocus: false,
-    queryFn: () => listSites({ page: 1, limit: 20, site: search || undefined }),
-  })
-  const sites = new Map<string, SiteListItem>()
-  for (const site of [...(currentQuery.data?.items ?? []), ...(searchQuery.data?.items ?? [])]) sites.set(site.id, site)
-  const optionsOf = (items: SiteListItem[]) => items.flatMap((site) => (site.domains?.length ? site.domains : [site.domain])
-    .filter((domain) => !search || domain.includes(search) || String(site.display_id) === search)
-    .map((domain) => ({ value: `${site.id}|${domain}`, label: <span className="dns-fix-option"><span>{domain}</span>
-      <span className="dns-fix-option-meta">{t('picker.site', { id: site.display_id })}</span></span> })))
-  const current = [...sites.values()].filter((site) => site.id === siteID)
-  const others = [...sites.values()].filter((site) => site.id !== siteID)
-  const options = [
-    ...(current.length ? [{ label: t('picker.currentSite'), options: optionsOf(current) }] : []),
-    ...(others.length ? [{ label: t('picker.otherSites'), options: optionsOf(others) }] : []),
-  ].filter((group) => group.options.length)
-  const loading = currentQuery.isPending || searchQuery.isFetching
-  const failed = currentQuery.isError && searchQuery.isError
-  const choose = (value: string) => {
-    const [id, domain] = value.split('|')
-    const site = sites.get(id)
-    if (!site || !domain) return
-    navigate(`/site/${site.id}/dns-reconcile`, { state: { dnsCheck: contextFromSite(site, domain) } })
-  }
   return (
     <section className="dns-fix-panel dns-fix-picker" aria-labelledby="dns-picker-title">
       <Typography.Title id="dns-picker-title" level={3}>{t('picker.title')}</Typography.Title>
-      <Field id="dns-fix-domain" label={t('picker.label')} help={t('picker.help')}>
+      <Field id="dns-fix-domain" label={t('picker.label')}>
         {(props) => (
-          <Select {...props} showSearch filterOption={false} className="dns-fix-picker-select" size="large"
-            placeholder={t('picker.placeholder')} suffixIcon={<Search size={16} aria-hidden="true" />}
-            searchValue={draft} onSearch={setDraft} onChange={choose} options={options} loading={loading}
-            notFoundContent={loading ? t('picker.loading') : t('picker.empty')} />
+          <Select {...props} showSearch className="dns-fix-picker-select" size="large" placeholder={t('picker.placeholder')}
+            suffixIcon={<Search size={16} aria-hidden="true" />} optionFilterProp="label" notFoundContent={t('picker.empty')}
+            options={domains.map((domain) => ({ value: domain, label: domain }))}
+            onChange={(domain: string) => navigate(`/site/${siteID}/dns-reconcile?domain=${encodeURIComponent(domain)}`)} />
         )}
       </Field>
-      {failed ? <DataState status="error" message={t('picker.error')} onRetry={() => { void currentQuery.refetch(); void searchQuery.refetch() }} /> : null}
     </section>
   )
 }
@@ -300,8 +281,8 @@ function FixSteps({ current }: { current: number }) {
     items={titles.map((title) => ({ title }))} />
 }
 
-function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
-  owner: Owner; ownerKey: string; siteID: string; context: SiteDnsCheckContext
+function DnsReconcileContent({ owner, ownerKey, siteID, context, canChangeDomain }: {
+  owner: Owner; ownerKey: string; siteID: string; context: SiteDnsCheckContext; canChangeDomain: boolean
 }) {
   const { t } = useTranslation('dnsReconcilePage')
   const navigate = useNavigate()
@@ -316,12 +297,10 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
   const [line, setLine] = useState('')
   const [weight, setWeight] = useState('0')
   const [propagationWindow, setPropagationWindow] = useState('900')
-  const [zoneID, setZoneID] = useState('')
-  const [providerRevision, setProviderRevision] = useState('')
   const [recordType, setRecordType] = useState<'A' | 'AAAA' | 'CNAME'>(target.cname ? 'CNAME' : 'A')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
-  const [plan, setPlan] = useState<Awaited<ReturnType<typeof dnsReconcileApi.dryRun>> | null>(null)
+  const [plan, setPlan] = useState<DNSReconcileDryRun | null>(null)
   const [dryRunError, setDryRunError] = useState<unknown>(null)
   const [dryRunPending, setDryRunPending] = useState(false)
   const [taskID, setTaskID] = useState<string | null>(null)
@@ -329,28 +308,40 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
   const [commandAttempt, setCommandAttempt] = useState<CommandAttempt | null>(null)
   const [writeError, setWriteError] = useState<unknown>(null)
   const [writePending, setWritePending] = useState(false)
+  const [refreshPending, setRefreshPending] = useState(false)
+  const [refreshNote, setRefreshNote] = useState<string | null>(null)
   const errorSummary = useRef<HTMLDivElement>(null)
 
-  // DNS 区域与区域版本从租户 DNS 账号下的区域列表按域名自动匹配，不让用户手填。
-  const zonesQuery = useQuery({
-    queryKey: [...prefix, 'zones'], retry: false, refetchOnWindowFocus: false,
+  // 托管区域按网站的 DNS 账号的域名清单（DNS 域名）匹配；检查时服务端按同样规则解析，不让用户填区域。
+  const providerID = target.provider?.id
+  const hostedQuery = useQuery({
+    queryKey: [...prefix, 'hosted', providerID ?? ''], enabled: Boolean(providerID), retry: false, refetchOnWindowFocus: false,
     queryFn: async () => {
       const token = currentAccess(ownerKey, 'read')
-      if (!token) throw staleRead
-      const providers = await dnsApi.list(token)
-      return (await dnsZonesApi.listZones(token, {
-        scopeKind: 'tenant', scopeID: fixedOwner[1],
-        providers: providers.items.map((provider) => ({ id: provider.id, scope_id: provider.scope_id })),
-      })).items
+      if (!token || !providerID) throw staleRead
+      return (await dnsHubApi.domains(token, { provider_id: providerID, q: hostedDomainQuery(target.domain), limit: 500 })).items
     },
   })
-  const zones = useMemo(() => zonesQuery.data ?? [], [zonesQuery.data])
-  const matchedZone = useMemo(() => matchZone(zones, target.domain), [zones, target.domain])
-  useEffect(() => {
-    if (!matchedZone || zoneID) return
-    setZoneID(matchedZone.id)
-    setProviderRevision(String(matchedZone.version))
-  }, [matchedZone, zoneID])
+  const hostedDomain = useMemo(() => matchHostedDomain(hostedQuery.data ?? [], target.domain), [hostedQuery.data, target.domain])
+
+  const refreshHosted = async () => {
+    const token = currentAccess(ownerKey, 'read')
+    if (!token || !providerID || refreshPending) return
+    setRefreshPending(true)
+    setRefreshNote(null)
+    try {
+      const outcome = (await dnsHubApi.refresh(token, providerID)).results.find((item) => item.provider_id === providerID)
+      if (!lineageActive.current) return
+      if (outcome?.state === 'throttled') setRefreshNote(t('zone.throttled', { seconds: outcome.retry_after_seconds }))
+      else if (outcome?.state !== 'refreshed') setRefreshNote(t('zone.refreshFailed'))
+      setDryRunError(null)
+      await hostedQuery.refetch()
+    } catch {
+      if (lineageActive.current) setRefreshNote(t('zone.refreshFailed'))
+    } finally {
+      if (lineageActive.current) setRefreshPending(false)
+    }
+  }
 
   const guardedRead = useCallback(async () => {
     const token = lineageActive.current ? currentAccess(ownerKey, 'read') : null
@@ -387,7 +378,7 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
     if (!taskID) setPlan(null)
   }
 
-  const inputFromForm = (): DNSReconcileCheckRequest | null => {
+  const inputFromForm = (): DNSReconcileDryRunRequest | null => {
     const trimmedName = target.domain.trim()
     const values = expectedValue.split(',').map((value) => value.trim()).filter(Boolean)
     const nameservers = authoritativeNS.split(',').map((value) => value.trim()).filter(Boolean)
@@ -398,8 +389,6 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
     if (lineInvalid(line)) errors.line = t('fieldErrors.line')
     if (!intIn(weight, 0, 100)) errors.weight = t('fieldErrors.weight')
     if (!intIn(propagationWindow, 1, 604800)) errors.propagationWindow = t('fieldErrors.propagationWindow')
-    if (!zoneID.trim()) errors.zoneID = t('fieldErrors.zoneID')
-    if (!intIn(providerRevision, 1, Number.MAX_SAFE_INTEGER)) errors.providerRevision = t('fieldErrors.providerRevision')
     setFieldErrors(errors)
     if (Object.keys(errors).length) {
       setAdvancedOpen(true)
@@ -414,7 +403,6 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
       line: line.trim(),
       weight: Number(weight),
       propagation_window_seconds: Number(propagationWindow),
-      provider: { zone_id: zoneID.trim(), revision: Number(providerRevision), records: [] },
     }
   }
 
@@ -454,12 +442,13 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
     }
   }
 
+  // 开始修复带回方案所依据的服务商快照（区域与版本），执行的就是确认过的方案。
   const startApply = () => {
     if (!plan || applyAttempt || writePending) return
     const input = inputFromForm()
     const token = currentAccess(ownerKey, 'manage')
     if (!input || !token) return
-    const attempt: ApplyAttempt = { input, identity: newIdentity('apply', plan.plan.precondition_revision) }
+    const attempt: ApplyAttempt = { input: { ...input, provider: plan.provider }, identity: newIdentity('apply', plan.provider.revision) }
     setApplyAttempt(attempt)
     void executeApply(attempt)
   }
@@ -534,7 +523,17 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
   const operations = plan?.plan.operations ?? []
   const counts = { create: 0, update: 0, delete: 0 }
   for (const item of operations) counts[item.action] += 1
-  const zoneText = zonesQuery.isPending ? t('diagnosis.zoneLoading') : matchedZone?.name ?? (zoneID ? zoneID : t('diagnosis.zoneMissing'))
+  const zoneMissing = Boolean(providerID) && ((hostedQuery.isSuccess && !hostedDomain) || hostedQuery.isError || zoneNotFound(dryRunError))
+  const zoneText = !providerID ? t('values.empty') : hostedQuery.isPending ? t('diagnosis.zoneLoading')
+    : zoneMissing || !hostedDomain ? t('diagnosis.zoneMissing') : hostedDomain.apex
+  const zoneCell = <span className="dns-fix-zone">
+    <span>{zoneText}</span>
+    {zoneMissing && canRefreshZones(useSessionStore.getState().principal!) ? (
+      <Button size="small" type="link" icon={<RefreshCw size={14} aria-hidden="true" />} loading={refreshPending}
+        onClick={() => void refreshHosted()}>{t('zone.refresh')}</Button>
+    ) : null}
+    {refreshNote ? <span className="dns-fix-zone-note" role="status">{refreshNote}</span> : null}
+  </span>
   const errorCount = Object.keys(fieldErrors).length
   const backToCheck = () => navigate('/site/list', { state: { siteSubnav: 'dnsCheck', dnsCheckBack: context.back } })
   const failureReason = status === 'timed_out' ? t('failureReasons.timed_out') : task?.result.error_code ? t('failureReasons.provider') : t('failureReasons.unknown')
@@ -560,24 +559,6 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
       </Field>
       <Field id="dns-fix-weight" label={t('fields.weight.label')} help={t('fields.weight.help')} error={fieldErrors.weight}>
         {(props) => <Input {...props} inputMode="numeric" value={weight} onChange={(event) => edit(setWeight)(event.target.value)} />}
-      </Field>
-      {zonesQuery.isError ? (
-        <Field id="dns-fix-zone" label={t('fields.zoneIDManual.label')} help={t('fields.zoneIDManual.help')} error={fieldErrors.zoneID}>
-          {(props) => <Input {...props} value={zoneID} onChange={(event) => edit(setZoneID)(event.target.value)} />}
-        </Field>
-      ) : (
-        <Field id="dns-fix-zone" label={t('fields.zoneID.label')} help={t('fields.zoneID.help')} error={fieldErrors.zoneID}>
-          {(props) => <Select {...props} value={zoneID || undefined} loading={zonesQuery.isPending} showSearch optionFilterProp="label"
-            options={zones.map((zone) => ({ value: zone.id, label: zone.name }))}
-            onChange={(value: string) => {
-              edit(setZoneID)(value)
-              const zone = zones.find((item) => item.id === value)
-              if (zone) setProviderRevision(String(zone.version))
-            }} />}
-        </Field>
-      )}
-      <Field id="dns-fix-revision" label={t('fields.providerRevision.label')} help={t('fields.providerRevision.help')} error={fieldErrors.providerRevision}>
-        {(props) => <Input {...props} inputMode="numeric" value={providerRevision} onChange={(event) => edit(setProviderRevision)(event.target.value)} />}
       </Field>
       <Field id="dns-fix-ns" label={t('fields.authoritativeNS.label')} help={t('fields.authoritativeNS.help')}>
         {(props) => <Input {...props} value={authoritativeNS} onChange={(event) => edit(setAuthoritativeNS)(event.target.value)} />}
@@ -637,7 +618,7 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
       <FixSteps current={currentStep} />
 
       <div className="dns-fix-panel">
-        <DnsDiagnosis context={context} zone={zoneText} showNext={!plan && !taskID} action={taskID ? null : (
+        <DnsDiagnosis context={context} zone={zoneCell} showNext={!plan && !taskID} action={taskID || !canChangeDomain ? null : (
           <Button type="link" onClick={() => navigate(`/site/${siteID}/dns-reconcile`, { state: null })}>{t('check.changeDomain')}</Button>
         )} />
         {!taskID ? <>
@@ -651,7 +632,7 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
           {dryRunError ? <DataState status="error" message={t(errorKey(dryRunError))} onRetry={() => void doDryRun()} /> : null}
           <div className="dns-fix-actions">
             <Button type={plan ? 'default' : 'primary'} size="large" icon={<Search size={16} aria-hidden="true" />} loading={dryRunPending}
-              onClick={() => void doDryRun()}>{plan ? t('plan.recheck') : t('check.action')}</Button>
+              disabled={!providerID} onClick={() => void doDryRun()}>{plan ? t('plan.recheck') : t('check.action')}</Button>
             {dryRunPending ? <span className="dns-fix-pending" role="status" aria-label={t('check.loading')}>{t('check.loading')}</span> : null}
           </div>
         </> : null}
@@ -737,8 +718,37 @@ function DnsReconcileContent({ owner, ownerKey, siteID, context }: {
   )
 }
 
-function DnsReconcileStart({ ownerKey, siteID }: { ownerKey: string; siteID: string }) {
+// 按路径里的网站 ID 读取本租户的这个网站：单域名直接进入诊断；多域名先选（只列本站域名）；
+// 域名写在 URL 参数里，刷新或后退都能恢复，且必须是该网站的域名。
+function DnsReconcileSite({ owner, ownerKey, siteID, domain, stateContext }: {
+  owner: Owner; ownerKey: string; siteID: string; domain: string; stateContext: SiteDnsCheckContext | null
+}) {
   const { t } = useTranslation('dnsReconcilePage')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const siteQuery = useQuery({
+    queryKey: ['dns-reconcile-site', ownerKey, siteID], retry: false, refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const token = currentAccess(ownerKey, 'read')
+      if (!token) throw staleRead
+      return (await sitesApi.list(token, { page: 1, limit: 1, site_ids: siteID })).items.find((item) => item.id === siteID) ?? null
+    },
+  })
+  const site = siteQuery.data
+  const domains = site ? (site.domains?.length ? site.domains : [site.domain]) : []
+  const chosen = domains.includes(domain) ? domain : domains.length === 1 ? domains[0] : ''
+  const urlDomain = new URLSearchParams(location.search).get('domain') ?? ''
+  useEffect(() => {
+    if (chosen && chosen !== urlDomain) {
+      navigate({ search: `?domain=${encodeURIComponent(chosen)}` }, { replace: true, state: location.state })
+    }
+  }, [chosen, urlDomain, navigate, location.state])
+  if (site && chosen) {
+    const context = stateContext?.domain === chosen ? stateContext : contextFromSite(site, chosen)
+    return <DnsReconcileContent key={`${ownerKey}|${chosen}`} owner={owner} ownerKey={ownerKey} siteID={siteID}
+      context={context} canChangeDomain={domains.length > 1} />
+  }
+  const siteError = siteQuery.error
   return (
     <section className="identity-page dns-fix-page" aria-labelledby="dns-reconcile-title">
       <header className="dns-fix-header">
@@ -747,8 +757,14 @@ function DnsReconcileStart({ ownerKey, siteID }: { ownerKey: string; siteID: str
           <Typography.Paragraph type="secondary">{t('description')}</Typography.Paragraph>
         </div>
       </header>
-      <FixSteps current={0} />
-      <DomainPicker ownerKey={ownerKey} siteID={siteID} />
+      {siteQuery.isPending ? <DataState status="loading" message={t('site.loading')} />
+        : siteError instanceof ApiError && siteError.status === 403 ? <Result status="403" title={t('site.unreadableTitle')} subTitle={t('site.unreadableDescription')} />
+        : siteQuery.isError ? <DataState status="error" message={t('site.error')} onRetry={() => void siteQuery.refetch()} />
+        : !site ? <Result status="404" title={t('site.unreadableTitle')} subTitle={t('site.unreadableDescription')} />
+        : <>
+          <FixSteps current={0} />
+          <DomainPicker siteID={siteID} domains={domains} />
+        </>}
     </section>
   )
 }
@@ -756,8 +772,10 @@ function DnsReconcileStart({ ownerKey, siteID }: { ownerKey: string; siteID: str
 export default function DnsReconcilePage() {
   const { t } = useTranslation('dnsReconcilePage')
   const { id = '' } = useParams()
-  const routeState = useLocation().state as { dnsCheck?: SiteDnsCheckContext } | null
-  const context = routeState?.dnsCheck?.siteID === id ? routeState.dnsCheck : null
+  const location = useLocation()
+  const routeState = location.state as { dnsCheck?: SiteDnsCheckContext } | null
+  const stateContext = routeState?.dnsCheck?.siteID === id ? routeState.dnsCheck : null
+  const domain = new URLSearchParams(location.search).get('domain') ?? stateContext?.domain ?? ''
   const accessToken = useSessionStore((state) => state.accessToken)
   const principal = useSessionStore((state) => state.principal)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
@@ -766,6 +784,5 @@ export default function DnsReconcilePage() {
   if (!uuidPattern.test(id)) return <Result status="404" title={t('errors.notFoundTitle')} subTitle={t('errors.notFoundDescription')} />
   if (!owner || !canRead(principal)) return <Result status="403" title={t('errors.forbiddenTitle')} subTitle={t('errors.forbiddenDescription')} />
   const ownerKey = JSON.stringify(owner)
-  if (!context) return <DnsReconcileStart key={ownerKey} ownerKey={ownerKey} siteID={id} />
-  return <DnsReconcileContent key={`${ownerKey}|${context.domain}`} owner={owner} ownerKey={ownerKey} siteID={id} context={context} />
+  return <DnsReconcileSite key={`${ownerKey}|${id}`} owner={owner} ownerKey={ownerKey} siteID={id} domain={domain} stateContext={stateContext} />
 }

@@ -39,7 +39,7 @@ const (
 	// IPIntelCapabilityVersion is CAPABILITY_NAME_IP_INTEL v2 (format v2 library).
 	IPIntelCapabilityVersion uint32 = 2
 	// MaxWAFIPIntelValues bounds one condition's value set.
-	MaxWAFIPIntelValues = 64
+	MaxWAFIPIntelValues  = 64
 	maxWAFIPIntelPerRule = 4
 )
 
@@ -93,7 +93,9 @@ func ValidIPIntelValue(field WAFIPIntelField, value string) bool {
 // NormalizeWAFIPIntel validates conditions the way the renderer does, so the
 // node precheck can independently re-derive the rendered conditions. Values
 // are sorted (numbers numerically) and conditions ordered canonically.
-func NormalizeWAFIPIntel(values []WAFIPIntel) ([]WAFIPIntel, error) { return normalizeWAFIPIntel(values) }
+func NormalizeWAFIPIntel(values []WAFIPIntel) ([]WAFIPIntel, error) {
+	return normalizeWAFIPIntel(values)
+}
 
 func normalizeWAFIPIntel(conditions []WAFIPIntel) ([]WAFIPIntel, error) {
 	if conditions == nil {

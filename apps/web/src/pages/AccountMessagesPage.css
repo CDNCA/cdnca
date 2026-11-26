@@ -42,12 +42,6 @@
   line-height: 18px;
 }
 
-.account-messages-hint {
-  margin: 0 0 12px;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 13px;
-}
-
 .account-event-message-body {
   margin: 12px 0 0;
   white-space: pre-wrap;

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-
 )
 
 // Installers download edge-agent/artifacts.json: nodes from their control

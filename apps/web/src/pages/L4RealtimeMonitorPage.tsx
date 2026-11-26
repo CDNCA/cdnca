@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useId, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Input, Radio, Spin, Table, Tabs, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, Radio, Spin, type TableColumnsType } from 'antd'
+import { Tabs } from '../components/Tabs'
 import { RefreshCw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
@@ -17,12 +19,17 @@ import { formatAnalyticsBandwidth as formatBandwidth, formatAnalyticsBytes as fo
 import '../i18n/l4Realtime'
 import './L4RealtimeMonitorPage.css'
 import '../styles/analyticsControlParity.css'
-import { FeedbackWhen, TimeRangeFilter } from '@cdnca/ui'
+import { FeedbackWhen, TimeRangeFilter, Table } from '@cdnca/ui'
 import { L4NodeSelect, L4TenantSelect } from './L4ScopeFilters'
 import { parsePorts, readRows, type AppliedQuery } from './l4RealtimeRead'
+import { FieldErrorText, filterFieldProps, useFieldFocus } from '../components/FilterFieldError'
+import { filterParam, linkedTimeRange, timeRangeUrlValues, useFilterUrl } from './filterUrl'
 
 type TrafficRange = 'today' | 'last7d' | 'last30d' | 'custom'
 type RankingRange = '10m' | '30m' | '60m'
+const rankingRanges: readonly RankingRange[] = ['10m', '30m', '60m']
+const trafficPresets: readonly string[] = ['today', 'last7d', 'last30d']
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 
 interface RankingRow {
@@ -150,23 +157,52 @@ function RealtimeChart({ title, points, language, formatter }: { title: string; 
           <line className="l4-realtime-axis-line" x1={plot.left} x2={width - plot.right} y1={plot.top + plotHeight} y2={plot.top + plotHeight} />
           {points.length > 0 ? <polyline className="l4-realtime-series" points={polyline} /> : null}
         </svg>
-        {points.length === 0 ? <span className="l4-realtime-baseline-chart-zero">0</span> : null}
       </div>
     </section>
   )
 }
 
+// 已生效的时间范围、端口（平台还有租户、节点）写进 URL，刷新或打开链接时读回并按它首查；
+// 链接里不认识的值用默认，端口不合法时放进输入框标错、不生效。
+function linkedTraffic(searchParams: URLSearchParams, audience: L4RealtimeAudience) {
+  const uuid = (key: string) => { const value = filterParam(searchParams, key).toLowerCase(); return uuidPattern.test(value) ? value : undefined }
+  const linked = linkedTimeRange(searchParams, trafficPresets)
+  const range = (linked?.preset ?? 'today') as TrafficRange
+  const window = linked?.range ?? presetWindow(range === 'custom' ? 'today' : range)
+  const port = filterParam(searchParams, 'port')
+  const ports = parsePorts(port)
+  const tenantId = audience === 'admin' ? uuid('tenant_id') : undefined
+  const nodeId = audience === 'admin' ? uuid('node_id') : undefined
+  const filters = range === 'custom' ? customFilters(localDateTime(window[0]), localDateTime(window[1])) : presetFilters(range)
+  return {
+    range, from: localDateTime(window[0]), to: localDateTime(window[1]), port, portValid: ports !== null, tenantId, nodeId,
+    applied: { filters: { ...(filters ?? presetFilters('today')), ...(tenantId ? { tenantId } : {}), ...(nodeId ? { nodeId } : {}) }, ports: ports ?? [] } as AppliedQuery,
+    appliedPort: ports ? port : '',
+  }
+}
+
 function TrafficPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ownerKey: string }) {
   const { t, i18n } = useTranslation('l4Realtime')
-  const [tenantId, setTenantId] = useState<string>()
-  const [nodeId, setNodeId] = useState<string>()
-  const [port, setPort] = useState('')
-  const [range, setRange] = useState<TrafficRange>('today')
-  const initialWindow = useMemo(() => presetWindow('today'), [])
-  const [from, setFrom] = useState(() => localDateTime(initialWindow[0]))
-  const [to, setTo] = useState(() => localDateTime(initialWindow[1]))
+  const [searchParams] = useSearchParams()
+  const [linked] = useState(() => linkedTraffic(searchParams, audience))
+  const [tenantId, setTenantId] = useState<string | undefined>(linked.tenantId)
+  const [nodeId, setNodeId] = useState<string | undefined>(linked.nodeId)
+  const [port, setPort] = useState(linked.port)
+  const [range, setRange] = useState<TrafficRange>(linked.range)
+  const [from, setFrom] = useState(linked.from)
+  const [to, setTo] = useState(linked.to)
   const [validationError, setValidationError] = useState<string | null>(null)
-  const [applied, setApplied] = useState<AppliedQuery>(() => ({ filters: presetFilters('today'), ports: [] }))
+  // 端口（443、443/TCP，逗号分隔多个）不合法时错误挂在端口输入框上并给它焦点，
+  // 不发请求，已生效的范围与图表不变。
+  const portFieldID = `${useId()}-port`
+  const [portError, setPortError] = useState<string | null>(linked.portValid ? null : t('filters.invalidPort'))
+  const focusField = useFieldFocus()
+  const [applied, setApplied] = useState<AppliedQuery>(linked.applied)
+  const [appliedView, setAppliedView] = useState({ range: linked.range, port: linked.appliedPort })
+  useFilterUrl({
+    port: appliedView.port, tenant_id: applied.filters.tenantId, node_id: applied.filters.nodeId,
+    ...timeRangeUrlValues(appliedView.range, applied.filters.from ?? '', applied.filters.to ?? ''),
+  })
   const query = useQuery({
     queryKey: ['l4-realtime-traffic', ownerKey, applied],
     queryFn: ({ signal }) => readRows(ownerKey, audience, applied, signal),
@@ -176,17 +212,16 @@ function TrafficPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ow
 
   const apply = () => {
     const ports = parsePorts(port)
-    if (!ports) {
-      setValidationError(t('filters.invalidPort'))
-      return
-    }
     const filters = range === 'custom' ? customFilters(from, to) : presetFilters(range)
-    if (!filters) {
-      setValidationError(t('filters.invalidWindow'))
+    setPortError(ports ? null : t('filters.invalidPort'))
+    setValidationError(filters ? null : t('filters.invalidWindow'))
+    if (!ports) {
+      focusField(portFieldID)
       return
     }
-    setValidationError(null)
+    if (!filters) return
     const next = { filters: { ...filters, ...(tenantId ? { tenantId } : {}), ...(nodeId ? { nodeId } : {}) }, ports }
+    setAppliedView({ range, port: port.trim() })
     if (JSON.stringify(next) === JSON.stringify(applied)) void query.refetch()
     else setApplied(next)
   }
@@ -198,7 +233,8 @@ function TrafficPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ow
       <div className="l4-realtime-baseline-filter">
         {audience === 'admin' ? <><L4TenantSelect ownerKey={ownerKey} value={tenantId} onChange={setTenantId} />
           <L4NodeSelect ownerKey={ownerKey} value={nodeId} onChange={setNodeId} /></> : null}
-        <Input className="l4-realtime-baseline-port" aria-label={t('filters.port')} placeholder={t('filters.portPlaceholder')} value={port} onChange={(event) => setPort(event.target.value)} />
+        <Input className="l4-realtime-baseline-port" aria-label={t('filters.port')} placeholder={t('filters.portPlaceholder')} value={port} onPressEnter={apply}
+          {...filterFieldProps(portFieldID, portError)} onChange={(event) => { setPort(event.target.value); setPortError(null) }} />
         <TimeRangeFilter className="l4-realtime-baseline-range" label={t('filters.range')} maxSpanMs={31 * 24 * 60 * 60 * 1000}
           value={{ preset: range, range: from && to ? [dayjs(from), dayjs(to)] : null }}
           onChange={({ preset, range: window }) => {
@@ -208,22 +244,35 @@ function TrafficPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ow
           }} />
         <Button className="l4-realtime-baseline-search" type="primary" icon={<Search size={15} />} loading={query.isFetching} onClick={apply}>{t('actions.query')}</Button>
       </div>
+      <FieldErrorText id={portFieldID} error={portError} />
       {validationError ? <Alert className="l4-realtime-alert" type="error" showIcon message={validationError} /> : null}
       {query.error ? <FeedbackWhen title={t(errorKey(query.error))} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
       {query.data && !query.data.complete ? <Alert className="l4-realtime-alert" type="warning" showIcon message={t('states.incomplete')} /> : null}
       {query.isPending ? <div className="l4-realtime-loading" aria-label={t('states.loading')}><Spin size="small" /></div> : null}
-      <div className="l4-realtime-baseline-chart-grid">
-        <RealtimeChart title={t('charts.bandwidth')} points={chartPoints(rows, 'bandwidth')} language={language} formatter={formatBandwidth} />
-        <RealtimeChart title={t('charts.traffic')} points={chartPoints(rows, 'traffic')} language={language} formatter={formatBytes} />
-      </div>
+      {/* 只有读到了时间点才画图（全是 0 的时间点照常画坐标）；
+          读取成功但这段时间没有任何点时给一条空态，不画四条 0 刻度加居中的 0。加载与失败各有自己的状态。 */}
+      {rows.length > 0 ? (
+        <div className="l4-realtime-baseline-chart-grid">
+          <RealtimeChart title={t('charts.bandwidth')} points={chartPoints(rows, 'bandwidth')} language={language} formatter={formatBandwidth} />
+          <RealtimeChart title={t('charts.traffic')} points={chartPoints(rows, 'traffic')} language={language} formatter={formatBytes} />
+        </div>
+      ) : query.isSuccess ? <DataState status="empty" message={t('states.empty')} /> : null}
     </div>
   )
 }
 
 function RankingPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ownerKey: string }) {
   const { t, i18n } = useTranslation('l4Realtime')
-  const [range, setRange] = useState<RankingRange>('10m')
-  const [applied, setApplied] = useState(() => rankingFilters('10m'))
+  // 已生效的排行时段写进 ?ranking_range=（默认 10 分钟不写）。
+  const [searchParams] = useSearchParams()
+  const [initialRange] = useState<RankingRange>(() => {
+    const value = filterParam(searchParams, 'ranking_range')
+    return rankingRanges.find((item) => item === value) ?? '10m'
+  })
+  const [range, setRange] = useState<RankingRange>(initialRange)
+  const [appliedRange, setAppliedRange] = useState<RankingRange>(initialRange)
+  const [applied, setApplied] = useState(() => rankingFilters(initialRange))
+  useFilterUrl({ ranking_range: appliedRange === '10m' ? undefined : appliedRange })
   const query = useQuery({
     queryKey: ['l4-realtime-ranking', ownerKey, applied],
     queryFn: ({ signal }) => readRows(ownerKey, audience, { filters: applied, ports: [] }, signal),
@@ -240,6 +289,7 @@ function RankingPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ow
   ]
   const refresh = () => {
     const next = rankingFilters(range)
+    setAppliedRange(range)
     if (JSON.stringify(next) === JSON.stringify(applied)) void query.refetch()
     else setApplied(next)
   }
@@ -265,11 +315,20 @@ function RankingPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ow
 
 function L4RealtimeContent({ audience, ownerKey }: { audience: L4RealtimeAudience; ownerKey: string }) {
   const { t } = useTranslation('l4Realtime')
+  // 当前页签写进 ?view=ranking（带宽流量为默认不写），刷新、复制地址和前进后退都回到原页签。
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get('view') === 'ranking' ? 'ranking' : 'traffic'
+  const changeView = (next: string) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'ranking') params.set('view', 'ranking')
+    else params.delete('view')
+    setSearchParams(params)
+  }
   return (
     <section className="l4-realtime-baseline-page" aria-labelledby="l4-realtime-title">
       <h1 className="visually-hidden" id="l4-realtime-title">{t('heading')}</h1>
       <div className="l4-realtime-baseline-panel">
-        <Tabs className="l4-realtime-baseline-tabs" animated={false} destroyOnHidden defaultActiveKey="traffic" items={[
+        <Tabs className="l4-realtime-baseline-tabs" animated={false} destroyOnHidden activeKey={view} onChange={changeView} items={[
           { key: 'traffic', label: t('tabs.traffic'), children: <TrafficPanel audience={audience} ownerKey={ownerKey} /> },
           { key: 'ranking', label: t('tabs.ranking'), children: <RankingPanel audience={audience} ownerKey={ownerKey} /> },
         ]} />

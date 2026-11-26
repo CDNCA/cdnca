@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"github.com/cdnca/cdnca/services/control-api/internal/nativebackup"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/controlgrpc"
 	"github.com/cdnca/cdnca/services/control-api/internal/controlinternal"
@@ -181,6 +182,11 @@ func (g controlInternalGateways) Settings(ctx context.Context) (controlinternal.
 			Transport: item.Transport, TunnelHost: item.TunnelHost, EnrollmentAddress: item.EnrollmentAddress})
 	}
 	return result, nil
+}
+
+// ObserveLocalGateway makes the adapter a controlinternal.LocalGatewayObserver.
+func (adapter controlInternalGateways) ObserveLocalGateway(instanceID, version string, certificateNotAfter time.Time) {
+	adapter.service.ObserveLocalGateway(instanceID, version, certificateNotAfter)
 }
 
 func controlInternalGatewayRegistry(service *gatewayregistry.Service) controlinternal.GatewayRegistry {

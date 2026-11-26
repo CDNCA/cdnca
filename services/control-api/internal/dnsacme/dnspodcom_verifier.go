@@ -1,7 +1,5 @@
 package dnsacme
 
-import "net/http"
-
 // DNSPod.com (international) answers the same legacy API as dnsapi.cn on
 // api.dnspod.com: POST /User.Detail with login_token "ID,Token" returns
 // info.user ("Get Account Information", https://docs.dnspod.com/api/untitled-2/,
@@ -13,7 +11,7 @@ const (
 )
 
 func NewDNSPodComProviderVerifier() *DNSPodProviderVerifier {
-	verifier := newDNSPodProviderVerifier("", http.DefaultClient, dnspodVerifyTimeout)
+	verifier := newDNSPodProviderVerifier("", providerAPIClient(), dnspodVerifyTimeout)
 	verifier.endpoint, verifier.host = dnspodComVerifyEndpoint, dnspodComVerifyHost
 	return verifier
 }

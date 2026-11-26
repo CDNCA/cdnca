@@ -110,6 +110,14 @@ describe('IdentitySessionsPage', () => {
     expect(screen.getByText('当前设备')).toBeInTheDocument()
     expect(screen.getAllByText('活跃').length).toBeGreaterThan(0)
     expect(document.body.textContent).not.toMatch(/Mozilla\/5\.0|203\.0\.113\.47|token hash/i)
+    // 凭证轮换历史不再当作「会话数」展示
+    expect(screen.queryByRole('columnheader', { name: '会话数' })).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/会话数|2 个/)
+    // 操作列固定在右侧，撤销按钮带设备名
+    const actionsHeader = screen.getByRole('columnheader', { name: '操作' })
+    expect(actionsHeader).toHaveClass('ant-table-cell-fix-right')
+    expect(screen.getByRole('button', { name: '撤销设备 Safari / iOS' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '撤销设备 Chrome / macOS' }).closest('td')).toHaveClass('ant-table-cell-fix-right')
     await user.click(screen.getByRole('button', { name: '下一页' }))
     expect(await screen.findByText('已撤销')).toBeInTheDocument()
     expect(identitySessionsApi.list).toHaveBeenLastCalledWith(
@@ -128,13 +136,13 @@ describe('IdentitySessionsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(await screen.findByRole('button', { name: '撤销设备' }))
+    await user.click(await screen.findByRole('button', { name: '撤销设备 Chrome / macOS' }))
     const dialog = await screen.findByRole('dialog', { name: '确认撤销设备' })
     await user.click(within(dialog).getByRole('button', { name: '确认撤销' }))
     expect(await screen.findByText('撤销结果待确认', OUTCOME_BAR)).toBeInTheDocument()
     const firstAttempt = revokeSpy.mock.calls[0]?.[1] as IdentitySessionRevokeAttempt
     expect(firstAttempt).toMatchObject({ familyID, revision: 3 })
-    expect(screen.getByRole('button', { name: '撤销设备' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '撤销设备 Chrome / macOS' })).toBeDisabled()
 
     await user.click(screen.getByRole('button', { name: '使用同一请求重试' }))
     await waitFor(() => expect(revokeSpy).toHaveBeenCalledTimes(2))
@@ -153,13 +161,13 @@ describe('IdentitySessionsPage', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(await screen.findByRole('button', { name: '撤销设备' }))
+    await user.click(await screen.findByRole('button', { name: '撤销设备 Chrome / macOS' }))
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '确认撤销' }))
     await user.click(await screen.findByRole('button', { name: '放弃并刷新' }))
-    expect(screen.getByRole('button', { name: '撤销设备' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '撤销设备 Chrome / macOS' })).toBeDisabled()
     expect(listSpy).toHaveBeenCalledTimes(2)
     await act(async () => refresh.resolve({ items: [otherFamily] }))
-    await waitFor(() => expect(screen.getByRole('button', { name: '撤销设备' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: '撤销设备 Chrome / macOS' })).toBeEnabled())
   })
 
   it('binds reads to the full owner, keeps tokens out of keys, and ignores late old-owner data', async () => {

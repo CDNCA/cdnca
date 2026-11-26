@@ -165,7 +165,17 @@ func (h *Handler) test(w http.ResponseWriter, r *http.Request, requestID string,
 		h.writeResult(w, requestID, systemmailsettings.Document{}, err)
 		return
 	}
-	h.json(w, http.StatusOK, result)
+	switch {
+	case result.OK:
+		h.json(w, http.StatusOK, result)
+	case result.Code == systemmailsettings.CodeConfigIncomplete:
+		h.json(w, http.StatusUnprocessableEntity, map[string]any{"error": map[string]any{"code": "system_mail_settings_config_incomplete",
+			"message": "发信配置不完整", "request_id": requestID, "details": map[string]any{"provider": result.Provider, "missing": result.Missing}}})
+	default:
+		// the provider refused or could not be reached; reason is the stable libs/mail (or plugin) code
+		h.json(w, http.StatusBadGateway, map[string]any{"error": map[string]any{"code": "system_mail_settings_test_failed",
+			"message": "测试邮件发送失败", "request_id": requestID, "details": map[string]any{"provider": result.Provider, "reason": result.Code}}})
+	}
 }
 
 func (h *Handler) writeResult(w http.ResponseWriter, requestID string, value systemmailsettings.Document, err error) {

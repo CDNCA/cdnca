@@ -25,8 +25,16 @@ paths:
     post:
       tags: [DNS reconciliation]
       operationId: dryRunDNSReconciliation
-      x-summary-zh: "生成确定性的修复计划，不调用服务商"
+      x-summary-zh: "生成确定性的修复计划，不写服务商记录"
       summary: Build a deterministic repair plan without provider side effects
+      description: >-
+        Without provider, the zone is resolved on the server: the site's own
+        verified DNS account and the longest domain of its domain list that is
+        the name or a parent of it (refresh the list with POST
+        /v1/dns/hub/domains/refresh). The response carries the provider
+        snapshot the plan was built on; apply sends it back unchanged. A name
+        that is not a domain of the site is 403; no hosted domain covering it
+        is 404 dns_reconcile_zone_not_found.
       security: [{bearerAuth: []}]
       x-required-permissions: [dns.read]
       parameters:
@@ -37,12 +45,13 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/CheckRequest'}
+            schema: {$ref: '#/components/schemas/DryRunRequest'}
       responses:
         '200': {$ref: '#/components/responses/DryRunOK'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/ZoneNotFound'}
         '405': {$ref: '#/components/responses/MethodNotAllowed'}
         '408': {$ref: '#/components/responses/RequestCancelled'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -295,7 +304,7 @@ components:
         X-Request-ID: {$ref: '#/components/headers/RequestID'}
       content:
         application/json:
-          schema: {$ref: '#/components/schemas/ReconcileResult'}
+          schema: {$ref: '#/components/schemas/DryRunResult'}
     TaskAccepted:
       description: Durable job created or replayed and available for workers.
       headers:
@@ -343,6 +352,10 @@ components:
       description: Task is absent or outside the authenticated tenant/site scope.
       headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    ZoneNotFound:
+      description: No hosted domain of the site's DNS account covers the name (dns_reconcile_zone_not_found).
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     MethodNotAllowed:
       description: Method is not supported by this route.
       headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
@@ -380,7 +393,7 @@ components:
     UUID:
       type: string
       format: uuid
-      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     Metadata:
       type: string
       pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
@@ -422,6 +435,21 @@ components:
           description: Provider record weight; zero is the provider default.
         propagation_started_at: {type: string, format: date-time}
         propagation_window_seconds: {type: integer, minimum: 1, maximum: 604800}
+        provider: {$ref: '#/components/schemas/ProviderSnapshot'}
+    DryRunRequest:
+      description: CheckRequest whose provider may be omitted (the server resolves the zone and records).
+      type: object
+      additionalProperties: false
+      required: [name, expected, authoritative_ns, ttl, propagation_window_seconds]
+      properties:
+        name: {$ref: '#/components/schemas/CheckRequest/properties/name'}
+        expected: {$ref: '#/components/schemas/CheckRequest/properties/expected'}
+        authoritative_ns: {$ref: '#/components/schemas/CheckRequest/properties/authoritative_ns'}
+        ttl: {$ref: '#/components/schemas/CheckRequest/properties/ttl'}
+        line: {$ref: '#/components/schemas/CheckRequest/properties/line'}
+        weight: {$ref: '#/components/schemas/CheckRequest/properties/weight'}
+        propagation_started_at: {$ref: '#/components/schemas/CheckRequest/properties/propagation_started_at'}
+        propagation_window_seconds: {$ref: '#/components/schemas/CheckRequest/properties/propagation_window_seconds'}
         provider: {$ref: '#/components/schemas/ProviderSnapshot'}
     ExpectedRecord:
       type: object
@@ -613,6 +641,32 @@ components:
         last_check: {$ref: '#/components/schemas/CheckResult'}
         error_class: {type: string, enum: ['', transient, permanent, revision_conflict, cancelled, timeout]}
         error_code: {type: string, maxLength: 64}
+    DryRunResult:
+      description: ReconcileResult plus the provider snapshot the plan was built on.
+      type: object
+      additionalProperties: false
+      required: [tenant_id, site_id, zone_id, payload_digest, plan, status, replayed, started_at, updated_at, initial_revision, provider_revision, operations, deferred_deletes, compensation_plan, propagation, error_class, error_code, provider]
+      properties:
+        tenant_id: {$ref: '#/components/schemas/UUID'}
+        site_id: {$ref: '#/components/schemas/UUID'}
+        zone_id: {$ref: '#/components/schemas/UUID'}
+        payload_digest: {$ref: '#/components/schemas/ReconcileResult/properties/payload_digest'}
+        plan: {$ref: '#/components/schemas/RepairPlan'}
+        status: {$ref: '#/components/schemas/ReconcileResult/properties/status'}
+        replayed: {type: boolean}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        ready_at: {type: string, format: date-time}
+        initial_revision: {type: integer, format: int64, minimum: 1}
+        provider_revision: {type: integer, format: int64, minimum: 1}
+        operations: {$ref: '#/components/schemas/ReconcileResult/properties/operations'}
+        deferred_deletes: {$ref: '#/components/schemas/ReconcileResult/properties/deferred_deletes'}
+        compensation_plan: {$ref: '#/components/schemas/ReconcileResult/properties/compensation_plan'}
+        propagation: {$ref: '#/components/schemas/ReconcileResult/properties/propagation'}
+        last_check: {$ref: '#/components/schemas/CheckResult'}
+        error_class: {$ref: '#/components/schemas/ReconcileResult/properties/error_class'}
+        error_code: {$ref: '#/components/schemas/ReconcileResult/properties/error_code'}
+        provider: {$ref: '#/components/schemas/ProviderSnapshot'}
     RepairPlan:
       type: object
       additionalProperties: false

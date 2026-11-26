@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Modal, Result, Select, Table, Tooltip, type TableColumnsType } from 'antd'
+import { Alert, Button, Modal, Result, Select, Tooltip, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -22,7 +22,7 @@ import {
   type AdminMessageQueryFilters,
 } from './AdminMessageQueryPage.adapter'
 import './AdminMessageQueryPage.css'
-import { FeedbackWhen, IdOrNameInput, useLiveApply, type IdOrNameOption } from '@cdnca/ui'
+import { FeedbackWhen, IdOrNameInput, useLiveApply, type IdOrNameOption, Table } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from './filterUrl'
 
 type Owner = readonly ['platform', string, null, string, number]
@@ -164,6 +164,8 @@ function AdminMessageQueryContent({ owner, ownerKey }: { owner: Owner; ownerKey:
   const [applied, setApplied] = useState<FilterTexts>(initialFilters)
   const params = useMemo(() => filterParams(applied), [applied])
   const [detailMessage, setDetailMessage] = useState<AdminMessage | null>(null)
+  // 日志中心路由要求 platform.admin；没有时详情照常、不给链接。
+  const canOpenSentLog = useSessionStore((state) => Boolean(state.principal?.permissions.includes('platform.admin')))
   const [limit, setLimit] = useState<(typeof pageSizes)[number]>(10)
   const [cursors, setCursors] = useState<string[]>([])
   const cursor = cursors.at(-1)
@@ -360,9 +362,11 @@ function AdminMessageQueryContent({ owner, ownerKey }: { owner: Owner; ownerKey:
               <dt>{t('details.messageTitle')}</dt><dd>{detailMessage.title?.trim() || t('unknown')}</dd>
               <dt>{t('details.siteId')}</dt><dd>{detailMessage.site_id
                 ? `${detailMessage.site_domain ?? t('unknown')}（${detailMessage.site_id}）` : t('details.noSubject')}</dd>
-              <dt>{t('details.messageId')}</dt><dd>{detailMessage.id}</dd>
+              <dt>{t('details.messageId')}</dt><dd>{detailMessage.id}{canOpenSentLog ? (
+                // 日志中心（platform.admin）发送记录页按消息ID预筛，查看重试与失败原因。
+                <> <Link className="admin-message-detail-deliveries" to={`/sys/log-center?${new URLSearchParams({ tab: 'sent', message_id: detailMessage.id })}`}>{t('details.viewDeliveries')}</Link></>
+              ) : null}</dd>
             </dl>
-            <p className="admin-message-detail-hint">{t('details.deliveryHint')}</p>
             <div className="admin-message-detail-channel">
               <h3>{t('details.email')}<span className="admin-message-detail-state">{channelState(detailMessage.email_state)}</span></h3>
               <pre className="cdnca-dialog-scroll">{detailMessage.email_state ? detailMessage.email_content?.trim() || t('details.empty') : t('details.notGeneratedHelp')}</pre>

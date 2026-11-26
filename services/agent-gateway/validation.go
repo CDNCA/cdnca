@@ -431,6 +431,17 @@ func (g *Gateway) validateDeploymentCommand(command *agentv1.DeploymentCommand, 
 			return err
 		}
 	}
+	// the versions whose held telemetry the
+	// agent may send (Control lists at most 64, apply commands only).
+	if len(command.ReleasedConfigVersionIds) > 64 ||
+		len(command.ReleasedConfigVersionIds) != 0 && command.Action != agentv1.DeploymentAction_DEPLOYMENT_ACTION_APPLY {
+		return fmt.Errorf("command released config versions are invalid")
+	}
+	for _, released := range command.ReleasedConfigVersionIds {
+		if err := g.validateUUID("command.released_config_version_ids", released); err != nil {
+			return err
+		}
+	}
 	switch command.Action {
 	case agentv1.DeploymentAction_DEPLOYMENT_ACTION_APPLY, agentv1.DeploymentAction_DEPLOYMENT_ACTION_RECONCILE:
 		if len(command.Artifacts) == 0 || len(command.Artifacts) > g.config.MaxCommandArtifacts {

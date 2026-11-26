@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Alert, App, Badge, Button, Card, Checkbox, Descriptions, Drawer, Empty, Image, Input, List, Modal, Result, Select, Space, Table,
-  Tabs, Tag, Typography,
-} from 'antd'
+import { Alert, App, Badge, Button, Card, Checkbox, Descriptions, Drawer, Empty, Image, Input, List, Modal, Result, Select, Space, Tabs, Tag, Typography } from 'antd'
 import { ShieldOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -23,7 +20,7 @@ import { useAdvisories } from './useAdvisories'
 import { pluginDescription, pluginName, pluginSummary, pluginTitle, usePluginCatalog } from './usePluginCatalog'
 
 import './PluginMarketPage.css'
-import { useFeedback, FeedbackWhen } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, Table } from '@cdnca/ui'
 import { outcomeUnknown, useIdempotencyKey } from '../market/idempotency'
 
 

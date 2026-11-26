@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { AppRoutes } from '../App'
 import { systemCleanupSettingsApi, type PlatformSystemCleanupDocument } from '../api/systemCleanupSettings'
-import { systemSettingsApi } from '../api/systemSettings'
+import { brandAssetApi } from '../api/brandAsset'
+import { systemSettingsApi, type PlatformSystemSettingsDocument } from '../api/systemSettings'
 import { systemUserSettingsApi, type PlatformSystemUserSettings, type PlatformSystemUserSettingsDocument } from '../api/systemUserSettings'
 import { useSessionStore } from '../auth/session'
 import SystemGlobalSettingsPage from '../pages/SystemGlobalSettingsPage'
@@ -34,6 +35,14 @@ const cleanup: PlatformSystemCleanupDocument = {
     cleanup_cache_days: 30, access_logs_days: 7, node_metrics_days: 7, bandwidth_history_days: 90, blacklist_history_days: 7,
     node_traffic_history_days: 45,
     audit_retention_days: { admin: 365, user: 180, auth: 90, site: 180, security: 180, rule: 180, finance: 1095, package: 365, plugin: 180, node: 90, dns: 180, cert: 180, system: 365, other: 180 },
+  },
+}
+
+const systemDocument: PlatformSystemSettingsDocument = {
+  schema: 'cdnca.platform-system-settings/v1', revision: 1,
+  value: {
+    system_name: 'CDNCA', user_title: '用户', admin_title: '管理员', footer_links: '', footer_text: '', global_js: '', bound_domains: '',
+    expiry_close: false, traffic_close: false, allow_upgrade: true, allow_downgrade: false, maintenance: false, maintenance_message: '', auto_upgrade_node: false,
   },
 }
 
@@ -85,16 +94,29 @@ describe('system settings navigation (ADMIN-CURRENT-08)', () => {
     expect(await within(screen.getByTestId('system-settings-baseline-cleanup')).findByText('系统配置已保存')).toBeInTheDocument()
   })
 
-  it('states the scope and save granularity of each tab', async () => {
+  // 系统配置首屏不再有作用范围/保存方式说明和「当前生效」摘要按钮，空闲时没有顶部状态，页内导航是长页唯一的定位入口；数据清理页签的范围说明不变。
+  it('opens the system tab on the form without scope notes or summary buttons, and the section navigation still jumps', async () => {
     authenticate()
-    vi.spyOn(systemSettingsApi, 'get').mockReturnValue(new Promise(() => {}))
+    vi.spyOn(systemSettingsApi, 'get').mockResolvedValue(systemDocument)
+    vi.spyOn(brandAssetApi, 'list').mockResolvedValue({ schema: 'cdnca.platform-brand-asset/v1', assets: [] })
     vi.spyOn(systemCleanupSettingsApi, 'get').mockResolvedValue(cleanup)
     const user = userEvent.setup()
     renderWithProviders(<SystemGlobalSettingsPage />)
-    expect(await screen.findByTestId('system-settings-scope-system')).toHaveTextContent('约 1 秒自动保存')
+    const panel = await screen.findByTestId('system-settings-baseline-system')
+    expect(screen.queryByTestId('system-settings-scope-system')).toBeNull()
+    expect(screen.queryByText(/作用范围|保存方式|无保存按钮|切换标签前/)).toBeNull()
+    expect(within(panel).queryByRole('navigation', { name: '当前生效' })).toBeNull()
+    expect(within(panel).queryByTestId('system-settings-save-status')).toBeNull()
+    expect(within(panel).getByTestId('system-settings-saved-receipt')).toBeEmptyDOMElement()
+    expect(within(panel).queryByText('所有修改已自动保存')).toBeNull()
+    // the section navigation comes right before the first field, and is the only jump list
+    const navigation = within(panel).getByRole('navigation', { name: '系统配置页内导航' })
+    expect(within(panel).getAllByRole('navigation')).toEqual([navigation])
+    expect(navigation.compareDocumentPosition(within(panel).getByLabelText('系统名称')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(within(navigation).getByRole('button', { name: '维护升级' }))
+    expect(within(panel).getByRole('heading', { name: '维护升级' })).toHaveFocus()
     await user.click(screen.getByRole('tab', { name: '数据清理' }))
-    const scope = await screen.findByTestId('system-settings-scope-cleanup')
-    expect(scope).toHaveTextContent('0 表示永久保留')
+    expect(await screen.findByTestId('system-settings-scope-cleanup')).toHaveTextContent('0 表示永久保留')
   })
 
   it('has no backup fields on the cleanup tab and links to the single control backup entry', async () => {

@@ -518,10 +518,10 @@ test("current YAML and external refs include all required operations", async () 
 	// 平台插件安装另 7 条（列表/详情/confirm/upgrade/disable/uninstall/targets）原只在子文件，汇总补引用。
 	// 通知运行时健康 GET /v1/notification-runtime-health 1 条。
 	// 取消升级计划 POST cancelControlUpgradeRollout 1 条。
-	assert.equal(result.operations.length, 961);
-	assert.equal(result.distinctTupleCount, 935);
-	assert.equal(result.overlaps.length, 26);
-	assert.equal(result.overlaps.length, 26);
+	// 发信测试、注册协议、主控回源鉴权状态、实名认证可用方式等 7 条（其中 1 条与子文件同一 wire tuple）。
+	assert.equal(result.operations.length, 968);
+	assert.equal(result.distinctTupleCount, 941);
+	assert.equal(result.overlaps.length, 27);
   const operationIDs = new Set(result.operations.map(({operationId}) => operationId));
   assert.deepEqual(legacyMissingOperationIDs.filter((value) => !operationIDs.has(value)), []);
   for (const operationId of [

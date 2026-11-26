@@ -180,6 +180,25 @@ describe('native control upgrade contract', () => {
     expect(fetch).toHaveBeenCalledTimes(6)
   })
 
+  // an unconfirmed current schema head is null with a reason.
+  it('keeps an unconfirmed current schema head and its reason', async () => {
+    const options = (current_schema_head: number | null, current_schema_head_reason?: unknown) => ({
+      schema: 'cdnca.native-control-upgrade-options/v1', observed_at: '2026-11-23T00:00:00Z',
+      options: { current_version: '1.0.35', current_schema_head, ...(current_schema_head_reason === undefined ? {} : { current_schema_head_reason }),
+        target_mode: 'follow_channel', items: [] } })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(options(null, 'current_artifact_unregistered')))
+      .mockResolvedValueOnce(json(options(692)))
+      .mockResolvedValueOnce(json(options(692, 'current_artifact_unregistered')))
+      .mockResolvedValueOnce(json(options(null, 'Bad Reason')))
+    expect((await nativeControlUpgradesApi.options('token')).options).toMatchObject({
+      current_schema_head: null, current_schema_head_reason: 'current_artifact_unregistered' })
+    const confirmed = (await nativeControlUpgradesApi.options('token')).options
+    expect(confirmed.current_schema_head).toBe(692)
+    expect(confirmed).not.toHaveProperty('current_schema_head_reason')
+    await expect(nativeControlUpgradesApi.options('token')).rejects.toMatchObject({ code: 'invalid_response' })
+    await expect(nativeControlUpgradesApi.options('token')).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
   it('keeps the reason_code of a refused issue', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
       error: { code: 'upgrade_target_blocked', reason_code: 'same_version', request_id: 'r' } }), { status: 409 }))

@@ -572,7 +572,9 @@ func mustClient(t *testing.T, config Config, httpClient HTTPClient) *Client {
 // sameTenant maps a scope to a tenant with the same ID (test fixtures only).
 type sameTenant struct{}
 
-func (sameTenant) TenantOfScope(_ context.Context, scopeID string) (string, error) { return scopeID, nil }
+func (sameTenant) TenantOfScope(_ context.Context, scopeID string) (string, error) {
+	return scopeID, nil
+}
 
 func validAccessEvent(eventID string) AccessEvent {
 	return AccessEvent{

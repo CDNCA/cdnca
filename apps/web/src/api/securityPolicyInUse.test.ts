@@ -22,3 +22,16 @@ describe('security_policy_in_use sites', () => {
     expect((await responseApiError(refusal(undefined))).inUseSites).toBeUndefined()
   })
 })
+
+// a refused matcher / filter delete or disable names the CC rule groups using it.
+describe('cc_reference_in_use policies', () => {
+  it('keeps the named rule groups', async () => {
+    const response = new Response(JSON.stringify({ error: {
+      code: 'cc_reference_in_use', message: 'in use', request_id: 'req-2',
+      details: { policies: [{ id: '11111111-1111-4111-8111-111111111111', name: '登录防护' }, { id: 'bad', name: 'x' }] },
+    } }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    const error = await responseApiError(response)
+    expect(error.code).toBe('cc_reference_in_use')
+    expect(error.ccReferenceUsers).toEqual([{ id: '11111111-1111-4111-8111-111111111111', name: '登录防护' }])
+  })
+})

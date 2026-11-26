@@ -436,7 +436,7 @@ export interface MarketPlugin {
 export interface MarketUIPage {
   origin: string
   api_base_url?: string
-  pages: Array<{ id: string; path: string; mount: 'menu' | 'site_tab' | 'plugin_settings'; menu_parent?: string; role: 'admin' | 'user';
+  pages: Array<{ id: string; path: string; mount: 'menu' | 'site_tab' | 'plugin_settings'; menu_parent?: string; menu_section?: string; role: 'admin' | 'user';
     title: { 'zh-CN': string; 'en-US'?: string }; required_permission?: string; required_module?: string }>
 }
 // This controller's local state of a market plugin (GET /v1/admin/market/plugin-library). locally_disabled: the platform
@@ -864,8 +864,11 @@ export const marketApi = {
     call<MarketLocalDisable>(token, `/v1/admin/market/plugin-library/${id(pluginID)}/disable`, json('POST', input), key),
   enableLocally: (token: string, pluginID: string, key: string) =>
     call<MarketLocalDisable>(token, `/v1/admin/market/plugin-library/${id(pluginID)}/enable`, json('POST', {}), key),
-  download: (token: string, pluginID: string) =>
-    call<MarketDownload>(token, '/v1/admin/market/plugin-downloads', json('POST', { plugin_id: pluginID })),
+  // reinstall: uninstalled here, licence still held; the market asks the license service for a new
+  // pending installation record (at most one: a repeat adds nothing).
+  download: (token: string, pluginID: string, options: { reinstall?: boolean } = {}) =>
+    call<MarketDownload>(token, '/v1/admin/market/plugin-downloads',
+      json('POST', { plugin_id: pluginID, ...(options.reinstall ? { reinstall: true } : {}) })),
   purchaseFromPrepaid: (token: string, input: { price_plan_id: string; plan_revision: number; trial?: boolean }, key: string) =>
     call<MarketLicense>(token, '/v1/admin/market/plugin-purchases', json('POST', input), key),
   updateOfferTerms: (token: string, offerID: string,

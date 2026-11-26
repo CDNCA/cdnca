@@ -157,7 +157,7 @@ func (service *Service) List(ctx context.Context, actor Actor, input Query) (Pag
 		page.NextCursor, err = service.encodeCursor(cursorEnvelope{ScopeID: query.ScopeID, UserID: actor.UserID,
 			SessionID: actor.SessionID, Fingerprint: fingerprint, SnapshotAt: query.SnapshotAt,
 			BeforeTime: last.OccurredAt, BeforeID: last.ID, AuditThroughPosition: query.AuditThroughPosition,
-				RangeFrom: query.From, RangeTo: query.To})
+			RangeFrom: query.From, RangeTo: query.To})
 		if err != nil {
 			return Page{}, ErrUnavailable
 		}
@@ -408,12 +408,12 @@ func (service *Service) prepare(actor Actor, input Query) (StoreQuery, string, e
 	}
 	fingerprintRaw, _ := json.Marshal([]any{target, actorUserID, input.AuditActorUserID, input.ActorUserDisplayID, input.AfterAuditBoundary,
 		kinds, results, input.Action, input.ActionVerb, input.ResourceType, input.ResourceID, input.Change,
-		input.SourceIP, input.From.UTC(), input.To.UTC(), platform, input.Category})
+		input.SourceIP, input.From.UTC(), input.To.UTC(), platform, input.Category, input.HideSessionRefresh})
 	fingerprint := sha256.Sum256(fingerprintRaw)
 	return StoreQuery{ScopeID: target, ActorUserID: actorUserID, ExactActorUserID: input.AuditActorUserID, ActorUserDisplayID: input.ActorUserDisplayID,
 		Kinds: kinds, ResultCodes: results, Action: input.Action, ActionVerb: input.ActionVerb, Category: input.Category,
 		ResourceType: input.ResourceType, ResourceID: input.ResourceID, Change: input.Change, SourceIP: input.SourceIP,
-		From: from, To: to, SnapshotAt: minTime(now, to), Limit: limit + 1}, hex.EncodeToString(fingerprint[:]), nil
+		From: from, To: to, SnapshotAt: minTime(now, to), Limit: limit + 1, HideSessionRefresh: input.HideSessionRefresh}, hex.EncodeToString(fingerprint[:]), nil
 }
 
 func authorize(actor Actor, target *uuid.UUID) (uuid.UUID, bool, error) {

@@ -617,6 +617,19 @@ func runUpgradeNegotiationSession(t *testing.T, ctx context.Context, client *Cli
 	}
 }
 
+// sessionEndedByDeadline reports that runSession returned only after ctx
+// expired. Once the deadline passes, runSession returns whichever branch saw
+// the end first: ctx.Err, io.EOF from a heartbeat whose building (it reads
+// the journal) started before the deadline and whose Send came after it, or
+// the stream's gRPC status. Run returns ctx.Err in every case (client.go).
+func sessionEndedByDeadline(ctx context.Context, err error) bool {
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return false
+	}
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) ||
+		status.Code(err) == codes.DeadlineExceeded || status.Code(err) == codes.Canceled
+}
+
 func TestRunSessionBindsBaseUpgradeCapabilitiesToSentHello(t *testing.T) {
 	capability := func(name agentv1.CapabilityName) *agentv1.Capability {
 		return &agentv1.Capability{Name: name, ApiVersion: 1}
@@ -694,7 +707,7 @@ func TestRunSessionBindsBaseUpgradeCapabilitiesToSentHello(t *testing.T) {
 				return
 			}
 			// The probe's recovery error keeps the session; it ends with the context.
-			if !established || !errors.Is(runErr, context.DeadlineExceeded) || runtime.recoveryCount() != 1 {
+			if !established || !sessionEndedByDeadline(ctx, runErr) || runtime.recoveryCount() != 1 {
 				t.Fatalf("valid negotiation = (established=%t err=%v recoveries=%d), want (true, deadline, 1)",
 					established, runErr, runtime.recoveryCount())
 			}

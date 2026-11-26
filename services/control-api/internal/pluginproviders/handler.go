@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 )
 
@@ -159,7 +160,12 @@ func (h *Handler) mutate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// clientIP is the console's resolved client address (httpapi
+// WithClientSourceIP, 源IP请求头 included), else the connection's.
 func clientIP(r *http.Request) string {
+	if address := audit.SourceIPFrom(r.Context()); address != "" {
+		return address
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

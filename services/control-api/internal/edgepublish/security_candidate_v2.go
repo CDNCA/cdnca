@@ -11,6 +11,7 @@ import (
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
+	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -50,7 +51,7 @@ func (s *Service) persistSiteRuntimeV2SecurityCandidateTx(
 		return SecurityCandidateResult{}, err
 	}
 	if _, found := telemetrySubscriptions[request.SiteID]; !found {
-		return SecurityCandidateResult{}, ErrNotFound
+		return SecurityCandidateResult{}, siteOutOfPublicationError(ctx, tx, request.ConfigurationScopeID, request.SiteID)
 	}
 	if err := validateL4AdditionalListenerTargets(ctx, tx, request.ConfigurationScopeID, target.NodeIDs, capabilities, now); err != nil {
 		return SecurityCandidateResult{}, err
@@ -70,7 +71,7 @@ func (s *Service) persistSiteRuntimeV2SecurityCandidateTx(
 		return SecurityCandidateResult{}, err
 	}
 	release, err := s.buildSiteObjectRelease(ctx, tx, request.ConfigurationScopeID, request.ConfigVersionID, bundle,
-		recipients, capabilities, now)
+		recipients, capabilities, nil, now)
 	if err != nil {
 		return SecurityCandidateResult{}, err
 	}
@@ -153,4 +154,28 @@ func canonicalUUIDs(values []uuid.UUID) []uuid.UUID {
 	result := slices.Clone(values)
 	sort.Slice(result, func(i, j int) bool { return bytes.Compare(result[i][:], result[j][:]) < 0 })
 	return slices.Compact(result)
+}
+
+// siteOutOfPublicationError says why a site the candidate names is not in the
+// compiled release: a cancelled package subscription (left out of every
+// publication, user) is packageaddon.ErrSubscriptionInactive, a
+// suspended one (until it is unsuspended) ErrPackageSubscriptionSuspended,
+// anything else stays ErrNotFound. The caller already authorized the scope.
+func siteOutOfPublicationError(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID) error {
+	var cancelled, suspended bool
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(bool_or(subscription.lifecycle_status<>'active'),false),
+		COALESCE(bool_or(subscription.suspended_at IS NOT NULL),false) FROM sites site
+		JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
+		 AND subscription.id=site.package_subscription_id
+		WHERE site.scope_id=$1 AND site.id=$2 AND site.deleted_at IS NULL`,
+		scopeID, siteID).Scan(&cancelled, &suspended); err != nil {
+		return fmt.Errorf("%w: read site package state", ErrPersistence)
+	}
+	if cancelled {
+		return packageaddon.ErrSubscriptionInactive
+	}
+	if suspended {
+		return ErrPackageSubscriptionSuspended
+	}
+	return ErrNotFound
 }

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
@@ -527,7 +528,7 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 				return ErrOriginSectionConflict
 			}
 			currentPool = defaultOriginPool(request.Fields.originItems)
-			if err := replaceOriginPool(ctx, tx, request.ID, currentPool, s.now().UTC()); err != nil {
+			if err := replaceOriginPool(ctx, tx, request.ID, currentPool, s.now().UTC(), request.ExpectedRevision+1); err != nil {
 				return err
 			}
 		}
@@ -664,6 +665,10 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 				return ErrDomainConflict
 			}
 			return siteTLSProfileViolation(err)
+		}
+		// After the write: the subscription it leaves the site on decides.
+		if err := http3NewlyDenied(tlsBefore.HTTP3, item); err != nil {
+			return err
 		}
 		if cnameIntent != nil {
 			if err := insertCNAMEIntentFact(ctx, tx, *cnameIntent, s.now().UTC()); err != nil {
@@ -844,13 +849,32 @@ func (s *Store) UpdateOrigin(
 		if deleted {
 			return ErrNotFound
 		}
-		if currentRevision != request.ExpectedRevision {
+		if request.primaryOrigins == nil && currentRevision != request.ExpectedRevision {
 			return ErrRevisionConflict
+		}
+		if request.primaryOrigins != nil {
+			// 客户区改源站 only replaces the primary origins: the version that matters is the pool's own
+			// (migration 703), so a CNAME projection or publication since the customer's read is no conflict.
+			changed, err := originPoolChangedSince(ctx, tx, request.ID, request.ExpectedRevision, currentRevision)
+			if err != nil {
+				return err
+			}
+			if changed {
+				return ErrRevisionConflict
+			}
 		}
 
 		previous, err := selectOriginPool(ctx, tx, request.ID)
 		if err != nil {
 			return err
+		}
+		if request.primaryOrigins != nil {
+			if request.Pool, err = WithPrimaryOrigins(withOriginScheme(previous, request.primaryScheme), request.primaryOrigins); err != nil {
+				return err
+			}
+			if err := normalizeOriginPool(&request.Pool); err != nil {
+				return err
+			}
 		}
 		// 网站级 L2 配置 is the platform's (仅管理员可设): a
 		// tenant's write keeps the stored one
@@ -861,7 +885,7 @@ func (s *Store) UpdateOrigin(
 			return err
 		}
 		now := s.now().UTC()
-		if err := replaceOriginPool(ctx, tx, request.ID, request.Pool, now); err != nil {
+		if err := replaceOriginPool(ctx, tx, request.ID, request.Pool, now, currentRevision+1); err != nil {
 			return err
 		}
 		origins, hosts := originCompatibility(request.Pool)
@@ -873,7 +897,7 @@ func (s *Store) UpdateOrigin(
 			RETURNING `+siteColumns("sites")+`,
 			          (SELECT display_name FROM users WHERE id = sites.owner_user_id),
 			          (SELECT display_id::text FROM users WHERE id = sites.owner_user_id)`,
-			request.ID, origins, hosts, actor.UserID, now, request.ExpectedRevision))
+			request.ID, origins, hosts, actor.UserID, now, currentRevision))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRevisionConflict
 		}
@@ -898,7 +922,7 @@ func (s *Store) UpdateOrigin(
 			Result:       "success",
 			Changes:      originForwardingChanges(previous, request.Pool),
 			Payload: automaticAuditPayload(actor, scopeID, "site.origin.update", map[string]any{
-				"from_version":        request.ExpectedRevision,
+				"from_version":        currentRevision,
 				"to_version":          item.Revision,
 				"from_balance_method": previous.BalanceMethod,
 				"to_balance_method":   request.Pool.BalanceMethod,
@@ -1217,6 +1241,16 @@ func (s *Store) BatchAction(
 			}
 
 			if request.Action == BatchActionSetProtocols {
+				// Same rule as a single-site update: switching HTTP/3 on is
+				// refused per site while its current entitlement excludes it.
+				if request.Protocols.HTTP3Enabled != nil && *request.Protocols.HTTP3Enabled &&
+					!current.HTTP3Enabled && current.HTTP3PackageDenied {
+					setBatchFailure(itemResult, http3PackageDeniedReason)
+					if err := s.appendBatchAudit(ctx, tx, actor, auditScopeID, request, entry.request, itemResult, &current); err != nil {
+						return err
+					}
+					continue
+				}
 				updated, err := s.setBatchSiteProtocols(ctx, tx, actor, request, current)
 				if err != nil {
 					return err
@@ -1702,8 +1736,8 @@ func insertOriginPool(
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO site_origin_pools (
 			site_id, balance_method, failover_tries, connect_timeout_ms, read_timeout_ms,
-			keepalive_enabled, keepalive_idle_timeout_ms, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			keepalive_enabled, keepalive_idle_timeout_ms, updated_at, site_revision
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (SELECT revision FROM sites WHERE id = $1))`,
 		siteID, pool.BalanceMethod, pool.FailoverTries, pool.ConnectTimeoutMS, pool.ReadTimeoutMS,
 		pool.KeepaliveEnabled, pool.KeepaliveIdleTimeoutMS, updatedAt); err != nil {
 		return err
@@ -1834,20 +1868,24 @@ func allocateSiteDisplayID(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, up
 	return displayID, nil
 }
 
+// replaceOriginPool writes pool as the site's; siteRevision is the site revision the write ends at (the pool's
+// own version, migration 703: originPoolChangedSince).
 func replaceOriginPool(
 	ctx context.Context,
 	tx pgx.Tx,
 	siteID uuid.UUID,
 	pool OriginPool,
 	updatedAt time.Time,
+	siteRevision int64,
 ) error {
 	command, err := tx.Exec(ctx, `
 		UPDATE site_origin_pools SET
 			balance_method = $2, failover_tries = $3, connect_timeout_ms = $4,
-			read_timeout_ms = $5, keepalive_enabled = $6, keepalive_idle_timeout_ms = $7, updated_at = $8
+			read_timeout_ms = $5, keepalive_enabled = $6, keepalive_idle_timeout_ms = $7, updated_at = $8,
+			site_revision = $9
 		WHERE site_id = $1`,
 		siteID, pool.BalanceMethod, pool.FailoverTries, pool.ConnectTimeoutMS, pool.ReadTimeoutMS,
-		pool.KeepaliveEnabled, pool.KeepaliveIdleTimeoutMS, updatedAt)
+		pool.KeepaliveEnabled, pool.KeepaliveIdleTimeoutMS, updatedAt, siteRevision)
 	if err != nil {
 		return err
 	}
@@ -2468,10 +2506,13 @@ func listWhere(actor Actor, filter ListFilter) (string, []any) {
 		))
 	}
 	if filter.PackageID != nil {
-		add("s.package_id = $%d", *filter.PackageID)
+		add(currentPackageIDColumn("s")+" = $%d", *filter.PackageID)
+	}
+	if filter.PackageSubscriptionID != nil {
+		add("s.package_subscription_id = $%d", *filter.PackageSubscriptionID)
 	}
 	if filter.Package != "" {
-		add("position(lower($%d) in lower(COALESCE(s.package_name, ''))) > 0", filter.Package)
+		add("position(lower($%d) in lower(COALESCE("+currentPackageNameColumn("s")+", ''))) > 0", filter.Package)
 	}
 	if filter.Site != "" {
 		args = append(args, filter.Site)
@@ -2618,6 +2659,30 @@ func activeDomainsExpression(alias string) string {
 // content rewrite tester compiles https rules against the same names).
 func ActiveDomainsSQL(alias string) string { return activeDomainsExpression(alias) }
 
+// currentPackageIDColumn / currentPackageNameColumn: a site bound to a
+// package subscription shows the subscription's current product, the
+// entitlement in effect now (an upgrade or downgrade adds one; the
+// subscription row keeps the purchased product, migration 261), not the
+// product stored when the site was last saved
+// . An unbound site keeps its own.
+func currentPackageIDColumn(alias string) string {
+	return "COALESCE((SELECT package_subscription_current_product_id(subscription.id, now())" +
+		" FROM package_subscriptions subscription WHERE subscription.tenant_scope_id = " + alias + ".scope_id" +
+		" AND subscription.id = " + alias + ".package_subscription_id), " + alias + ".package_id)"
+}
+
+// CurrentPackageIDSQL is currentPackageIDColumn for other packages (the
+// domain export filters by the package the site list shows).
+func CurrentPackageIDSQL(alias string) string { return currentPackageIDColumn(alias) }
+
+func currentPackageNameColumn(alias string) string {
+	return "COALESCE((SELECT CASE WHEN jsonb_typeof(current_product.snapshot->'name') = 'string'" +
+		" THEN current_product.snapshot->>'name' END FROM package_subscriptions subscription" +
+		" CROSS JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id, now()) AS snapshot) current_product" +
+		" WHERE subscription.tenant_scope_id = " + alias + ".scope_id AND subscription.id = " + alias + ".package_subscription_id), " +
+		alias + ".package_name)"
+}
+
 func siteColumns(alias string) string {
 	domains := activeDomainsExpression(alias)
 	originPool := `(SELECT jsonb_build_object(
@@ -2670,7 +2735,7 @@ func siteColumns(alias string) string {
 		alias + ".id", alias + ".display_id", alias + ".scope_id", alias + ".owner_user_id", alias + ".domain", domains,
 		alias + ".http_ports", alias + ".https_ports", alias + ".origins", originPool, alias + ".cname",
 		alias + ".https_enabled", alias + ".enabled", alias + ".status", "site_sync_status_503(" + alias + ".scope_id, " + alias + ".id)",
-		alias + ".is_default", alias + ".package_id", alias + ".package_name", alias + ".group_id",
+		alias + ".is_default", currentPackageIDColumn(alias), currentPackageNameColumn(alias), alias + ".group_id",
 		alias + ".group_name", alias + ".region_id", alias + ".region_name", alias + ".node_group_id",
 		alias + ".node_group_name", alias + ".lock_reason", alias + ".locked_at",
 		alias + ".package_subscription_id", alias + ".cname_state", alias + ".cname_task_id",
@@ -2694,12 +2759,46 @@ func siteColumns(alias string) string {
 		"(SELECT subscription.ends_at FROM package_subscriptions subscription WHERE subscription.tenant_scope_id = " +
 			alias + ".scope_id AND subscription.id = " + alias + ".package_subscription_id)",
 		// The package's validity for 暂不可用: only an enabled,
-		// undeleted package is published.
-		"(SELECT CASE WHEN subscription.deleted_at IS NOT NULL THEN 'deleted' WHEN NOT subscription.admin_enabled THEN 'disabled'" +
+		// undeleted, unsuspended package is published. A cancelled subscription
+		// (terminated by its billing host) ranks before its earlier suspension.
+		"(SELECT CASE WHEN subscription.deleted_at IS NOT NULL THEN 'deleted'" +
+			" WHEN subscription.lifecycle_status <> 'active' THEN 'cancelled'" +
+			" WHEN NOT subscription.admin_enabled THEN 'disabled'" +
+			" WHEN subscription.suspended_at IS NOT NULL THEN 'suspended'" +
 			" ELSE 'valid' END FROM package_subscriptions subscription WHERE subscription.tenant_scope_id = " +
 			alias + ".scope_id AND subscription.id = " + alias + ".package_subscription_id)",
+		// Who suspended the site's subscription and why (migration 698).
+		"(SELECT jsonb_build_object('source', package_subscription_suspend_source_698(subscription.id), 'reason', subscription.suspend_reason)" +
+			" FROM package_subscriptions subscription WHERE subscription.tenant_scope_id = " + alias +
+			".scope_id AND subscription.id = " + alias + ".package_subscription_id AND subscription.suspended_at IS NOT NULL)",
+		http3PackageDeniedColumn(alias),
 	}, ", ")
 }
+
+// http3PackageDeniedColumn: the current entitlement of the site's
+// subscription sets limits.http3 false, the one case the publication drops
+// HTTP/3 (edgepublish applySoldPackageRuntimeV2Limits; an absent key or an
+// unbound site keeps it).
+func http3PackageDeniedColumn(alias string) string {
+	return "COALESCE((SELECT package_subscription_current_product_snapshot(subscription.id, now()) #> '{spec,limits,http3}' = 'false'::jsonb" +
+		" FROM package_subscriptions subscription WHERE subscription.tenant_scope_id = " + alias + ".scope_id" +
+		" AND subscription.id = " + alias + ".package_subscription_id), false)"
+}
+
+// http3NewlyDenied refuses a write that switches HTTP/3 on (off before, on
+// after) while the current entitlement excludes it. Switching it off,
+// keeping it as it was, or saving other fields of a site already on stays
+// allowed; the stored choice comes back with a package that includes it.
+func http3NewlyDenied(before bool, after Site) error {
+	if !before && after.HTTP3Enabled && after.HTTP3PackageDenied {
+		return fieldError("http3_enabled", http3PackageDeniedReason)
+	}
+	return nil
+}
+
+// http3PackageDeniedReason: the refusal reason of http3NewlyDenied, the
+// package feature code the batch item failure carries.
+const http3PackageDeniedReason = "package_feature_denied"
 
 func scanSite(row rowScanner) (Site, error) {
 	var item Site
@@ -2711,6 +2810,7 @@ func scanSite(row rowScanner) (Site, error) {
 	var lockOperatorName *string
 	var originPoolJSON []byte
 	var packageState *string
+	var suspensionJSON []byte
 	if err := row.Scan(
 		&item.ID,
 		&displayID,
@@ -2772,6 +2872,8 @@ func scanSite(row rowScanner) (Site, error) {
 		&item.UpdatedAt,
 		&item.PackageExpiresAt,
 		&packageState,
+		&suspensionJSON,
+		&item.HTTP3PackageDenied,
 		&ownerDisplayName,
 		&ownerDisplayID,
 	); err != nil {
@@ -2786,6 +2888,13 @@ func scanSite(row rowScanner) (Site, error) {
 	}
 	item.Owner = &OwnerReference{ID: item.ownerID, DisplayID: ownerDisplayID, DisplayName: ownerDisplayName}
 	item.PackageUnavailableReason = packageUnavailableReason(item.PackageSubscriptionID, packageState)
+	if item.PackageUnavailableReason != nil && *item.PackageUnavailableReason == PackageUnavailableSuspended && suspensionJSON != nil {
+		var suspension PackageSuspension
+		if err := json.Unmarshal(suspensionJSON, &suspension); err != nil {
+			return Site{}, err
+		}
+		item.PackageSuspension = &suspension
+	}
 	item.Lock = LockState{Locked: lockedAt != nil, Reason: lockReason, LockedAt: lockedAt}
 	if lockOperatorName != nil {
 		item.Lock.Operator = &LockOperator{DisplayName: *lockOperatorName}
@@ -2899,7 +3008,7 @@ func prepareCNAMEWriteIntent(ctx context.Context, tx pgx.Tx, actor Actor, ownerI
 			FROM package_subscriptions subscription JOIN package_subscription_state_versions owner
 			  ON owner.subscription_id=subscription.id AND owner.tenant_scope_id=subscription.tenant_scope_id
 			 AND owner.revision=subscription.revision AND owner.owner_user_id=$3
-			WHERE subscription.tenant_scope_id=$1 AND subscription.product_id=$2
+			WHERE subscription.tenant_scope_id=$1 AND package_subscription_current_product_id(subscription.id,now())=$2
 			  AND subscription.lifecycle_status='active'
 			  AND subscription.admin_enabled=true AND subscription.deleted_at IS NULL`, scopeID, *fields.PackageID, ownerID).Scan(&subscriptionID, &count)
 		if err != nil || count != 1 {
@@ -2922,14 +3031,19 @@ func prepareCNAMEWriteIntent(ctx context.Context, tx pgx.Tx, actor Actor, ownerI
 	if err := locks.Err(); err != nil {
 		return nil, err
 	}
-	var subscriptionProductID uuid.UUID
-	var snapshotMode, domain, hostname string
-	// A market leaf's hidden product has no cname block (the "" case below).
-	err = tx.QueryRow(ctx, `SELECT subscription.product_id,
-		COALESCE(subscription.product_snapshot->'spec'->'cname'->>'mode',''),
-		COALESCE(subscription.product_snapshot->'spec'->'cname'->>'domain',''),
-		COALESCE(subscription.product_snapshot->'spec'->'cname'->>'hostname','')
+	var subscriptionProductID, purchasedProductID uuid.UUID
+	var snapshotMode, domain, hostname, productName string
+	// The subscription's current product: the entitlement in effect now, not
+	// the purchased one an upgrade or downgrade leaves on the row (261;
+	//). A market leaf's hidden product
+	// has no cname block (the "" case below).
+	err = tx.QueryRow(ctx, `SELECT package_subscription_current_product_id(subscription.id,now()),subscription.product_id,
+		COALESCE(current_product.snapshot->'spec'->'cname'->>'mode',''),
+		COALESCE(current_product.snapshot->'spec'->'cname'->>'domain',''),
+		COALESCE(current_product.snapshot->'spec'->'cname'->>'hostname',''),
+		CASE WHEN jsonb_typeof(current_product.snapshot->'name')='string' THEN current_product.snapshot->>'name' ELSE '' END
 		FROM package_subscriptions subscription
+		CROSS JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS snapshot) current_product
 		WHERE subscription.tenant_scope_id=$1 AND subscription.id=$2 AND subscription.lifecycle_status='active'
 		  AND subscription.admin_enabled=true AND subscription.deleted_at IS NULL
 		  AND EXISTS (SELECT 1 FROM package_monitor_subscription_owners owner
@@ -2940,7 +3054,7 @@ func prepareCNAMEWriteIntent(ctx context.Context, tx pgx.Tx, actor Actor, ownerI
 		  AND EXISTS (SELECT 1 FROM package_subscription_state_versions state
 			WHERE state.subscription_id=subscription.id AND state.tenant_scope_id=subscription.tenant_scope_id
 			  AND state.revision=subscription.revision AND state.owner_user_id=$3)
-		FOR UPDATE OF subscription`, scopeID, *fields.PackageSubscriptionID, ownerID).Scan(&subscriptionProductID, &snapshotMode, &domain, &hostname)
+		FOR UPDATE OF subscription`, scopeID, *fields.PackageSubscriptionID, ownerID).Scan(&subscriptionProductID, &purchasedProductID, &snapshotMode, &domain, &hostname, &productName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrInvalidInput
 	}
@@ -2948,9 +3062,29 @@ func prepareCNAMEWriteIntent(ctx context.Context, tx pgx.Tx, actor Actor, ownerI
 		return nil, err
 	}
 	if fields.PackageID != nil && *fields.PackageID != subscriptionProductID {
-		return nil, fieldError("package_id", "does not match the package subscription")
+		// A page read before a package change echoes a product the
+		// subscription had; the site takes the current one (never written
+		// back to the old). Any other product is not this subscription's.
+		var held bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM package_subscriptions subscription
+			WHERE subscription.tenant_scope_id=$1 AND subscription.id=$2 AND (subscription.product_id=$3 OR EXISTS(
+			  SELECT 1 FROM package_subscription_entitlement_versions entitlement
+			  WHERE entitlement.subscription_id=subscription.id AND entitlement.tenant_scope_id=subscription.tenant_scope_id
+			    AND entitlement.product_id=$3)))`, scopeID, *fields.PackageSubscriptionID, *fields.PackageID).Scan(&held); err != nil {
+			return nil, err
+		}
+		if !held {
+			return nil, fieldError("package_id", "does not match the package subscription")
+		}
 	}
-	fields.PackageID = &subscriptionProductID
+	// The row stores the subscription row's product: sites_scope_package_subscription_product_113_fk
+	// binds (scope_id,package_subscription_id,package_id) to package_subscriptions.product_id,
+	// the purchased product a package change leaves in place (261). Reads show
+	// the current one (currentPackageIDColumn).
+	fields.PackageID = &purchasedProductID
+	if productName = strings.TrimSpace(productName); productName != "" && utf8.RuneCountInString(productName) <= 128 {
+		fields.PackageName = productName
+	}
 	mode := ""
 	switch snapshotMode {
 	case "per_site":

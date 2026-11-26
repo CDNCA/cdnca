@@ -327,6 +327,7 @@ func TestNodeHTTP01DebtSpansGenerationsUntilRequired(t *testing.T) {
 		t.Fatalf("status %+v", status)
 	}
 }
+
 // Membership is frozen when the epoch opens: a node joining the line group
 // mid-epoch is neither targeted nor allowed to serve the site until the final
 // empty cleanup closes the epoch.
@@ -470,6 +471,7 @@ func TestNodeHTTP01CleanupOnlyForNonServingNode(t *testing.T) {
 	f.setAdmin(t, n1, "active")
 	wantCode(t, "cleanup_only on a serving node", forge(n1, "cleanup_only", "active", true), "P3427")
 }
+
 // seed063 records a 063 site overlay history (revisions 1..revision, the last
 // one in mode, every revision targeting nodes) with one token fact per apply
 // revision; value seeds the token's value digest.

@@ -327,6 +327,8 @@ func failureReason(code string) string {
 		return "写入或生效验证记录失败"
 	case "acme_dns_provider_unavailable", "acme_dns_provider_invalid":
 		return "DNS API 不可用或配置无效"
+	case "acme_dns_proxy_unavailable":
+		return "无法通过 http代理 连接 DNS API"
 	case "acme_http01_no_serving_node", "acme_http01_node_unsupported":
 		return "没有可完成文件验证的节点"
 	case "acme_timeout":

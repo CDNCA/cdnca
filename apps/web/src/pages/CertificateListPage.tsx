@@ -8,13 +8,11 @@ import {
   Form,
   Input,
   Modal,
-  Pagination,
   Radio,
   Result,
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   Tooltip,
   Typography,
@@ -30,6 +28,7 @@ import '../i18n/systemSettings'
 import { ApiError, type Principal } from '../api/auth'
 import { samePEMCertificateChain } from './certificatePEM'
 import {
+  bindableVersion,
   certificatesApi,
   type CertificateAsset,
 	  type CertificateAssetSource,
@@ -61,8 +60,10 @@ import { formatDateTime } from '../i18n/formatters'
 import SiteDnsApiPanel from './SiteDnsApiPanel'
 import './CertificateListPage.css'
 import { CertificatePEMDialog } from '../components/CertificatePEMDialog'
-import { AdvancedFilters, FeedbackWhen, MODAL_WIDTH, OutcomeUnknown, fieldReasonText, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply, type AdvancedFilterItem, type FormErrorMap } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, MODAL_WIDTH, OutcomeUnknown, fieldReasonText, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply, type AdvancedFilterItem, type FormErrorMap, Pagination, Table } from '@cdnca/ui'
 import { certificateSearch, userSearch } from './idNameSources'
+import { certificateOrderPollInterval, inFlightOrderStatuses, stuckOrderAfterMs } from './certificateOrderPolling'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 // Order fields named differently on the form: the domains
 // are one textarea, so domains / domains[n] mark it.
@@ -392,9 +393,6 @@ function sameDomainSet(domains: string[], sans: string[]): boolean {
   return set.size > 0 && domains.length === set.size && domains.every((domain) => set.has(domain.toLowerCase()))
 }
 
-// 尚未出结果的申请（签发后会生成新证书，不再算这一行“申请中”）。
-const inFlightOrderStatuses = new Set<CertificateOrderStatus>(['pending', 'validating', 'issuing'])
-
 // 只有 ACME 证书、且申请晚于当前版本导入时间、尚未产出证书，才算这一行“申请中”。
 // 早于当前版本的未结订单（如被 CA 复用 order 后卡住的旧申请）不再让新签发的证书一直标“申请中”。
 function orderInFlightFor(order: CertificateOrder, asset: CertificateAsset, version: CertificateAssetVersion): boolean {
@@ -403,8 +401,7 @@ function orderInFlightFor(order: CertificateOrder, asset: CertificateAsset, vers
     Date.parse(order.created_at) >= Date.parse(version.imported_at) && sameDomainSet(order.domains, version.sans)
 }
 
-// 验证/签发正常几分钟完成；超过 1 小时仍未结束的申请在申请记录里提示卡住。
-const stuckOrderAfterMs = 60 * 60 * 1000
+// 超过 1 小时仍未结束的申请在申请记录里提示卡住。
 function orderStuck(order: CertificateOrder, now: number): boolean {
   return inFlightOrderStatuses.has(order.status) && now - Date.parse(order.created_at) > stuckOrderAfterMs
 }
@@ -703,6 +700,7 @@ function CertificateListPageContent({
   const { t, i18n } = useTranslation('certificates')
   const { t: assetT } = useTranslation('certificateAssets')
   const { t: syncT } = useTranslation('certificatePublicationFailures')
+  const namedRows = useNamedRowSelection()
   const sessionPrincipal = useSessionStore((state) => state.principal)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -795,7 +793,6 @@ function CertificateListPageContent({
   const [defaultProviderID, setDefaultProviderID] = useState<string | undefined>(undefined)
   const [defaultIssuer, setDefaultIssuer] = useState<CertificateIssuer | undefined>(undefined)
   const [defaultWriteError, setDefaultWriteError] = useState<ApiError | null>(null)
-  const [accepted, setAccepted] = useState(false)
   // 受理成功但解析未指向本平台的 HTTP-01 域名（dns_warnings，只提示不拦截）
   const [acceptedDNSWarnings, setAcceptedDNSWarnings] = useState<string[]>([])
   const [reapplyTarget, setReapplyTarget] = useState<{ name: string, input: CreateCertificateOrderInput } | null>(null)
@@ -906,7 +903,36 @@ function CertificateListPageContent({
       }
     },
     enabled: sectionTab === 'list',
+    // 页面可见且有进行中的申请时约 4 秒重读一次，到终态即停；读失败保留上次数据。
+    refetchInterval: (current) => certificateOrderPollInterval(current.state.data?.items),
+    refetchIntervalInBackground: false,
   })
+  // 申请产出证书（issued_asset_id / issued_version_id 首次出现或变化）时让证书列表和该证书详情重读一次。
+  // 本次挂载第一次读到的已签发申请只记下，不重读（证书列表同时在读）；之后新出现的申请、
+  // 刚受理的申请（见 mutation onSuccess）以及轮询/手动刷新读到的变化都会触发。
+  const issuedSeenRef = useRef<Map<string, string> | null>(null)
+  useEffect(() => {
+    const items = query.data?.items
+    if (!items) return
+    const seen = issuedSeenRef.current
+    const next = new Map(seen ?? [])
+    const changedAssets = new Set<string>()
+    let changedWithoutAsset = false
+    for (const order of items) {
+      const signature = order.issued_asset_id || order.issued_version_id
+        ? `${order.issued_asset_id ?? ''}/${order.issued_version_id ?? ''}` : ''
+      if (seen && signature && next.get(order.id) !== signature) {
+        if (order.issued_asset_id) changedAssets.add(order.issued_asset_id)
+        else changedWithoutAsset = true
+      }
+      next.set(order.id, signature)
+    }
+    issuedSeenRef.current = next
+    if (changedAssets.size === 0 && !changedWithoutAsset) return
+    void queryClient.invalidateQueries({ queryKey: assetPrefix })
+    if (changedWithoutAsset) void queryClient.invalidateQueries({ queryKey: detailPrefix })
+    else for (const assetID of changedAssets) void queryClient.invalidateQueries({ queryKey: [...detailPrefix, assetID] })
+  }, [assetPrefix, detailPrefix, query.data?.items, queryClient])
   const assetPageItems = useMemo(() => assetsQuery.data?.items ?? [], [assetsQuery.data?.items])
   const assetDetailQueries = useQueries({
     queries: assetPageItems.map((asset) => ({
@@ -1359,9 +1385,10 @@ function CertificateListPageContent({
       queryClient.setQueryData<{ items: CertificateOrder[] }>(orderPrefix, (current) => current
         ? { items: [order, ...current.items.filter((item) => item.id !== order.id)] }
         : current)
-      // 重新申请只弹 toast；新申请仍显示页内“证书申请已提交”。
-      if (reapplyTarget) message.success(assetT('reapply.submitted'))
-      else if (currentSessionAccess('certificates.manage')) setAccepted(true)
+      // 受理的申请记为“尚未产出证书”，之后任何一次读取看到已签发都会让证书列表重读。
+      issuedSeenRef.current = new Map(issuedSeenRef.current ?? []).set(order.id, '')
+      // 受理只弹一次短 toast，进度看“申请中”入口。
+      message.success(reapplyTarget ? assetT('reapply.submitted') : t('editor.acceptedTitle'))
       setAcceptedDNSWarnings(order.dns_warnings ?? [])
       orderAttemptRef.current = null
       setAttempt(null)
@@ -1453,7 +1480,6 @@ function CertificateListPageContent({
 
   useEffect(() => {
     if (!canManage) {
-      setAccepted(false)
       setUploadOpen(false)
       setEditorOpen(false)
       setBatchOpen(false)
@@ -1525,7 +1551,7 @@ function CertificateListPageContent({
 
 	  const openBind = () => {
 		if (!detail || !currentSessionAccess('certificates.manage')) return
-		const version = detail.versions.find((item) => item.status === 'active')
+		const version = bindableVersion(detail.versions)
 		if (!version) {
 		  setDetailError(new ApiError('invalid transition', 409, 'certificate_asset_invalid_transition'))
 		  return
@@ -1633,7 +1659,7 @@ function CertificateListPageContent({
 
   const resetAddAttempts = () => {
     uploadAttemptRef.current = null; setAssetAttempt(null); setAssetWriteError(null)
-    orderAttemptRef.current = null; setAttempt(null); setWriteError(null); setAccepted(false)
+    orderAttemptRef.current = null; setAttempt(null); setWriteError(null)
   }
   // 平台“默认设置/DNS API”已选的用户即当前上下文用户，手动申请时默认带入（仍可改选）。
   const contextOwner = contextUser ?? null
@@ -1839,7 +1865,6 @@ function CertificateListPageContent({
       const input = reapplyOrderInput(source, queryOwner[0] === 'platform' ? row.asset.tenant_scope_id : undefined)
       orderAttemptRef.current = null
       setAttempt(null)
-      setAccepted(false)
       setWriteError(null)
       setReapplyTarget({ name: row.asset.name, input })
       return
@@ -1856,7 +1881,6 @@ function CertificateListPageContent({
     initialChallengeRef.current = row.version.sans.some((domain) => domain.startsWith('*.')) ? 'dns-01' : 'http-01'
     orderAttemptRef.current = null
     setAttempt(null)
-    setAccepted(false)
     setWriteError(null)
     setEditorOpen(true)
   }
@@ -1924,6 +1948,17 @@ function CertificateListPageContent({
     setActiveTab('orders'); setPage(1); setSearch('')
   }
   const closeOrders = () => { setOrderAsset(null); setActiveTab('assets'); setPage(1); setSearch('') }
+  // 只有首次加载和用户点刷新/重试时表格显示加载中；轮询和失效重读保留旧行、筛选和焦点。
+  // 证书列表刷新时一并重读申请记录，让“申请中”与已签发的证书同步。
+  const [manualRefresh, setManualRefresh] = useState<'assets' | 'orders' | null>(null)
+  const refreshList = () => {
+    if (!currentSessionAccess('certificates.read')) return
+    const target = activeTab
+    setManualRefresh(target)
+    void Promise.allSettled(target === 'assets' ? [assetsQuery.refetch(), query.refetch()] : [query.refetch()]).then(() => {
+      if (currentSessionMatches()) setManualRefresh((current) => current === target ? null : current)
+    })
+  }
   // certificate_order_in_flight 报错后带“查看申请记录”入口（关闭弹窗打开申请记录）。
   const inFlightAction = (error: ApiError | null | undefined) => error?.code === 'certificate_order_in_flight'
     ? <Button size="small" type="link" onClick={() => {
@@ -2310,16 +2345,13 @@ function CertificateListPageContent({
           onRemove={(key) => applyAdvancedFilters({ ...filterDraft, [key]: key in emptyFilterDraft ? '' : undefined })}
           extra={<>
             {activeTab === 'assets' ? <Button icon={<Download size={14} />} disabled={filteredAssetRows.length === 0} onClick={exportAssets}>{assetT('assetActions.export')}</Button> : null}
-            <Button icon={<RefreshCw size={14} />} aria-label={assetT('actions.refresh')} onClick={() => {
-              if (currentSessionAccess('certificates.read')) void (activeTab === 'assets' ? assetsQuery.refetch() : query.refetch())
-            }} />
+            <Button icon={<RefreshCw size={14} />} aria-label={assetT('actions.refresh')} onClick={refreshList} />
           </>}
         />
       </div>
-      {activeTab === 'orders' ? (
+      {activeTab === 'orders' && orderAsset ? (
         <div className="certificate-orders-heading">
-          <strong>{assetT('orders.title')}</strong>
-          <span>{orderAsset ? assetT('orders.scoped', { domains: orderAsset.sans.join(', ') || assetT('assetValues.loading') }) : assetT('orders.all')}</span>
+          <strong>{assetT('orders.scoped', { domains: orderAsset.sans.join(', ') || assetT('assetValues.loading') })}</strong>
         </div>
       ) : null}
 		{activeTab === 'assets' ? (
@@ -2341,7 +2373,6 @@ function CertificateListPageContent({
             </div>
           </div>
         ) : null}
-		{accepted ? <Alert className="identity-alert" type="success" showIcon closable message={t('editor.acceptedTitle')} description={t('editor.acceptedDescription')} onClose={() => setAccepted(false)} /> : null}
 		{activeTab === 'assets' && (applyingCount > 0 || (failedCount > 0 && assetsQuery.isSuccess && (assetsQuery.data?.total ?? 0) === 0 && !hasActiveAssetFilter)) ? (() => {
 		  const showFailed = failedCount > 0 && (assetsQuery.data?.total ?? 0) === 0 && !hasActiveAssetFilter
 		  const text = applyingCount > 0 && showFailed ? assetT('pendingOrders.both', { applying: applyingCount, failed: failedCount })
@@ -2353,27 +2384,25 @@ function CertificateListPageContent({
 		  message={t('editor.dnsWarningTitle', { domains: acceptedDNSWarnings.join('、') })} description={t('editor.dnsWarningDescription')}
 		  onClose={() => setAcceptedDNSWarnings([])} /> : null}
 		{detailError ? <FeedbackWhen title={errorMessage(detailError, activeTab === 'assets' ? assetT : t)} onClose={() => setDetailError(null)} /> : null}
-      {activeError ? <FeedbackWhen title={activeTab === 'assets' ? assetT('errors.assetsLoadFailed') : t('errors.loadFailed')} detail={queryError ? errorMessage(queryError, activeTab === 'assets' ? assetT : t) : (activeTab === 'assets' ? assetT('errors.request_failed') : t('errors.request_failed'))} action={<Button size="small" onClick={() => {
-        if (currentSessionAccess('certificates.read')) void (activeTab === 'assets' ? assetsQuery.refetch() : query.refetch())
-      }}>{assetT('actions.retry')}</Button>} /> : null}
-      <div className="identity-table-scroll" data-testid="certificate-table-scroll" aria-busy={activeTab === 'assets' ? assetsQuery.isFetching : query.isFetching}>
+      {activeError ? <FeedbackWhen title={activeTab === 'assets' ? assetT('errors.assetsLoadFailed') : t('errors.loadFailed')} detail={queryError ? errorMessage(queryError, activeTab === 'assets' ? assetT : t) : (activeTab === 'assets' ? assetT('errors.request_failed') : t('errors.request_failed'))} action={<Button size="small" onClick={refreshList}>{assetT('actions.retry')}</Button>} /> : null}
+      <div className="identity-table-scroll" data-testid="certificate-table-scroll" aria-busy={activeTab === 'assets' ? assetsQuery.isLoading || manualRefresh === 'assets' : query.isLoading || manualRefresh === 'orders'}>
         {activeTab === 'assets' ? (
           <Table
             rowKey={(row) => row.asset.id} size="small" columns={assetColumns} dataSource={filteredAssetRows}
-            loading={assetsQuery.isPending || assetsQuery.isFetching} pagination={false}
+            loading={assetsQuery.isLoading || manualRefresh === 'assets'} pagination={false}
             locale={{ emptyText: assetsQuery.isPending ? ' ' : assetT(hasActiveAssetFilter ? 'assetValues.filteredEmpty' : 'assetValues.empty') }}
-            rowSelection={{
+            rowSelection={namedRows<CertificateAssetRow>({
               columnWidth: certificateColumnWidths.assets.selection,
               selectedRowKeys: selectedAssetIDs,
               onChange: (keys) => setSelectedAssetIDs(keys.map(String)),
-            }}
+            }, (row) => `${row.asset.name} #${row.asset.display_id}`, assetT('selectionScope'))}
             tableLayout="fixed"
             scroll={{ x: certificateTableWidth(certificateColumnWidths.assets, isTenant ? ['user'] : []) }}
           />
         ) : (
           <Table
             rowKey="id" size="small" columns={columns} dataSource={pageItems}
-            loading={query.isPending || query.isFetching} pagination={false}
+            loading={query.isLoading || manualRefresh === 'orders'} pagination={false}
             locale={{ emptyText: query.isPending ? ' ' : t(search.trim() ? 'values.filteredEmpty' : 'values.empty') }}
             tableLayout="fixed"
             scroll={{ x: certificateTableWidth(certificateColumnWidths.orders) }}
@@ -2463,7 +2492,7 @@ function CertificateListPageContent({
 			  : detail.asset.disabled ? assetT('assetStates.disabled')
 			  : live?.renewal_due ? assetT('renewal.due')
 			  : assetT(detail.asset.auto_renew ? 'autoRenew.enabled' : 'autoRenew.disabled')
-			const bindBlocked = commandLocked || !detail.versions.some((item) => item.status === 'active')
+			const bindBlocked = commandLocked || !bindableVersion(detail.versions)
 			const bindButton = canManage
 			  ? <Button type={bindings.length === 0 ? 'primary' : 'default'} size="small" icon={<Link2 size={14} aria-hidden />} disabled={bindBlocked} onClick={openBind}>{assetT('assetActions.bind')}</Button>
 			  : null
@@ -2680,7 +2709,7 @@ function CertificateListPageContent({
             }} />
         </div> : null}
         {!requestOnly || offeredIssuers.length > 1 ? <section className="certificate-type-section" aria-label={t('batch.type')}>
-          <h3>{t('batch.type')}<small>{t('batch.typeHint')}</small></h3>
+          <h3>{t('batch.type')}</h3>
           <div className="certificate-type-cards">
             {!requestOnly && !batchOpen ? <button type="button" className={`certificate-type-card${uploadOpen ? ' is-active' : ''}`} aria-pressed={uploadOpen}
               disabled={addLocked} onClick={chooseUpload}>

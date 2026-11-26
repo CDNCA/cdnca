@@ -264,7 +264,9 @@ func validActor(actor Actor) error {
 	return nil
 }
 
-func validMedia(slot Slot, mimeType string) bool { return themepack.ValidBrandMedia(string(slot), mimeType) }
+func validMedia(slot Slot, mimeType string) bool {
+	return themepack.ValidBrandMedia(string(slot), mimeType)
+}
 
 // ValidAsset applies the upload media checks to a theme package's brand image.
 func ValidAsset(slot Slot, mimeType string, body []byte) bool {

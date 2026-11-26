@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App as AntApp, ConfigProvider } from 'antd'
 import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, vi } from 'vitest'
 
 import type { CertificateOrderStatusItem } from '../api/certificateOrderStatus'
 import { useSessionStore } from '../auth/session'
@@ -294,5 +295,80 @@ describe('CertificateOrdersPage', () => {
     await changeLocale('qps-ploc')
     renderWithProviders(<CertificateOrdersPage />, ['/site/cert/orders'])
     expect(await screen.findByRole('heading', { name: '［证~书~订~单~与~续~期~状~态~］' })).toBeInTheDocument()
+  })
+})
+
+// 独立申请记录页有进行中的申请时约 4 秒重读，到终态或离开页面即停。
+describe('CertificateOrdersPage polling', () => {
+  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }) })
+  afterEach(() => { vi.useRealTimers() })
+  const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+  const table = () => document.querySelector<HTMLElement>('.ant-table')!
+  const inFlight = (createdAgoMs = 60_000): CertificateOrderStatusItem => {
+    const at = new Date(Date.now() - createdAgoMs).toISOString()
+    return {
+      ...renewalOrder, id: '55555555-5555-4555-8555-555555555555', domains: ['poll.example.net'], status: 'validating',
+      renewal_of_order_id: undefined, failure_code: undefined, created_at: at, updated_at: at,
+    }
+  }
+
+  it('polls an in-flight order, keeps the list when a poll fails, and stops once issued', async () => {
+    authenticate()
+    const order = inFlight()
+    const responses = [
+      () => json({ items: [order] }),
+      () => json({ error: { code: 'certificate_order_unavailable', message: 'acme.internal secret' } }, 503),
+      () => json({ items: [{
+        ...order, status: 'issued', issued_asset_id: activeOrder.issued_asset_id,
+        issued_version_id: activeOrder.issued_version_id, issued_at: order.created_at,
+      }] }),
+    ]
+    let reads = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => responses[Math.min(reads++, responses.length - 1)]!())
+    renderWithProviders(<CertificateOrdersPage />, ['/site/cert/orders'])
+
+    expect(await screen.findByText('poll.example.net')).toBeInTheDocument()
+    expect(within(table()).getByText('验证中')).toBeInTheDocument()
+    expect(reads).toBe(1)
+
+    await advance(4_100)
+    await waitFor(() => expect(reads).toBe(2))
+    expect(screen.getByText('poll.example.net')).toBeInTheDocument()
+    expect(screen.queryByText('证书签发服务暂不可用，请稍后重试。')).not.toBeInTheDocument()
+
+    await advance(4_100)
+    await waitFor(() => expect(reads).toBe(3))
+    expect(await within(table()).findByText('已签发')).toBeInTheDocument()
+
+    await advance(12_000)
+    expect(reads).toBe(3)
+  })
+
+  it('stops polling when the page is left', async () => {
+    authenticate()
+    const order = inFlight()
+    let reads = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { reads += 1; return json({ items: [order] }) })
+    const view = renderWithProviders(<CertificateOrdersPage />, ['/site/cert/orders'])
+    expect(await screen.findByText('poll.example.net')).toBeInTheDocument()
+    await advance(4_100)
+    await waitFor(() => expect(reads).toBe(2))
+
+    view.unmount()
+    await advance(12_000)
+    expect(reads).toBe(2)
+  })
+
+  it('does not poll finished orders or an in-flight order older than an hour', async () => {
+    authenticate()
+    let reads = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      reads += 1
+      return json({ items: [activeOrder, renewalOrder, inFlight(2 * 60 * 60 * 1000)] })
+    })
+    renderWithProviders(<CertificateOrdersPage />, ['/site/cert/orders'])
+    expect(await screen.findByText('poll.example.net')).toBeInTheDocument()
+    await advance(12_000)
+    expect(reads).toBe(1)
   })
 })

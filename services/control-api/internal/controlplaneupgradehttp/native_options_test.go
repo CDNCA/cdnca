@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/controlplaneupgrade"
 	"github.com/cdnca/cdnca/services/control-api/internal/controlupgrade"
 	"github.com/google/uuid"
 )
@@ -50,6 +53,64 @@ func TestNativeUpgradeOptionsPassThrough(t *testing.T) {
 	}
 	if _, ok := keys["supported"]; ok || len(keys) != 3 {
 		t.Fatalf("options keys = %s", response.Body.String())
+	}
+}
+
+// the options request names the runner-verified
+// installed build, and without it the page gets an unconfirmed head instead of a License value.
+func TestNativeUpgradeOptionsReportsInstalledArtifact(t *testing.T) {
+	var installation, sent string
+	handler := nativeWithLicense(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			CurrentArtifactSHA256 string `json:"current_artifact_sha256"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		sent = body.CurrentArtifactSHA256
+		head := "697"
+		if sent == strings.Repeat("52", 32) {
+			head = "692"
+		}
+		_, _ = io.WriteString(w, `{"schema":"cdnca.upgrade.options/v1","installation_id":"`+installation+`","component":"control-api",`+
+			`"current_version":"1.4.0","current_schema_head":`+head+`,"target_mode":"follow_channel","items":[]}`+"\n")
+	})
+	installation = handler.config.InstallationID
+	options := func() string {
+		t.Helper()
+		response := httptest.NewRecorder()
+		handler.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, nativePlanPath+"/options", nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("options = %d %s", response.Code, response.Body.String())
+		}
+		return response.Body.String()
+	}
+	if body := options(); sent != strings.Repeat("52", 32) || !strings.Contains(body, `"current_schema_head":692,"target_mode"`) {
+		t.Fatalf("installed build options = %s (sent %q)", body, sent)
+	}
+	for name, status := range map[string]func(*controlplaneupgrade.NativeStandaloneStatus){
+		"runner status unreadable": nil,
+		"current release unverified": func(status *controlplaneupgrade.NativeStandaloneStatus) {
+			*status = controlplaneupgrade.NativeStandaloneStatus{Reason: controlplaneupgrade.NativeReasonCurrentReleaseUnverified,
+				InstallationID: status.InstallationID, ProtocolVersion: 2, ArtifactFormat: controlplaneupgrade.NativeManifestSchema}
+		},
+		"runner reports another version": func(status *controlplaneupgrade.NativeStandaloneStatus) { status.CurrentVersion = "1.3.9" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			base := controlplaneupgrade.NativeStandaloneStatus{InstallationID: handler.config.InstallationID, ProtocolVersion: 2,
+				ArtifactFormat: controlplaneupgrade.NativeManifestSchema, CurrentVersion: "1.4.0", CurrentArtifactSHA256: strings.Repeat("52", 32)}
+			handler.readStatus = func(string, string, time.Time) (controlplaneupgrade.NativeStandaloneStatus, error) {
+				if status == nil {
+					return controlplaneupgrade.NativeStandaloneStatus{}, errors.New("status file missing")
+				}
+				current := base
+				status(&current)
+				return current, nil
+			}
+			sent = "unset"
+			if body := options(); sent != "" ||
+				!strings.Contains(body, `"current_schema_head":null,"current_schema_head_reason":"current_artifact_unverified"`) {
+				t.Fatalf("unverified options = %s (sent %q)", body, sent)
+			}
+		})
 	}
 }
 

@@ -18,7 +18,8 @@ const zhCN = {
   node: {
     title: '节点可用性拨测',
     intro: '用 dnspup 运营商检测点按频率拨测每个节点 IP 的端口，结果进节点「监控日志」。本机探测与 dnspup 多数检测点都失败才暂停节点解析，只有 dnspup 失败时只告警。',
-    inactive: 'dnspup 拨测未在使用（未授权、未启用、未配置 Key 或已暂停），节点只由本机探测判定。',
+    inactive: '{{reason}}，节点只由本机探测判定。',
+    inactiveReasons: { unlicensed: 'dnspup 拨测未授权', disabled: 'dnspup 拨测未启用', paused: 'dnspup 拨测已暂停', noKey: 'dnspup 拨测未配置 Key', unknown: 'dnspup 拨测未在使用' },
     interval: '拨测频率', intervals: { off: '关闭', every: '每 {{minutes}} 分钟' },
     groups: '检测点运营商/地区', groupNames: { domestic: '国内（不限运营商）', telecom: '电信', unicom: '联通', mobile: '移动', overseas: '海外' },
     pointsPerGroup: '每组检测点数', failurePercent: '失败检测点比例超过（%）', failureRounds: '连续失败次数', recoveryRounds: '连续恢复次数',
@@ -50,6 +51,7 @@ const zhCN = {
     transport_error: '无法连接 dnspup', service_unavailable: 'dnspup 暂不可用',
     probe_dnspup_node_monitoring_unavailable: '节点拨测暂不可用', not_found: '不存在', probe_dnspup_not_installed: '拨测插件未启用',
     probe_dnspup_not_configured: '拨测插件未开启或未配置 Key', probe_dnspup_paused: 'dnspup 暂停中', probe_dnspup_quota_exceeded: '排障额度已用完',
+    session_expired: '登录已失效，请重新登录后重试，已填内容会保留',
   },
   unified: {
     failures: { ok: '正常', refused: '连不上', timeout: '超时', reset: '被重置', tls: 'TLS 握手失败', http: 'HTTP 错误', dns: '解析错误', other: '其他' },
@@ -60,7 +62,7 @@ const zhCN = {
       intro: '调度、容灾、节点可用性与插件共用同一个 dnspup 额度。每个用途单独计量、可设月上限与最小间隔；本月额度不够时按优先级降频：可用性 > 调度 > 报表（排障）。预计月用量按本月日均推算。智能调度读节点可用性的拨测结果，不单独计量。',
       names: { node_availability: '节点可用性', origin_failover: '回源切换', edge_health: '聚合边缘候选', plugin: '插件拨测接口', diagnose: '排障（mtr）' },
       classes: { 1: '可用性', 2: '调度', 3: '报表' },
-      columns: { purpose: '用途', class: '优先级', enabled: '启用', cap: '月上限（0 不限）', interval: '最小间隔（秒，0 跟随）', used: '本月已用', projected: '预计月用量', state: '状态', probeType: '拨测类型' },
+      columns: { purpose: '用途', class: '优先级', enabled: '启用', cap: '月上限（0 不限）', interval: '最小间隔（秒，0 跟随）', used: '本月已用', projected: '预计月用量', state: '额度状态', probeType: '拨测类型' },
       probeTypes: { tcping: 'TCP 连接', https: 'HTTPS' },
       edgeHTTPS: {
         title: '聚合边缘候选改用 HTTPS 拨测',
@@ -77,11 +79,16 @@ const zhCN = {
       title: '地区 × 运营商矩阵',
       intro: '每格为该地区该运营商检测点的可用率、平均延迟与主要故障类型。故障类型只用于诊断展示。',
       subject: '对象', subjects: { node: '节点', edge: '第三方 CDN 候选' },
-      nodeID: '节点 ID', edgeHost: '候选主机', window: '时间范围', windows: { '1h': '1 小时', '6h': '6 小时', '24h': '24 小时', '7d': '7 天' },
+      nodeID: '矩阵节点', edgeHost: '候选主机', edgeEmpty: '暂无可选的候选主机', window: '时间范围', windows: { '1h': '1 小时', '6h': '6 小时', '24h': '24 小时', '7d': '7 天' },
       load: '查看', empty: '该时间范围内没有拨测结果', area: '地区', unknownArea: '未知',
       cell: '{{availability}} · {{latency}} ms', history: '可用率历史（%）',
       diagnose: '排障（mtr）', diagnoseTarget: '目标 IP 或域名', diagnosePoints: '检测点 ID（最多 2 个，逗号分隔）',
       diagnoseStart: '发起排障', diagnoseRunning: '排障进行中…', diagnoseDone: '排障完成', diagnoseFailed: '排障失败：{{code}}',
+    },
+    mtr: {
+      checkpoint: '检测点', target: '目标', state: '状态', complete: '已完成', partial: '部分结果', noResponse: '无响应',
+      hop: '跳数', host: 'IP / 主机名', average: '平均延迟（ms）', loss: '丢包率', sent: '发送次数',
+      raw: '诊断详情', empty: '没有检测点返回结果',
     },
     selection: {
       title: '细化选点', enabled: '使用细化选点（代替上面的检测点运营商/地区）',
@@ -103,7 +110,7 @@ const zhCN = {
       groupScope: '线路组范围', groupScopes: { platform: '平台线路组', tenant: '租户线路组' }, tenant: '租户',
       tenantPlaceholder: '输入用户名、邮箱或 ID 搜索，或粘贴范围 ID', tenantTag: '租户',
       required: '请选择对象', noMatch: '没有匹配项', listFailed: '列表读取失败，请确认有查看节点和线路组的权限', unnamed: '（已删除）',
-      add: '添加覆盖', save: '保存覆盖', saved: '覆盖已保存', remove: '删除', removed: '覆盖已删除', empty: '没有覆盖，全部按全局设置',
+      add: '添加覆盖', collapse: '收起添加覆盖', cancel: '取消', save: '保存覆盖', saved: '覆盖已保存', remove: '删除', removed: '覆盖已删除', empty: '没有覆盖，全部按全局设置',
     },
   },
 }
@@ -129,7 +136,8 @@ const enUS: Messages = {
   node: {
     title: 'Node availability probing',
     intro: 'dnspup carrier checkpoints probe every node IP and port at the chosen interval; the results go to the node monitoring log. A node is paused only when the local probe and most dnspup checkpoints both fail; dnspup failing alone only alerts.',
-    inactive: 'dnspup probing is not in use (not licensed, disabled, no key pair or paused): nodes are judged by the local probe only.',
+    inactive: '{{reason}}: nodes are judged by the local probe only.',
+    inactiveReasons: { unlicensed: 'dnspup probing is not licensed', disabled: 'dnspup probing is off', paused: 'dnspup probing is paused', noKey: 'dnspup probing has no key pair', unknown: 'dnspup probing is not in use' },
     interval: 'Probe interval', intervals: { off: 'Off', every: 'Every {{minutes}} min' },
     groups: 'Checkpoint carriers / regions', groupNames: { domestic: 'Mainland (any carrier)', telecom: 'China Telecom', unicom: 'China Unicom', mobile: 'China Mobile', overseas: 'Overseas' },
     pointsPerGroup: 'Checkpoints per group', failurePercent: 'Failed checkpoints above (%)', failureRounds: 'Consecutive failures', recoveryRounds: 'Consecutive recoveries',
@@ -161,6 +169,7 @@ const enUS: Messages = {
     transport_error: 'Cannot reach dnspup', service_unavailable: 'dnspup unavailable',
     probe_dnspup_node_monitoring_unavailable: 'Node probing unavailable', not_found: 'Not found', probe_dnspup_not_installed: 'The probe plugin is not active',
     probe_dnspup_not_configured: 'The probe plugin is disabled or has no key', probe_dnspup_paused: 'dnspup is paused', probe_dnspup_quota_exceeded: 'Diagnosis quota used up',
+    session_expired: 'Your sign-in has expired. Sign in again and retry; your entries are kept.',
   },
   unified: {
     failures: { ok: 'OK', refused: 'Refused', timeout: 'Timeout', reset: 'Reset', tls: 'TLS handshake failed', http: 'HTTP error', dns: 'DNS error', other: 'Other' },
@@ -171,7 +180,7 @@ const enUS: Messages = {
       intro: 'Scheduling, failover, node availability and plugins share one dnspup quota. Each purpose is metered on its own and can have a monthly cap and a minimum interval; when the month cannot be covered, purposes slow down by priority: availability > scheduling > reports (diagnosis). The projection extrapolates this month\'s daily average. Smart scheduling reads the node availability results and is not metered separately.',
       names: { node_availability: 'Node availability', origin_failover: 'Origin failover', edge_health: 'Aggregated edge candidates', plugin: 'Plugin probe API', diagnose: 'Diagnosis (mtr)' },
       classes: { 1: 'Availability', 2: 'Scheduling', 3: 'Reports' },
-      columns: { purpose: 'Purpose', class: 'Priority', enabled: 'Enabled', cap: 'Monthly cap (0 none)', interval: 'Minimum interval (s, 0 follows)', used: 'Used this month', projected: 'Projected per month', state: 'State', probeType: 'Probe type' },
+      columns: { purpose: 'Purpose', class: 'Priority', enabled: 'Enabled', cap: 'Monthly cap (0 none)', interval: 'Minimum interval (s, 0 follows)', used: 'Used this month', projected: 'Projected per month', state: 'Quota state', probeType: 'Probe type' },
       probeTypes: { tcping: 'TCP connect', https: 'HTTPS' },
       edgeHTTPS: {
         title: 'Aggregated edge candidates probe over HTTPS',
@@ -188,11 +197,16 @@ const enUS: Messages = {
       title: 'Area × carrier matrix',
       intro: 'Each cell is the availability, average latency and main failure category of that area and carrier\'s checkpoints. Failure categories are for diagnosis only.',
       subject: 'Subject', subjects: { node: 'Node', edge: 'Third-party CDN candidate' },
-      nodeID: 'Node ID', edgeHost: 'Candidate host', window: 'Window', windows: { '1h': '1 hour', '6h': '6 hours', '24h': '24 hours', '7d': '7 days' },
+      nodeID: 'Matrix node', edgeHost: 'Candidate host', edgeEmpty: 'No candidate hosts', window: 'Window', windows: { '1h': '1 hour', '6h': '6 hours', '24h': '24 hours', '7d': '7 days' },
       load: 'Show', empty: 'No probe results in this window', area: 'Area', unknownArea: 'Unknown',
       cell: '{{availability}} · {{latency}} ms', history: 'Availability history (%)',
       diagnose: 'Diagnosis (mtr)', diagnoseTarget: 'Target IP or domain', diagnosePoints: 'Checkpoint IDs (at most 2, comma separated)',
       diagnoseStart: 'Start diagnosis', diagnoseRunning: 'Diagnosis running…', diagnoseDone: 'Diagnosis finished', diagnoseFailed: 'Diagnosis failed: {{code}}',
+    },
+    mtr: {
+      checkpoint: 'Checkpoint', target: 'Target', state: 'State', complete: 'Complete', partial: 'Partial result', noResponse: 'No response',
+      hop: 'Hop', host: 'IP / host name', average: 'Average latency (ms)', loss: 'Loss', sent: 'Sent',
+      raw: 'Diagnostic details', empty: 'No checkpoint returned a result',
     },
     selection: {
       title: 'Detailed checkpoint selection', enabled: 'Use detailed selection (replaces the carriers / regions above)',
@@ -214,7 +228,7 @@ const enUS: Messages = {
       groupScope: 'Line group scope', groupScopes: { platform: 'Platform line groups', tenant: 'Tenant line groups' }, tenant: 'Tenant',
       tenantPlaceholder: 'Search by username, email or ID, or paste a scope ID', tenantTag: 'Tenant',
       required: 'Select a subject', noMatch: 'No match', listFailed: 'Could not load the list; check you can view nodes and line groups', unnamed: '(deleted)',
-      add: 'Add override', save: 'Save override', saved: 'Override saved', remove: 'Delete', removed: 'Override deleted', empty: 'No overrides: global settings apply everywhere',
+      add: 'Add override', collapse: 'Hide new override', cancel: 'Cancel', save: 'Save override', saved: 'Override saved', remove: 'Delete', removed: 'Override deleted', empty: 'No overrides: global settings apply everywhere',
     },
   },
 }

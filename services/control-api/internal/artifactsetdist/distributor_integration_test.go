@@ -40,7 +40,7 @@ type distHarness struct {
 	signer      testSigner
 	clock       time.Time
 	// node runs the simulated agent's object store and active set.
-	objects             map[string][]byte
+	objects map[string][]byte
 	// reject: item artifact ID -> reason the simulated agent's installer refuses it with
 	reject              map[string]string
 	active              *artifactset.Set

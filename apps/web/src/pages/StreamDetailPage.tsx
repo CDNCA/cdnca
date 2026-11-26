@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Form, Input, InputNumber, Popconfirm, Radio, Result, Select, Space, Spin, Switch, type FormInstance } from 'antd'
+import { Button, Form, Input, InputNumber, Popconfirm, Radio, Result, Select, Space, Spin, Switch, Tag, type FormInstance } from 'antd'
 import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { ArrowLeft, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -10,10 +10,13 @@ import { streamsApi, type Stream, type StreamAdditionalListener, type StreamOrig
 import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/streamGuard'
+import '../i18n/streamEligibility'
 import '../i18n/originWeight'
 import '../i18n/unconfirmedClose'
 import { streamOriginShares } from './originWeightShare'
 import StreamPublicationModal, { streamPublicationFailure } from './StreamPublicationModal'
+import CnameFailureActions from './site-edit/CnameFailureActions'
+import { cnameFailureText } from './site-edit/cnameFailureText'
 import { dropWriteRecovery, useWriteRecovery } from './streamWriteRecovery'
 import StreamGroupSelect from './StreamGroupSelect'
 import { StreamClientAddressField, StreamDNSFields, StreamFollowPortField, StreamGeoFields, StreamGuardRulesFields, StreamListenPortEndField, StreamNewConnectionRateFields, StreamSessionLogField, StreamTLSPassthroughFields } from './StreamPolicyFields'
@@ -107,8 +110,10 @@ type DetailWriteAttempt = { input: UpdateStreamRequest; key: string; section: De
 function StreamDetailContent({ id, scopeKind, scopeID, sessionEpoch, canManage }: DetailSession) {
   const { t, i18n } = useTranslation('streams')
   const { t: tGuard } = useTranslation('streamGuard')
+  const { t: tEligibility } = useTranslation('streamEligibility')
   const { t: tW } = useTranslation('originWeight')
   const { t: tu } = useTranslation('unconfirmedClose')
+  const { t: tCname, i18n: cnameI18n } = useTranslation('siteCnameRegeneration')
   const queryClient = useQueryClient()
   const [form] = Form.useForm<StreamFormValues>()
   const [messageApi, context] = useFeedbackMessage()
@@ -313,7 +318,7 @@ function StreamDetailContent({ id, scopeKind, scopeID, sessionEpoch, canManage }
   }
   const [operationLabel, operationTone] = !item ? ['', undefined]
     : item.admin_status !== 'normal' ? [t(`adminStatus.${item.admin_status}`), 'is-warning']
-      : item.eligibility_state === 'ineligible' ? [t('states.ineligible'), 'is-warning']
+      : item.eligibility_state === 'ineligible' ? [item.ineligible_reason ? tEligibility(item.ineligible_reason) : t('states.ineligible'), 'is-warning']
         : item.enabled ? [t('states.normal'), 'is-normal'] : [t('states.disabled'), undefined]
   const aclActions = [{ value: 'allow', label: t('acl.allow') }, { value: 'deny', label: t('acl.deny') }]
   const date = (value?: string | null) => value ? formatDateTime(value, i18n.resolvedLanguage ?? i18n.language) : t('values.unavailable')
@@ -346,7 +351,13 @@ function StreamDetailContent({ id, scopeKind, scopeID, sessionEpoch, canManage }
                   ? <span className="stream-detail-sync-failure">{t('publication.failureReason')}：{streamPublicationFailure(item.publish_intent, t)}</span> : null}</dd></div>
               <div><dt>{t('detail.createdAt')}</dt><dd>{date(item.created_at)}</dd></div>
               <div><dt>{t('columns.updatedAt')}</dt><dd>{date(item.updated_at)}</dd></div>
-              <div className="stream-detail-fact-wide"><dt>{t('columns.cname')}</dt><dd>{item.cname || t('values.unavailable')}</dd></div>
+              <div className="stream-detail-fact-wide"><dt>{t('columns.cname')}</dt><dd>
+                {/* Same reading as the list's CNAME column: failed with its reason, generating, the CNAME, or — when none is allocated. */}
+                {item.cname_state === 'failed'
+                  ? <span className="site-cname-cell site-cname-failed" data-testid="stream-cname-failed"><CnameFailureActions code={item.cname_failure_code}
+                    reason={cnameFailureText(item.cname_failure_code, item.cname_domain, tCname, cnameI18n.exists, scopeKind === 'platform')} admin={scopeKind === 'platform'} /></span>
+                  : item.cname_state === 'pending' && !item.cname ? <Tag color="processing" data-testid="stream-cname-pending">{tCname('cell.pending')}</Tag>
+                    : item.cname || t('values.placeholder')}</dd></div>
             </dl>
           </section>
           <section className="stream-detail-section">

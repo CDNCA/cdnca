@@ -305,7 +305,7 @@ type providerDispatchHandler struct {
 
 func (handler providerDispatchHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if strings.HasPrefix(request.URL.Path, apiPrefix+"/provider-sessions") ||
-		strings.HasPrefix(request.URL.Path, apiPrefix+"/provider-callbacks") {
+		strings.HasPrefix(request.URL.Path, apiPrefix+"/provider-callbacks") || request.URL.Path == apiPrefix+"/methods" {
 		handler.provider.ServeHTTP(writer, request)
 		return
 	}

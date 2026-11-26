@@ -1896,7 +1896,9 @@ components:
           description: Reseller's prepaid wholesale cost W of the order. Platform responses only; tenant responses always carry 0.
         product_name:
           type: string
-          description: Package name from the order's product snapshot. Only the reseller customer orders route (ADR 0018 RS-05) returns it.
+          description: >-
+            Product name frozen in the order's own product snapshot (a traffic-package order falls back to its
+            traffic product snapshot), so a later rename or archive does not change it. Omitted when neither carries a name.
     Fulfillment:
       type: object
       additionalProperties: false
@@ -1941,6 +1943,9 @@ components:
         - owner_user_id
         - revision
         - lifecycle_status
+        - suspended_at
+        - suspend_reason
+        - suspend_source
         - starts_at
         - ends_at
         - created_at
@@ -1969,6 +1974,23 @@ components:
         owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
         revision: {type: integer, format: int64, minimum: 1}
         lifecycle_status: {type: string, enum: [active, cancelled]}
+        suspended_at:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            When the subscription was suspended (for example by its billing host); null while it is not.
+            A suspended subscription keeps its term and can still be renewed, but its sites are not served.
+            Clients show cancelled before suspended, suspended before expired (ends_at passed), then active.
+        suspend_reason:
+          type: [string, 'null']
+          maxLength: 256
+          description: The reason given when the subscription was suspended; null while it is not suspended.
+        suspend_source:
+          type: [string, 'null']
+          enum: [billing_bridge, admin, null]
+          description: >-
+            Who suspended the subscription: billing_bridge (the billing host through the billing bridge
+            service.suspend), admin (a platform administrator). Null while it is not suspended.
         starts_at: {type: string, format: date-time}
         ends_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}

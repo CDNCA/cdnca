@@ -47,6 +47,8 @@ type Service struct {
 	auditor *audit.Log
 	// rootFingerprint is the token fingerprint of this installation's root CA.
 	rootFingerprint string
+	// local: what the co-located Gateway last presented (ObserveLocalGateway).
+	local localGatewayState
 }
 
 func New(config Config) (*Service, error) {

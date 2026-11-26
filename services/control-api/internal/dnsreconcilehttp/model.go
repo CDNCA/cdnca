@@ -83,11 +83,22 @@ type Domain interface {
 	RecordProviderReport(context.Context, dnsreconcile.ProviderReportRequest) (dnsreconcile.ReportResult, error)
 }
 
+// ZoneResolver serves a check that names no zone (provider omitted): the
+// site's own DNS account and the longest hosted domain covering the name,
+// with its current records (dnsproviderremotesource.SiteReconcileZones).
+// ZoneRevision is the zone's current revision, checked before an apply.
+type ZoneResolver interface {
+	ResolveSiteZone(ctx context.Context, tenantID, siteID, actorUserID uuid.UUID, requestID, name string) (dnscheck.ProviderSnapshot, error)
+	ZoneRevision(ctx context.Context, tenantID, siteID, zoneID uuid.UUID) (int64, error)
+}
+
 type Dependencies struct {
 	Sessions  SessionAuthenticator
 	IAM       IAMAuthorizer
 	Domain    Domain
 	Workloads WorkloadAuthenticator
+	// Zones is optional: without it every check names its zone.
+	Zones ZoneResolver
 }
 
 type Config struct {

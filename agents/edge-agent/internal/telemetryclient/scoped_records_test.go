@@ -59,8 +59,11 @@ func TestScopedWireBatchNamesEachRecordsSiteScope(t *testing.T) {
 			t.Fatalf("record %d scope = %q, want site scope %q (never the tenant)", index, got, want)
 		}
 	}
-	if _, err := buildWireBatch([]Record{scopedTestRecord(t, 1, "access.v1", tenantA, uuid.NewString())}, limits); !errors.Is(err, ErrInvalidPublication) {
-		t.Fatalf("record of an unknown site error = %v, want ErrInvalidPublication", err)
+	// an unknown site holds the record (its
+	// scope is unconfirmed); it is not an invalid record.
+	if _, err := buildWireBatch([]Record{scopedTestRecord(t, 1, "access.v1", tenantA, uuid.NewString())}, limits); !errors.Is(err, ErrAttributionUnconfirmed) ||
+		errors.Is(err, ErrInvalidPublication) {
+		t.Fatalf("record of an unknown site error = %v, want ErrAttributionUnconfirmed", err)
 	}
 	legacy, err := buildWireBatch(records, sessionLimits{maxRecords: 8, maxRecordBytes: 1 << 20, maxBatchBytes: 4 << 20})
 	if err != nil {

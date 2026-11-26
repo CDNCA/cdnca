@@ -54,7 +54,7 @@ describe('SiteAnalysisPage element-level baseline', () => {
     expect(analysisCSS).toMatch(/\.analytics-analysis-search-type[\s\S]*width: 96px;[\s\S]*min-width: 96px;/)
   })
 
-  it('exposes all three observed search modes, queries server ports, and safely retains unsupported CC tags', async () => {
+  it('offers only supported search modes, queries server ports, and labels the search button in the locale', async () => {
     authenticate()
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(rankResponse(input)))
     const user = userEvent.setup()
@@ -66,15 +66,17 @@ describe('SiteAnalysisPage element-level baseline', () => {
     expect(toolbar?.querySelector('.analytics-analysis-search-input')).toBeInTheDocument()
     expect(toolbar?.querySelector('.analytics-analysis-search-input .ant-input-group-addon:first-child .analytics-analysis-search-type')).toBeInTheDocument()
     expect(toolbar?.querySelector('.analytics-analysis-refresh-action')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '搜索' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'search' })).not.toBeInTheDocument()
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '统计维度' }))
     expect(await screen.findByRole('option', { name: '域名' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '服务器端口' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '攻击请求' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '攻击请求' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('option', { name: '服务器端口' }))
     const port = screen.getByPlaceholderText('输入端口，如 80 或 443')
     await user.type(port, '443')
-    await user.click(screen.getByRole('button', { name: '刷新' }))
+    await user.click(screen.getByRole('button', { name: '搜索' }))
     expect(screen.getByText('服务器端口：443')).toBeInTheDocument()
     await waitFor(() => expect(rankCalls(fetchSpy)).toHaveLength(2))
     const portURL = new URL(String(rankCalls(fetchSpy).at(-1)![0]), 'http://cdnca.test')
@@ -87,14 +89,7 @@ describe('SiteAnalysisPage element-level baseline', () => {
     expect(screen.queryByText('服务器端口：443')).not.toBeInTheDocument()
     await waitFor(() => expect(rankCalls(fetchSpy)).toHaveLength(3))
     expect(new URL(String(rankCalls(fetchSpy).at(-1)![0]), 'http://cdnca.test').searchParams.has('listen_port')).toBe(false)
-
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '统计维度' }))
-    await user.click(screen.getByRole('option', { name: '攻击请求' }))
-    expect(screen.getAllByText('攻击请求').some((element) => element.closest('.ant-tag'))).toBe(true)
-    expect(screen.getByText(/当前版本不支持此筛选条件/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '清除' }))
-    expect(screen.queryByRole('button', { name: '清除' })).not.toBeInTheDocument()
-    expect(rankCalls(fetchSpy)).toHaveLength(3)
+    expect(screen.queryAllByText('攻击请求', { exact: false }).filter((element) => element.closest('.ant-tag'))).toHaveLength(0)
   })
 
   it('uses a confirmable range popup, real sortable metrics, and a log drill-down', async () => {

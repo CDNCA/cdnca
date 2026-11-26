@@ -15,6 +15,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -78,13 +79,56 @@ func TestRollbackFailureBlocksRolloutUntilAuditedReconciliation(t *testing.T) {
 	wrongConfig := ReconcileNodeConfigRequest{
 		RequestID: uuid.New(), NodeID: nodeID, ConfigurationScopeID: scopeID,
 		SourceDeploymentID: failedDeployment.ID, SourceDeploymentAttempt: 1,
-		ObservedConfigVersionID: &otherConfig.ID, Resolution: ReconciliationAgentObserved,
+		ObservedConfigVersionID: &otherConfig.ID, Resolution: ReconciliationOperatorConfirmed,
 		Evidence: "signed agent inventory report",
 	}
-	if _, err := store.ReconcileNodeConfig(context.Background(), wrongConfig); !errors.Is(err, ErrConfigNotFound) {
+	// An operator may name only the source deployment's own version
+	//; another scope's is refused with it.
+	if _, err := store.ReconcileNodeConfig(context.Background(), wrongConfig); !errors.Is(err, ErrReconciliationObservedNotSource) {
 		t.Fatalf("cross-scope observed config error = %v", err)
 	}
 
+	// agent_observed needs the scope's own
+	// report after the failure, on the online session, matching and not
+	// contradicting itself.
+	rollbackFailed := "rollback_failed"
+	for _, test := range []struct {
+		name    string
+		observe func()
+	}{
+		{"no scope report", func() {}},
+		{"report before the failure", func() {
+			seedScopeObservation(t, pool, nodeID, scopeID, 1, "online", "running", &configV2.ID, integrationClock.Add(-time.Minute), nil, nil)
+		}},
+		{"report of another scope", func() {
+			deleteScopeObservations(t, pool, nodeID)
+			seedScopeObservation(t, pool, nodeID, otherScopeID, 1, "online", "running", &configV2.ID, integrationClock.Add(time.Minute), nil, nil)
+		}},
+		{"agent still names the failed rollback", func() {
+			deleteScopeObservations(t, pool, nodeID)
+			seedScopeObservation(t, pool, nodeID, scopeID, 1, "online", "running", &configV2.ID, integrationClock.Add(time.Minute),
+				&failedDeployment.ID, &rollbackFailed)
+		}},
+		{"node offline", func() {
+			seedScopeObservation(t, pool, nodeID, scopeID, 1, "offline", "running", &configV2.ID, integrationClock.Add(time.Minute), nil, nil)
+		}},
+		{"report of an older session", func() {
+			seedScopeObservation(t, pool, nodeID, scopeID, 2, "online", "running", &configV2.ID, integrationClock.Add(time.Minute), nil, nil)
+			setPresenceEpoch(t, pool, nodeID, 3)
+		}},
+		{"another version than observed", func() {
+			seedScopeObservation(t, pool, nodeID, scopeID, 1, "online", "running", &configV3.ID, integrationClock.Add(time.Minute), nil, nil)
+		}},
+	} {
+		test.observe()
+		unobserved := ReconcileNodeConfigRequest{RequestID: uuid.New(), NodeID: nodeID, ConfigurationScopeID: scopeID,
+			SourceDeploymentID: failedDeployment.ID, SourceDeploymentAttempt: 1, ObservedConfigVersionID: &configV2.ID,
+			Resolution: ReconciliationAgentObserved, Evidence: "node heartbeat"}
+		if _, err := store.ReconcileNodeConfig(context.Background(), unobserved); !errors.Is(err, ErrReconciliationSource) {
+			t.Fatalf("%s: agent_observed reconciliation error = %v", test.name, err)
+		}
+	}
+	seedScopeObservation(t, pool, nodeID, scopeID, 1, "online", "running", &configV2.ID, integrationClock.Add(time.Minute), nil, nil)
 	request := ReconcileNodeConfigRequest{
 		RequestID: uuid.New(), NodeID: nodeID, ConfigurationScopeID: scopeID,
 		SourceDeploymentID: failedDeployment.ID, SourceDeploymentAttempt: 1,
@@ -139,6 +183,67 @@ func TestRollbackFailureBlocksRolloutUntilAuditedReconciliation(t *testing.T) {
 		after.Rollout.Deployments[0].Command.PreviousConfigVersionId == nil ||
 		*after.Rollout.Deployments[0].Command.PreviousConfigVersionId != configV2.ID.String() {
 		t.Fatalf("post-reconciliation rollout = (%+v, %v)", after, err)
+	}
+}
+
+// seedScopeObservation writes the node's presence (status, session epoch,
+// OpenResty state) and its report for scope (triggers off: only the rows
+// requireScopeObservation reads).
+func seedScopeObservation(t *testing.T, pool *pgxpool.Pool, nodeID, scopeID uuid.UUID, epoch int64, status, openResty string,
+	current *uuid.UUID, at time.Time, applyID *uuid.UUID, applyState *string) {
+	t.Helper()
+	digest := sha256.Sum256([]byte("observation"))
+	var offlineSince any
+	if status != "online" {
+		offlineSince = at
+	}
+	err := pgx.BeginFunc(context.Background(), pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(context.Background(), `SET LOCAL session_replication_role = replica`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(context.Background(), `INSERT INTO node_presence(node_id,status,session_epoch,heartbeat_sequence,
+			event_id,request_id,payload_digest,occurred_at,projected_at,online_since,offline_since,openresty_state,firewall_state,
+			confirmed_session_epoch,confirmed_heartbeat_sequence,confirmed_event_id,confirmed_request_id,confirmed_payload_digest,
+			last_seen_at,filesystem_total_bytes,filesystem_available_bytes,cache_used_bytes,active_deployments,revision,updated_at)
+			VALUES($1,$2,$3,1,$4,$4,$5,$6,$6,$6,$7,$8,'running',$3,1,$4,$4,$5,$6,1,1,0,'[]',1,$6)
+			ON CONFLICT (node_id) DO UPDATE SET status=EXCLUDED.status, session_epoch=EXCLUDED.session_epoch,
+			confirmed_session_epoch=EXCLUDED.confirmed_session_epoch,
+			offline_since=EXCLUDED.offline_since, openresty_state=EXCLUDED.openresty_state`,
+			nodeID, status, epoch, uuid.New(), digest[:], at, offlineSince, openResty); err != nil {
+			return err
+		}
+		var applyAttempt any
+		if applyID != nil {
+			applyAttempt = 1
+		}
+		_, err := tx.Exec(context.Background(), `INSERT INTO node_presence_scope_identities(node_id,configuration_scope_id,
+			session_epoch,heartbeat_sequence,current_config_version_id,last_apply_deployment_id,last_apply_attempt,
+			last_apply_config_version_id,last_apply_state,last_apply_error_code,updated_at) VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10)
+			ON CONFLICT (node_id,configuration_scope_id) DO UPDATE SET session_epoch=EXCLUDED.session_epoch,
+			current_config_version_id=EXCLUDED.current_config_version_id, last_apply_deployment_id=EXCLUDED.last_apply_deployment_id,
+			last_apply_attempt=EXCLUDED.last_apply_attempt, last_apply_config_version_id=EXCLUDED.last_apply_config_version_id,
+			last_apply_state=EXCLUDED.last_apply_state, last_apply_error_code=EXCLUDED.last_apply_error_code,
+			updated_at=EXCLUDED.updated_at`,
+			nodeID, scopeID, epoch, current, applyID, applyAttempt, map[bool]any{true: current, false: nil}[applyID != nil], applyState,
+			map[bool]any{true: "ROLLBACK_RESTORE_FAILED", false: nil}[applyState != nil && *applyState == "rollback_failed"], at)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func deleteScopeObservations(t *testing.T, pool *pgxpool.Pool, nodeID uuid.UUID) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `DELETE FROM node_presence_scope_identities WHERE node_id=$1`, nodeID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setPresenceEpoch(t *testing.T, pool *pgxpool.Pool, nodeID uuid.UUID, epoch int64) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `UPDATE node_presence SET session_epoch=$2 WHERE node_id=$1`, nodeID, epoch); err != nil {
+		t.Fatal(err)
 	}
 }
 

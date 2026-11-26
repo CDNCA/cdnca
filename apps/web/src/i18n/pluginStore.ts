@@ -20,7 +20,7 @@ const zhCN = {
   card: { developer: '开发者', installs: '{{count}} 次安装', latest: '最新版本 {{version}}', free: '免费', from: '{{price}} 起', privileged: '高权限' },
   detail: {
     summary: '简介', screenshots: '截图', homepage: '主页', support: '支持', license: '许可证协议', compat: '兼容范围',
-    permissions: '权限声明', highRisk: '高风险权限', permissionsChanged: '本版本权限有变化', versions: '版本历史', beta: '测试版', changelog: '更新日志',
+    permissions: '权限声明', highRisk: '高风险', permissionsChanged: '本版本权限有变化', versions: '版本历史', beta: '测试版', changelog: '更新日志',
     plans: '价格计划', noPlans: '这个插件还没有在售的价格计划', privilegedHint: '主控扩展会在主控进程旁运行，权限较高，请确认开发者可信。',
     controlAPI: '主控 {{range}}', edgeAgent: '节点 {{range}}', any: '不限',
   },
@@ -37,6 +37,7 @@ const zhCN = {
     prepaidDone: '已用市场余额付款，许可证已生效。功能类插件已开通，其他插件由主控管理员在“我的插件”确认安装。', insufficientBalance: '市场预付余额不足：可在“节点市场 → 收款与余额”充值，或改用“购买”在门户付款', alreadyLicensed: '本主控已有这个插件的有效许可证',
   },
   licenses: {
+    claims: { free_permanent: '永久免费领取', free_promo: '限免领取', paid_once: '一次性购买', paid_monthly: '按月订阅', paid_yearly: '按年订阅' },
     plugin: '插件', kind: '类型', status: '状态', periodEnd: '到期时间', autoRenew: '自动续费', on: '开启', off: '到期后停止',
     cancel: '退订', resume: '恢复续费', renew: '续费', dispute: '申请争议',
     renewConfirm: '用市场预付余额在原许可证上续一个周期（同价、同周期），确认续费？', renewed: '已续费，有效期至 {{end}}',
@@ -49,7 +50,6 @@ const zhCN = {
     disputeNotLinked: '这份许可证用市场预付余额购买，没有关联售后订单，不能在这里申请争议；如需售后请联系插件市场平台客服', disputeOpen: '这笔订单已有进行中的争议',
     reasons: { not_as_described: '与描述不符', not_working: '无法使用', duplicate_charge: '重复扣费', other: '其他' },
     kinds: { trial: '试用', one_time: '买断', subscription: '订阅', free: '免费' },
-    claims: { free_permanent: '永久免费领取', free_promo: '限免领取', paid_once: '一次性购买', paid_monthly: '按月订阅', paid_yearly: '按年订阅' },
     promoCharge: '限免领取，{{at}} 起按月收费 {{price}}',
     states: { trialing: '试用中', active: '有效', past_due: '欠费宽限中', cancelled: '已退订', expired: '已过期', refunded: '已退款', revoked: '已吊销' },
   },
@@ -88,7 +88,7 @@ const enUS: Messages = {
   card: { developer: 'Developer', installs: '{{count}} installs', latest: 'Latest {{version}}', free: 'Free', from: 'From {{price}}', privileged: 'Privileged' },
   detail: {
     summary: 'Summary', screenshots: 'Screenshots', homepage: 'Homepage', support: 'Support', license: 'License', compat: 'Compatibility',
-    permissions: 'Permissions', highRisk: 'High-risk permission', permissionsChanged: 'Permissions changed in this version', versions: 'Version history', beta: 'Beta', changelog: 'Changelog',
+    permissions: 'Permissions', highRisk: 'High risk', permissionsChanged: 'Permissions changed in this version', versions: 'Version history', beta: 'Beta', changelog: 'Changelog',
     plans: 'Price plans', noPlans: 'This plugin has no plan on sale yet', privilegedHint: 'Controller extensions run beside the controller with broad access; make sure you trust the developer.',
     controlAPI: 'Controller {{range}}', edgeAgent: 'Node {{range}}', any: 'any',
   },
@@ -105,6 +105,7 @@ const enUS: Messages = {
     prepaidDone: 'Paid from the market balance; the licence is active. Feature plugins are on; other plugins are installed by the controller administrator in My plugins.', insufficientBalance: 'Not enough market prepaid balance: top up in Node market → Payments & balance, or use Buy to pay in the portal', alreadyLicensed: 'This controller already holds an active licence for this plugin',
   },
   licenses: {
+    claims: { free_permanent: 'Claimed free for good', free_promo: 'Claimed during a free promo', paid_once: 'One-time purchase', paid_monthly: 'Monthly subscription', paid_yearly: 'Yearly subscription' },
     plugin: 'Plugin', kind: 'Type', status: 'Status', periodEnd: 'Ends', autoRenew: 'Auto-renew', on: 'On', off: 'Stops at period end',
     cancel: 'Cancel', resume: 'Resume', renew: 'Renew', dispute: 'Dispute',
     renewConfirm: 'Renew this licence for one more period from the market prepaid balance (same price and period)?', renewed: 'Renewed until {{end}}',
@@ -117,7 +118,6 @@ const enUS: Messages = {
     disputeNotLinked: 'This licence was paid from the market prepaid balance and has no order to dispute here; contact the plugin market platform for support', disputeOpen: 'This order already has an open dispute',
     reasons: { not_as_described: 'Not as described', not_working: 'Does not work', duplicate_charge: 'Charged twice', other: 'Other' },
     kinds: { trial: 'Trial', one_time: 'One-time', subscription: 'Subscription', free: 'Free' },
-    claims: { free_permanent: 'Claimed free for good', free_promo: 'Claimed during a free promo', paid_once: 'One-time purchase', paid_monthly: 'Monthly subscription', paid_yearly: 'Yearly subscription' },
     promoCharge: 'Claimed free, billed {{price}} monthly from {{at}}',
     states: { trialing: 'Trialing', active: 'Active', past_due: 'Past due (grace)', cancelled: 'Cancelled', expired: 'Expired', refunded: 'Refunded', revoked: 'Revoked' },
   },

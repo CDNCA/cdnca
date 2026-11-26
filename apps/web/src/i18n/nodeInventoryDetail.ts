@@ -13,6 +13,8 @@ const zhCN = {
     ticket: '授权票据',
     toolset: '打包脚本',
   },
+  // each disclosure's accessible name names its section.
+  diagnostics: { title: '诊断详情', telemetry: '访问统计上报 · 诊断详情', status: '节点状态 · 诊断详情', protection: 'DDoS 防护 · 诊断详情' },
   toolset: {
     notReported: '未上报',
     none: '未刷新',
@@ -31,6 +33,9 @@ const zhCN = {
   protection: {
     title: 'DDoS 防护', state: '防护状态', reason: '原因', detail: '节点说明', observedAt: '上报时间',
     notReported: '节点尚未上报防护状态（离线或 Agent 版本较旧）', loadFailed: '读取防护状态失败',
+    notConfigured: '未配置', awaitingNode: '等待节点应用', notApplied: '防护配置尚未应用', notPublished: '待发布',
+    draftPending: '有待发布的修改',
+    openSettings: '前往连接与 DDoS 防护',
   },
   marketProbeRoles: { probe_only: '仅探测', join_market: '加入市场', disabled: '关闭' },
   nativeRuntimeStates: { switched: '已切换', unchanged: '未变', rolled_back: '已回滚' },
@@ -100,6 +105,10 @@ const enUS: typeof zhCN = {
     ticket: 'Service ticket',
     toolset: 'Packaging scripts',
   },
+  diagnostics: {
+    title: 'Diagnostic details', telemetry: 'Access statistics upload · Diagnostic details',
+    status: 'Node status · Diagnostic details', protection: 'DDoS protection · Diagnostic details',
+  },
   toolset: {
     notReported: 'Not reported',
     none: 'Not refreshed',
@@ -118,6 +127,9 @@ const enUS: typeof zhCN = {
   protection: {
     title: 'DDoS protection', state: 'Protection state', reason: 'Reason', detail: 'Node detail', observedAt: 'Reported at',
     notReported: 'The node has not reported its protection state (offline or an older Agent)', loadFailed: 'Could not read the protection state',
+    notConfigured: 'Not configured', awaitingNode: 'Waiting for the node to apply', notApplied: 'Protection settings not applied yet',
+    notPublished: 'Not published yet', draftPending: 'Has unpublished changes',
+    openSettings: 'Open Connection and DDoS protection',
   },
   marketProbeRoles: { probe_only: 'Probe only', join_market: 'Joined market', disabled: 'Off' },
   nativeRuntimeStates: { switched: 'Switched', unchanged: 'Unchanged', rolled_back: 'Rolled back' },

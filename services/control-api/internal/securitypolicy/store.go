@@ -84,6 +84,9 @@ func (s *Store) Create(ctx context.Context, actor Actor, request CreateRequest, 
 		if err := requireUsableReferences(ctx, tx, request.TargetScopeID, request.Fields.Rules); err != nil {
 			return err
 		}
+		if err := requireUsableCCReferences(ctx, tx, request.TargetScopeID, request.Fields.Rules); err != nil {
+			return err
+		}
 		policyID, err := uuid.NewV7()
 		if err != nil {
 			return err
@@ -161,6 +164,11 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 			if featureErr != nil && !errors.Is(featureErr, packageaddon.ErrFeatureDenied) {
 				return featureErr
 			}
+			// Matcher / filter locks precede the policy lock, as in an edit
+			// of them (ReexpandCCReferencesTx); checked below.
+			if _, err := loadCCReferences(ctx, tx, policy.ScopeID, request.Fields.Rules, true); err != nil {
+				return err
+			}
 		}
 		current, err := lockPolicy(ctx, tx, actor, request.ID)
 		if err != nil {
@@ -192,6 +200,9 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 		if err := requireUsableReferences(ctx, tx, current.policy.ScopeID, request.Fields.Rules); err != nil {
 			return err
 		}
+		if err := requireUsableCCReferences(ctx, tx, current.policy.ScopeID, request.Fields.Rules); err != nil {
+			return err
+		}
 		existing := current.policy.Rules
 		if block := current.policy.QuickBlock; block != nil {
 			// The re-derived quick block rules keep their reserved IDs.
@@ -213,6 +224,21 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 				return fmt.Errorf("decode stored security policy update response: %w", err)
 			}
 			result.Replayed = true
+			return nil
+		}
+		// content equal to the
+		// stored version is a no-op: the current policy and revision come back,
+		// with no new version, audit event, or library change. The write is
+		// still completed so a retry with the same key replays it.
+		unchanged, err := sameStoredContent(current.policy, request.Fields)
+		if err != nil {
+			return err
+		}
+		if unchanged {
+			if err := s.completeWrite(ctx, tx, actor.UserID, "security_policy.update", request.IdempotencyKey, current.policy.ID, current.policy); err != nil {
+				return err
+			}
+			result.Policy = current.policy
 			return nil
 		}
 

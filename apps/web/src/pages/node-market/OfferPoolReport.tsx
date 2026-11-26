@@ -1,5 +1,6 @@
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Drawer, Space, Table, Tag, Tooltip, Typography } from 'antd'
+import { Alert, App, Button, Drawer, Space, Tag, Tooltip, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 

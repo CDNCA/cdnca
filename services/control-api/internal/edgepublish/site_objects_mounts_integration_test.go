@@ -4,8 +4,8 @@ package edgepublish
 
 import (
 	"encoding/hex"
-	"errors"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"

@@ -86,6 +86,14 @@ type GatewaySettings struct {
 	EndpointsVersion string
 }
 
+// LocalGatewayObserver records the co-located Gateway's calls for the
+// Gateway management page (gatewayregistry.Service): it has no row of its
+// own, so what it last presented is all there is to show. version is empty
+// except on ReportGatewayReady.
+type LocalGatewayObserver interface {
+	ObserveLocalGateway(instanceID, version string, certificateNotAfter time.Time)
+}
+
 var errGatewayRefused = errors.New("gateway refused")
 
 type Config struct {
@@ -113,6 +121,7 @@ type Service struct {
 	siteObjects           SiteObjectStore
 	gatewayWorkloadURISAN string
 	gateways              GatewayRegistry
+	localGateway          LocalGatewayObserver
 	installationID        string
 	logger                *slog.Logger
 }
@@ -128,12 +137,14 @@ func NewService(identity NodeIdentityService, artifacts ArtifactStore, config Co
 	if nilDependency(siteObjects) {
 		siteObjects, _ = artifacts.(SiteObjectStore)
 	}
+	localGateway, _ := config.Gateways.(LocalGatewayObserver)
 	return &Service{
 		identity:              identity,
 		artifacts:             artifacts,
 		siteObjects:           siteObjects,
 		gatewayWorkloadURISAN: config.GatewayWorkloadURISAN,
 		gateways:              config.Gateways,
+		localGateway:          localGateway,
 		installationID:        config.InstallationID,
 		logger:                slog.Default(),
 	}, nil
@@ -545,6 +556,7 @@ func (s *Service) gatewayPrincipal(ctx context.Context, instanceID string) (*x50
 	}
 	uri := leaf.URIs[0].String()
 	if uri == s.gatewayWorkloadURISAN {
+		s.observeLocalGateway(instanceID, "", leaf)
 		return leaf, uuid.Nil, false, nil
 	}
 	if s.gateways == nil || !strings.HasPrefix(uri, GatewayWorkloadURIPrefix) {
@@ -560,6 +572,12 @@ func (s *Service) gatewayPrincipal(ctx context.Context, instanceID string) (*x50
 		return nil, uuid.Nil, false, gatewayUnauthenticated()
 	}
 	return leaf, id, disabled, nil
+}
+
+func (s *Service) observeLocalGateway(instanceID, version string, leaf *x509.Certificate) {
+	if s.localGateway != nil && canonicalUUID(instanceID) {
+		s.localGateway.ObserveLocalGateway(instanceID, version, leaf.NotAfter)
+	}
 }
 
 // ReportGatewayReady marks a standalone Gateway online and returns the
@@ -582,6 +600,8 @@ func (s *Service) ReportGatewayReady(ctx context.Context, request *controlv1.Rep
 		if err := s.gateways.MarkReady(ctx, bound, request.GetVersion()); err != nil {
 			return nil, gatewayUnauthenticated()
 		}
+	} else if s.localGateway != nil {
+		s.localGateway.ObserveLocalGateway(request.GetGatewayInstanceId(), request.GetVersion(), time.Time{})
 	}
 	return &controlv1.ReportGatewayReadyResponse{InstallationId: s.installationID}, nil
 }

@@ -48,6 +48,7 @@ type sessionLimits struct {
 	maxBatchBytes  int
 	scoped         bool
 	scopeForSite   func(string) (string, bool)
+	heldVersion    func(scopeID, configVersionID string) bool
 }
 
 func New(config Config, dialer Dialer) (*Client, error) {
@@ -80,6 +81,13 @@ func (c *Client) Send(ctx context.Context, batch Batch) (SendAck, error) {
 		return SendAck{}, err
 	}
 
+	// A batch headed by a record whose site's scope is unconfirmed waits
+	// without opening a session (no Gateway round trip per retry).
+	if c.config.ScopedRecords && c.session == nil {
+		if err := headAttribution(batch, c.config.ScopeForSite, c.config.HeldVersion); errors.Is(err, ErrAttributionUnconfirmed) {
+			return SendAck{}, err
+		}
+	}
 	accepted := 0
 	backoff := c.config.InitialBackoff
 	var current *outboundBatch
@@ -103,6 +111,11 @@ func (c *Client) Send(ctx context.Context, batch Batch) (SendAck, error) {
 		if current == nil {
 			wire, err := buildOutboundBatch(batch, accepted, c.session.limits)
 			if err != nil {
+				if errors.Is(err, ErrAttributionUnconfirmed) {
+					// The Gateway reads the node's authorization per session: the
+					// held records go on a session opened once their scope is known.
+					c.closeSession()
+				}
 				return SendAck{Accepted: accepted}, err
 			}
 			current = wire
@@ -240,7 +253,7 @@ func (c *Client) validateHello(hello *agentv1.TelemetryGatewayHello) (sessionLim
 	}
 	return sessionLimits{
 		maxRecords: maxRecords, maxRecordBytes: maxRecordBytes, maxBatchBytes: maxBatchBytes,
-		scoped: hello.ScopedRecords, scopeForSite: c.config.ScopeForSite,
+		scoped: hello.ScopedRecords, scopeForSite: c.config.ScopeForSite, heldVersion: c.config.HeldVersion,
 	}, nil
 }
 
@@ -460,6 +473,9 @@ func buildWireBatch(records []Record, limits sessionLimits) (*agentv1.TelemetryB
 	}
 	maximum := min(len(records), limits.maxRecords)
 	wireRecords := make([]*agentv1.TelemetryRecord, 0, maximum)
+	// A record that cannot go (invalid, or its site's scope unconfirmed) ends
+	// the batch after the records before it; at the head it is the error.
+records:
 	for index := 0; index < maximum; index++ {
 		record := records[index]
 		if len(record.Payload) > limits.maxRecordBytes {
@@ -484,14 +500,20 @@ func buildWireBatch(records []Record, limits sessionLimits) (*agentv1.TelemetryB
 		case "rum_minute.v1":
 			kind = agentv1.TelemetryKind_TELEMETRY_KIND_RUM_MINUTE_V1
 		default:
-			return nil, ErrInvalidPublication
+			if len(wireRecords) > 0 {
+				break records
+			}
+			return nil, errRecordInvalid
 		}
 		subscriptionID := ""
 		if record.Kind != "l4_session.v1" && !record.trusted {
 			var err error
 			subscriptionID, err = packageSubscriptionFromPayload(record.Payload)
 			if err != nil {
-				return nil, ErrInvalidPublication
+				if len(wireRecords) > 0 {
+					break records
+				}
+				return nil, errRecordInvalid
 			}
 		}
 		wireRecord := &agentv1.TelemetryRecord{
@@ -504,11 +526,14 @@ func buildWireBatch(records []Record, limits sessionLimits) (*agentv1.TelemetryB
 			var scopeID string
 			var err error
 			if record.trusted {
-				scopeID, err = siteScope(record.siteID, limits.scopeForSite)
+				scopeID, err = siteScope(record.siteID, record.configVersionID, limits.scopeForSite, limits.heldVersion)
 			} else {
-				scopeID, err = recordScope(record, limits.scopeForSite)
+				scopeID, err = recordScope(record, limits.scopeForSite, limits.heldVersion)
 			}
 			if err != nil {
+				if len(wireRecords) > 0 && heldRecordError(err) {
+					break
+				}
 				return nil, err
 			}
 			wireRecord.ConfigurationScopeId = &scopeID
@@ -535,14 +560,20 @@ func buildConnectionsWireBatch(records []ConnectionsRecord, limits sessionLimits
 	for index := 0; index < maximum; index++ {
 		record := records[index]
 		if !validConnectionsRecord(record, limits.maxRecordBytes) {
-			return nil, ErrInvalidPublication
+			if len(wireRecords) > 0 {
+				break
+			}
+			return nil, errRecordInvalid
 		}
 		wireRecord := &agentv1.ConnectionsTelemetryRecordV1{
 			ReceiptId: record.ReceiptID, Envelope: proto.Clone(record.Envelope).(*agentv1.ConnectionsMetricEnvelopeV1),
 		}
 		if limits.scoped {
-			scopeID, err := siteScope(record.Envelope.GetSiteId(), limits.scopeForSite)
+			scopeID, err := siteScope(record.Envelope.GetSiteId(), record.Envelope.GetConfigVersionId(), limits.scopeForSite, limits.heldVersion)
 			if err != nil {
+				if len(wireRecords) > 0 && heldRecordError(err) {
+					break
+				}
 				return nil, err
 			}
 			wireRecord.ConfigurationScopeId = &scopeID
@@ -563,42 +594,89 @@ func buildConnectionsWireBatch(records []ConnectionsRecord, limits sessionLimits
 // recordScope is the configuration scope that published the record's site.
 // It is resolved from the site, never taken from the payload tenant: scope and
 // tenant are distinct identifiers.
-func recordScope(record Record, scopeForSite func(string) (string, bool)) (string, error) {
-	var siteID string
+func recordScope(record Record, scopeForSite func(string) (string, bool), heldVersion func(string, string) bool) (string, error) {
+	var siteID, configVersionID string
 	if record.Kind == "l4_session.v1" {
 		var envelope agentv1.L4SessionEnvelopeV1
 		if err := proto.Unmarshal(record.Payload, &envelope); err != nil {
-			return "", ErrInvalidPublication
+			return "", errRecordInvalid
 		}
-		siteID = envelope.GetSiteId()
+		siteID, configVersionID = envelope.GetSiteId(), envelope.GetConfigVersionId()
 	} else {
 		var envelope struct {
 			Events []struct {
-				SiteID string `json:"site_id"`
+				SiteID          string `json:"site_id"`
+				ConfigVersionID string `json:"config_version_id"`
 			} `json:"events"`
 		}
 		if err := json.Unmarshal(record.Payload, &envelope); err != nil || len(envelope.Events) == 0 {
-			return "", ErrInvalidPublication
+			return "", errRecordInvalid
 		}
 		siteID = envelope.Events[0].SiteID
 		for _, event := range envelope.Events {
 			if event.SiteID != siteID {
-				return "", ErrInvalidPublication
+				return "", errRecordInvalid
 			}
 		}
+		scopeID, err := siteScope(siteID, "", scopeForSite, nil)
+		if err != nil || heldVersion == nil {
+			return scopeID, err
+		}
+		for _, event := range envelope.Events {
+			if event.ConfigVersionID != "" && heldVersion(scopeID, event.ConfigVersionID) {
+				return "", ErrAttributionUnconfirmed
+			}
+		}
+		return scopeID, nil
 	}
-	return siteScope(siteID, scopeForSite)
+	return siteScope(siteID, configVersionID, scopeForSite, heldVersion)
 }
 
-func siteScope(siteID string, scopeForSite func(string) (string, bool)) (string, error) {
-	if !canonicalUUID(siteID) || scopeForSite == nil {
+// A site no confirmed scope carries is not a fault of the record
+// it waits, unsent, for its scope. So does a
+// record of a configuration version its scope holds (Config.HeldVersion): the
+// Gateway's authorization would not carry it.
+func siteScope(siteID, configVersionID string, scopeForSite func(string) (string, bool), heldVersion func(string, string) bool) (string, error) {
+	if scopeForSite == nil {
 		return "", ErrInvalidPublication
+	}
+	if !canonicalUUID(siteID) {
+		return "", errRecordInvalid
 	}
 	scopeID, ok := scopeForSite(siteID)
-	if !ok || !canonicalUUID(scopeID) {
+	if !ok {
+		return "", ErrAttributionUnconfirmed
+	}
+	if !canonicalUUID(scopeID) {
 		return "", ErrInvalidPublication
 	}
+	if configVersionID != "" && heldVersion != nil && heldVersion(scopeID, configVersionID) {
+		return "", ErrAttributionUnconfirmed
+	}
 	return scopeID, nil
+}
+
+// headAttribution resolves the scope of the batch's first record.
+func headAttribution(batch Batch, scopeForSite func(string) (string, bool), heldVersion func(string, string) bool) error {
+	switch {
+	case len(batch.Connections) > 0:
+		envelope := batch.Connections[0].Envelope
+		_, err := siteScope(envelope.GetSiteId(), envelope.GetConfigVersionId(), scopeForSite, heldVersion)
+		return err
+	case len(batch.Records) == 0:
+		return nil
+	case batch.Records[0].trusted:
+		_, err := siteScope(batch.Records[0].siteID, batch.Records[0].configVersionID, scopeForSite, heldVersion)
+		return err
+	default:
+		_, err := recordScope(batch.Records[0], scopeForSite, heldVersion)
+		return err
+	}
+}
+
+// heldRecordError: the record cannot go now, the records before it can.
+func heldRecordError(err error) bool {
+	return errors.Is(err, errRecordInvalid) || errors.Is(err, ErrAttributionUnconfirmed)
 }
 
 func packageSubscriptionFromPayload(payload []byte) (string, error) {

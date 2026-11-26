@@ -11,6 +11,7 @@ const zhCN = {
     unconfirmed: '生效状态未确认',
     bindingLoadFailed: '读取本站发布绑定失败，生效状态未确认。',
     current: '当前生效',
+    effect: { publishing: '未生效 · 下发中', failedRetrying: '未生效 · 下发失败，正在重试', failed: '未生效 · 下发失败', none: '未生效' },
     readOnly: '只读',
   },
   cc: {
@@ -62,6 +63,7 @@ const zhCN = {
   save: {
     publishFailed: '已保存到规则库，但未生效：本次下发被拒绝。处理下面的原因后点“重新下发”。',
     publishWaiting: '已保存到规则库，尚未生效：节点还没有所需的规则包，到齐后系统会自动下发。',
+    publishSuspended: '已保存到规则库，订阅已暂停，恢复后生效：恢复订阅后点“重新下发”。',
     republish: '重新下发',
     requestId: '（请求编号 {{id}}）',
     wafDefaultEmpty: '尚未配置默认 WAF 规则，本站 WAF 未开启。',
@@ -76,6 +78,8 @@ const zhCN = {
     title: 'WAF防护',
     totalSwitch: '站点 WAF 规则库',
     totalHint: '打开开关即为本站启用系统默认 WAF 规则库（系统设置 > 网站默认 > 安全设置），随即自动下发。',
+    totalHintApply: '开启即使用系统默认 WAF 规则库，或在下方应用已有规则库。',
+    emptyReadOnly: '本站还没有应用 WAF 规则库，当前账号只能查看。',
     totalHintOn: '关闭开关即从本站撤下该规则库；内置模块与防御级别在下方直接调整。',
     libraryOn: '已启用：{{name}}', libraryOff: '未启用',
     advancedEdit: '高级规则编辑',
@@ -85,7 +89,10 @@ const zhCN = {
     modeHint: '观察模式下命中只记录、不拦截，适合先观察误报。观察模式、封禁和挑战需要节点支持 WAF v2。',
     autoBlock: 'WAF 命中自动封禁', autoBlockWindow: '统计窗口（秒）', autoBlockHits: '命中次数', autoBlockSeconds: '封禁时长（秒）',
     autoBlockHint: '同一客户端在窗口内被本站规则库拦截或挑战达到次数后临时封禁。',
-    applyConfirm: '将本站的 WAF 规则库换成“{{name}}”并立即下发？', applyCancel: '取消',
+    applyConfirm: '将本站的 WAF 规则库换成“{{name}}”并立即下发？', applyCancel: '取消', applyNamed: '应用“{{name}}”',
+    capabilityWait: '规则库 v{{version}} 等待 {{count}} 个节点升级后自动下发：{{nodes}}',
+    rulePackWait: '规则库 v{{version}} 等待节点装好规则包后自动下发：{{nodes}}',
+    upgradeNodes: '去升级节点',
     publishLatest: '立即下发新版本',
     builtinHintEdit: '点击模块即开启/关闭（自研检测引擎），随即生效；OWASP CRS 档位见上方“防御级别”。',
     tier: {
@@ -98,7 +105,7 @@ const zhCN = {
     },
     officialPacks: {
       title: '官方系统规则包', hint: '平台提供并自动更新的官方规则包，下面是它们对本站是否生效；要开关请到「规则包」页按网站设置。',
-      summary: '{{active}} 个生效 / 共 {{total}} 个',
+      summary: '对本站生效 {{active}}/{{total}}', action: '动作：{{action}}', show: '查看 {{count}} 个规则包', hide: '收起规则包',
       active: '已生效', inactive: '未生效', none: '暂无官方系统规则包', loadFailed: '官方系统规则包读取失败。',
     },
     moduleOn: '开启', moduleOff: '关闭',
@@ -169,6 +176,7 @@ const enUS = {
   common: {
     loading: 'Loading site protection configuration', loadFailed: 'Failed to load site protection configuration', retry: 'Retry',
     manage: 'Manage', configured: 'Configured', notConfigured: 'Not configured', unconfirmed: 'Effective state not confirmed', bindingLoadFailed: "Could not read this site's published binding; the effective state is not confirmed.", current: 'Active', readOnly: 'Read only',
+    effect: { publishing: 'Not active · publishing', failedRetrying: 'Not active · publishing failed, retrying', failed: 'Not active · publishing failed', none: 'Not active' },
   },
   cc: {
     title: 'CC protection', defaultProtection: 'Default protection',
@@ -191,6 +199,7 @@ const enUS = {
   save: {
     publishFailed: 'Saved to the rule library but not in effect: publishing was refused. Fix the reason below, then click Publish again.',
     publishWaiting: 'Saved to the rule library, not in effect yet: the nodes do not have the required rule packs; it is published automatically once they do.',
+    publishSuspended: 'Saved to the rule library. The subscription is suspended, so it takes effect once resumed: click Publish again after the subscription is resumed.',
     republish: 'Publish again', requestId: '(request ID {{id}})',
     wafDefaultEmpty: 'No default WAF rules are configured; WAF is not switched on for this site.',
     wafDefaultEmptyAdmin: 'Configure the default WAF rules in System settings > Site defaults > Security settings, or choose an existing library for this site under Rule library protection below.',
@@ -201,6 +210,8 @@ const enUS = {
   },
   waf: {
     title: 'WAF protection', totalSwitch: 'Site WAF rule library', totalHint: 'Switch on to apply the system default WAF library to this site; it is published automatically.',
+    totalHintApply: 'Switch on to use the system default WAF library, or apply an existing library below.',
+    emptyReadOnly: 'This site has no WAF rule library yet; this account can only view it.',
     totalHintOn: 'Switch off to withdraw the library from this site; modules and the defense level are adjusted below.',
     libraryOn: 'On: {{name}}', libraryOff: 'Off', advancedEdit: 'Advanced rule editing',
     level: 'Defense level',
@@ -209,21 +220,24 @@ const enUS = {
     modeHint: 'In observe mode hits are only logged, never blocked, to watch for false positives first. Observe mode, ban and challenge need nodes with WAF v2.',
     autoBlock: 'Auto ban on WAF hits', autoBlockWindow: 'Window (seconds)', autoBlockHits: 'Hits', autoBlockSeconds: 'Ban duration (seconds)',
     autoBlockHint: "A client blocked or challenged by this site's rule library that many times within the window is banned for a while.",
-    applyConfirm: 'Switch this site\'s WAF rule library to "{{name}}" and publish now?', applyCancel: 'Cancel',
+    applyConfirm: 'Switch this site\'s WAF rule library to "{{name}}" and publish now?', applyCancel: 'Cancel', applyNamed: 'Apply "{{name}}"',
+    capabilityWait: 'Library v{{version}} is published once {{count}} nodes are upgraded: {{nodes}}',
+    rulePackWait: 'Library v{{version}} is published once the nodes have the rule packs: {{nodes}}',
+    upgradeNodes: 'Upgrade nodes',
     publishLatest: 'Publish the new version now',
 
     builtinHintEdit: 'Click a module to switch it (self-developed engine); applied at once. CRS tiers are under the defense level.', moduleOn: 'On', moduleOff: 'Off',
     tier: {
       title: 'Managed WAF tier', label: 'Tier', off: 'Off',
-      hint: "The official managed WAF (OWASP CRS). Choosing a tier enables the managed WAF rule in this site's WAF rule library and publishes it at once; a site without a library gets the system default library.",
+      hint: "The official managed WAF (OWASP CRS). Choosing a tier enables the managed WAF rule in this site's WAF rule library and publishes it at once.",
       help: 'The WAF rules page shows this rule as "托管 WAF（由网站页设置）"; both pages edit the same rule. Only the strict tiers have the grey-zone challenge.',
       noProfiles: 'No CRS profile pack is downloaded yet.',
       profilesFailed: 'The tiers could not be loaded; try again later.',
       protected: "This site uses a subscribed (read-only) library; its provider sets the tier.",
     },
     officialPacks: {
-      title: 'Official system rule packs', hint: "Official packs maintained and updated by the platform, and whether each applies to this site; switch them per site on the Rule packs page.",
-      summary: '{{active}} active / {{total}} total',
+      title: 'Official system rule packs', hint: "Maintained and updated by the platform, independent of this site's WAF rule library; platform, user and site settings decide whether each applies to this site. Switch them per site on the Rule packs page.",
+      summary: 'Applies to this site: {{active}}/{{total}}', action: 'Action: {{action}}', show: 'Show {{count}} rule packs', hide: 'Hide rule packs',
       active: 'Active', inactive: 'Not active', none: 'No official system rule pack', loadFailed: 'The official system rule packs could not be loaded.',
     },
     autoBan: 'Automatic WAF attack blocking', autoBanHint: 'Thresholds come from the site firewall action policy; edit them here and they apply when you leave the field. A failed candidate keeps the last stable revision.',

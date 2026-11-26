@@ -207,7 +207,7 @@ export interface SitePublishFailedNode {
 }
 
 /** Why a site is not served for lack of a valid package. */
-export type SitePackageUnavailableReason = 'no_package' | 'package_disabled' | 'package_deleted'
+export type SitePackageUnavailableReason = 'no_package' | 'package_disabled' | 'package_deleted' | 'package_suspended' | 'package_cancelled'
 
 export interface SiteAutoDNSStatus {
   provider_id: string
@@ -306,6 +306,11 @@ export interface SiteBasicConfig {
   // owner's default, else on; on update: unchanged). HTTP/3 needs TLSv1.3.
   http2_enabled?: boolean
   http3_enabled?: boolean
+  // Response only, ignored on writes:
+  // http3_enabled as the site's current package lets it go out, and why not
+  // (the package leaves HTTP/3 out; http3_enabled keeps the user's choice).
+  http3_effective?: boolean
+  http3_unavailable_reason?: 'package_feature_denied'
   // ssl_prefer_server_ciphers: null by the cipher preset (modern off,
   // compatible/legacy on); null on update restores that.
   tls_prefer_server_ciphers?: boolean | null
@@ -537,6 +542,14 @@ export interface SiteDetail {
   package_expired_days?: number | null
   package_remaining_days?: number | null
   package_unavailable_reason?: SitePackageUnavailableReason | null
+  /** 订阅暂停的来源与原因（迁移 708），仅 package_unavailable_reason 为 package_suspended 时有值。 */
+  package_suspension?: SitePackageSuspension | null
+}
+
+/** billing_bridge：计费系统经计费对接暂停；admin：平台管理员暂停。 */
+export interface SitePackageSuspension {
+  source: 'billing_bridge' | 'admin'
+  reason: string
 }
 
 export function operationalSiteStatus(value: Pick<SiteListItem, 'status' | 'status_state' | 'lock'>): SiteOperationalStatus {
@@ -1100,7 +1113,7 @@ function siteDetail(body: unknown): SiteDetail {
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const siteTLSProfileKeys = ['tls_cipher_preset', 'tls_cipher_suites', 'tls_ocsp_stapling', 'tls_client_auth', 'tls_client_ca_pem',
-  'http2_enabled', 'http3_enabled', 'tls_prefer_server_ciphers']
+  'http2_enabled', 'http3_enabled', 'tls_prefer_server_ciphers', 'http3_effective', 'http3_unavailable_reason']
 const siteBasicKeys = [
   'cname',
   'cname_current_revision',

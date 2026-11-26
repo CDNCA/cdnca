@@ -35,7 +35,7 @@ func (s *Service) List(ctx context.Context, actor Actor, kind Kind, filter ListF
 		(filter.Type != "" && !typePattern.MatchString(filter.Type)) {
 		return ListResult{}, ErrInvalidInput
 	}
-	if actor.ScopeKind == "tenant" && filter.Owner != "" {
+	if actor.ScopeKind == "tenant" && (filter.Owner != "" || filter.ScopeID != uuid.Nil && filter.ScopeID != actor.ScopeID) {
 		return ListResult{}, ErrPermissionDenied
 	}
 	return s.store.List(ctx, actor, kind, filter)

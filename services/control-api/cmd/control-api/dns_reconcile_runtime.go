@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsacme"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnscheck"
@@ -591,9 +592,15 @@ func openDNSReconcileProductionRuntime(ctx context.Context, config dnsReconcileR
 		}
 		workloads = authenticator
 	}
+	// 修复域名解析 resolves the zone of a site domain through the site's own
+	// DNS account when the page names none.
+	siteZones, err := dnsproviderremotesource.NewSiteReconcileZones(providerSource, ownerSnapshot, audit.New(pool))
+	if err != nil {
+		return nil, err
+	}
 	handler, err := dnsreconcilehttp.NewHandler(dnsreconcilehttp.Dependencies{
 		Sessions: &dnsReconcileSessionAuthenticator{identity: identityService},
-		IAM:      &dnsReconcileIAMAuthorizer{pool: pool}, Domain: domain, Workloads: workloads,
+		IAM:      &dnsReconcileIAMAuthorizer{pool: pool}, Domain: domain, Workloads: workloads, Zones: siteZones,
 	}, dnsreconcilehttp.Config{})
 	if err != nil {
 		return nil, err

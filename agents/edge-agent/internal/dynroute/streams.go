@@ -60,7 +60,7 @@ const l4StreamSetSchema = "cdnca.edge.l4-stream-set/v2"
 
 // l4Plan is what one Apply gives the L4 runtime.
 type l4Plan struct {
-	versionID  string             // "" = no L4 configuration (nothing to apply)
+	versionID  string              // "" = no L4 configuration (nothing to apply)
 	config     *l4runtime.ConfigV2 // nil = no streams
 	dispatched map[int]bool        // ports whose IPv4 websites the L4 dispatcher hands over
 	tcp        []ddos.PortRange    // the streams' TCP ports

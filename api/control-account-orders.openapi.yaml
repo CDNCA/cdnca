@@ -74,7 +74,7 @@ paths:
         - name: status
           in: query
           schema:
-            $ref: '#/components/schemas/AccountOrderStatus'
+            $ref: '#/components/schemas/AccountStatementStatus'
         - name: created_from
           in: query
           schema: {type: string, format: date-time}
@@ -480,9 +480,14 @@ components:
         payment_method: {type: string, description: 'balance, provider name, recharge channel, manual, migrate_import, or a manual record value.'}
         order_number: {type: string, description: Merchant order number for manual records; the order, recharge or transaction UUID otherwise.}
         transaction_number: {type: string}
-        status: {$ref: '#/components/schemas/AccountOrderStatus'}
+        status: {$ref: '#/components/schemas/AccountStatementStatus'}
         created_at: {type: string, format: date-time}
         paid_at: {type: string, format: date-time}
+        balance_delta_minor: {type: integer, format: int64, description: 'Ledger rows only: the signed change of the tenant balance (positive credit, negative debit).'}
+    AccountStatementStatus:
+      type: string
+      description: 'paid / unpaid for orders; posted for ledger rows (posted to the balance, not a paid order).'
+      enum: [paid, unpaid, posted]
     AccountStatementPage:
       type: object
       additionalProperties: false

@@ -81,7 +81,7 @@ function requestKey(): string {
 export type EventSubscriptionRows = { rows: EventSubscriptionRow[]; extraRows: EventSubscriptionRow[]; grouped: boolean; error: unknown }
 
 export function useEventSubscriptionRows(): EventSubscriptionRows {
-  const { t } = useTranslation('tickets')
+  const { t, i18n } = useTranslation('tickets')
   const token = useSessionStore((state) => state.accessToken) ?? ''
   const principal = useSessionStore((state) => state.principal)
   const epoch = useSessionStore((state) => state.sessionEpoch)
@@ -168,7 +168,8 @@ export function useEventSubscriptionRows(): EventSubscriptionRows {
   // 一个消息类型一行：某渠道组内全部开启才显示为开；只要组内有事件支持该渠道就有开关。
   const groupRow = (group: typeof tenantGroups[number]): EventSubscriptionRow => {
     const label = t(`subscriptions.groups.${group.key}.label`)
-    const hint = t(`subscriptions.groups.${group.key}.hint`)
+    // 说明只在与标题语义不同的组（证书：含自动续期失败）里有；其余组不复述标题。
+    const hint = i18n.exists(`subscriptions.groups.${group.key}.hint`, { ns: 'tickets' }) ? t(`subscriptions.groups.${group.key}.hint`) : undefined
     const members = group.events.map((event) => byEvent.get(event)!)
     const values = members.flatMap((query, index) => query.data?.event_type === group.events[index] ? [query.data] : [])
     if (values.length !== group.events.length) {

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Card, Col, Descriptions, Drawer, Row, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Card, Col, Descriptions, Drawer, Row, Space, Tag, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { marketApi, marketUnavailable, type MarketOfferListing, type MarketOfferNodes } from '../../api/market'

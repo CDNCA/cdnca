@@ -514,6 +514,23 @@ func (a *Activator) Rollback(ctx context.Context) (uint64, error) {
 // single-step rollback exists: it activates the difference as new
 // generations (contract §4.3 item 3), without a rebuild.
 func (a *Activator) RollbackTo(ctx context.Context, target uint64) (Activation, error) {
+	old, err := a.Files.Read(target)
+	if err != nil {
+		return Activation{}, err
+	}
+	return a.rollbackToIndex(ctx, old)
+}
+
+// RollbackToEmpty returns the node to an empty routing table (no site
+// routable) as new generations: the compensation of a node's first
+// generation, which has no earlier one to return to.
+func (a *Activator) RollbackToEmpty(ctx context.Context) (Activation, error) {
+	return a.rollbackToIndex(ctx, Index{})
+}
+
+// rollbackToIndex activates the difference from the active index to old's
+// routing table as new generations.
+func (a *Activator) rollbackToIndex(ctx context.Context, old Index) (Activation, error) {
 	started := time.Now()
 	status, err := a.Control.Status(ctx)
 	if err != nil {
@@ -522,10 +539,6 @@ func (a *Activator) RollbackTo(ctx context.Context, target uint64) (Activation, 
 	active, ok, err := a.Files.Current()
 	if err != nil || !ok || active.Generation != status.Generation || !status.EpochOK {
 		return Activation{}, fmt.Errorf("%w: node generation %d is not the agent's current index", ErrConflict, status.Generation)
-	}
-	old, err := a.Files.Read(target)
-	if err != nil {
-		return Activation{}, err
 	}
 	first := max(status.MaxGeneration, active.Generation) + 1
 	sets, err := ChangeSets(active, old, first, a.ChangeLimit)

@@ -11,6 +11,7 @@ import { changeLocale } from '../i18n'
 import AdminTasksPage from '../pages/AdminTasksPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import adminTasksStyles from '../pages/AdminTasksPage.css?raw'
 
 // antd 测试环境所有 Modal 的 aria-labelledby 都是 test-id，可访问名取的是 DOM 里第一个 test-id（常是反馈弹窗标题）；
 // 业务弹窗按自身标题匹配，并排除反馈弹窗（.cdnca-feedback）
@@ -246,7 +247,7 @@ describe('AdminTasksPage', () => {
     expect(screen.getByTestId('jobs-table-scroll')).toHaveAttribute('aria-busy', 'false')
     const user = userEvent.setup()
     await user.click(screen.getByRole('combobox', { name: '任务类型' }))
-    expect(await screen.findByText('暂无事实')).toBeInTheDocument()
+    expect(await screen.findByTitle('—')).toBeInTheDocument()
   })
 
   it('localizes a transient list error and retries without exposing server detail', async () => {
@@ -370,7 +371,7 @@ describe('AdminTasksPage', () => {
     expect(screen.getByRole('columnheader', { name: '失败次数' })).toBeInTheDocument()
     expect(within(screen.getByRole('row', { name: /cache\.purge/ })).getByText('1')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: '优先级' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: '名称' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: '名称' })).not.toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: '依赖' })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: '创建时间' })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: '进度' })).not.toBeInTheDocument()
@@ -415,7 +416,7 @@ describe('AdminTasksPage', () => {
     expect(await screen.findByText('第 1 页')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
     expect(await within(drawer).findByText('执行进度')).toBeInTheDocument()
     expect(within(drawer).getByText('租约已过期')).toBeInTheDocument()
     expect(within(drawer).getByText('node-1')).toBeInTheDocument()
@@ -424,6 +425,72 @@ describe('AdminTasksPage', () => {
     expect(fetchSpy.mock.calls.some(([input]) => String(input).endsWith(`/${job.task_id}`))).toBe(true)
     expect(fetchSpy.mock.calls.some(([input]) => String(input).includes(`/${job.task_id}/attempts?`))).toBe(true)
     expect(fetchSpy.mock.calls.some(([input]) => String(input).includes(`/${job.task_id}/results?`))).toBe(true)
+  })
+
+  it('localizes the task type in details, marks unknown types with their raw code, and drops the subtask title', async () => {
+    authenticateAdmin()
+    vi.spyOn(jobsApi, 'kinds').mockResolvedValue({ data: [{
+      kind: 'edge.publication', name_key: 'jobs.kindNames.edgePublication', integration: 'integrated', runtime_status: 'unknown',
+    }] })
+    const publication: BackgroundJob = { ...job, kind: 'edge.publication' }
+    let current = publication
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(jobResponse(input, current)))
+    const user = userEvent.setup()
+    const view = renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+
+    expect(await screen.findByText('节点配置发布')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '详情' }))
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
+    expect(screen.queryByRole('dialog', { name: '子任务详情' })).not.toBeInTheDocument()
+    const kindCell = await within(drawer).findByText('节点配置发布')
+    expect(kindCell).toBeInTheDocument()
+    expect(within(drawer).queryByText('edge.publication')).not.toBeInTheDocument()
+    view.unmount()
+
+    current = { ...job, kind: 'future.kind' }
+    renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+    await user.click(await screen.findByRole('button', { name: '详情' }))
+    const unknownDrawer = await screen.findByRole('dialog', { name: '任务详情' })
+    const unknown = await within(unknownDrawer).findByText('未知任务类型', { exact: false })
+    expect(unknown.closest('.jobs-detail-kind-unknown')).toHaveTextContent('future.kind')
+  })
+
+  it('uses a neutral dash for empty facts, lists the task ID once, and keeps producer-managed scheduling out of the rows', async () => {
+    authenticateAdmin()
+    const sameResource: BackgroundJob = { ...withStatus('succeeded', 1), related_resource: { reference: job.task_id }, trace_id: undefined }
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://web.test')
+      if (url.pathname === '/v1/admin/jobs') {
+        return Promise.resolve(json({
+          data: [sameResource],
+          // 任务元数据只随编号分页返回；游标页带元数据按契约整页拒收
+          page: { number: 1, limit: Number(url.searchParams.get('limit')), total: 1, total_pages: 1, consistency: 'request_snapshot' },
+          query: { from: url.searchParams.get('from'), to: url.searchParams.get('to') },
+          task_metadata: [{
+            task_id: sameResource.task_id,
+            name: { name_key: 'jobs.kindNames.unknown', resource: sameResource.related_resource.reference, source: 'derived' },
+            priority: { policy: 'producer_managed' },
+            dependencies: { state: 'unknown', items: [] },
+          }],
+        }))
+      }
+      return Promise.resolve(jobResponse(input, sameResource))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+
+    const row = (await screen.findByText('cache.purge')).closest('tr')!
+    expect(within(row).getAllByText(job.task_id)).toHaveLength(1)
+    expect(screen.queryByRole('columnheader', { name: '优先级' })).not.toBeInTheDocument()
+    expect(screen.queryByText('由任务生产方调度')).not.toBeInTheDocument()
+    expect(screen.queryByText('暂无事实')).not.toBeInTheDocument()
+
+    await user.click(within(row).getByRole('button', { name: '详情' }))
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
+    expect(await within(drawer).findByText('由任务生产方调度')).toBeInTheDocument()
+    expect(within(drawer).queryByText('暂无事实')).not.toBeInTheDocument()
+    expect(within(drawer).queryByText('失败代码', { selector: '.ant-descriptions-item-label' })).not.toBeInTheDocument()
+    expect(within(drawer).getAllByText('—').length).toBeGreaterThan(0)
   })
 
   it('shows stable server denial without leaking its English message', async () => {
@@ -458,8 +525,8 @@ describe('AdminTasksPage', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
 
     expect(await screen.findByText('当前账号缺少后台任务管理权限')).toBeInTheDocument()
     expect(screen.queryByText('当前账号缺少后台任务读取权限')).not.toBeInTheDocument()
@@ -478,7 +545,7 @@ describe('AdminTasksPage', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
 
     expect(await within(drawer).findAllByText('未知失败原因')).toHaveLength(3)
     expect(within(drawer).queryByText('private_detail_code')).not.toBeInTheDocument()
@@ -510,12 +577,34 @@ describe('AdminTasksPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AdminTasksPage />, [kind === 'platform' ? '/sys/task' : '/account/tasks'])
     await user.click(await screen.findByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
     const summary = await within(drawer).findByTestId('jobs-cause-summary')
     expect(summary).toHaveTextContent('任务失败：网站未绑定套餐且没有平台默认线路组')
     expect(summary).toHaveTextContent(next)
     expect(within(drawer).queryByText('未知失败原因')).toBeNull()
     expect(within(drawer).getAllByText('生成网站 CNAME').length).toBeGreaterThan(0)
+  })
+
+  // 清除CDN无关解析 items that were kept read as
+  // why they were kept, not as an unknown failure.
+  it.each([
+    ['dns_record_changed', '记录已变化或已被网站使用，已保留未删除'],
+    ['dns_cleanup_plan_stale', '清除计划由旧版本生成，缺少完整记录值，已跳过'],
+  ] as const)('explains a kept DNS cleanup record (%s)', async (code, text) => {
+    authenticateAdmin()
+    const cleanupJob = { ...job, kind: 'dns.cleanup.v1', status: 'failed' as const, failure_code: 'all_items_failed' }
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://web.test')
+      if (url.pathname === `/v1/jobs/${cleanupJob.task_id}`) return Promise.resolve(json({ data: cleanupJob }))
+      return Promise.resolve(jobResponse(input, cleanupJob, { attempt: code, result: code }))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+    await user.click(await screen.findByRole('button', { name: '详情' }))
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
+    expect(await within(drawer).findByTestId('jobs-cause-summary')).toHaveTextContent(text)
+    expect(within(drawer).queryByText('未知失败原因')).toBeNull()
+    expect(within(drawer).queryByText(code)).toBeNull()
   })
 
   it('localizes retries_exhausted for detail and result without exposing the raw code', async () => {
@@ -530,7 +619,7 @@ describe('AdminTasksPage', () => {
     authenticateAdmin()
     const chinese = renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: '详情' }))
-    const chineseDrawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const chineseDrawer = await screen.findByRole('dialog', { name: '任务详情' })
     expect(await within(chineseDrawer).findAllByText('任务重试次数已用尽')).toHaveLength(2)
     expect(within(chineseDrawer).queryByText('retries_exhausted')).not.toBeInTheDocument()
     chinese.unmount()
@@ -539,7 +628,7 @@ describe('AdminTasksPage', () => {
     authenticateAdmin()
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: 'Details' }))
-    const englishDrawer = await screen.findByRole('dialog', { name: 'Subtask details' })
+    const englishDrawer = await screen.findByRole('dialog', { name: 'Task details' })
     expect(await within(englishDrawer).findAllByText('Task retries are exhausted')).toHaveLength(2)
     expect(within(englishDrawer).queryByText('retries_exhausted')).not.toBeInTheDocument()
   })
@@ -560,7 +649,7 @@ describe('AdminTasksPage', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: 'Details' }))
-    const drawer = await screen.findByRole('dialog', { name: 'Subtask details' })
+    const drawer = await screen.findByRole('dialog', { name: 'Task details' })
 
     expect(await within(drawer).findByText(
       'Task storage is unavailable. Try again later. (Request ID: jobs-detail-1)',
@@ -616,19 +705,19 @@ describe('AdminTasksPage', () => {
     expect(within(document.querySelector('.jobs-pagination') as HTMLElement)
       .getByText('第 2 页')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
     await user.click(await within(drawer).findByRole('button', { name: '下一页尝试记录' }))
     await user.click(await within(drawer).findByRole('button', { name: '下一页逐项结果' }))
     expect(within(drawer).getAllByText('第 2 页')).toHaveLength(2)
     await user.click(within(drawer).getByRole('button', { name: '重试失败任务' }))
-    expect(await screen.findByText('确认重试任务')).toBeInTheDocument()
+    expect(await screen.findByText(/^重试任务「/)).toBeInTheDocument()
 
     const readsBeforeRefresh = list.mock.calls.length
     act(() => adminSession('jobs-token-b', undefined, 'refresh'))
     expect(useSessionStore.getState().sessionEpoch).toBe(epoch)
-    expect(screen.getByText('确认重试任务')).toBeInTheDocument()
-    await user.click(within(screen.getByText('确认重试任务').closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    expect(screen.getByText(/^重试任务「/)).toBeInTheDocument()
+    await user.click(within(screen.getByText(/^重试任务「/).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
     expect(await screen.findByText('操作结果待确认', { selector: OUTCOME_BAR })).toBeInTheDocument()
 
     act(() => adminSession('jobs-token-c', undefined, 'refresh'))
@@ -638,8 +727,8 @@ describe('AdminTasksPage', () => {
     expect(screen.getByLabelText('资源标识')).toHaveValue('site:stable.test')
     expect(within(document.querySelector('.jobs-pagination') as HTMLElement)
       .getByText('第 2 页')).toBeInTheDocument()
-    expect(pageDialog('子任务详情')).toBeInTheDocument()
-    expect(within(pageDialog('子任务详情')).getAllByText('第 2 页')).toHaveLength(2)
+    expect(pageDialog('任务详情')).toBeInTheDocument()
+    expect(within(pageDialog('任务详情')).getAllByText('第 2 页')).toHaveLength(2)
     await user.click(screen.getByRole('button', { name: '使用同一请求重试' }))
     expect(await screen.findByText('任务已重新入队')).toBeInTheDocument()
 
@@ -692,8 +781,8 @@ describe('AdminTasksPage', () => {
         expect(await screen.findByText('确认取消任务')).toBeInTheDocument()
       } else {
         await user.click(screen.getByRole('button', { name: '重试失败任务' }))
-        await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-          .getByRole('button', { name: '确认' }))
+        await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+          .getByRole('button', { name: /^确认重试/ }))
         expect(await screen.findByText('操作结果待确认', { selector: OUTCOME_BAR })).toBeInTheDocument()
       }
       const readsBeforeRefresh = list.mock.calls.length
@@ -787,8 +876,8 @@ describe('AdminTasksPage', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
     expect(retry).toHaveBeenCalledTimes(1)
     const firstAttempt = retry.mock.calls[0]!
 
@@ -884,8 +973,8 @@ describe('AdminTasksPage', () => {
 
       renderTasksWithQueryClient(queryClient)
       await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-      await user.click(within(screen.getByText('确认重试任务').closest<HTMLElement>('[role="dialog"]')!)
-        .getByRole('button', { name: '确认' }))
+      await user.click(within(screen.getByText(/^重试任务「/).closest<HTMLElement>('[role="dialog"]')!)
+        .getByRole('button', { name: /^确认重试/ }))
       act(() => adminSession('command-token-b', undefined, 'new', scopeB))
       expect(await screen.findByText('site:b.test')).toBeInTheDocument()
 
@@ -927,7 +1016,7 @@ describe('AdminTasksPage', () => {
 
     expect(await screen.findByText('执行中')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
     expect(await within(drawer).findByText('执行进度')).toBeInTheDocument()
     await user.click(within(drawer).getByRole('button', { name: '取消任务' }))
     const confirmation = (await screen.findByText('确认取消任务')).closest<HTMLElement>('[role="dialog"]')!
@@ -973,8 +1062,8 @@ describe('AdminTasksPage', () => {
 
     expect(await screen.findByText('失败')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '重试失败任务' }))
-    const confirmation = (await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!
-    await user.click(within(confirmation).getByRole('button', { name: '确认' }))
+    const confirmation = (await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!
+    await user.click(within(confirmation).getByRole('button', { name: /^确认重试/ }))
     expect(screen.getByRole('button', { name: '重试中' })).toBeDisabled()
     expect(fetchSpy.mock.calls.some(([input, init]) =>
       init?.method === 'POST' && String(input) === `/v1/admin/jobs/${job.task_id}/retry`)).toBe(true)
@@ -1004,8 +1093,8 @@ describe('AdminTasksPage', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
 
     expect(await screen.findByText('操作结果待确认', { selector: OUTCOME_BAR })).toBeInTheDocument()
     expect(screen.queryByText('private upstream address')).not.toBeInTheDocument()
@@ -1034,8 +1123,8 @@ describe('AdminTasksPage', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
 
     expect(await screen.findByText('任务操作失败')).toBeInTheDocument()
     expect(screen.getByText('当前任务状态不允许此操作')).toBeInTheDocument()
@@ -1060,8 +1149,8 @@ describe('AdminTasksPage', () => {
 
 		renderWithProviders(<AdminTasksPage />, ['/sys/task'])
 		await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-		await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-			.getByRole('button', { name: '确认' }))
+		await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+			.getByRole('button', { name: /^确认重试/ }))
 
 		expect(await screen.findByText('内容已被其他人修改，请刷新后再保存')).toBeInTheDocument()
 		expect(screen.queryByText('private current revision')).not.toBeInTheDocument()
@@ -1097,8 +1186,8 @@ describe('AdminTasksPage', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/sys/task'])
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    const confirmation = (await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!
-    await user.click(within(confirmation).getByRole('button', { name: '确认' }))
+    const confirmation = (await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!
+    await user.click(within(confirmation).getByRole('button', { name: /^确认重试/ }))
     await waitFor(() => expect(fetchSpy.mock.calls.some(([input, init]) =>
       init?.method === 'POST' && String(input) === `/v1/admin/jobs/${cacheJob.task_id}/retry`)).toBe(true))
     expect(screen.queryByRole('link', { name: /刷新预热/ })).not.toBeInTheDocument()
@@ -1185,3 +1274,80 @@ describe('AdminTasksPage', () => {
     }
   })
 })
+
+describe('AdminTasksPage toolbar, retry target and narrow layout', () => {
+  const lastListURL = (fetchSpy: { mock: { calls: unknown[][] } }) => new URL(String(fetchSpy.mock.calls
+    .filter(([input]) => String(input).startsWith('/v1/admin/jobs?')).at(-1)?.[0]), 'https://web.test')
+
+  it('shows the query button in the filter toolbar; Enter and click both apply the resource filter', async () => {
+    authenticateAdmin(['jobs.read_all'])
+    // 类型目录读取失败会弹出居中反馈框并抢走焦点，这里给一个空目录
+    vi.spyOn(jobsApi, 'kinds').mockResolvedValue({ data: [] })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(jobResponse(input)))
+    const user = userEvent.setup()
+    renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+    await screen.findByText('site:example.test')
+    const query = screen.getByRole('button', { name: '查询' })
+    expect(query).not.toHaveClass('visually-hidden')
+    expect(query.closest('.jobs-filter-group')).not.toBeNull()
+    query.focus()
+    expect(query).toHaveFocus()
+
+    await user.type(screen.getByLabelText('资源标识'), 'site:enter.test{Enter}')
+    await waitFor(() => expect(lastListURL(fetchSpy).searchParams.get('resource')).toBe('site:enter.test'))
+    await user.clear(screen.getByLabelText('资源标识'))
+    await user.type(screen.getByLabelText('资源标识'), 'site:click.test')
+    await user.click(query)
+    await waitFor(() => expect(lastListURL(fetchSpy).searchParams.get('resource')).toBe('site:click.test'))
+  })
+
+  it('names the task, its resource, state and failure in the retry confirmation', async () => {
+    authenticateAdmin(['jobs.read_all', 'jobs.manage_all'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(jobResponse(input, withStatus('failed', 2))))
+    const user = userEvent.setup()
+    renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+    await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
+    const title = await screen.findByText(/^重试任务「.+」？$/)
+    const dialog = title.closest<HTMLElement>('[role="dialog"]')!
+    expect(within(dialog).getByText('site:example.test')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /^确认重试 .+/ })).toBeInTheDocument()
+    expect(within(dialog).getByText('失败')).toBeInTheDocument()
+  })
+
+  it('pins the actions column right so row entries stay reachable on a phone', async () => {
+    authenticateAdmin(['jobs.read_all', 'jobs.manage_all'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(jobResponse(input)))
+    renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+    const details = await screen.findByRole('button', { name: '详情' })
+    expect(details.closest('td')).toHaveClass('ant-table-cell-fix-right')
+    expect(screen.getByRole('columnheader', { name: '操作' })).toHaveClass('ant-table-cell-fix-right')
+  })
+
+  it('wraps the pager on a phone and keeps only previous / current / next page buttons', async () => {
+    const sheet = document.createElement('style')
+    sheet.textContent = adminTasksStyles
+    document.head.append(sheet)
+    const narrow = [...sheet.sheet!.cssRules].find((rule): rule is CSSMediaRule => 'conditionText' in rule && rule.conditionText === '(max-width: 575px)')!
+    const rule = (selector: string) => [...narrow.cssRules].find((item): item is CSSStyleRule => item instanceof CSSStyleRule && item.selectorText.includes(selector))!
+    expect(rule('.jobs-page .jobs-total').style.getPropertyValue('flex')).toContain('100%')
+    expect(rule('.jobs-page-number:not(.is-current)').style.getPropertyValue('display')).toBe('none')
+    expect(rule('.jobs-pagination .ant-select').style.getPropertyValue('flex')).toContain('100%')
+    sheet.remove()
+
+    authenticateAdmin(['jobs.read_all'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://web.test')
+      // 编号分页须与请求的 limit 一致并逐条带任务元数据（api/jobs.ts parseList）
+      if (url.pathname === '/v1/admin/jobs') return Promise.resolve(json({ data: [job], page: { number: 1, limit: 10, total: 180, total_pages: 18, consistency: 'request_snapshot' },
+        query: { from: url.searchParams.get('from'), to: url.searchParams.get('to') },
+        task_metadata: [{ task_id: job.task_id, name: { name_key: 'jobs.kindNames.unknown', resource: job.related_resource.reference, source: 'derived' },
+          priority: { policy: 'ready_fifo' }, dependencies: { state: 'unknown', items: [] } }] }))
+      return Promise.resolve(jobResponse(input))
+    })
+    renderWithProviders(<AdminTasksPage />, ['/sys/task'])
+    const current = await screen.findByRole('button', { name: '第 1 页', current: 'page' })
+    expect(current.closest('.jobs-page-number')).toHaveClass('is-current')
+    expect(screen.getByRole('button', { name: '第 18 页' }).closest('.jobs-page-number')).not.toHaveClass('is-current')
+  })
+})
+

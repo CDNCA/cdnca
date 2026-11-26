@@ -1,4 +1,6 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { onlineManager } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../api/auth'
@@ -190,5 +192,129 @@ describe('AccountLogPage', () => {
     expect(screen.getByText('已接受')).toBeInTheDocument()
     expect(screen.getByText('已送达')).toBeInTheDocument()
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['操作', '结果', '对象', '时间'])
+  })
+  // 活动 tabpanel 内含对应表格，不另起外部表
+  it('renders each log table inside its active tabpanel', async () => {
+    signIn()
+    renderWithProviders(<AccountLogPage />, ['/account/log'])
+    const loginTab = await screen.findByRole('tab', { name: '登录日志' })
+    const loginPanel = document.getElementById(loginTab.getAttribute('aria-controls')!)!
+    expect(loginPanel).toHaveAttribute('role', 'tabpanel')
+    expect(await within(loginPanel).findByText('中国-山东省-潍坊市')).toBeInTheDocument()
+    expect(within(loginPanel).getByRole('table')).toBeInTheDocument()
+    expect(screen.getAllByRole('table')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('tab', { name: '操作日志' }))
+    const operationTab = screen.getByRole('tab', { name: '操作日志' })
+    const operationPanel = document.getElementById(operationTab.getAttribute('aria-controls')!)!
+    expect(operationPanel).toHaveAttribute('role', 'tabpanel')
+    expect(await within(operationPanel).findByText('www.example.com')).toBeInTheDocument()
+    expect(screen.getAllByRole('table')).toHaveLength(1)
+    expect(document.querySelectorAll('[role="tabpanel"]').length).toBeGreaterThan(0)
+    for (const panel of document.querySelectorAll('[role="tabpanel"]')) {
+      if (panel !== operationPanel) expect(panel.querySelector('table')).toBeNull()
+    }
+  })
+
+  // dispatching 显示「发送中」，accepted 不升级为已送达，未知码仍回退
+  it('labels dispatching notifications as sending and keeps unknown codes unknown', async () => {
+    signIn()
+    vi.mocked(observabilityLogsApi.list).mockImplementation(async (_token, filters) => ({
+      items: filters.kinds?.[0] === 'notification' ? [
+        { event_id: 'n-1', occurred_at: '2026-10-24T12:00:00Z', kind: 'notification', action: 'notification.dispatch_started',
+          reason_code: 'notification.dispatch_started', result_code: 'dispatching', source_ip: 'unknown', geo_code: 'unknown' },
+        { event_id: 'n-2', occurred_at: '2026-10-24T11:00:00Z', kind: 'notification', action: 'notification.provider_accepted',
+          reason_code: 'notification.provider_accepted', result_code: 'accepted', source_ip: 'unknown', geo_code: 'unknown' },
+        { event_id: 'n-3', occurred_at: '2026-10-24T10:00:00Z', kind: 'notification', action: 'notification.provider_accepted',
+          reason_code: 'notification.provider_accepted', result_code: 'brand_new_code', source_ip: 'unknown', geo_code: 'unknown' },
+      ] : [],
+      total_count: filters.kinds?.[0] === 'notification' ? 3 : 0,
+      snapshot_at: '2026-10-25T00:00:00Z',
+    }))
+    renderWithProviders(<AccountLogPage />, ['/account/log'])
+    fireEvent.click(await screen.findByRole('tab', { name: '消息发送' }))
+    const sending = await screen.findByText('发送中')
+    expect(sending.closest('.ant-tag')).toHaveClass('ant-tag-processing')
+    expect(screen.getByText('已接受').closest('.ant-tag')).toHaveClass('ant-tag-processing')
+    expect(screen.queryByText('已送达')).not.toBeInTheDocument()
+    expect(screen.getByText('未知结果').closest('.ant-tag')).toHaveClass('ant-tag-error')
+  })
+})
+
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-testid="location">{location.search}</output>
+}
+
+// 日志查询的默认范围、页签与范围进 URL、操作日志默认不列会话续期、即时筛选不显示「应用」、离线等待网络。
+describe('AccountLogPage filters', () => {
+  it('selects 近30天 for the default 30-day query', async () => {
+    signIn()
+    renderWithProviders(<AccountLogPage />, ['/account/log'])
+    await screen.findByText('中国-山东省-潍坊市')
+    expect(screen.getByRole('radio', { name: '近30天' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: '自定义' })).not.toBeChecked()
+    const filters = vi.mocked(observabilityLogsApi.list).mock.calls[0]![1]
+    expect(Date.now() - Date.parse(filters.from!)).toBeLessThanOrEqual(31 * 24 * 3600 * 1000)
+    expect(screen.getByTestId('account-log-page')).toBeInTheDocument()
+  })
+
+  it('keeps the tab and the applied range in the URL and reads them back', async () => {
+    signIn()
+    const view = renderWithProviders(<><AccountLogPage /><LocationProbe /></>, ['/account/log?keep=1'])
+    await screen.findByText('中国-山东省-潍坊市')
+    expect(screen.getByTestId('location').textContent).toBe('?keep=1')
+    fireEvent.click(screen.getByRole('tab', { name: '消息发送' }))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('?keep=1&tab=notification'))
+    fireEvent.click(screen.getByRole('radio', { name: '近7天' }))
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('location').textContent!).get('range')).toBe('last7d'))
+    const search = screen.getByTestId('location').textContent!
+    view.unmount()
+
+    vi.mocked(observabilityLogsApi.list).mockClear()
+    renderWithProviders(<AccountLogPage />, [`/account/log${search}`])
+    expect(await screen.findByRole('tab', { name: '消息发送' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('radio', { name: '近7天' })).toBeChecked()
+    await waitFor(() => expect(observabilityLogsApi.list).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ kinds: ['notification'] })))
+    view.unmount()
+  })
+
+  it('falls back to the login tab and the default range for unknown URL values', async () => {
+    signIn()
+    renderWithProviders(<AccountLogPage />, ['/account/log?tab=backup&range=last90d'])
+    expect(await screen.findByRole('tab', { name: '登录日志' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('radio', { name: '近30天' })).toBeChecked()
+  })
+
+  it('hides session renewals by default, no 应用', async () => {
+    signIn()
+    renderWithProviders(<AccountLogPage />, ['/account/log?tab=operation'])
+    await screen.findByText('中国-北京市-北京市')
+    const list = vi.mocked(observabilityLogsApi.list)
+    expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ kinds: ['operation'], hideSessionRefresh: true })
+    const toggle = screen.getByRole('button', { name: '高级筛选' })
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+    const panel = screen.getByRole('group', { name: '高级筛选' })
+    expect(within(panel).queryByRole('button', { name: '应用' })).toBeNull()
+    fireEvent.click(within(panel).getByRole('checkbox', { name: '显示会话续期' }))
+    await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ kinds: ['operation'], hideSessionRefresh: undefined }))
+    expect(screen.getByRole('list', { name: '已启用的高级条件' })).toHaveTextContent('会话续期：显示')
+    fireEvent.click(screen.getByRole('button', { name: '移除条件 会话续期' }))
+    await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ hideSessionRefresh: true }))
+  })
+
+  it('marks a paused search as waiting for the network', async () => {
+    signIn()
+    renderWithProviders(<AccountLogPage />, ['/account/log'])
+    await screen.findByText('中国-山东省-潍坊市')
+    try {
+      act(() => onlineManager.setOnline(false))
+      fireEvent.click(screen.getByRole('button', { name: '查询' }))
+      expect(await screen.findByRole('status')).toHaveTextContent('等待网络连接，恢复后自动查询')
+      act(() => onlineManager.setOnline(true))
+      await waitFor(() => expect(screen.queryByText('等待网络连接，恢复后自动查询')).toBeNull())
+    } finally {
+      onlineManager.setOnline(true)
+    }
   })
 })

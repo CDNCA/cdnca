@@ -926,10 +926,6 @@ func TestGatewayRollbackUsesOnlyLocalReleaseAndReplaysAfterRestart(t *testing.T)
 	if err != nil || pointers.Current != "cfg-v1" || pointers.Previous != "cfg-v2" {
 		t.Fatalf("Pointers() = (%+v, %v)", pointers, err)
 	}
-	record, err := client.store.record(recordKey(rollback.DeploymentId, rollback.Attempt))
-	if err != nil || record == nil || !record.ExecutionDone || len(record.Statuses) < 2 {
-		t.Fatalf("durable rollback record = (%+v, %v)", record, err)
-	}
 
 	restartedRuntime := &testRuntime{}
 	restartedManager, err := deployment.NewManager(deploymentRoot, testPrechecker{}, restartedRuntime)
@@ -939,6 +935,13 @@ func TestGatewayRollbackUsesOnlyLocalReleaseAndReplaysAfterRestart(t *testing.T)
 	restarted, err := New(config, &bufDialer{listener: listener}, restartedManager, trust)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Run closed the first client's journal lease, and on Linux its store
+	// path is /proc/self/fd/<lease fd>: read the durable record through the
+	// restarted client, which holds the lease now.
+	record, err := restarted.store.record(recordKey(rollback.DeploymentId, rollback.Attempt))
+	if err != nil || record == nil || !record.ExecutionDone || len(record.Statuses) < 2 {
+		t.Fatalf("durable rollback record = (%+v, %v)", record, err)
 	}
 	restarted.jitter = func(time.Duration) time.Duration { return time.Millisecond }
 	restartCtx, restartCancel := context.WithCancel(context.Background())

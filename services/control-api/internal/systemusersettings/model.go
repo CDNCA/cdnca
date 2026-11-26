@@ -2,6 +2,8 @@ package systemusersettings
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -133,6 +135,20 @@ type PublicSettings struct {
 	EmailVerificationRequired bool
 	PhoneRequired             bool
 	PhoneVerificationRequired bool
+	// QQRequired: sign-up must give a QQ number.
+	QQRequired bool
+	// UsernameRequired: sign-up must give a username; off, an empty one is
+	// generated (accountregistration.ResolveUsername).
+	UsernameRequired bool
+	// The sign-up terms edited on the settings page: the only
+	// source of the agreement visitors accept. TermsVersion is derived from
+	// them (TermsVersion), so changing either asks for a new acceptance.
+	TermsTitle   string
+	TermsBody    string
+	TermsVersion string
+	// TermsPublished: the settings page has terms of its own (
+	// TermsPublished); otherwise the sites link their own terms page.
+	TermsPublished bool
 	// The CAPTCHA provider and app ID are embedded in the browser widget, so they are public.
 	CaptchaProvider string
 	CaptchaAppID    string
@@ -289,15 +305,18 @@ type SaveRequest struct {
 
 func DefaultSettings() Settings {
 	return Settings{
-		SessionTTLSeconds: 2592000, EmailCodeLoginEnabled: true,
+		// UsernameRequired: sign-up always asked for a username before
+		// so no row and a row without the field keep that.
+		SessionTTLSeconds: 2592000, EmailCodeLoginEnabled: true, UsernameRequired: true,
 		RegistrationSuccessSubject:  "用户注册成功",
 		RegistrationSuccessBody:     "<p>您好，{{username}}。您的账户已创建，请使用注册时设置的密码登录。</p>",
-		PasswordResetSubject:        "用户密码已重置",
-		PasswordResetBody:           "<p>您好，{{username}}。您的密码已完成重置。如非本人操作，请立即联系管理员。</p>",
+		PasswordResetSubject:        "找回密码",
+		PasswordResetBody:           "您好，{{username}}。你正在找回账号密码，请在有效期内打开下面的链接设置新密码；如果不是你本人操作，请忽略本邮件。",
 		VerificationTemplateChannel: "email", VerificationSubject: "用户验证码",
 		VerificationBody:    "<p>您好，您的验证码为 {{captcha}}。</p>",
 		VerificationSMSBody: "您的验证码为${captcha}，在5分钟内有效。",
-		TermsTitle:          "用户协议、法律声明和隐私政策", TermsBody: "这里填写协议内容",
+		// no terms until the administrator writes them
+		TermsTitle: legacyDefaultTermsTitle, TermsBody: "",
 		LoginFailureLimitPerHour: 30, LoginCaptchaThresholdPerHour: 3, SessionRegionCheck: false,
 		EmailAntiAbuseMode: "none", SMSAntiAbuseMode: "native", CaptchaProvider: "tencent",
 		IdentityVerificationMethod: "none", DefaultRechargeMethod: "none", RechargeRestriction: "none",
@@ -306,3 +325,49 @@ func DefaultSettings() Settings {
 }
 
 func Schema() string { return schema }
+
+// The terms every installation was given before a placeholder
+// sentence, never real terms. A document still holding exactly this pair has
+// no terms of its own.
+const (
+	legacyDefaultTermsTitle = "用户协议、法律声明和隐私政策"
+	legacyDefaultTermsBody  = "这里填写协议内容"
+)
+
+// TermsPublished reports whether the settings page holds terms visitors can
+// be shown: a body that is not blank and not the old default
+// title and body together. Unpublished, GET /v1/auth/registration-terms
+// answers 404 and the sites link their own terms page; sign-up stays open.
+func TermsPublished(title, body string) bool {
+	return strings.TrimSpace(body) != "" && !(title == legacyDefaultTermsTitle && body == legacyDefaultTermsBody)
+}
+
+// adminTermsView is how the settings page reads the terms: the old default
+// placeholder pair reads as an empty body (the page shows the placeholder as
+// a hint). Read only: the stored document and its revision are unchanged.
+func adminTermsView(value Settings) Settings {
+	if value.TermsTitle == legacyDefaultTermsTitle && value.TermsBody == legacyDefaultTermsBody {
+		value.TermsBody = ""
+	}
+	return value
+}
+
+// TermsVersion is the version of the sign-up terms:
+// "terms-" and the first 12 hex digits of (title NUL body). The same
+// text always has the same version, so stored settings need no migration
+// and any edit of the title or body is a new version. it is
+// computed the same while the terms are unpublished (an empty body has a
+// version too), so a sign-up accepts that version; the site's own terms page
+// is not part of it: editing that page keeps the version, only publishing or
+// changing the terms on the settings page makes a new one.
+//
+// An unpublished body (blank, or the old default placeholder) counts as empty,
+// so an old installation keeps the same version when the settings page first
+// saves the placeholder back as "" with an unrelated change.
+func TermsVersion(title, body string) string {
+	if !TermsPublished(title, body) {
+		body = ""
+	}
+	sum := sha256.Sum256([]byte(title + "\x00" + body))
+	return "terms-" + hex.EncodeToString(sum[:])[:12]
+}

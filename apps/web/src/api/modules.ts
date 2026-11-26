@@ -10,7 +10,11 @@ export interface GrantedModules {
   status: string
   lease_serial: number
   modules: string[]
+  /** The lease's other feature codes (packages.manage, ...), empty under the same rule; absent from older servers. */
+  features?: string[]
 }
+
+const featureCodePattern = /^[a-z][a-z0-9._-]{0,127}$/
 
 export async function fetchGrantedModules(token: string): Promise<GrantedModules> {
   if (!token) throw new ApiError('Not signed in', 401, 'unauthenticated')
@@ -26,8 +30,13 @@ export async function fetchGrantedModules(token: string): Promise<GrantedModules
   if (!response.ok) throw await responseApiError(response)
   const body = (await response.json().catch(() => undefined)) as Partial<GrantedModules> | undefined
   if (!body || typeof body.status !== 'string' || typeof body.lease_serial !== 'number' ||
-    !Array.isArray(body.modules) || body.modules.some((code) => typeof code !== 'string' || !moduleCodePattern.test(code))) {
+    !Array.isArray(body.modules) || body.modules.some((code) => typeof code !== 'string' || !moduleCodePattern.test(code)) ||
+    (body.features !== undefined && (!Array.isArray(body.features) ||
+      body.features.some((code) => typeof code !== 'string' || !featureCodePattern.test(code))))) {
     throw new ApiError('Invalid response', 502, 'response_invalid')
   }
-  return { status: body.status, lease_serial: body.lease_serial, modules: [...body.modules] }
+  return {
+    status: body.status, lease_serial: body.lease_serial, modules: [...body.modules],
+    ...(body.features ? { features: [...body.features] } : {}),
+  }
 }

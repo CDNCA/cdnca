@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, InputNumber, Modal, QRCode, Radio, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Form, InputNumber, Modal, QRCode, Radio, Space, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -12,7 +12,7 @@ import { marketAccess } from '../../api/marketAccess'
 import { useSessionStore } from '../../auth/session'
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/nodeMarket'
-import { OutcomeUnknown } from '@cdnca/ui'
+import { OutcomeUnknown, Table } from '@cdnca/ui'
 import { outcomeUnknown, useIdempotencyKey } from '../market/idempotency'
 import { CursorPager, LoadFailure, useCursorPages } from './supplier/shared'
 

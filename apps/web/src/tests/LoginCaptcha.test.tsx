@@ -47,6 +47,8 @@ it('shows the image CAPTCHA after login_captcha_required, sends it once and refr
   // A new image is fetched and the old answer is cleared.
   await screen.findByRole('img', { name: '图形验证码图片' })
   expect(String(fetchSpy.mock.calls[3][0])).toMatch(/\/v1\/auth\/login-captchas$/)
+  // the image request keeps the HttpOnly binding cookie it sets
+  expect(fetchSpy.mock.calls[3][1]).toMatchObject({ credentials: 'include' })
   expect(screen.getByLabelText('图形验证码')).toHaveValue('')
   await user.type(screen.getByLabelText('图形验证码'), 'XYZ23')
   await user.click(screen.getByRole('button', { name: '登录' }))

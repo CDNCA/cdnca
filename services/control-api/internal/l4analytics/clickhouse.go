@@ -49,8 +49,8 @@ type aggregateRow struct {
 	SiteID     string `json:"site_id"`
 	StreamID   string `json:"stream_id"`
 	ListenerID string `json:"listener_id"`
-	Protocol   string `json:"protocol"`
-	ListenPort uint16 `json:"listen_port"`
+	Protocol   string `json:"row_protocol"`
+	ListenPort uint16 `json:"row_listen_port"`
 	Sessions   uint64 `json:"sessions"`
 	BytesUp    uint64 `json:"bytes_up"`
 	BytesDown  uint64 `json:"bytes_down"`
@@ -161,8 +161,11 @@ func (source *ClickHouseSource) readAggregates(ctx context.Context, scope Scope,
 		params.Set("after_stream", filter.After.StreamID)
 		params.Set("after_listener", filter.After.ListenerID)
 	}
-	query := `SELECT toInt64(toUnixTimestamp(toStartOfMinute(finalized_at))) * 1000 AS bucket_ms, node_id, site_id, stream_id, listener_id, any(protocol) AS protocol,
-any(listen_port) AS listen_port, count() AS sessions, sum(bytes_up) AS bytes_up, sum(bytes_down) AS bytes_down,
+	// The aggregates are aliased row_*: an alias named like a column (protocol,
+	// listen_port) is what ClickHouse resolves in WHERE, which then refuses the
+	// protocol / port filters with ILLEGAL_AGGREGATION.
+	query := `SELECT toInt64(toUnixTimestamp(toStartOfMinute(finalized_at))) * 1000 AS bucket_ms, node_id, site_id, stream_id, listener_id, any(protocol) AS row_protocol,
+any(listen_port) AS row_listen_port, count() AS sessions, sum(bytes_up) AS bytes_up, sum(bytes_down) AS bytes_down,
 countIf(status_code >= 500 OR error_code != '') AS errors FROM l4_session_facts_v1 FINAL WHERE ` + strings.Join(conditions, " AND ") +
 		` GROUP BY bucket_ms, node_id, site_id, stream_id, listener_id ORDER BY bucket_ms, node_id, site_id, stream_id, listener_id LIMIT {limit:UInt16} FORMAT JSONEachRow`
 	params.Set("limit", strconv.Itoa(int(filter.Limit)))

@@ -48,12 +48,20 @@ export interface DNSReconcileCheckRequest {
   weight?: number
   propagation_started_at?: string
   propagation_window_seconds: number
-  provider: {
-    zone_id: string
-    revision: number
-    records: DNSReconcileProviderRecord[]
-  }
+  provider: DNSReconcileProviderSnapshot
 }
+
+export interface DNSReconcileProviderSnapshot {
+  zone_id: string
+  revision: number
+  records: DNSReconcileProviderRecord[]
+}
+
+// 不带 provider 时由服务端按网站的自有 DNS 账号解析托管区域并读取当前记录。
+export type DNSReconcileDryRunRequest = Omit<DNSReconcileCheckRequest, 'provider'> & { provider?: DNSReconcileProviderSnapshot }
+
+// 方案连同它所依据的服务商快照；开始修复时原样带回，执行的就是确认过的方案。
+export type DNSReconcileDryRun = DNSReconcileResult & { provider: DNSReconcileProviderSnapshot }
 
 export interface DNSReconcileProviderOperation {
   sequence: number
@@ -191,7 +199,7 @@ export interface DNSReconcileCommandIdentity extends DNSReconcileRequestIdentity
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const metadataPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const idempotencyKeyPattern = /^[A-Za-z0-9._-]{1,128}$/
 const traceparentPattern = /^00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-(?:00|01)$/
@@ -278,20 +286,24 @@ function validProviderRecord(value: unknown): value is DNSReconcileProviderRecor
     text(value.value, 1, 255) && integer(value.ttl, 1, 604800) && validLineWeight(value.line, value.weight)
 }
 
-function validCheckRequest(value: unknown): value is DNSReconcileCheckRequest {
+function validProviderSnapshot(value: unknown): value is DNSReconcileProviderSnapshot {
+  return isObject(value) && exactKeys(value, ['zone_id', 'revision', 'records']) &&
+    typeof value.zone_id === 'string' && uuidPattern.test(value.zone_id) &&
+    integer(value.revision, 1) && Array.isArray(value.records) &&
+    value.records.length <= 128 && value.records.every(validProviderRecord)
+}
+
+function validCheckRequest(value: unknown, providerOptional = false): value is DNSReconcileCheckRequest {
   if (!isObject(value) || !exactKeys(value, [
-    'name', 'expected', 'authoritative_ns', 'ttl', 'propagation_window_seconds', 'provider',
-  ], ['propagation_started_at', 'line', 'weight']) || !text(value.name, 1, 255) ||
+    'name', 'expected', 'authoritative_ns', 'ttl', 'propagation_window_seconds', ...(providerOptional ? [] : ['provider']),
+  ], ['propagation_started_at', 'line', 'weight', ...(providerOptional ? ['provider'] : [])]) || !text(value.name, 1, 255) ||
     !Array.isArray(value.expected) || value.expected.length < 1 || value.expected.length > 3 ||
     !value.expected.every(validExpectedRecord) || !Array.isArray(value.authoritative_ns) ||
     value.authoritative_ns.length > 32 || !value.authoritative_ns.every((item) => text(item, 1, 255)) ||
     !integer(value.ttl, 1, 604800) || !validLineWeight(value.line, value.weight) ||
     !integer(value.propagation_window_seconds, 1, 604800) ||
-    (value.propagation_started_at !== undefined && !dateTime(value.propagation_started_at)) ||
-    !isObject(value.provider) || !exactKeys(value.provider, ['zone_id', 'revision', 'records'])) return false
-  return typeof value.provider.zone_id === 'string' && uuidPattern.test(value.provider.zone_id) &&
-    integer(value.provider.revision, 1) && Array.isArray(value.provider.records) &&
-    value.provider.records.length <= 128 && value.provider.records.every(validProviderRecord)
+    (value.propagation_started_at !== undefined && !dateTime(value.propagation_started_at))) return false
+  return (providerOptional && value.provider === undefined) || validProviderSnapshot(value.provider)
 }
 
 function validProviderOperation(value: unknown): value is DNSReconcileProviderOperation {
@@ -538,18 +550,22 @@ function validateTarget(siteID: string, taskID?: string): void {
 async function dryRun(
   accessToken: string,
   siteID: string,
-  input: DNSReconcileCheckRequest,
+  input: DNSReconcileDryRunRequest,
   identity: DNSReconcileRequestIdentity,
-): Promise<DNSReconcileResult> {
+): Promise<DNSReconcileDryRun> {
   validateTarget(siteID)
-  if (!validCheckRequest(input)) throw requestInvalid()
+  if (!validCheckRequest(input, true)) throw requestInvalid()
   const value = await request(accessToken, `/v1/sites/${siteID}/dns-reconcile/dry-run`, 200, identity, {
     method: 'POST', body: JSON.stringify(input),
   })
-  if (!validResult(value.body) || value.body.status !== 'dry_run' || value.body.site_id !== siteID ||
-    value.body.zone_id !== input.provider.zone_id ||
-    value.body.plan.precondition_revision !== input.provider.revision) throw responseInvalid()
-  return value.body
+  if (!isObject(value.body)) throw responseInvalid()
+  const { provider, ...body } = value.body
+  if (!validProviderSnapshot(provider) || !validResult(body) || body.status !== 'dry_run' || body.site_id !== siteID ||
+    body.zone_id !== provider.zone_id || body.plan.precondition_revision !== provider.revision ||
+    (input.provider && (provider.zone_id !== input.provider.zone_id || provider.revision !== input.provider.revision))) {
+    throw responseInvalid()
+  }
+  return { ...body, provider }
 }
 
 async function apply(

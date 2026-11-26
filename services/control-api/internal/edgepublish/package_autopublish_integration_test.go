@@ -71,10 +71,18 @@ func TestPackageOpenPublishesAutomaticallyToPackageLineGroup(t *testing.T) {
 		if _, err := tx.Exec(t.Context(), `SET LOCAL session_replication_role = replica`); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(t.Context(), `UPDATE package_subscriptions
-			SET product_snapshot=jsonb_set(product_snapshot,'{spec,node_group_id}',to_jsonb($2::text)) WHERE id=$1`,
-			scope.SubscriptionID, groupID); err != nil {
-			return err
+		// The current entitlement (701) is read from the entitlement version
+		// when one exists, so both copies carry the group.
+		for _, table := range []string{"package_subscriptions", "package_subscription_entitlement_versions"} {
+			key := "id"
+			if table != "package_subscriptions" {
+				key = "subscription_id"
+			}
+			if _, err := tx.Exec(t.Context(), `UPDATE `+table+`
+				SET product_snapshot=jsonb_set(product_snapshot,'{spec,node_group_id}',to_jsonb($2::text)) WHERE `+key+`=$1`,
+				scope.SubscriptionID, groupID); err != nil {
+				return err
+			}
 		}
 		_, err := tx.Exec(t.Context(), `UPDATE sites SET package_subscription_id=$2,
 			package_id=(SELECT product_id FROM package_subscriptions WHERE id=$2) WHERE id=$1`,

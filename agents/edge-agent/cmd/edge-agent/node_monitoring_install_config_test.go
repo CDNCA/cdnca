@@ -355,6 +355,12 @@ func nodeInstallerMonitoringConfig(t *testing.T) (string, func() ([]byte, error)
 // carried agentVersion (NATIVE_VERSION comes from the verified manifest).
 func nodeInstallerConfigForAgent(t *testing.T, agentVersion string) (string, func() ([]byte, error)) {
 	t.Helper()
+	// write_config builds the configuration with jq. On a node the installer
+	// installs jq with its base tools and preflight_check_commands refuses to
+	// run without it; a host without jq cannot run the script at all.
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("jq is not installed: install-node.sh write_config requires it")
+	}
 	root := secureConfigTempDir(t)
 	content, err := os.ReadFile("../../../../scripts/install-node.sh")
 	if err != nil {

@@ -106,7 +106,7 @@ const fixedLocaleOracle = {
   "actions.create": { zh: "创建", en: "Create" },
   "actions.edit": { zh: "编辑", en: "Edit" },
   "actions.configureResolution": { zh: "配置解析", en: "Set Resolution" },
-  "actions.deleteLineGroup": { zh: "删除线路分组", en: "Delete Line Group" },
+  "actions.deleteLineGroup": { zh: "删除线路组{{name}}", en: "Delete line group {{name}}" },
   "actions.setPlatformDefault": { zh: "设为平台默认", en: "Set as Platform Default" },
   "actions.unsetPlatformDefault": { zh: "取消平台默认", en: "Unset Platform Default" },
   "notices.platformDefaultSet": { zh: "已设为平台默认线路组，没选套餐的网站用它生成 CNAME", en: "Set as the platform default line group; sites without a package use it for CNAME" },
@@ -172,6 +172,7 @@ const fixedLocaleOracle = {
   "values.placeholder": { zh: "—", en: "—" },
   "values.unavailable": { zh: "未提供", en: "Not provided" },
   "values.deleteUnavailable": { zh: "当前接口未提供删除能力", en: "The current API does not provide delete capability" },
+  "values.lineGroupNameWithID": { zh: "{{name}}（编号 {{id}}）", en: "{{name}} (#{{id}})" },
   "values.selectBeforeDelete": { zh: "请选择线路分组!", en: "Select at least one line group to delete" },
   "values.ipCount": { zh: "{{count}} 个 IP", en: "{{count}} IPs" },
   "values.healthyCount": { zh: "健康 {{count}}", en: "{{count}} healthy" },
@@ -313,6 +314,7 @@ const fixedLocaleOracle = {
   "errors.resolutionUnavailable": { zh: "当前 Control API 尚未提供线路分组解析配置契约。", en: "The Control API does not yet provide a line-group resolution configuration contract." },
   "dialogs.deleteTitle": { zh: "删除确认", en: "Delete Confirmation" },
   "dialogs.deleteDescription": { zh: "是否删除线路分组 id:{{ids}}", en: "Delete line group id:{{ids}}?" },
+  "dialogs.deleteOne": { zh: "删除线路组「{{name}}」？", en: "Delete line group \"{{name}}\"?" },
   "notices.created": { zh: "线路组已创建", en: "Line group created" },
   "notices.createdEmpty": { zh: "线路组「{{name}}」已创建，还没有节点 IP", en: "Line group \"{{name}}\" created with no node IPs yet" },
   "notices.createdEmptyNext": { zh: "下一步：点「配置解析」添加节点 IP，线路组才会解析到节点。", en: "Next: choose Set Resolution to add node IPs; the line group resolves to nodes only after that." },
@@ -379,6 +381,7 @@ const fixedLocaleOracle = {
   "lineDetail.dialogs.deleteTitle": { zh: "删除解析 IP", en: "Delete Resolution IP" },
   "lineDetail.dialogs.deleteDescription": { zh: "是否删除解析 IP {{address}}？", en: "Delete resolution IP {{address}}?" },
   // smartsched：线路组智能调度抽屉
+  "selectionScope": { zh: "线路分组", en: "line groups" },
   "smartSchedule.action": { zh: "智能调度", en: "Smart Scheduling" },
   "smartSchedule.actionLabel": { zh: "{{name}} 的智能调度", en: "Smart scheduling for {{name}}" },
   "smartSchedule.title": { zh: "智能调度 · {{name}}", en: "Smart Scheduling · {{name}}" },
@@ -463,6 +466,9 @@ const fixedInterpolation: Partial<Record<keyof typeof fixedLocaleOracle, Record<
   'values.healthyCount': { count: 1 },
   'values.lineGroupStatistics': { nodeCount: 1, siteCount: 3, forwardCount: 1 },
   'dialogs.deleteDescription': { ids: '7' },
+  'actions.deleteLineGroup': { name: '香港线路' },
+  'dialogs.deleteOne': { name: '香港线路' },
+  'values.lineGroupNameWithID': { name: '香港线路', id: '7' },
   'notices.batchDeleted': { count: 2 },
   'pagination.page': { page: 1, pages: 1 },
   'pagination.total': { count: 2 },
@@ -523,7 +529,8 @@ const l2ConfigFixture = {
   updated_at: '2026-10-09T00:00:00Z',
 }
 
-const allRouteVisibleContracts = Object.values(fixedVisibleContract)
+// selectionScope 只是行选择提示里的片段，与 titles.lineGroups 同值，不作为整段可见文案比对。
+const allRouteVisibleContracts = Object.values(fixedVisibleContract).filter(({ key }) => key !== 'selectionScope')
 const l2NodeSchedulingKeys = new Set([
   'actions.previous',
   'actions.next',

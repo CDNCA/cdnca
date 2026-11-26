@@ -31,7 +31,20 @@
       {
        "name": "modules",
        "type": "array<string>",
-       "required": true
+       "required": true,
+       "description": "The codes the control plane acts on: the lease's module codes, plus module.doh, module.rum and module.content_rewrite when a valid lease issued before those codes names none of them (the publication gate delivers them under the same rule)."
+      },
+      {
+       "name": "lease_modules",
+       "type": "array<string>",
+       "required": true,
+       "description": "The lease's literal module codes, empty under the same rule as modules."
+      },
+      {
+       "name": "features",
+       "type": "array<string>",
+       "required": true,
+       "description": "The lease's other feature codes (e.g. packages.manage, which package publish requires), empty under the same rule as modules, so a page can tell a missing feature from an unusable lease before a gated write. The write gates are unchanged."
       }
      ]
     },

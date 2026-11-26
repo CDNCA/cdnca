@@ -55,7 +55,7 @@ func TestWorkerPrunesReinstalledHostMetricsByHostOrder(t *testing.T) {
 	sample(2, "20 days")
 	sample(3, "10 days")
 	seedNodeEnrollment(t, pool, nodeID, userID) // reinstall
-	sample(1, "9 days") // the new host, same event ID as the previous host's 1
+	sample(1, "9 days")                         // the new host, same event ID as the previous host's 1
 	sample(2, "1 hour")
 
 	worker, err := NewWorker(pool, audit.New(pool), Config{BatchSize: 10, BatchPause: time.Millisecond})

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Input, Modal, Select, Space, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -9,7 +9,7 @@ import { useSessionStore } from '../../auth/session'
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/pluginStore'
 import { pluginName, usePluginCatalog } from './usePluginCatalog'
-import { useFeedback } from '@cdnca/ui'
+import { useFeedback, Table } from '@cdnca/ui'
 
 const severityColor: Record<MarketAdvisory['severity'], string> = { critical: 'red', high: 'volcano', medium: 'orange', low: 'gold' }
 const dispositions: AdvisoryDisposition[] = ['disabled', 'upgraded', 'uninstalled', 'accepted_risk', 'not_affected']

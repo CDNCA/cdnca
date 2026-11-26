@@ -118,8 +118,8 @@ func productionSites(ctx context.Context, env edgegolden.Env, scenario *edgegold
 		if err != nil {
 			return nil, nil, fmt.Errorf("site %s: %w", id, err)
 		}
-		if site.Cache != nil || len(site.Origin.Auth) != 0 {
-			return nil, nil, ErrUnsupported{"cache or origin authentication together with security"}
+		if len(site.Origin.Auth) != 0 {
+			return nil, nil, ErrUnsupported{"origin authentication together with security"}
 		}
 		for _, digest := range site.ReferencedDigests() {
 			if referenced[digest], err = read(digest); err != nil {

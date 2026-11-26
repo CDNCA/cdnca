@@ -88,16 +88,20 @@ func TestReleaseAcksReport(t *testing.T) {
 		t.Fatalf("decode = %+v, %v", decoded, err)
 	}
 	for name, mutate := range map[string]func(*Report){
-		"empty":            func(r *Report) { r.ReleaseAcks = []ReleaseAck{} },
-		"no site":          func(r *Report) { r.SiteID, r.TenantID = "", "" },
-		"site target":      func(r *Report) { r.ReleaseAcks[0] = ReleaseAck{Kind: TargetSite, Target: "*", At: testNow, Applied: true} },
+		"empty":   func(r *Report) { r.ReleaseAcks = []ReleaseAck{} },
+		"no site": func(r *Report) { r.SiteID, r.TenantID = "", "" },
+		"site target": func(r *Report) {
+			r.ReleaseAcks[0] = ReleaseAck{Kind: TargetSite, Target: "*", At: testNow, Applied: true}
+		},
 		"applied and code": func(r *Report) { r.ReleaseAcks[0].Error = ReleaseGateWriteFailed },
 		"failed no code":   func(r *Report) { r.ReleaseAcks[1].Error = "" },
 		"unknown code":     func(r *Report) { r.ReleaseAcks[1].Error = "oops" },
 		"retry too high":   func(r *Report) { r.ReleaseAcks[0].Retry = MaxReleaseRetry + 1 },
 		"zero at":          func(r *Report) { r.ReleaseAcks[0].At = 0 },
-		"on a state":       func(r *Report) { r.Kind, r.State = ReportState, &StateChange{From: StateNormal, To: StateAttack, Reason: "x"} },
-		"acks on drift":    func(r *Report) { r.Kind, r.Drift = ReportDrift, &Drift{Metrics: []string{"ratio_404"}, Days: 1} },
+		"on a state": func(r *Report) {
+			r.Kind, r.State = ReportState, &StateChange{From: StateNormal, To: StateAttack, Reason: "x"}
+		},
+		"acks on drift": func(r *Report) { r.Kind, r.Drift = ReportDrift, &Drift{Metrics: []string{"ratio_404"}, Days: 1} },
 	} {
 		report := clone(t, ack)
 		mutate(&report)

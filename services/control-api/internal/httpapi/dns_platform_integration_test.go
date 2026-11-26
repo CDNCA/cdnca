@@ -288,6 +288,14 @@ func TestPlatformDNSConfigHTTPFlow(t *testing.T) {
 			result.Operations[0].ID).Scan(&item); err != nil || !strings.HasPrefix(item, "删除记录 old.cdn.example.com A 198.51.100.7 #") {
 			t.Fatalf("cleanup item = %q, %v", item, err)
 		}
+		// The full record goes in with the item (migration 686).
+		var owner, recordType, value, recordID string
+		if err := pool.QueryRow(t.Context(), `SELECT owner_name, record_type, record_value, provider_record_id
+			FROM dns_cleanup_plan_records WHERE job_id=$1 AND item_id=$2`, result.Operations[0].ID, item).
+			Scan(&owner, &recordType, &value, &recordID); err != nil || owner != "old.cdn.example.com." ||
+			recordType != "A" || value != "198.51.100.7" || recordID != "old" {
+			t.Fatalf("cleanup plan record = %q %q %q %q, %v", owner, recordType, value, recordID, err)
+		}
 		jobs, err := jobstate.NewStore(pool, time.Now)
 		if err != nil {
 			t.Fatal(err)

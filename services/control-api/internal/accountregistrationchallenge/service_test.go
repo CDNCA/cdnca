@@ -53,6 +53,24 @@ func TestNormalizeCreateInputBindsCanonicalRegistrationSubject(t *testing.T) {
 	}
 }
 
+// an SMS code needs no email (phone-only verification).
+func TestNormalizeCreateInputSMSWithoutEmail(t *testing.T) {
+	t.Parallel()
+	input := CreateInput{
+		ScopeID: uuid.New(), Username: "owner_1", Phone: "+8613812345678",
+		Channel: accountregistration.VerificationSMS, Source: "192.0.2.9", HumanToken: strings.Repeat("a", 32),
+		IdempotencyKey: "challenge-1", RequestID: "request-1",
+	}
+	normalized, err := normalizeCreateInput(input, challengeTestKey, "")
+	if err != nil || normalized.Email != "" || normalized.Destination != input.Phone {
+		t.Fatalf("normalized=%+v err=%v", normalized, err)
+	}
+	input.Email = "bad"
+	if _, err := normalizeCreateInput(input, challengeTestKey, ""); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("a malformed email beside an SMS code: %v", err)
+	}
+}
+
 func TestNormalizeCreateInputRejectsUnsafeBindings(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +88,7 @@ func TestNormalizeCreateInputRejectsUnsafeBindings(t *testing.T) {
 		"mapped source": func(input *CreateInput) { input.Source = "::ffff:192.0.2.9" },
 		"human token":   func(input *CreateInput) { input.HumanToken = "short" },
 		"idempotency":   func(input *CreateInput) { input.IdempotencyKey = "contains space" },
+		"no email code": func(input *CreateInput) { input.Email = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

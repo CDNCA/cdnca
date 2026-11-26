@@ -7,12 +7,11 @@ import {
   Result,
   Select,
   Radio,
-  Table,
-  Tabs,
   Tooltip,
   Typography,
   type TableColumnsType,
 } from 'antd'
+import { Tabs } from '../components/Tabs'
 import dayjs from 'dayjs'
 import { CircleHelp, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -34,7 +33,7 @@ import { businessTimeZone, formatBandwidth, formatBytes, formatDateTime } from '
 import '../i18n/nodeRealtime'
 import { themeColor, themeColorAlpha, useThemeRevision } from '../theme/themeColor'
 import './NodeRealtimePage.css'
-import { AdvancedFilters, TimeRangeFilter, type TimeRange, type TimeRangePreset } from '@cdnca/ui'
+import { AdvancedFilters, TimeRangeFilter, type TimeRange, type TimeRangePreset, Table } from '@cdnca/ui'
 
 type Owner = readonly ['platform', string, string, number]
 
@@ -951,25 +950,9 @@ function NodeRealtimeContent({ owner, ownerKey }: { owner: Owner; ownerKey: stri
     return result && result.telemetry?.network_selection?.source !== 'default_route'
   })
 
-  return (
-    <section className="identity-page node-realtime-page">
-      <header className="identity-page-header">
-        <div>
-          <Typography.Title level={3}>{t('title')}</Typography.Title>
-        </div>
-      </header>
-
-      <Tabs
-        className="node-realtime-tabs"
-        activeKey={activeView}
-        onChange={(value) => { setWindowAnchor(Date.now()); setActiveView(value) }}
-        items={[
-          { key: 'ranking', label: t('views.ranking') },
-          { key: 'monitoring', label: t('views.monitoring') },
-          { key: 'traffic', label: t('views.traffic') },
-        ]}
-      />
-
+  // 当前页签的筛选与正文放进它自己的 tabpanel（aria-controls 指向的面板），其余页签不挂载。
+  const activeContent = (
+    <>
       {activeView === 'ranking' ? (
         <div className="node-realtime-controls node-realtime-controls--ranking" aria-label={t('filters.controls')}>
           <div className="node-realtime-control-group node-realtime-control-group--metric">
@@ -1218,7 +1201,25 @@ function NodeRealtimeContent({ owner, ownerKey }: { owner: Owner; ownerKey: stri
           />
         </div>
       ) : null}
+    </>
+  )
 
+  return (
+    <section className="identity-page node-realtime-page">
+      <header className="identity-page-header">
+        <div>
+          <Typography.Title level={3}>{t('title')}</Typography.Title>
+        </div>
+      </header>
+
+      <Tabs
+        className="node-realtime-tabs node-realtime-tabset"
+        activeKey={activeView}
+        onChange={(value) => { setWindowAnchor(Date.now()); setActiveView(value) }}
+        items={(['ranking', 'monitoring', 'traffic'] as const).map((key) => ({
+          key, label: t(`views.${key}`), children: key === activeView ? activeContent : null,
+        }))}
+      />
     </section>
   )
 }

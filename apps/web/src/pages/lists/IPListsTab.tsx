@@ -122,7 +122,8 @@ export function IPListsTab({ audience, accessToken, canManage, scopeID }: {
     },
     { title: t('columns.updatedAt'), key: 'updated_at', render: (_, list) => formatDateTime(list.updated_at, locale) },
     {
-      title: t('columns.actions'), key: 'actions',
+      // 窄屏横滑时编辑/删除固定在可视区右侧。
+      title: t('columns.actions'), key: 'actions', fixed: 'right', width: 150,
       render: (_, list) => editable(list) ? (
         <Space size={4}>
           <Button size="small" type="link" icon={<Pencil size={14} />} onClick={() => openEditor(list)}>{t('actions.edit')}</Button>

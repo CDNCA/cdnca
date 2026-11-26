@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -18,11 +18,12 @@ vi.mock('../components/useGrantedModules', async (importOriginal) => ({
   useGrantedModules: () => grantedModules,
 }))
 
+// SUBMAIL shows its signature field (the inherit choice shows none).
 const initial: PlatformSystemMailSettingsDocument = {
   schema: 'cdnca.platform-system-mail-settings/v1', revision: 3,
   value: {
     smtp_address: 'smtp.example.test', smtp_ssl: true, smtp_port: 465, smtp_user: '', smtp_password_reference: '', smtp_from: '', smtp_from_name: '',
-    sms_provider: '', sms_access_key_id: '', sms_access_key_reference: '', sms_signature_name: '', sms_template_map: '',
+    sms_provider: 'submail', sms_access_key_id: '', sms_access_key_reference: '', sms_signature_name: '', sms_template_map: '',
     mail_provider: '', mail_region: '', mail_access_key_id: '', mail_from: '', mail_from_name: '',
   },
 }
@@ -43,6 +44,20 @@ function renderMail(document = initial) {
 }
 
 describe('SystemGlobalSettingsPage mail section saves', () => {
+  it('shows only the SMTP save action while the built-in SMTP sender is selected', async () => {
+    plugins = []
+    renderMail()
+    const user = userEvent.setup()
+
+    await screen.findByRole('textbox', { name: 'SMTP地址' })
+    expect(screen.getByRole('button', { name: '保存SMTP设置' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '保存发信服务商' })).toBeNull()
+
+    await user.click(screen.getByRole('combobox', { name: '发信方式' }))
+    await user.click(screen.getByText('SendGrid', { selector: '.ant-select-item-option-content' }))
+    expect(screen.getByRole('button', { name: '保存发信服务商' })).toBeVisible()
+  })
+
   it('allows repairing a legacy provider without silently replacing it or submitting unsupported values', async () => {
     const legacy = { ...initial, value: { ...initial.value, sms_provider: 'tencent' } }
     const put = vi.spyOn(systemMailSettingsApi, 'put').mockImplementation(async (_token, revision, value) => ({ ...initial, revision: revision + 1, value }))
@@ -53,13 +68,14 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     expect(screen.getByRole('button', { name: '保存SMTP设置' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '保存短信设置' })).toBeDisabled()
     await user.click(provider)
-    await user.click(screen.getByText('自定义 HTTPS 网关', { selector: '.ant-select-item-option-content' }))
+    await user.click(screen.getByText('阿里云短信', { selector: '.ant-select-item-option-content' }))
     expect(screen.getByRole('button', { name: '保存SMTP设置' })).toBeDisabled()
+    await user.type(screen.getByRole('textbox', { name: 'AccessKey ID' }), 'key-id')
     await user.click(screen.getByRole('button', { name: '保存短信设置' }))
     await screen.findAllByText('发信配置已保存')
-    expect(put.mock.calls[0][2].sms_provider).toBe('https_json')
+    expect(put.mock.calls[0][2].sms_provider).toBe('aliyun')
     expect(screen.getByRole('button', { name: '保存SMTP设置' })).toBeEnabled()
-    expect(screen.getByText('自定义 HTTPS 网关', { selector: '.ant-select-selection-item' })).toBeInTheDocument()
+    expect(screen.getByText('阿里云短信', { selector: '.ant-select-selection-item' })).toBeInTheDocument()
   })
 
   it.each(['smtp', 'sms'] as const)('saves %s without discarding the other section draft', async (section) => {
@@ -87,6 +103,208 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     await screen.findAllByText('发信配置已保存')
     expect(put.mock.calls[1][1]).toBe(4)
     expect(put.mock.calls[1][2]).toEqual({ ...initial.value, smtp_address: 'smtp.changed.test', sms_signature_name: '短信草稿' })
+  })
+
+  it('keeps an unsaved SMTP password across an unrelated save and tests only after it is saved', async () => {
+    const complete = { ...initial, value: { ...initial.value, smtp_user: 'mailer@example.test' } }
+    const put = vi.spyOn(systemMailSettingsApi, 'put').mockImplementation(async (_token, revision, value) => ({ ...complete, revision: revision + 1, value,
+      smtp_password_configured: true, smtp_password_fingerprint: '0123456789abcdef' }))
+    const sendTest = vi.spyOn(systemMailSettingsApi, 'test').mockResolvedValue({ ok: true, provider: 'smtp' })
+    renderMail(complete)
+    const user = userEvent.setup()
+    const password = await screen.findByLabelText('SMTP密码')
+    const testButton = screen.getByRole('button', { name: '发送测试邮件' })
+    await user.type(password, 'draft-secret')
+    await user.type(screen.getByRole('textbox', { name: '测试收件地址' }), 'ops@example.com')
+    expect(testButton).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '保存短信设置' }))
+    await screen.findAllByText('发信配置已保存')
+    expect(password).toHaveValue('draft-secret')
+    expect(testButton).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '保存SMTP设置' }))
+    await waitFor(() => expect(testButton).toBeEnabled())
+    expect(put.mock.calls[1][5]?.smtpPassword).toBe('draft-secret')
+    expect(password).toHaveValue('')
+    await user.click(testButton)
+    expect(sendTest).toHaveBeenCalledWith(expect.any(String), complete.value, 'ops@example.com', undefined)
+  })
+
+  // Issue 15: an incomplete SMTP page is shown next to the test button, not after a request.
+  it('disables the SMTP test while fields are missing, lists them, and focuses one on click', async () => {
+    plugins = []
+    const empty = { ...initial, value: { ...initial.value, smtp_address: '' } }
+    const sendTest = vi.spyOn(systemMailSettingsApi, 'test').mockResolvedValue({ ok: true, provider: 'smtp' })
+    vi.spyOn(systemMailSettingsApi, 'put').mockImplementation(async (_token, revision, value) => ({ ...empty, revision: revision + 1, value,
+      smtp_password_configured: true, smtp_password_fingerprint: '0123456789abcdef' }))
+    renderMail(empty)
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: '测试收件地址' }), 'ops@example.com')
+    const testButton = screen.getByRole('button', { name: '发送测试邮件' })
+    const missing = screen.getByRole('group', { name: 'SMTP配置不完整' })
+    expect(testButton).toBeDisabled()
+    expect(Array.from(missing.querySelectorAll('button')).map((item) => item.textContent)).toEqual(['SMTP地址', 'SMTP用户', 'SMTP密码', '发件地址'])
+
+    await user.click(within(missing).getByRole('button', { name: 'SMTP用户' }))
+    expect(screen.getByRole('textbox', { name: 'SMTP用户' })).toHaveFocus()
+    await user.click(within(missing).getByRole('button', { name: 'SMTP地址' }))
+    expect(screen.getByRole('textbox', { name: 'SMTP地址' })).toHaveFocus()
+
+    await user.type(screen.getByRole('textbox', { name: 'SMTP地址' }), 'smtp.example.test')
+    // a user that is an address also serves as the sender
+    await user.type(screen.getByRole('textbox', { name: 'SMTP用户' }), 'mailer@example.test')
+    expect(Array.from(missing.querySelectorAll('button')).map((item) => item.textContent)).toEqual(['SMTP密码'])
+    await user.type(screen.getByLabelText('SMTP密码'), 'secret')
+    await user.click(screen.getByRole('button', { name: '保存SMTP设置' }))
+    await waitFor(() => expect(testButton).toBeEnabled())
+    expect(screen.queryByRole('group', { name: 'SMTP配置不完整' })).toBeNull()
+    await user.click(testButton)
+    expect(sendTest).toHaveBeenCalledTimes(1)
+  })
+
+  // a saved, complete page whose fields are cleared without saving.
+  const saved = { ...initial, value: { ...initial.value, smtp_user: 'mailer', smtp_from: 'noreply@example.test' },
+    smtp_password_configured: true, smtp_password_fingerprint: '0123456789abcdef' }
+  const listed = (name: string) => Array.from(screen.getByRole('group', { name }).querySelectorAll('button')).map((item) => item.textContent)
+
+  it('lists the cleared SMTP fields of the unsaved form next to the test button', async () => {
+    plugins = []
+    const sendTest = vi.spyOn(systemMailSettingsApi, 'test').mockResolvedValue({ ok: true, provider: 'smtp' })
+    renderMail(saved)
+    const user = userEvent.setup()
+    const testTo = await screen.findByRole('textbox', { name: '测试收件地址' })
+    const testButton = screen.getByRole('button', { name: '发送测试邮件' })
+    await user.type(testTo, 'ops@example.com')
+    expect(testButton).toBeEnabled()
+    expect(screen.queryByRole('group', { name: 'SMTP配置不完整' })).toBeNull()
+
+    for (const name of ['SMTP地址', 'SMTP用户', '发件地址']) await user.clear(screen.getByRole('textbox', { name }))
+    await user.clear(testTo)
+    expect(testButton).toBeDisabled()
+    // the saved password (fingerprint shown) counts as filled
+    expect(listed('SMTP配置不完整')).toEqual(['SMTP地址', 'SMTP用户', '发件地址'])
+    expect(screen.getByText('请填写测试收件地址')).toBeInTheDocument()
+
+    await user.click(within(screen.getByRole('group', { name: 'SMTP配置不完整' })).getByRole('button', { name: 'SMTP地址' }))
+    expect(screen.getByRole('textbox', { name: 'SMTP地址' })).toHaveFocus()
+
+    await user.type(screen.getByRole('textbox', { name: 'SMTP地址' }), 'smtp.example.test')
+    await user.type(screen.getByRole('textbox', { name: 'SMTP用户' }), 'mailer')
+    await user.type(screen.getByRole('textbox', { name: '发件地址' }), 'noreply@example.test')
+    // only the recipient is left: no SMTP note, only the recipient one
+    expect(screen.queryByRole('group', { name: 'SMTP配置不完整' })).toBeNull()
+    expect(screen.getByText('请填写测试收件地址')).toBeInTheDocument()
+    expect(testButton).toBeDisabled()
+
+    await user.type(testTo, 'ops@example.com')
+    expect(screen.queryByText('请填写测试收件地址')).toBeNull()
+    expect(testButton).toBeEnabled()
+    await user.click(testButton)
+    expect(sendTest).toHaveBeenCalledWith(expect.any(String), saved.value, 'ops@example.com', undefined)
+  })
+
+  it('shows the missing fields of a 422 config_incomplete answer', async () => {
+    plugins = []
+    const complete = { ...initial, value: { ...initial.value, smtp_user: 'mailer@example.test' }, smtp_password_configured: true, smtp_password_fingerprint: '0123456789abcdef' }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => String(input).endsWith('/v1/admin/system-mail-settings/tests')
+      ? new Response(JSON.stringify({ error: { code: 'system_mail_settings_config_incomplete', message: '发信配置不完整', request_id: 'r-1',
+        details: { provider: 'smtp', missing: ['smtp_password'] } } }), { status: 422, headers: { 'Content-Type': 'application/json' } })
+      : new Response('{}', { status: 404 }))
+    renderMail(complete)
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole('textbox', { name: '测试收件地址' }), 'ops@example.com')
+    await user.click(screen.getByRole('button', { name: '发送测试邮件' }))
+    expect(await screen.findByText('发信配置还缺：SMTP密码')).toBeInTheDocument()
+    // the server's answer stays next to the button until the form changes
+    expect(listed('SMTP配置不完整')).toEqual(['SMTP密码'])
+    expect(screen.getByRole('button', { name: '发送测试邮件' })).toBeDisabled()
+    await user.type(screen.getByRole('textbox', { name: '发件人名称' }), 'CDNCA')
+    expect(screen.queryByRole('group', { name: 'SMTP配置不完整' })).toBeNull()
+    expect(screen.getByRole('button', { name: '发送测试邮件' })).toBeEnabled()
+  })
+
+  // the recipient is checked on its own before a test is sent.
+  describe('test recipient', () => {
+    const mailFetch = (status: number, error: Record<string, unknown>) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      String(input).endsWith('/v1/admin/system-mail-settings/tests')
+        ? new Response(JSON.stringify({ error: { message: 'x', request_id: 'r-to', ...error } }), { status, headers: { 'Content-Type': 'application/json' } })
+        : new Response('{}', { status: 404 }))
+    const recipient = async () => {
+      renderMail(saved)
+      const input = await screen.findByRole('textbox', { name: '测试收件地址' })
+      return { user: userEvent.setup(), input, button: screen.getByRole('button', { name: '发送测试邮件' }) }
+    }
+    const expectFieldError = (input: HTMLElement) => {
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+      const note = window.document.getElementById(input.getAttribute('aria-describedby') ?? '')
+      expect(note).toHaveTextContent('请填写有效的邮箱地址，例如 ops@example.com')
+    }
+
+    it('keeps the empty recipient required: button off, required note, no field error', async () => {
+      const sendTest = vi.spyOn(systemMailSettingsApi, 'test')
+      const { input, button } = await recipient()
+      expect(button).toBeDisabled()
+      expect(screen.getByText('请填写测试收件地址')).toBeInTheDocument()
+      expect(input).not.toHaveAttribute('aria-invalid')
+      expect(sendTest).not.toHaveBeenCalled()
+    })
+
+    it('marks a value without @ beside the input, sends nothing and focuses it on click', async () => {
+      const sendTest = vi.spyOn(systemMailSettingsApi, 'test')
+      const { user, input, button } = await recipient()
+      await user.type(input, 'ops.example.com')
+      // no note while typing
+      expect(input).not.toHaveAttribute('aria-invalid')
+      expect(button).toBeEnabled()
+      await user.click(button)
+      expect(sendTest).not.toHaveBeenCalled()
+      expect(input).toHaveFocus()
+      expectFieldError(input)
+      await user.clear(input)
+      await user.type(input, 'ops@example.com')
+      expect(input).not.toHaveAttribute('aria-invalid')
+      expect(input).not.toHaveAttribute('aria-describedby')
+    })
+
+    it('shows the format note when the input is left', async () => {
+      const { user, input } = await recipient()
+      await user.type(input, 'ops@')
+      await user.tab()
+      expectFieldError(input)
+    })
+
+    it('trims surrounding spaces and sends a valid address', async () => {
+      const sendTest = vi.spyOn(systemMailSettingsApi, 'test').mockResolvedValue({ ok: true, provider: 'smtp', message_id: 'm-1' })
+      const { user, input, button } = await recipient()
+      await user.type(input, '  ops@example.com ')
+      await user.tab()
+      expect(input).not.toHaveAttribute('aria-invalid')
+      await user.click(button)
+      await waitFor(() => expect(sendTest).toHaveBeenCalledTimes(1))
+      expect(sendTest.mock.calls[0][2]).toBe('ops@example.com')
+      expect(await screen.findByText('测试邮件已发送（m-1）')).toBeInTheDocument()
+    })
+
+    it('puts a server refusal of "to" on the input instead of the generic message', async () => {
+      const fetch = mailFetch(400, { code: 'system_mail_settings_validation_error', details: { field: 'to', reason: 'invalid_format' } })
+      const { user, input, button } = await recipient()
+      await user.type(input, 'ops@example')
+      await user.click(button)
+      await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/v1/admin/system-mail-settings/tests'))).toHaveLength(1))
+      await waitFor(() => expect(input).toHaveFocus())
+      expectFieldError(input)
+      expect(screen.queryByText('发信配置存在无效或不安全的字段')).toBeNull()
+      await user.type(input, '.com')
+      expect(input).not.toHaveAttribute('aria-invalid')
+    })
+
+    it('keeps the original message when the mail service fails', async () => {
+      mailFetch(502, { code: 'system_mail_settings_test_failed', details: { provider: 'smtp', reason: 'provider_unavailable' } })
+      const { user, input, button } = await recipient()
+      await user.type(input, 'ops@example.com')
+      await user.click(button)
+      expect(await screen.findByText('测试邮件发送失败：provider_unavailable')).toBeInTheDocument()
+      expect(input).not.toHaveAttribute('aria-invalid')
+    })
   })
 
   it('preserves edits made during a save and prevents overlapping section writes', async () => {

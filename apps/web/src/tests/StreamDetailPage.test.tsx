@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CdncaProvider } from '@cdnca/ui'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -33,6 +33,29 @@ async function loaded() { await screen.findByRole('heading', { name: '端口 181
 async function save(user: ReturnType<typeof userEvent.setup>) { await user.click(screen.getByRole('button', { name: '保存' })) }
 
 describe('StreamDetailPage', () => {
+  it('reads the CNAME as the list does: — when none is allocated, generating, failed with its reason', async () => {
+    authenticate()
+    const get = vi.spyOn(streamsApi, 'get').mockResolvedValueOnce({ ...stream, cname: '', cname_state: null, cname_failure_code: null })
+    setup()
+    await loaded()
+    const fact = screen.getByText('CNAME', { selector: 'dt' }).closest('div')!
+    expect(within(fact).getByText('—')).toBeInTheDocument()
+    expect(fact).not.toHaveTextContent('未提供')
+    cleanup()
+
+    get.mockResolvedValueOnce({ ...stream, cname: '', cname_state: 'pending', cname_failure_code: null })
+    setup()
+    await loaded()
+    expect(screen.getByTestId('stream-cname-pending')).toHaveTextContent('生成中')
+
+    cleanup()
+    get.mockResolvedValueOnce({ ...stream, cname: '', cname_state: 'failed', cname_failure_code: 'dns_provider_not_configured' })
+    setup()
+    await loaded()
+    expect(screen.getByTestId('stream-cname-failed')).toBeInTheDocument()
+    expect(screen.getByText('CNAME', { selector: 'dt' }).closest('div')).not.toHaveTextContent('未提供')
+  })
+
   it('adds a real listener on the same stream and preserves unrelated drafts', async () => {
     authenticate(); reads()
     const update = vi.spyOn(streamsApi, 'update').mockImplementation(async (_token, _id, fields) => ({ ...stream, ...fields, revision: 2 }))
@@ -147,6 +170,16 @@ describe('StreamDetailPage', () => {
     const user = userEvent.setup(); setup(); await loaded()
     const toggle = screen.getByRole('switch', { name: '会话日志' })
     expect(toggle).not.toBeChecked()
+    // 短说明只出现一次并作为开关描述；保留期等在“详情”里按需展开。
+    const help = '记录每个连接，在“四层实时监控 > 访问日志”查看。'
+    expect(toggle).toHaveAccessibleDescription(help)
+    expect(screen.getAllByText(help)).toHaveLength(1)
+    // 可见说明退出读序（aria-hidden），只经开关的描述读一次。
+    expect(screen.getByText(help)).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.queryByText(/保留 30 天/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '会话日志详情' }))
+    expect(screen.getByText(/保留 30 天/)).toBeInTheDocument()
+    expect(toggle).toHaveAccessibleDescription(help)
     await user.click(toggle)
     await save(user)
     await waitFor(() => expect(update).toHaveBeenCalledOnce())
@@ -232,9 +265,13 @@ describe('StreamDetailPage', () => {
     authenticate(); reads()
     const user = userEvent.setup(); setup(); await loaded()
     const notice = /服务端先发数据的协议在共享端口上会被断开/
+    expect(screen.queryByText(notice)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'TLS 透传（按 SNI 分流）详情' }))
     expect(screen.getByText(notice)).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'TLS 透传（按 SNI 分流）' })).not.toHaveAccessibleDescription(notice)
     await user.click(screen.getByRole('switch', { name: 'TLS 透传（按 SNI 分流）' }))
     await waitFor(() => expect(screen.queryByText(notice)).not.toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'TLS 透传（按 SNI 分流）详情' })).not.toBeInTheDocument()
   })
 
   it('disables UDP in the listener editor of a passthrough stream', async () => {
@@ -641,6 +678,20 @@ describe('StreamDetailPage', () => {
     expect(within(facts).getByText('运营状态').nextElementSibling).toHaveTextContent('套餐不可用')
     expect(within(facts).getByText('配置同步').nextElementSibling).toHaveTextContent('已同步')
     expect(within(facts).queryByRole('button', { name: '发布详情' })).toBeNull()
+  })
+
+  it('shows a suspended package subscription as the site does', async () => {
+    authenticate(); reads({ ...stream, eligibility_state: 'ineligible', ineligible_reason: 'package_suspended' })
+    setup(); await loaded()
+    const facts = document.querySelector('.stream-detail-facts') as HTMLElement
+    expect(within(facts).getByText('运营状态').nextElementSibling).toHaveTextContent('订阅已暂停')
+  })
+
+  it('shows a cancelled package subscription as the site does', async () => {
+    authenticate(); reads({ ...stream, eligibility_state: 'ineligible', ineligible_reason: 'package_cancelled' })
+    setup(); await loaded()
+    const facts = document.querySelector('.stream-detail-facts') as HTMLElement
+    expect(within(facts).getByText('运营状态').nextElementSibling).toHaveTextContent('订阅已终止')
   })
 
   it('preserves domain DNS and geo configuration across the two tabs', async () => {

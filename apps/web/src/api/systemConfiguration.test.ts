@@ -1,4 +1,5 @@
 import {
+  hasUnactivatedChanges,
   systemConfigurationApi,
   type DefaultConfiguration,
   type NodeMonitoringConfiguration,
@@ -178,6 +179,25 @@ describe('systemConfigurationApi node monitoring', () => {
       expect.stringContaining('/v1/admin/system-configuration/categories/node_monitoring'),
       expect.objectContaining({ credentials: 'include', headers: expect.objectContaining({ Authorization: 'Bearer access-token' }) }),
     )
+  })
+
+  // 生效快照摘要可选，只在有生效版本时出现。
+  it('parses the active snapshot hash and tells a restored head from a changed one', async () => {
+    const restored = { ...document, active_snapshot_sha256: document.snapshot_sha256 }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(restored))
+    const parsed = await systemConfigurationApi.get('access-token', 'node_monitoring')
+    expect(parsed.active_snapshot_sha256).toBe(document.snapshot_sha256)
+    expect(hasUnactivatedChanges(parsed)).toBe(false)
+    expect(hasUnactivatedChanges({ ...parsed, active_snapshot_sha256: 'e'.repeat(64) })).toBe(true)
+    expect(hasUnactivatedChanges({ ...parsed, active_snapshot_sha256: undefined, pending_categories: [] })).toBe(false)
+    expect(hasUnactivatedChanges({ ...parsed, active_snapshot_sha256: undefined, pending_categories: ['nginx'] })).toBe(true)
+    expect(hasUnactivatedChanges({ ...parsed, head_revision: 3, revision: 3 })).toBe(false)
+    expect(hasUnactivatedChanges({ ...parsed, active_revision: 0, active_snapshot_sha256: undefined })).toBe(true)
+    for (const bad of [{ ...document, active_snapshot_sha256: 'not-a-hash' },
+      { ...document, active_revision: 0, active_snapshot_sha256: document.snapshot_sha256 }]) {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(bad))
+      await expect(systemConfigurationApi.get('access-token', 'node_monitoring')).rejects.toMatchObject({ code: 'invalid_response' })
+    }
   })
 
   it('accepts the fresh-install revision zero document and first write CAS', async () => {

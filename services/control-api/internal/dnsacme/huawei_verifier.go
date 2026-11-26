@@ -39,7 +39,7 @@ type huaweiSignedRequest struct {
 }
 
 func NewHuaweiProviderVerifier() *HuaweiProviderVerifier {
-	return newHuaweiProviderVerifier("", http.DefaultClient, huaweiVerifyTimeout, time.Now)
+	return newHuaweiProviderVerifier("", providerAPIClient(), huaweiVerifyTimeout, time.Now)
 }
 
 func newHuaweiProviderVerifier(

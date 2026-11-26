@@ -71,12 +71,20 @@ func (s *Service) ListStatistics(
 		if err := s.authorizeTx(ctx, tx, actor, permissionRead, false); err != nil {
 			return err
 		}
-		for _, group := range groups {
+		groupIDs := make([]string, len(groups))
+		for index, group := range groups {
 			if group.GroupID == uuid.Nil || group.TenantScopeID != actor.ResourceScopeID() || group.Revision < 1 {
 				return ErrInvalidInput
 			}
+			groupIDs[index] = group.GroupID.String()
+		}
+		usage, err := lineGroupUsage(ctx, tx, actor.ResourceScopeID(), groupIDs)
+		if err != nil {
+			return err
+		}
+		for _, group := range groups {
 			var currentRevision int64
-			var statistics LineGroupStatistics
+			statistics := usage[group.GroupID]
 			err := tx.QueryRow(ctx, `
 				WITH current_group AS (
 					SELECT current_revision
@@ -88,28 +96,9 @@ func (s *Service) ListStatistics(
 				        FROM node_line_endpoints endpoint
 				        WHERE endpoint.tenant_scope_id=$1 AND endpoint.line_group_id=$2
 				          AND endpoint.config_revision=current_group.current_revision
-				          AND endpoint.node_id IS NOT NULL),
-				       (SELECT count(*)
-				        FROM sites site
-				        LEFT JOIN package_subscriptions subscription
-				          ON subscription.tenant_scope_id=site.scope_id
-				         AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
-				        WHERE site.scope_id=$1 AND site.deleted_at IS NULL
-				          AND (site.node_group_id=$2 OR site.node_group_id IS NULL
-				            AND (subscription.product_snapshot#>>'{spec,node_group_id}'=$2::text
-				              OR subscription.product_snapshot#>>'{spec,backup_node_group_id}'=$2::text))),
-				       (SELECT count(*)
-				        FROM l4_forwards forward_rule
-				        JOIN package_subscriptions subscription
-				          ON subscription.tenant_scope_id=forward_rule.scope_id
-				         AND subscription.id=forward_rule.package_subscription_id
-				        WHERE forward_rule.scope_id=$1 AND forward_rule.deleted_at IS NULL
-				          AND ($2 IN (forward_rule.node_group_id, forward_rule.backup_node_group_id)
-				            OR forward_rule.node_group_id IS NULL
-				            AND (subscription.product_snapshot#>>'{spec,node_group_id}'=$2::text
-				              OR subscription.product_snapshot#>>'{spec,backup_node_group_id}'=$2::text)))
+				          AND endpoint.node_id IS NOT NULL)
 				FROM current_group`, actor.ResourceScopeID(), group.GroupID).Scan(
-				&currentRevision, &statistics.NodeCount, &statistics.SiteCount, &statistics.ForwardCount,
+				&currentRevision, &statistics.NodeCount,
 			)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrNotFound

@@ -43,16 +43,22 @@ afterEach(() => {
 })
 
 // fix-e1 #2: with ORIGIN_AUTH_RUNTIME_ENABLED off the pages said "credential
-// not found in this tenant"; now they say the feature is off and how to enable it.
+// not found in this tenant"; now they say the feature is off.
+// the tenant sees no host recipe, only who to ask and one
+// link back to the site list.
 describe('origin authentication routes follow the origin_auth runtime', () => {
   for (const page of ['credentials', 'rules', 'publications']) {
     const path = `/site/origin-auth/${page}`
-    it(`${path} shows "feature not enabled" with the enable hint while off`, async () => {
+    it(`${path} shows "feature not enabled" and the way back to the site list while off`, async () => {
       stubOriginAuth(false)
       signInTenant()
       renderWithProviders(<AppRoutes />, [path])
-      expect(await screen.findByText('功能未启用')).toBeInTheDocument()
-      expect(screen.getByText(/ORIGIN_AUTH_RUNTIME_ENABLED=true/)).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { name: '功能未启用', level: 1 })).toBeInTheDocument()
+      expect(screen.getByText('平台尚未启用源站鉴权，请联系平台管理员。')).toBeInTheDocument()
+      expect(screen.queryByText(/ORIGIN_AUTH_RUNTIME_ENABLED|control\.env|control-api/)).not.toBeInTheDocument()
+      const back = screen.getByRole('link', { name: '返回网站列表' })
+      expect(back).toHaveAttribute('href', '/site/list')
+      expect(back.querySelector('button')).toBeNull()
       expect(mounted).not.toHaveBeenCalled()
     })
 

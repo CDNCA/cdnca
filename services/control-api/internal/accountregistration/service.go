@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/mail"
 	"regexp"
@@ -24,6 +25,8 @@ var (
 	registrationUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 	registrationMetadataPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 	registrationProofPattern    = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	// registrationQQPattern: a QQ number, 5 to 12 digits without a leading zero.
+	registrationQQPattern = regexp.MustCompile(`^[1-9][0-9]{4,11}$`)
 )
 
 type Service struct {
@@ -33,6 +36,17 @@ type Service struct {
 	policy    PublicSettingsReader
 	digestKey []byte
 	now       func() time.Time
+	// termsRequired: as BuiltInService.termsRequired; nil: always.
+	termsRequired func(context.Context) (bool, error)
+}
+
+// RequireTermsWhen sets what decides whether a sign-up must accept terms
+// (registration-config terms_required); false, the acceptance is neither
+// checked nor recorded. The HTTP handler follows the same answer.
+func (service *Service) RequireTermsWhen(required func(context.Context) (bool, error)) {
+	if service != nil {
+		service.termsRequired = required
+	}
 }
 
 func NewService(store Registrar, limiter RateLimiter, config ServiceConfig) (*Service, error) {
@@ -58,22 +72,56 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 		return RegisterResult{}, err
 	}
 	var required []string
-	if err := normalizeRegistrationInput(&input, phoneCode); err != nil {
-		return RegisterResult{}, err
-	}
+	var policy systemusersettings.PublicSettings
+	generated := false
 	if service.policy != nil {
 		if input.ScopeID == uuid.Nil {
 			return RegisterResult{}, ErrRegistrationPolicyUnavailable
 		}
-		policy, err := service.policy.GetPublic(ctx, input.ScopeID)
-		if err != nil {
+		if policy, err = service.policy.GetPublic(ctx, input.ScopeID); err != nil {
 			return RegisterResult{}, ErrRegistrationPolicyUnavailable
 		}
+		generated = fillUsername(&input, service.digestKey, policy, phoneCode)
+	}
+	termsRequired := true
+	if service.termsRequired != nil {
+		if termsRequired, err = service.termsRequired(ctx); err != nil {
+			return RegisterResult{}, ErrRegistrationPolicyUnavailable
+		}
+	}
+	if err := normalizeRegistrationInput(&input, phoneCode); err != nil {
+		return RegisterResult{}, err
+	}
+	// (Turnstile flow), as the built-in one: while
+	// terms are required they must be accepted in the version in force
+	// (CurrentTermsVersion, from the HTTP entry); an exact retry of a
+	// completed registration replays its receipt whatever changed since, so
+	// that is checked only once no completed receipt matches. A first
+	// submission is refused before any proof is spent.
+	var termsProblem error
+	if termsRequired && (!validTermsAcceptance(input) || input.CurrentTermsVersion != "" && input.TermsVersion != input.CurrentTermsVersion) {
+		termsProblem = ErrTermsOutdated
+	}
+	replays, _ := service.store.(ReplayReader)
+	if termsProblem != nil {
+		if replays == nil {
+			return RegisterResult{}, termsProblem
+		}
+		if _, err := replays.CompletedRegistration(ctx, input.IdempotencyKey, [32]byte{}); !errors.Is(err, ErrIdempotencyConflict) {
+			// no receipt for the key (a stored digest is never all zero), or the read failed
+			if err != nil {
+				return RegisterResult{}, err
+			}
+			return RegisterResult{}, termsProblem
+		}
+	}
+	if service.policy != nil {
 		if !policy.RegistrationEnabled {
 			return RegisterResult{}, ErrRegistrationDisabled
 		}
 		if policy.EmailRequired && input.Email == "" || policy.PhoneRequired && input.Phone == "" ||
-			policy.EmailVerificationRequired && input.Email == "" || policy.PhoneVerificationRequired && input.Phone == "" {
+			policy.EmailVerificationRequired && input.Email == "" || policy.PhoneVerificationRequired && input.Phone == "" ||
+			policy.QQRequired && input.QQ == "" {
 			return RegisterResult{}, ErrInvalidInput
 		}
 		required = RequiredProofChannels(policy)
@@ -105,6 +153,16 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 	if err != nil {
 		return RegisterResult{}, fmt.Errorf("digest account registration request: %w", err)
 	}
+	if termsProblem != nil {
+		replayed, err := replays.CompletedRegistration(ctx, input.IdempotencyKey, requestDigest)
+		if err != nil {
+			return RegisterResult{}, err
+		}
+		if !replayed {
+			return RegisterResult{}, termsProblem
+		}
+		return registerResult(true, generated, input.Username), nil
+	}
 	passwordHash, err := identity.HashPassword(input.Password)
 	if err != nil {
 		return RegisterResult{}, ErrInvalidInput
@@ -120,7 +178,7 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 		RegistrationID: ids[0], TenantID: ids[1], ScopeID: ids[2], UserID: ids[3],
 		OwnerRoleID: ids[4], ViewerRoleID: ids[5], VerificationID: ids[6],
 		Username: input.Username, PasswordHash: passwordHash, DisplayName: input.DisplayName,
-		Email: input.Email, Phone: input.Phone, TermsVersion: input.TermsVersion,
+		Email: input.Email, Phone: input.Phone, QQ: input.QQ, TermsVersion: recordedTermsVersion(input, termsRequired),
 		VerificationChannel: input.VerificationChannel, IdempotencyKey: input.IdempotencyKey,
 		RequestID: input.RequestID, RequestDigest: requestDigest, SubjectDigest: subjectDigest,
 		CreatedAt: now,
@@ -128,7 +186,17 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 	if err != nil {
 		return RegisterResult{}, err
 	}
-	return RegisterResult{Accepted: true, Replayed: stored.Replayed}, nil
+	return registerResult(stored.Replayed, generated, input.Username), nil
+}
+
+// registerResult is the 202 body; a generated username is
+// returned so the page can sign in with it.
+func registerResult(replayed, generated bool, username string) RegisterResult {
+	result := RegisterResult{Accepted: true, Replayed: replayed}
+	if generated {
+		result.Username = username
+	}
+	return result
 }
 
 // phoneCountryCode reads the platform default calling code for a bare phone
@@ -154,13 +222,30 @@ func normalizeRegistrationInput(input *RegisterInput, phoneCode string) error {
 	return normalizeRegistrationFields(input, phoneCode)
 }
 
-// normalizeRegistrationFields checks everything but the proof reference; the
-// built-in CAPTCHA registration (builtin.go) has no proof reference.
+// recordedTermsVersion is the accepted terms version a registration records:
+// none while no terms are required (the user accepted none).
+func recordedTermsVersion(input RegisterInput, termsRequired bool) string {
+	if !termsRequired {
+		return ""
+	}
+	return input.TermsVersion
+}
+
+// validTermsAcceptance: the terms are accepted and name a version (the
+// Turnstile flow, while terms are required).
+func validTermsAcceptance(input RegisterInput) bool {
+	return input.TermsAccepted && registrationMetadataPattern.MatchString(input.TermsVersion)
+}
+
+// normalizeRegistrationFields checks everything but the proof reference and
+// the terms acceptance; the built-in CAPTCHA registration (builtin.go) has no
+// proof reference.
 func normalizeRegistrationFields(input *RegisterInput, phoneCode string) error {
 	input.Username = strings.ToLower(strings.TrimSpace(input.Username))
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 	input.Phone = strings.TrimSpace(input.Phone)
+	input.QQ = strings.TrimSpace(input.QQ)
 	input.TermsVersion = strings.TrimSpace(input.TermsVersion)
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
 	input.RequestID = strings.TrimSpace(input.RequestID)
@@ -169,7 +254,6 @@ func normalizeRegistrationFields(input *RegisterInput, phoneCode string) error {
 		!registrationUsernamePattern.MatchString(input.Username) ||
 		utf8.RuneCountInString(input.DisplayName) < 1 || utf8.RuneCountInString(input.DisplayName) > 128 ||
 		strings.IndexFunc(input.DisplayName, unicode.IsControl) >= 0 ||
-		!input.TermsAccepted || !registrationMetadataPattern.MatchString(input.TermsVersion) ||
 		!registrationMetadataPattern.MatchString(input.IdempotencyKey) ||
 		!registrationMetadataPattern.MatchString(input.RequestID) ||
 		input.Source == "" || len(input.Source) > 256 ||
@@ -192,6 +276,9 @@ func normalizeRegistrationFields(input *RegisterInput, phoneCode string) error {
 		}
 		input.Phone = phone
 	}
+	if input.QQ != "" && !registrationQQPattern.MatchString(input.QQ) {
+		return ErrInvalidInput
+	}
 	if input.Email == "" && input.Phone == "" {
 		return ErrInvalidInput
 	}
@@ -207,16 +294,18 @@ func normalizeRegistrationFields(input *RegisterInput, phoneCode string) error {
 // joined by "," (consumeProofs), or the built-in CAPTCHA id.
 func (service *Service) requestDigest(input RegisterInput, proofEvidenceID string) ([32]byte, error) {
 	request, err := json.Marshal(struct {
-		Username            string `json:"username"`
-		Password            string `json:"password"`
-		DisplayName         string `json:"display_name"`
-		Email               string `json:"email"`
-		Phone               string `json:"phone"`
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		DisplayName string `json:"display_name"`
+		Email       string `json:"email"`
+		Phone       string `json:"phone"`
+		// omitempty: a request without a QQ keeps the digest it had before
+		QQ                  string `json:"qq,omitempty"`
 		TermsVersion        string `json:"terms_version"`
 		VerificationChannel string `json:"verification_channel"`
 		ProofEvidenceID     string `json:"proof_evidence_id"`
 	}{
-		input.Username, input.Password, input.DisplayName, input.Email, input.Phone,
+		input.Username, input.Password, input.DisplayName, input.Email, input.Phone, input.QQ,
 		input.TermsVersion, input.VerificationChannel, proofEvidenceID,
 	})
 	if err != nil {

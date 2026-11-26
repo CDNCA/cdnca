@@ -55,6 +55,25 @@ func TestLoadAccountRegistrationRuntimeConfigKeepsDefaultTurnstileSystemTrust(t 
 	}
 }
 
+// ACCOUNT_REGISTRATION_TERMS_VERSION is optional (unset: the
+// version of the terms on the settings page); a set value is still checked.
+func TestLoadAccountRegistrationRuntimeConfigTermsVersionOptional(t *testing.T) {
+	trusted := accountRecoveryRuntimeConfig{Enabled: true, DigestKey: make([]byte, 32)}
+	environment := validAccountRegistrationEnvironment()
+	delete(environment, "ACCOUNT_REGISTRATION_TERMS_VERSION")
+	config, err := loadAccountRegistrationRuntimeConfigFromEnv(trusted, mapAccountRegistrationEnv(environment))
+	if err != nil || config.TermsVersion != "" {
+		t.Fatalf("unset terms version = %q, %v", config.TermsVersion, err)
+	}
+	config.clearSecrets()
+	environment["ACCOUNT_REGISTRATION_TERMS_VERSION"] = "terms v1"
+	config, err = loadAccountRegistrationRuntimeConfigFromEnv(trusted, mapAccountRegistrationEnv(environment))
+	config.clearSecrets()
+	if err == nil {
+		t.Fatal("an invalid pinned terms version was accepted")
+	}
+}
+
 func TestLoadAccountRegistrationRuntimeConfigRejectsUnsafeTurnstileCABindingWithoutLeak(t *testing.T) {
 	server, validCA := newAccountRegistrationTurnstileServer(t)
 	const secretPath = "/missing/turnstile-ca-private-marker.pem"

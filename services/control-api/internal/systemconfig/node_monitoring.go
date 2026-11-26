@@ -50,6 +50,7 @@ func LoadActiveNodeMonitoring(ctx context.Context, tx pgx.Tx) (CategoryDocument,
 		Schema: canonicalSchema, Category: CategoryNodeMonitoring,
 		HeadRevision: active.Revision, ActiveRevision: active.Revision, Revision: active.Revision,
 		Status: StatusActive, SnapshotSHA256: active.SnapshotSHA256,
-		Value: EffectiveNodeMonitoring(active.Configuration.NodeMonitoring),
+		Configured: active.Configuration.NodeMonitoring != nil,
+		Value:      EffectiveNodeMonitoring(active.Configuration.NodeMonitoring),
 	}, active.StateChangedAt, nil
 }

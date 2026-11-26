@@ -118,6 +118,13 @@ func TestPostgresSubscriptionSuspendUnsuspend(t *testing.T) {
 		!s.Period.EndsAt.Equal(first.Period.EndsAt) || len(republished) != 1 || !republished[0] {
 		t.Fatalf("suspended = %#v republished %v", s, republished)
 	}
+	// Migration 698: a console suspension (not the billing bridge) reads back as admin.
+	if s.SuspendSource != SuspendSourceAdmin {
+		t.Fatalf("suspend source = %q, want admin", s.SuspendSource)
+	}
+	if stored, err := LoadSystem(t.Context(), pool, customer.scopeID, first.ID); err != nil || stored.SuspendSource != SuspendSourceAdmin {
+		t.Fatalf("stored suspend source = %q, %v", stored.SuspendSource, err)
+	}
 	// Replay and an already-suspended request both succeed without a write.
 	if replay, err := service.Suspend(context.Background(), resellerActor, request("bb03-suspend", true)); err != nil || !replay.Replayed {
 		t.Fatalf("replay = %#v, %v", replay, err)
@@ -150,6 +157,9 @@ func TestPostgresSubscriptionSuspendUnsuspend(t *testing.T) {
 		len(republished) != 2 || republished[1] {
 		t.Fatalf("unsuspended = %#v, %v (republished %v)", resumed.Subscription, err, republished)
 	}
+	if stored, err := LoadSystem(t.Context(), pool, customer.scopeID, first.ID); err != nil || stored.SuspendSource != "" {
+		t.Fatalf("resumed suspend source = %q, %v", stored.SuspendSource, err)
+	}
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM audit_events WHERE action='package_subscription.unsuspended' AND resource_id=$1`,
 		first.ID.String()).Scan(&audits); err != nil || audits != 1 {
 		t.Fatalf("unsuspend audits = %d, %v", audits, err)
@@ -174,7 +184,17 @@ func TestPostgresResellerCancel(t *testing.T) {
 	makeOwner(t, pool, direct, permissionManage) // package_subscriptions.manage is the owner role's (084)
 	directActor := Actor{UserID: direct.userID, ScopeID: direct.scopeID, SessionID: direct.sessionID, ScopeKind: ScopeTenant}
 	productID := insertPackageProductVersion(t, pool, platform, 1, 10, 1_000)
-	service := NewService(NewStore(pool))
+	// User cancelling takes the subscription's sites off the nodes as a
+	// suspension does (one republication, in the cancel transaction).
+	var republished []uuid.UUID
+	service := NewService(NewStore(pool).WithSuspensionRepublishTx(func(_ context.Context, _ pgx.Tx, scope, subscription uuid.UUID,
+		from int64, suspend bool, _ string) error {
+		if scope != customer.scopeID || from < 1 || !suspend {
+			return errors.New("unexpected republication")
+		}
+		republished = append(republished, subscription)
+		return nil
+	}))
 	subscription := openForSuspension(t, service, platform, customer, productID, "bb03c-open")
 	cancel := func(actor Actor, key string) error {
 		_, err := service.Cancel(context.Background(), actor, CancelRequest{TenantScopeID: customer.scopeID,
@@ -187,8 +207,14 @@ func TestPostgresResellerCancel(t *testing.T) {
 	if err := cancel(foreignActor, "bb03c-foreign"); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatalf("foreign reseller cancel = %v", err)
 	}
+	if len(republished) != 0 {
+		t.Fatalf("refused cancels republished %v", republished)
+	}
 	if err := cancel(resellerActor, "bb03c-reseller"); err != nil {
 		t.Fatalf("reseller cancel = %v", err)
+	}
+	if len(republished) != 1 || republished[0] != subscription.ID {
+		t.Fatalf("cancel republished %v, want once for %s", republished, subscription.ID)
 	}
 	var status string
 	if err := pool.QueryRow(t.Context(), `SELECT lifecycle_status FROM package_subscriptions WHERE id=$1`, subscription.ID).

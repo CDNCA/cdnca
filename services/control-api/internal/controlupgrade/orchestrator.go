@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"log/slog"
 	"reflect"
 	"strings"
 	"time"
@@ -44,8 +43,9 @@ type RolloutRuntimeConfig struct {
 	Clock          func() time.Time
 }
 
-// rolloutWriteTimeout bounds a create or action detached from its client:
-// License calls plus two artifact downloads of at most 10 minutes each.
+// rolloutWriteTimeout bounds an action detached from its client, and one
+// background create preparation: License calls plus two artifact downloads of
+// at most 10 minutes each.
 const rolloutWriteTimeout = 25 * time.Minute
 
 type RolloutRuntime struct {
@@ -108,19 +108,44 @@ func (s *Service) GetRollout(ctx context.Context, actor Actor, planID string) (R
 	return s.store.GetRollout(ctx, actor, planID)
 }
 
+// CreateRollout validates the request and records the create intent with its
+// background preparation, then returns at once: License issuance and the
+// download of both artifacts (about 110MB each) run in PrepareRolloutsOnce, so
+// the request never waits for them. The same
+// Idempotency-Key returns the same preparation, ready once the plan exists.
 func (s *Service) CreateRollout(ctx context.Context, actor Actor,
-	request CreateRolloutRequest) (RolloutWriteResult, error) {
+	request CreateRolloutRequest) (CreateRolloutResult, error) {
+	if s == nil || s.store == nil || s.rollout == nil {
+		return CreateRolloutResult{}, ErrRuntimeUnavailable
+	}
+	if validateCreateRolloutRequest(request) != nil {
+		return CreateRolloutResult{}, ErrInvalidInput
+	}
+	config := s.rollout.config
+	identity := RolloutIdentity{ActorScopeID: actor.ScopeID.String(), ActorUserID: actor.UserID.String(),
+		InstallationID: config.InstallationID.String()}
+	digest, _, err := rolloutRequestDigest(actor, config.InstallationID, "create", "", request.CreateRolloutBody)
+	if err != nil {
+		return CreateRolloutResult{}, err
+	}
+	return s.store.EnqueueCreateRollout(ctx, actor, identity, request, digest)
+}
+
+// completeCreateRollout turns a create intent into a durable queued plan: it
+// issues (or re-verifies) the License grant and artifact bundle, caches both
+// artifacts and finalizes the plan. It is idempotent per intent, so a
+// preparation interrupted anywhere resumes here. progress reports the phase.
+func (s *Service) completeCreateRollout(ctx context.Context, actor Actor,
+	request CreateRolloutRequest, progress func(PreparationPhase)) (RolloutWriteResult, error) {
 	if s == nil || s.store == nil || s.rollout == nil {
 		return RolloutWriteResult{}, ErrRuntimeUnavailable
 	}
 	if validateCreateRolloutRequest(request) != nil {
 		return RolloutWriteResult{}, ErrInvalidInput
 	}
-	// A browser that gives up must not abandon License issuance or the artifact
-	// download half way: the create runs to its end and the console's retry with
-	// the same Idempotency-Key gets the stored result.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rolloutWriteTimeout)
-	defer cancel()
+	if progress == nil {
+		progress = func(PreparationPhase) {}
+	}
 	config := s.rollout.config
 	identity := RolloutIdentity{ActorScopeID: actor.ScopeID.String(), ActorUserID: actor.UserID.String(),
 		InstallationID: config.InstallationID.String()}
@@ -144,6 +169,7 @@ func (s *Service) CreateRollout(ctx context.Context, actor Actor,
 	binding := intent.Binding
 	var parent entitlement.UpgradeGrant
 	var bundle entitlement.UpgradePlanArtifactBundle
+	progress(PreparationIssuing)
 	if intent.State == createIntentAcquired {
 		parent, bundle, err = verifyRolloutArtifacts(config, intent.PlanID, binding)
 	} else {
@@ -158,12 +184,14 @@ func (s *Service) CreateRollout(ctx context.Context, actor Actor,
 	}
 	// Cache both artifacts before the plan becomes durable so every later
 	// command can be served by the control plane alone.
+	progress(PreparationDownloading)
 	if err := config.Artifacts.ensureManifest(ctx, bundle.Forward.Manifest); err != nil {
 		return RolloutWriteResult{}, err
 	}
 	if err := config.Artifacts.ensureManifest(ctx, bundle.Rollback.Manifest); err != nil {
 		return RolloutWriteResult{}, err
 	}
+	progress(PreparationFinalizing)
 	profiles := rolloutProfiles(cohort, bundle.Version, config.Profiles)
 	binding.ForwardProfileBytes, _ = json.Marshal(profiles.forward)
 	binding.RollbackProfileBytes, _ = json.Marshal(profiles.rollback)
@@ -187,18 +215,8 @@ func (s *Service) CreateRollout(ctx context.Context, actor Actor,
 	if err != nil {
 		return RolloutWriteResult{}, ErrInvalidPlan
 	}
-	result, err := s.store.FinalizeCreateRollout(ctx, actor, identity, request, digest, intent, cohort,
+	return s.store.FinalizeCreateRollout(ctx, actor, identity, request, digest, intent, cohort,
 		plan, binding, snapshot, encodedRolloutDigest(snapshot))
-	if err == nil {
-		// Best effort: a new plan is when older versions stop being needed.
-		// Failure only leaves extra files; it never affects the plan.
-		if removed, pruneErr := config.Artifacts.PruneUnreferenced(ctx, s.store.pool); pruneErr != nil {
-			slog.Warn("control upgrade artifact cache prune failed", "error", pruneErr)
-		} else if removed > 0 {
-			slog.Info("control upgrade artifact cache pruned", "removed", removed)
-		}
-	}
-	return result, err
 }
 
 type derivedRolloutProfiles struct {

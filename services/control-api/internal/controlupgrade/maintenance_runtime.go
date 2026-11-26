@@ -15,7 +15,8 @@ func maintenanceControlRuntime(ctx context.Context, probe func(context.Context) 
 	if !state.Ready {
 		switch state.Reason {
 		case "control_upgrade_plan_writer_unconfigured", "control_upgrade_runner_unconfirmed",
-			"control_upgrade_state_unavailable", "control_upgrade_ha_unavailable", "control_upgrade_draining":
+			"control_upgrade_state_unavailable", "control_upgrade_ha_unavailable", "control_upgrade_draining",
+			"control_upgrade_current_release_unverified":
 			return state
 		}
 	}

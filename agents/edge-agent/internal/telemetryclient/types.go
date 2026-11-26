@@ -19,6 +19,15 @@ var (
 	ErrPermanentProtocol    = errors.New("permanent telemetry protocol failure")
 	ErrPartialAcknowledged  = errors.New("telemetry batch was partially acknowledged")
 	ErrBackpressure         = errors.New("telemetry gateway applied backpressure")
+	// ErrAttributionUnconfirmed: a scoped record's site is carried by no
+	// configuration scope the node has confirmed (EDGE-TELEMETRY-
+	// a first generation that ran but whose rollback failed
+	// leaves its scope without a current release). The record is valid; it
+	// stays queued, unsent and unacknowledged, until its scope is confirmed.
+	ErrAttributionUnconfirmed = errors.New("telemetry record site has no confirmed configuration scope")
+	// errRecordInvalid: the record itself, not its batch or the session, can
+	// never be published; the records before it still go.
+	errRecordInvalid = fmt.Errorf("%w: record content", ErrInvalidPublication)
 )
 
 type Record struct {
@@ -32,8 +41,9 @@ type Record struct {
 
 	// trusted: built by Publisher.trustedRecord from an event spool
 	// envelope whose events all have siteID and no package subscription.
-	trusted bool
-	siteID  string
+	trusted         bool
+	siteID          string
+	configVersionID string
 }
 
 // ConnectionsRecord is the in-memory form of one eventspool connections
@@ -73,9 +83,17 @@ type Config struct {
 	// confirm scoped_records before any record is sent. A configuration scope
 	// is an access scope ID, never the payload tenant ID. ScopeForSite maps a
 	// site to the scope whose current release carries it and is required when
-	// ScopedRecords is set.
+	// ScopedRecords is set; a site it does not map holds the queue
+	// (ErrAttributionUnconfirmed).
 	ScopedRecords bool
 	ScopeForSite  func(siteID string) (string, bool)
+	// HeldVersion (optional, scoped records): the scope holds the records of
+	// this configuration version. The version ran on the node but the control
+	// plane has not confirmed it (an apply whose rollback failed,
+	//), so the Gateway's authorization may not
+	// carry it: the records wait (ErrAttributionUnconfirmed) instead of being
+	// rejected on every retry.
+	HeldVersion func(scopeID, configVersionID string) bool
 
 	HandshakeTimeout time.Duration
 	AckTimeout       time.Duration

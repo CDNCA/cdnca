@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/challenge"
-	"github.com/cdnca/cdnca/libs/edgeconfig/edgeskeleton"
 	"github.com/cdnca/cdnca/libs/edgeconfig/edgesite"
+	"github.com/cdnca/cdnca/libs/edgeconfig/edgeskeleton"
 )
 
 const (
@@ -62,7 +62,7 @@ func ensureChallengeNode() *node {
 			Policy: challenge.Policy{SchemaVersion: challenge.SchemaVersion, PolicyVersion: policyRev, Algorithm: challenge.AlgorithmHMACSHA256,
 				CookieName: "__Host-cdnca_challenge", TrustedProxies: []string{}, BypassRoutes: []challenge.BypassRoute{},
 				CurrentKey: challenge.KeyRef{KeyID: "key-1"},
-				Rules: []challenge.Rule{external, rule("0f3a0000-0000-4000-8000-0000000000a2", siteID(12), clickHost, challenge.ModeClick)}},
+				Rules:      []challenge.Rule{external, rule("0f3a0000-0000-4000-8000-0000000000a2", siteID(12), clickHost, challenge.ModeClick)}},
 			Keys: []challenge.ArtifactKey{{KeyID: "key-1", Secret: []byte(strings.Repeat("k", 48))}},
 			ExternalCredentials: []challenge.ArtifactExternalCredential{{TenantID: tenant, SiteID: siteID(11), Provider: "turnstile",
 				AppID: "feat-app", Secret: []byte(strings.Repeat("s", 32)), Environment: challenge.ExternalSandbox}}}

@@ -1,4 +1,5 @@
-import { Alert, Button, Checkbox, Form, Input, InputNumber, Popconfirm, Radio, Select, Switch, type FormInstance } from 'antd'
+import { useId, useState, type ReactNode } from 'react'
+import { Alert, Button, Checkbox, Form, Input, InputNumber, Popconfirm, Radio, Select, Switch, type FormInstance, type FormItemProps } from 'antd'
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { streamGuardRulesMax, validStreamServerName, type StreamAdditionalListener, type StreamGuardMatch } from '../api/streams'
@@ -58,13 +59,34 @@ export function StreamFollowPortField({ itemClassName }: { itemClassName?: strin
   </Form.Item>
 }
 
+// A switch with at most one short note as its description, and longer notes behind 详情 that are shown on request and
+// are never part of the description (each note is announced once).
+// The visible note is aria-hidden so it is not read again as page text; aria-describedby still reads a hidden node it
+// references directly (accname: a hidden node referenced by aria-describedby is included).
+function StreamSwitchField({ itemClassName, name, label, help, details, rules, dependencies }: {
+  itemClassName?: string; name: string; label: string; help?: ReactNode; details?: ReactNode
+} & Pick<FormItemProps, 'rules' | 'dependencies'>) {
+  const { t } = useTranslation('streams')
+  const id = useId()
+  const [open, setOpen] = useState(false)
+  return <Form.Item className={itemClassName} label={label} htmlFor={`${id}-switch`}
+    extra={help ? <span id={`${id}-help`} aria-hidden="true">{help}</span> : undefined}>
+    <Form.Item name={name} valuePropName="checked" noStyle rules={rules} dependencies={dependencies}>
+      <Switch id={`${id}-switch`} aria-describedby={help ? `${id}-help` : undefined} />
+    </Form.Item>
+    {details ? <>
+      <Button type="link" size="small" aria-expanded={open} aria-label={t('form.detailsOf', { label })}
+        onClick={() => setOpen((value) => !value)}>{t('form.details')}</Button>
+      {open ? <div className="ant-form-item-extra">{details}</div> : null}
+    </> : null}
+  </Form.Item>
+}
+
 // 会话日志 (session_log, tcp/udp v7)。
 export function StreamSessionLogField({ itemClassName }: { itemClassName?: string }) {
   const { t } = useTranslation('streams')
-  return <Form.Item className={itemClassName} name="session_log_enabled" label={t('form.sessionLog')} valuePropName="checked"
-    extra={t('form.sessionLogHelp')}>
-    <Switch />
-  </Form.Item>
+  return <StreamSwitchField itemClassName={itemClassName} name="session_log_enabled" label={t('form.sessionLog')}
+    help={t('form.sessionLogHelp')} details={t('form.sessionLogDetails')} />
 }
 
 export function StreamDNSFields({ form }: { form: FormInstance<StreamFormValues> }) {
@@ -143,17 +165,16 @@ export function StreamTLSPassthroughFields({ form }: { form: FormInstance<Stream
   const proxyInbound = Form.useWatch('proxy_protocol_inbound', { form, preserve: true })
   const proxyV1 = Form.useWatch('proxy_protocol_v1', { form, preserve: true })
   return <>
-    <Form.Item name="tls_passthrough" label={t('form.tlsPassthrough')} valuePropName="checked" dependencies={['protocol']}
-      extra={protocol === 'tcp' && !enabled ? t('form.sharedPortTCPNotice') : undefined} rules={[
+    {/* 共享端口的协议限制只关系到未开透传的 TCP 转发，放在“详情”里按需查看。 */}
+    <StreamSwitchField name="tls_passthrough" label={t('form.tlsPassthrough')} dependencies={['protocol']}
+      details={protocol === 'tcp' && !enabled ? t('form.sharedPortTCPNotice') : undefined} rules={[
       { validator: (_, value: boolean) => {
         const listeners = (form.getFieldValue('additional_listeners') ?? []) as StreamAdditionalListener[]
         return !value || (form.getFieldValue('protocol') === 'tcp' && listeners.every((listener) => listener.protocol === 'tcp'))
           ? Promise.resolve()
           : Promise.reject(new Error(t('form.tlsPassthroughTCPOnly')))
       } },
-    ]}>
-      <Switch />
-    </Form.Item>
+    ]} />
     {/* 字段保留原始输入（tag 的 key 需唯一），校验与提交时再规范化，规范化后重复报错。 */}
     {enabled ? <Form.Item name="server_names" label={t('form.serverNames')} extra={t('form.serverNamesHelp')} rules={[
       { validator: (_, value: string[] | undefined) => {

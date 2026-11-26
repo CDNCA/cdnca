@@ -22,7 +22,8 @@ var nodeTelemetry bool
 // action block, the CRS rule that matched as rule_id, the site, path and
 // redacted query (managed-waf-block-logged). A log-only site's hit is
 // action log; a clean request writes nothing.
-//   b.waf.test: PL1 block     d.waf.test: PL1 observe-only (log)
+//
+//	b.waf.test: PL1 block     d.waf.test: PL1 observe-only (log)
 func managedWAFLogRun() {
 	all := profiles()
 	pl1, observe := profileNamed(all, "system/crs-pl1"), profileNamed(all, "system/crs-pl1-log")

@@ -6,12 +6,12 @@ const zhCN = {
   title: '修复域名解析',
   description: '检查域名是否正确指向本平台。发现问题时生成修复方案，你确认后自动修改，等各地解析生效后再删除旧记录。',
   steps: { diagnose: '检查现状', plan: '确认方案', apply: '修改并等待生效', finish: '完成', label: '修复进度', compact: '第 {{current}} / {{total}} 步：{{title}}' },
-  picker: {
-    title: '选择要检查的域名', label: '域名', placeholder: '输入域名或网站 ID 搜索',
-    help: '选好后会自动带出它应指向的 CNAME、DNS 账号和 DNS 区域，不需要手动填写。',
-    currentSite: '当前网站', otherSites: '其他网站', site: '网站 {{id}}', empty: '没有找到匹配的域名', loading: '正在加载网站',
-    error: '网站列表加载失败，请重试。',
+  picker: { title: '选择要检查的域名', label: '域名', placeholder: '输入域名搜索', empty: '没有找到匹配的域名' },
+  site: {
+    loading: '正在读取网站', error: '网站读取失败，请重试。',
+    unreadableTitle: '无法读取这个网站', unreadableDescription: '网站不存在，或当前账号无权查看。',
   },
+  zone: { refresh: '刷新托管范围', throttled: '{{seconds}} 秒后可再次刷新', refreshFailed: '刷新失败，请稍后重试。' },
   check: { action: '检查并生成修复方案', loading: '正在读取当前解析并生成修复方案', changeDomain: '换一个域名' },
   units: { seconds: '秒' },
   advanced: { title: '高级设置', summary: '默认值已按网站和 DNS 账号自动填好，一般不需要修改。' },
@@ -23,9 +23,6 @@ const zhCN = {
     weight: { label: '权重', help: '同一线路有多条记录时的流量比例，0–100；0 表示不设置。' },
     propagationWindow: { label: '最长等待生效', help: '超过这个时间各地仍未生效就停止并提示，1–604800 秒，默认 900 秒（15 分钟）。' },
     authoritativeNS: { label: '权威 DNS 服务器', help: '用来检查记录是否生效的权威服务器，多个用英文逗号分隔；留空用系统默认。' },
-    zoneID: { label: 'DNS 区域', help: '托管这个域名的 DNS 区域，已按域名自动匹配。' },
-    zoneIDManual: { label: 'DNS 区域 ID', help: '没能读取区域列表，请填写 网站管理 > DNS API 中该域名所在区域的 ID。' },
-    providerRevision: { label: '区域版本', help: '用来避免和其他人的修改冲突，选好区域后自动带出。' },
   },
   fieldErrors: {
     summary: '有 {{count}} 项设置需要修改，已在下方标出。',
@@ -35,8 +32,6 @@ const zhCN = {
     line: '线路名称不能有首尾空格或控制字符，且不超过 64 字节。',
     weight: '请输入 0–100 之间的整数。',
     propagationWindow: '请输入 1–604800 之间的整数（秒）。',
-    zoneID: '请选择托管这个域名的 DNS 区域。',
-    providerRevision: '请输入大于 0 的整数。',
   },
   plan: {
     title: '将要做的修改', none: '解析已经正确，不需要修改。',
@@ -128,19 +123,19 @@ const zhCN = {
     notFound: '没有找到这次修复。', notFoundTitle: '修复任务不存在', notFoundDescription: '任务可能已被删除，或不属于当前账号。',
     conflict: '域名解析刚被其他操作修改过，请刷新后重新检查。', rateLimited: '操作过于频繁，请稍后重试。',
     unavailable: '修复服务暂时不可用，请稍后重试。', invalidRequest: '请求被拒绝，请检查高级设置里的值后重试。',
-    requestFailed: '请求失败，请稍后重试。',
+    requestFailed: '请求失败，请稍后重试。', zoneNotFound: '这个 DNS 账号下没有托管该域名的区域。',
   },
 } as const
 const enUS = {
   title: 'Fix domain DNS',
   description: 'Check whether a domain points at this platform. If not, build a fix, apply it after you confirm, and remove old records once the change is live everywhere.',
   steps: { diagnose: 'Check', plan: 'Review fix', apply: 'Apply and wait', finish: 'Finish', label: 'Fix progress', compact: 'Step {{current}} of {{total}}: {{title}}' },
-  picker: {
-    title: 'Choose a domain to check', label: 'Domain', placeholder: 'Search by domain or site ID',
-    help: 'Its CNAME, DNS account and DNS zone are filled in for you.',
-    currentSite: 'This site', otherSites: 'Other sites', site: 'Site {{id}}', empty: 'No matching domains', loading: 'Loading sites',
-    error: 'Sites could not be loaded. Try again.',
+  picker: { title: 'Choose a domain to check', label: 'Domain', placeholder: 'Search by domain', empty: 'No matching domains' },
+  site: {
+    loading: 'Loading the site', error: 'The site could not be loaded. Try again.',
+    unreadableTitle: 'This site cannot be read', unreadableDescription: 'The site does not exist, or your account cannot view it.',
   },
+  zone: { refresh: 'Refresh hosted domains', throttled: 'You can refresh again in {{seconds}} s', refreshFailed: 'Refresh failed. Try again later.' },
   check: { action: 'Check and build a fix', loading: 'Reading current DNS and building a fix', changeDomain: 'Choose another domain' },
   units: { seconds: 's' },
   advanced: { title: 'Advanced settings', summary: 'Filled in from the site and DNS account. You rarely need to change these.' },
@@ -152,9 +147,6 @@ const enUS = {
     weight: { label: 'Weight', help: 'Traffic share when a line has several records, 0–100. 0 means not set.' },
     propagationWindow: { label: 'Maximum wait', help: 'Stop and report if the change is not live everywhere by then, 1–604800 seconds. Default 900 (15 minutes).' },
     authoritativeNS: { label: 'Authoritative DNS servers', help: 'Servers used to confirm the change is live, separated by commas. Leave empty for the system default.' },
-    zoneID: { label: 'DNS zone', help: 'The zone hosting this domain, matched from the domain name.' },
-    zoneIDManual: { label: 'DNS zone ID', help: 'Zones could not be loaded. Enter the zone ID shown under Sites > DNS API.' },
-    providerRevision: { label: 'Zone version', help: 'Prevents overwriting someone else\'s change. Filled in from the zone.' },
   },
   fieldErrors: {
     summary: '{{count}} settings need changes. They are marked below.',
@@ -164,8 +156,6 @@ const enUS = {
     line: 'The line name cannot have leading or trailing spaces or control characters, and must be 64 bytes or less.',
     weight: 'Enter a whole number from 0 to 100.',
     propagationWindow: 'Enter a whole number from 1 to 604800 (seconds).',
-    zoneID: 'Choose the DNS zone that hosts this domain.',
-    providerRevision: 'Enter a whole number greater than 0.',
   },
   plan: {
     title: 'Changes to make', none: 'DNS is already correct. Nothing to change.',
@@ -257,7 +247,7 @@ const enUS = {
     notFound: 'This fix was not found.', notFoundTitle: 'Fix not found', notFoundDescription: 'It may have been removed or belongs to another account.',
     conflict: 'DNS was just changed by something else. Refresh and check again.', rateLimited: 'Too many requests. Try again later.',
     unavailable: 'The fix service is unavailable for now. Try again later.', invalidRequest: 'The request was rejected. Review the advanced settings and try again.',
-    requestFailed: 'The request failed. Try again later.',
+    requestFailed: 'The request failed. Try again later.', zoneNotFound: 'This DNS account hosts no zone for the domain.',
   },
 }
 

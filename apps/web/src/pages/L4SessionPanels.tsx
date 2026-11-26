@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, Button, Input, InputNumber, Popconfirm, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, InputNumber, Popconfirm, Select, Tag, type TableColumnsType } from 'antd'
 import { RefreshCw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -21,9 +21,35 @@ import { L4NodeSelect, L4TenantSelect, optionLabel } from './L4ScopeFilters'
 import { guardRulesField, hasStreamManagePermission, hasStreamReadPermission, newGuardRuleID, streamFields, writeKey } from './streamForm'
 import './L4RealtimeMonitorPage.css'
 import '../styles/analyticsControlParity.css'
-import { AdvancedFilters, FeedbackWhen, useLiveApply } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, useLiveApply, Table } from '@cdnca/ui'
 import { useSearchParams } from 'react-router-dom'
 import { filterParam, useFilterUrl } from './filterUrl'
+import { isPort } from '../api/addressRules'
+import { FieldErrorText, FilterField, filterFieldProps, useFieldFocus } from '../components/FilterFieldError'
+
+// 客户端 IP 与端口的错误挂在各自输入框上（两个都错时都标出），
+// 点查询或回车时焦点移到第一个出错的字段；边输入边生效只标错。不合法时不发请求，已生效的条件与结果不变。
+type FieldErrors = Partial<Record<'client' | 'listenPort', string>>
+
+function useL4FieldErrors(t: (key: string) => string) {
+  const base = useId()
+  const ids = { client: `${base}-client`, listenPort: `${base}-port` }
+  const [errors, setErrors] = useState<FieldErrors>({})
+  const focus = useFieldFocus()
+  // true when the draft passes; else marks the fields (and focuses the first one unless live).
+  const check = (client: string, port: string, live: boolean): boolean => {
+    const next: FieldErrors = {
+      ...(validClientFilter(client) ? {} : { client: t('sessionLog.invalidClient') }),
+      ...(port.trim() === '' || isPort(port.trim()) ? {} : { listenPort: t('filters.invalidPort') }),
+    }
+    setErrors(next)
+    const first = next.client ? ids.client : next.listenPort ? ids.listenPort : null
+    if (first && !live) focus(first)
+    return first === null
+  }
+  const invalid = Object.keys(errors)
+  return { ids, errors, check, invalid }
+}
 
 function sessionToken(ownerKey: string): string {
   const state = useSessionStore.getState()
@@ -60,19 +86,43 @@ function StreamSelect({ ownerKey, value, onChange, allowClear }: { ownerKey: str
       label: `${item.name} (${item.listen_port}/${item.protocol.toUpperCase()})${item.session_log_enabled ? '' : ` · ${t('sessionLog.notEnabled')}`}` }))} />
 }
 
+const sessionLogRanges = ['1h', '6h', '12h', '24h'] as const
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+// 已生效的转发、客户端 IP、端口、时间范围、结束原因
+// （平台还有租户、节点）写进 URL，刷新或打开链接时读回，首条请求就按它发；不认识的值用默认，非法的 IP/端口留在输入框里标错、不生效。
+function linkedSessionLog(params: URLSearchParams, audience: L4RealtimeAudience) {
+  const uuid = (key: string) => { const value = filterParam(params, key).toLowerCase(); return uuidPattern.test(value) ? value : undefined }
+  const range = sessionLogRanges.find((value) => value === filterParam(params, 'range')) ?? '1h'
+  const reason = l4EndReasons.find((value) => value === filterParam(params, 'end_reason'))
+  const draft = {
+    tenantId: audience === 'admin' ? uuid('tenant_id') : undefined, nodeId: audience === 'admin' ? uuid('node_id') : undefined,
+    streamId: uuid('stream_id'), client: filterParam(params, 'client_ip'), port: filterParam(params, 'port'), reason, range,
+  }
+  const clientValid = validClientFilter(draft.client)
+  const portValid = draft.port === '' || isPort(draft.port)
+  const applied: L4SessionLogFilters = {
+    range, limit: 50, ...(draft.tenantId ? { tenantId: draft.tenantId } : {}), ...(draft.nodeId ? { nodeId: draft.nodeId } : {}),
+    ...(draft.streamId ? { streamId: draft.streamId } : {}), ...(portValid && draft.port ? { listenPort: Number(draft.port) } : {}),
+    ...(clientValid && draft.client ? { clientIp: draft.client } : {}), ...(reason ? { endReason: reason } : {}),
+  }
+  const appliedKey = JSON.stringify([range, draft.tenantId, draft.nodeId, draft.streamId, portValid ? draft.port : '', clientValid ? draft.client : '', reason])
+  return { draft, applied, appliedKey }
+}
+
 function SessionLogPanel({ audience, ownerKey }: { audience: L4RealtimeAudience; ownerKey: string }) {
   const { t, i18n } = useTranslation('l4Realtime')
-  const [tenantId, setTenantId] = useState<string>()
-  const [nodeId, setNodeId] = useState<string>()
-  const [streamId, setStreamId] = useState<string>()
-  // 客户端 IP/端口 可从分享链接带入，已生效后写回 URL。
   const [initialParams] = useSearchParams()
-  const [client, setClient] = useState(() => filterParam(initialParams, 'client_ip'))
-  const [port, setPort] = useState(() => filterParam(initialParams, 'port'))
-  const [reason, setReason] = useState<L4EndReason>()
-  const [range, setRange] = useState<L4SessionLogFilters['range']>('1h')
-  const [validation, setValidation] = useState<string | null>(null)
-  const [applied, setApplied] = useState<L4SessionLogFilters>({ range: '1h', limit: 50 })
+  const [linked] = useState(() => linkedSessionLog(initialParams, audience))
+  const [tenantId, setTenantId] = useState<string | undefined>(linked.draft.tenantId)
+  const [nodeId, setNodeId] = useState<string | undefined>(linked.draft.nodeId)
+  const [streamId, setStreamId] = useState<string | undefined>(linked.draft.streamId)
+  const [client, setClient] = useState(linked.draft.client)
+  const [port, setPort] = useState(linked.draft.port)
+  const [reason, setReason] = useState<L4EndReason | undefined>(linked.draft.reason)
+  const [range, setRange] = useState<L4SessionLogFilters['range']>(linked.draft.range)
+  const fields = useL4FieldErrors(t)
+  const [applied, setApplied] = useState<L4SessionLogFilters>(linked.applied)
   const [cursors, setCursors] = useState<string[]>([])
   const cursor = cursors[cursors.length - 1]
   // control-log-ui：条件变了按新数据读；同一条件下翻页 30 秒内用缓存。
@@ -84,33 +134,28 @@ function SessionLogPanel({ audience, ownerKey }: { audience: L4RealtimeAudience;
   })
   const language = i18n.resolvedLanguage ?? 'zh-CN'
   const [labels, setLabels] = useState<Record<string, string | undefined>>({})
-  // A tag's × or 清空高级条件 clears those fields and queries again at once.
-  const apply = (cleared: Partial<Record<'tenantId' | 'nodeId' | 'listenPort' | 'endReason', true>> = {}) => {
+  // a tag's × or 清空高级条件 clears those fields and queries again at once.
+  const apply = (cleared: Partial<Record<'tenantId' | 'nodeId' | 'listenPort' | 'endReason', true>> = {}, live = false) => {
     const t2 = cleared.tenantId ? undefined : tenantId, n2 = cleared.nodeId ? undefined : nodeId
     const p2 = cleared.listenPort ? '' : port, r2 = cleared.endReason ? undefined : reason
     if (cleared.tenantId) setTenantId(undefined)
     if (cleared.nodeId) setNodeId(undefined)
     if (cleared.listenPort) setPort('')
     if (cleared.endReason) setReason(undefined)
+    if (!fields.check(client, p2, live)) return
     const listenPort = p2.trim() === '' ? undefined : Number(p2)
-    if (listenPort !== undefined && (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535)) {
-      setValidation(t('filters.invalidPort'))
-      return
-    }
-    if (!validClientFilter(client)) {
-      setValidation(t('sessionLog.invalidClient'))
-      return
-    }
-    setValidation(null)
     setCursors([])
     setApplied({ range, limit: 50, ...(t2 ? { tenantId: t2 } : {}), ...(n2 ? { nodeId: n2 } : {}), ...(streamId ? { streamId } : {}), ...(listenPort ? { listenPort } : {}),
       ...(client.trim() ? { clientIp: client.trim() } : {}), ...(r2 ? { endReason: r2 } : {}) })
   }
   // 边输入边生效；下拉选完即查，文本 400ms 防抖；不合法时 apply 就地报错不发请求。
   const draftKey = JSON.stringify([range, tenantId, nodeId, streamId, port.trim(), client.trim(), reason])
-  const [appliedKey, setAppliedKey] = useState(() => JSON.stringify(['1h', undefined, undefined, undefined, '', '', undefined]))
-  useLiveApply(draftKey, appliedKey, () => { setAppliedKey(draftKey); apply() })
-  useFilterUrl({ client_ip: applied.clientIp, port: applied.listenPort })
+  const [appliedKey, setAppliedKey] = useState(linked.appliedKey)
+  useLiveApply(draftKey, appliedKey, () => { setAppliedKey(draftKey); apply({}, true) })
+  useFilterUrl({
+    client_ip: applied.clientIp, port: applied.listenPort, stream_id: applied.streamId, end_reason: applied.endReason,
+    range: applied.range === '1h' ? undefined : applied.range, tenant_id: applied.tenantId, node_id: applied.nodeId,
+  })
   const columns: TableColumnsType<L4SessionLogRow> = [
     { title: t('sessionLog.columns.finished'), dataIndex: 'finalized_at', key: 'finalized_at', width: 170, render: (value: string) => formatDateTime(value) },
     { title: t('sessionLog.columns.client'), key: 'client', width: 200, render: (_, row) => <>
@@ -133,7 +178,8 @@ function SessionLogPanel({ audience, ownerKey }: { audience: L4RealtimeAudience;
       columns={audience === 'admin' ? 4 : 2}
       primary={<>
         <StreamSelect ownerKey={ownerKey} value={streamId} onChange={setStreamId} allowClear />
-        <Input aria-label={t('sessionLog.client')} placeholder={t('sessionLog.clientPlaceholder')} value={client} onChange={(event) => setClient(event.target.value)} onPressEnter={() => apply()} style={{ width: 200 }} />
+        <Input aria-label={t('sessionLog.client')} placeholder={t('sessionLog.clientPlaceholder')} value={client} onChange={(event) => setClient(event.target.value)} onPressEnter={() => apply()} style={{ width: 200 }}
+          {...filterFieldProps(fields.ids.client, fields.errors.client)} />
         <Select aria-label={t('filters.range')} value={range} onChange={setRange} style={{ width: 120 }}
           options={[{ value: '1h', label: t('ranges.one') }, { value: '6h', label: t('ranges.six') }, { value: '12h', label: t('ranges.twelve') }, { value: '24h', label: t('ranges.day') }]} />
       </>}
@@ -145,7 +191,10 @@ function SessionLogPanel({ audience, ownerKey }: { audience: L4RealtimeAudience;
             field: <L4NodeSelect ownerKey={ownerKey} value={nodeId} onChange={(value, label) => { setNodeId(value); setLabels((current) => ({ ...current, nodeId: label })) }} /> },
         ] : []),
         { key: 'listenPort', label: t('filters.port'), applied: applied.listenPort ? String(applied.listenPort) : '',
-          field: <Input aria-label={t('filters.port')} placeholder={t('filters.port')} value={port} onChange={(event) => setPort(event.target.value)} /> },
+          field: <FilterField id={fields.ids.listenPort} error={fields.errors.listenPort}>
+            <Input aria-label={t('filters.port')} placeholder={t('filters.port')} value={port} onChange={(event) => setPort(event.target.value)}
+              {...filterFieldProps(fields.ids.listenPort, fields.errors.listenPort)} />
+          </FilterField> },
         { key: 'endReason', label: t('sessionLog.reason'), applied: applied.endReason ? t(`sessionLog.reasons.${applied.endReason}`) : '',
           field: <Select aria-label={t('sessionLog.reason')} placeholder={t('sessionLog.reason')} allowClear value={reason} onChange={setReason}
             options={l4EndReasons.map((value) => ({ value, label: t(`sessionLog.reasons.${value}`) }))} /> },
@@ -156,9 +205,11 @@ function SessionLogPanel({ audience, ownerKey }: { audience: L4RealtimeAudience;
       onQuery={() => apply()}
       onClearAdvanced={() => apply({ tenantId: true, nodeId: true, listenPort: true, endReason: true })}
       onRemove={(key) => apply({ [key]: true })}
+      invalid={fields.invalid}
     />
-    <p className="l4-session-muted density-note">{t('sessionLog.help')}</p>
-    {validation ? <Alert type="error" showIcon message={validation} /> : null}
+    <FieldErrorText id={fields.ids.client} error={fields.errors.client} />
+    {/* 记录范围与保留期收进按需展开的说明，空表只说没有记录。 */}
+    <details className="l4-session-help"><summary>{t('live.helpTitle')}</summary><p className="l4-session-muted">{t('sessionLog.help')}</p></details>
     {query.error ? <FeedbackWhen title={t(errorKey(query.error))} /> : null}
     <Table<L4SessionLogRow> columns={columns} dataSource={query.data?.rows ?? []} rowKey="event_id" loading={query.isPending || query.isPlaceholderData} pagination={false}
       locale={{ emptyText: t('sessionLog.empty') }} scroll={{ x: 1090 }} size="small" />
@@ -204,7 +255,7 @@ function LiveConnectionsPanel({ audience, ownerKey, canManage }: { audience: L4R
   // Opened with no filter: every forward the session reaches (all tenants
   // for the platform), newest connection first.
   const [applied, setApplied] = useState<L4AllLiveFilters>({})
-  const [validation, setValidation] = useState<string | null>(null)
+  const fields = useL4FieldErrors(t)
   const [closedMessage, setClosedMessage] = useState<string | null>(null)
   const [banSeconds, setBanSeconds] = useState<number>(quickBanDefaultSeconds)
   const query = useQuery({
@@ -249,21 +300,13 @@ function LiveConnectionsPanel({ audience, ownerKey, canManage }: { audience: L4R
   const language = i18n.resolvedLanguage ?? 'zh-CN'
   const problems = query.data?.problems ?? []
   const [labels, setLabels] = useState<Record<string, string | undefined>>({})
-  const refresh = (cleared: Partial<Record<'tenantId' | 'nodeId' | 'listenPort', true>> = {}) => {
+  const refresh = (cleared: Partial<Record<'tenantId' | 'nodeId' | 'listenPort', true>> = {}, live = false) => {
     const tenantId2 = cleared.tenantId ? undefined : tenantId, nodeId2 = cleared.nodeId ? undefined : nodeId, port2 = cleared.listenPort ? '' : port
     if (cleared.tenantId) setTenantId(undefined)
     if (cleared.nodeId) setNodeId(undefined)
     if (cleared.listenPort) setPort('')
+    if (!fields.check(client, port2, live)) return
     const listenPort = port2.trim() === '' ? undefined : Number(port2)
-    if (listenPort !== undefined && (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535)) {
-      setValidation(t('filters.invalidPort'))
-      return
-    }
-    if (!validClientFilter(client)) {
-      setValidation(t('sessionLog.invalidClient'))
-      return
-    }
-    setValidation(null)
     setClosedMessage(null)
     const next: L4AllLiveFilters = { ...(tenantId2 ? { tenantId: tenantId2 } : {}), ...(nodeId2 ? { nodeId: nodeId2 } : {}), ...(streamId ? { streamId } : {}),
       ...(listenPort ? { listenPort } : {}), ...(client.trim() ? { clientIp: client.trim() } : {}) }
@@ -273,7 +316,7 @@ function LiveConnectionsPanel({ audience, ownerKey, canManage }: { audience: L4R
   // 同上，边输入边生效。
   const draftKey = JSON.stringify([tenantId, nodeId, streamId, port.trim(), client.trim()])
   const [appliedKey, setAppliedKey] = useState(() => JSON.stringify([undefined, undefined, undefined, '', '']))
-  useLiveApply(draftKey, appliedKey, () => { setAppliedKey(draftKey); refresh() })
+  useLiveApply(draftKey, appliedKey, () => { setAppliedKey(draftKey); refresh({}, true) })
   useFilterUrl({ client_ip: applied.clientIp, port: applied.listenPort })
   const columns: TableColumnsType<LiveRow> = [
     { title: t('live.columns.started'), key: 'started', width: 170, render: (_, row) => row.started_at ? formatDateTime(row.started_at) : t('live.untracked') },
@@ -311,7 +354,8 @@ function LiveConnectionsPanel({ audience, ownerKey, canManage }: { audience: L4R
       columns={audience === 'admin' ? 3 : 2}
       primary={<>
         <StreamSelect ownerKey={ownerKey} value={streamId} onChange={setStreamId} allowClear />
-        <Input aria-label={t('sessionLog.client')} placeholder={t('sessionLog.clientPlaceholder')} value={client} onChange={(event) => setClient(event.target.value)} onPressEnter={() => refresh()} style={{ width: 200 }} />
+        <Input aria-label={t('sessionLog.client')} placeholder={t('sessionLog.clientPlaceholder')} value={client} onChange={(event) => setClient(event.target.value)} onPressEnter={() => refresh()} style={{ width: 200 }}
+          {...filterFieldProps(fields.ids.client, fields.errors.client)} />
       </>}
       items={[
         ...(audience === 'admin' ? [
@@ -321,7 +365,10 @@ function LiveConnectionsPanel({ audience, ownerKey, canManage }: { audience: L4R
             field: <L4NodeSelect ownerKey={ownerKey} value={nodeId} onChange={(value, label) => { setNodeId(value); setLabels((current) => ({ ...current, nodeId: label })) }} /> },
         ] : []),
         { key: 'listenPort', label: t('filters.port'), applied: applied.listenPort ? String(applied.listenPort) : '',
-          field: <Input aria-label={t('filters.port')} placeholder={t('filters.port')} value={port} onChange={(event) => setPort(event.target.value)} /> },
+          field: <FilterField id={fields.ids.listenPort} error={fields.errors.listenPort}>
+            <Input aria-label={t('filters.port')} placeholder={t('filters.port')} value={port} onChange={(event) => setPort(event.target.value)}
+              {...filterFieldProps(fields.ids.listenPort, fields.errors.listenPort)} />
+          </FilterField> },
       ]}
       queryIcon={<RefreshCw size={15} />}
       queryText={t('actions.refresh')}
@@ -329,10 +376,11 @@ function LiveConnectionsPanel({ audience, ownerKey, canManage }: { audience: L4R
       onQuery={() => refresh()}
       onClearAdvanced={() => refresh({ tenantId: true, nodeId: true, listenPort: true })}
       onRemove={(key) => refresh({ [key]: true })}
+      invalid={fields.invalid}
     />
+    <FieldErrorText id={fields.ids.client} error={fields.errors.client} />
     <p className="l4-session-muted density-note">{t('live.summary')}</p>
     <details className="l4-session-help"><summary>{t('live.helpTitle')}</summary><p className="l4-session-muted">{t('live.help')}</p></details>
-    {validation ? <Alert type="error" showIcon message={validation} /> : null}
     {query.error ? <FeedbackWhen title={t(errorKey(query.error))} /> : null}
     {close.error ? <FeedbackWhen title={t('live.closeFailed')} /> : null}
     {ban.error ? <FeedbackWhen title={ban.error instanceof ApiError && ban.error.status === 409 ? t('live.banConflict') : t('live.banFailed')} /> : null}

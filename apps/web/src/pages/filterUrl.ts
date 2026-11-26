@@ -40,3 +40,26 @@ export function filterParam(searchParams: URLSearchParams, name: string): string
   const by = written.get(`${name}=${value}`)
   return by !== undefined && by !== useSessionStore.getState().sessionEpoch ? '' : value
 }
+
+/**
+ * TimeRangeFilter 的已生效范围写进 URL。
+ * 快捷项写 range=<key>（默认项不写），自定义写 from/to（ISO）。
+ */
+export function timeRangeUrlValues(preset: string, from: string, to: string, defaultPreset = 'today'): FilterUrlValues {
+  if (preset === 'custom') return { range: undefined, from, to }
+  return { range: preset === defaultPreset ? undefined : preset, from: undefined, to: undefined }
+}
+
+/** 读回 timeRangeUrlValues 写的范围：页面提供的快捷项、或两端都能解析的自定义区间；其余（缺省、非法）为 null，用页面默认。 */
+export function linkedTimeRange(searchParams: URLSearchParams, presets: readonly string[]): { preset: string; range?: [Date, Date] } | null {
+  const preset = filterParam(searchParams, 'range')
+  if (preset && presets.includes(preset)) return { preset }
+  const from = Date.parse(filterParam(searchParams, 'from'))
+  const to = Date.parse(filterParam(searchParams, 'to'))
+  return Number.isFinite(from) && Number.isFinite(to) && from < to ? { preset: 'custom', range: [new Date(from), new Date(to)] } : null
+}
+
+/** Forgets what this tab wrote (test isolation: each test is a fresh tab). */
+export function clearFilterUrlMemory() {
+  written.clear()
+}

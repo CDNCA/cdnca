@@ -3,8 +3,8 @@ import i18n from './index'
 const messages = {
   'zh-CN': {
     editor: {
-      targetScopePlaceholder: '小写租户作用域 UUID',
       ownerPlaceholder: '所属用户 UUID',
+      ownerPickRequired: '请选择所属用户',
     },
     evaluate: {
       ja4: 'JA4 指纹',
@@ -15,8 +15,8 @@ const messages = {
   },
   'en-US': {
     editor: {
-      targetScopePlaceholder: 'Canonical lowercase tenant scope UUID',
       ownerPlaceholder: 'Owner user UUID',
+      ownerPickRequired: 'Choose the owner',
     },
     evaluate: {
       ja4: 'JA4 fingerprint',
@@ -39,8 +39,8 @@ for (const [locale, values] of Object.entries(messages)) {
 }
 
 i18n.addResourceBundle('qps-ploc', 'securityPolicies', { editor: {
-  targetScopePlaceholder: `［${messages['zh-CN'].editor.targetScopePlaceholder}］`,
   ownerPlaceholder: `［${messages['zh-CN'].editor.ownerPlaceholder}］`,
+  ownerPickRequired: `［${messages['zh-CN'].editor.ownerPickRequired}］`,
 }, evaluate: {
   ja4: `［${messages['zh-CN'].evaluate.ja4}］`,
   ja4Placeholder: `［${messages['zh-CN'].evaluate.ja4Placeholder}］`,
@@ -48,8 +48,8 @@ i18n.addResourceBundle('qps-ploc', 'securityPolicies', { editor: {
   headersInvalid: `［${messages['zh-CN'].headersInvalid}］`,
 } }, true, true)
 i18n.addResourceBundle('qps-Ploc', 'securityPolicies', { editor: {
-  targetScopePlaceholder: `［${messages['zh-CN'].editor.targetScopePlaceholder}］`,
   ownerPlaceholder: `［${messages['zh-CN'].editor.ownerPlaceholder}］`,
+  ownerPickRequired: `［${messages['zh-CN'].editor.ownerPickRequired}］`,
 }, evaluate: {
   ja4: `［${messages['zh-CN'].evaluate.ja4}］`,
   ja4Placeholder: `［${messages['zh-CN'].evaluate.ja4Placeholder}］`,

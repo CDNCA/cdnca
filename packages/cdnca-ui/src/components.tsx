@@ -3,7 +3,9 @@
 // business logic stay in each page. Usage: ../COMPONENTS.md. Styles:
 // styles.css "Page building blocks" (classic) and apps/web tech-look.css.
 import { useContext, type ReactNode } from 'react'
-import { Button, ConfigProvider, Popconfirm, Table, Tag, type ButtonProps, type TableProps } from 'antd'
+import { Button, ConfigProvider, Popconfirm, Tag, type ButtonProps, type TableProps } from 'antd'
+
+import { Table } from './pagination'
 
 /** Modal widths: S simple forms / confirms, M ordinary forms, L wide forms and tables. */
 export const MODAL_WIDTH = { S: 520, M: 720, L: 960 } as const

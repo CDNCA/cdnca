@@ -60,6 +60,32 @@ paths:
         '408': {$ref: '#/components/responses/RequestCancelled'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
         '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/methods:
+    get:
+      tags: [My identity verification]
+      operationId: getMyIdentityVerificationMethods
+      x-summary-zh: "读取当前可发起的实名认证方式"
+      summary: Read the verification methods the authenticated user may start
+      description: >-
+        Read-only. Reports whether the one KYC service configured on the system
+        user settings page (kyc_* fields, each falling back to
+        IDENTITY_VERIFICATION_KYC_*) is ready, its name (the provider of a new
+        provider session) and the kinds the saved identity policy allows. No
+        endpoint, key, credential or object store fact is returned. A service
+        that is not configured, has no credentials yet, or has every kind turned
+        off answers configured false with no kinds. Requires the same live
+        identity_verification.self.manage check as the status.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      responses:
+        '200': {$ref: '#/components/responses/MethodsOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
   /v1/identity-verification/cases:
     post:
       tags: [My identity verification]
@@ -717,6 +743,21 @@ components:
         created_at: {type: string, format: date-time}
         state_changed_at: {type: string, format: date-time}
         submitted_at: {type: string, format: date-time}
+    VerificationMethods:
+      type: object
+      additionalProperties: false
+      required: [configured, provider_display_name, kinds]
+      properties:
+        configured: {type: boolean}
+        provider_display_name:
+          type: string
+          maxLength: 64
+          description: Name of the configured service; sent back as provider when starting a session. Empty when configured is false.
+        kinds:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items: {type: string, enum: [personal_initial, personal_reverification, enterprise]}
     SelfStatus:
       type: object
       additionalProperties: false
@@ -823,6 +864,13 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/CaseView'}
+    MethodsOK:
+      description: The verification methods the authenticated user may start.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/VerificationMethods'}
     StatusOK:
       description: The authenticated user's own verification status.
       headers:

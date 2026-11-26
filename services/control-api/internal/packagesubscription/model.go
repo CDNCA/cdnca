@@ -75,6 +75,13 @@ func NewBridgeActor(grant *bridgeauth.Grant) (Actor, error) {
 	return actor, nil
 }
 
+// Suspension sources (migration 698): the billing bridge facade
+// (service.suspend from the billing host) or an administrator.
+const (
+	SuspendSourceBillingBridge = "billing_bridge"
+	SuspendSourceAdmin         = "admin"
+)
+
 // Bridge reports whether the actor came from the billing bridge facade.
 func (actor Actor) Bridge() bool { return actor.bridge != nil }
 
@@ -117,9 +124,13 @@ type Subscription struct {
 	// configuration but its sites and forwards are not published (migration 555).
 	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
 	SuspendReason string     `json:"suspend_reason,omitempty"`
-	Revision      int64      `json:"revision"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	// SuspendSource: who suspended it (SuspendSourceBillingBridge /
+	// SuspendSourceAdmin); kept in the suspend version snapshot and read back
+	// through package_subscription_suspend_source_698. Empty while active.
+	SuspendSource string    `json:"suspend_source,omitempty"`
+	Revision      int64     `json:"revision"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type TaskIntent struct {

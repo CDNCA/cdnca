@@ -50,6 +50,9 @@ type accountRecoveryRuntimeDependencies struct {
 	// is <ACCOUNT_RECOVERY_BASE_URL origin>/accept-invitation and the mail
 	// goes through the recovery sender.
 	Identity *identity.Service
+	// RegistrationProofKeys let a recovery request name an account by the
+	// email its registration verified.
+	RegistrationProofKeys [][]byte
 }
 
 type accountRecoveryHealthSnapshot struct {
@@ -114,6 +117,7 @@ func openAccountRecoveryRuntime(
 		SubjectLimit: config.SubjectLimit, SourceLimit: config.SourceLimit,
 		DispatchKeyring: config.DispatchKeys, DispatchEnqueuer: notificationStore,
 		DispatchTemplates: config.Templates, TemplateResolver: templateSettings,
+		RegistrationProofKeys: dependencies.RegistrationProofKeys,
 	})
 	if err != nil {
 		return nil, runtimeStageError{stage: "configure account recovery service", err: err}

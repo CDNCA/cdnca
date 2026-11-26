@@ -2,7 +2,8 @@
 // JSON 文本（表单项 setting_value），规则用站点编辑页同一套弹窗编辑——缓存规则
 // CacheRuleDialog、条件规则 ConditionalOriginRouteDialog。
 import { useState } from 'react'
-import { Alert, Button, Space, Table, Tooltip, type TableColumnsType } from 'antd'
+import { Alert, Button, Space, Tooltip, type TableColumnsType } from 'antd'
+import { Table } from '@cdnca/ui'
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 

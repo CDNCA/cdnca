@@ -1,0 +1,95 @@
+{
+ "id": "admin-control-origin-auth",
+ "prefix": "/v1/admin/control-origin-auth",
+ "operations": [
+  {
+   "operation_id": "getControlOriginAuthStatus",
+   "method": "GET",
+   "path": "/v1/admin/control-origin-auth",
+   "summary": "Read whether the console behind a CDN gets the visitor address (source IP header, origin authentication)",
+   "summary_zh": "读取主控在 CDN 后是否已取得访客 IP（源IP请求头 / 回源鉴权状态）",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires system_configuration.read on the platform scope. Two separate observations of the answering control-api process, kept in its memory for an hour; no header value is stored. A CDN clue is a header CDNs write the visitor address into (CF-Connecting-IP, True-Client-IP, Ali-Cdn-Real-Ip, EO-Connecting-IP, Fastly-Client-IP, Cdn-Src-Ip), which the console nginx passes through. The visitor address is confirmed when the source IP header of the system other settings (source_ip_header) gave a valid address for the request, or when the console nginx with origin authentication (install-control.sh origin-auth --real-ip-header H, the CDN sending X-Cdnca-Origin-Key) sets X-Cdnca-Origin-Verified to 1, meaning the key matched and H gave the visitor address (key_only: the key matched, H did not; 0: no key); that header is believed only while the installer's /etc/cdnca-control/origin-auth.conf exists, since without origin authentication nginx passes a client's own through. cdn_without_origin_auth is true while the last CDN request without a confirmed visitor address came within the hour and no confirmed request came since.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "The observation of the answering process.",
+     "fields": [
+      {
+       "name": "cdn_without_origin_auth",
+       "type": "boolean",
+       "required": true,
+       "description": "A CDN request without a confirmed visitor address came within the last hour and no confirmed one since."
+      },
+      {
+       "name": "origin_auth_enabled",
+       "type": "boolean",
+       "required": true,
+       "description": "install-control.sh origin-auth is configured on this host (its origin-auth.conf exists)."
+      },
+      {
+       "name": "baota",
+       "type": "boolean",
+       "required": true,
+       "description": "A BaoTa host (the installer's host profile says ENV=bt), whose site proxy rewrites X-Real-IP and X-Forwarded-For with the CDN node: the source IP header reads only CF-Connecting-IP or True-Client-IP there."
+      },
+      {
+       "name": "client_headers_forwarded",
+       "type": "boolean",
+       "required": true,
+       "description": "The console nginx passes the client's own X-Real-IP and X-Forwarded-For to control-api as X-Cdnca-Client-X-Real-IP and X-Cdnca-Client-X-Forwarded-For (current installs and converged consoles), so the source IP header can read those two."
+      },
+      {
+       "name": "real_ip_header",
+       "type": "string:  / CF-Connecting-IP / True-Client-IP / X-Forwarded-For / X-Real-IP",
+       "required": true,
+       "description": "The --real-ip-header origin authentication takes the visitor address from; empty while it is off."
+      },
+      {
+       "name": "key_only",
+       "type": "boolean",
+       "required": true,
+       "description": "The last CDN request without a confirmed visitor address carried the origin key but real_ip_header held no visitor address (X-Cdnca-Origin-Verified key_only): the CDN does not write the visitor IP into that header."
+      },
+      {
+       "name": "visitor_ip_confirmed",
+       "type": "boolean",
+       "required": true,
+       "description": "Within the last hour a request's visitor address was confirmed (by the source IP header or the origin key) and no unconfirmed CDN request came since."
+      },
+      {
+       "name": "header",
+       "type": "string:  / CF-Connecting-IP / True-Client-IP / Ali-Cdn-Real-Ip / EO-Connecting-IP / Fastly-Client-IP / Cdn-Src-Ip",
+       "required": true,
+       "description": "The visitor address header of the last CDN request without a confirmed visitor address; empty when none came."
+      },
+      {
+       "name": "last_seen_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true,
+       "description": "When that request came; null when none came."
+      },
+      {
+       "name": "last_confirmed_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true,
+       "description": "When the last request with a confirmed visitor address came; null when none came."
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  }
+ ]
+}

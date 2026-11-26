@@ -1,14 +1,14 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Form, Input, InputNumber, Popconfirm, Radio, Select, Skeleton, Space, Switch, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Form, Input, InputNumber, Popconfirm, Radio, Select, Skeleton, Space, Switch, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 
-import { ApiError } from '../../api/auth'
 import { newIdempotencyKey } from '../../api/market'
 import {
   nodeProbeTypes, probeCarriers, probeDNSPupUnifiedApi, probeWindows, type NodeProbeType, type ProbeDiagnosis,
   type ProbeMatrixCell, type ProbeOverrideInput, type ProbePurposeInput, type ProbePurposeStatus, type ProbeSelection,
-  type ProbeWindow,
+  type ProbeWindow, type ProbeDNSPupStatus,
 } from '../../api/probeDNSPup'
 import { nodesApi } from '../../api/nodes'
 import { nodeSchedulingApi } from '../../api/nodeScheduling'
@@ -16,18 +16,17 @@ import { useSessionStore } from '../../auth/session'
 import { MetricTrendChart } from '../../components/MetricTrendChart'
 import TenantScopeSelect from '../../components/TenantScopeSelect'
 import '../../i18n/probeDNSPup'
-import { FeedbackWhen, PageSection, useFeedback } from '@cdnca/ui'
+import { FeedbackWhen, PageSection, useFeedback, Table } from '@cdnca/ui'
 import { SelectionFields, selectionOf, type SelectionValues } from './SelectionFields'
-
-function useReason() {
-  const { t, i18n } = useTranslation('probeDNSPup')
-  return (error: unknown) => error instanceof ApiError && i18n.exists(`probeDNSPup:errors.${error.code}`)
-    ? t(`errors.${error.code}`) : t('errors.request_failed')
-}
+import { MTRResult } from './MTRResult'
+import { useProbeReason as useReason } from './probeErrors'
+import { inactiveReason } from './NodeProbeCard'
 
 // Per purpose quota and frequency: one dnspup quota for availability,
 // scheduling, plugins and reports, slowed by priority when short.
-export function PurposesCard({ token }: { token: string }) {
+// 拨测未在使用（未授权/未启用/已暂停/未配置 Key）时，
+// 用途行的额度状态写原因而不是「正常」，账户额度一行只在接入生效后显示（未读到账户时不说不限额）。
+export function PurposesCard({ token, connection }: { token: string; connection: ProbeDNSPupStatus }) {
   const { t, i18n } = useTranslation('probeDNSPup')
   const { message } = App.useApp()
   const feedback = useFeedback()
@@ -50,7 +49,9 @@ export function PurposesCard({ token }: { token: string }) {
     setDraft((current) => ({ ...current, [purpose]: { ...current[purpose], ...change } }))
   if (query.error) return <PageSection title={t('unified.purposes.title')}><FeedbackWhen title={reason(query.error)} /></PageSection>
   const data = query.data
+  const inactive = connection.active ? null : inactiveReason(connection)
   const state = (item: ProbePurposeStatus) => {
+    if (inactive) return <Tag>{t(`node.inactiveReasons.${inactive}`)}</Tag>
     if (item.gate.stopped) return <Tag color="red">{t('unified.purposes.gate.stopped')} · {t(`unified.purposes.reasons.${item.gate.reason ?? 'disabled'}`)}</Tag>
     if (item.gate.factor > 1) return <Tag color="orange">{t('unified.purposes.gate.slowed', { factor: item.gate.factor })}</Tag>
     return <Tag color="green">{t('unified.purposes.gate.normal')}</Tag>
@@ -58,12 +59,14 @@ export function PurposesCard({ token }: { token: string }) {
   return <PageSection title={t('unified.purposes.title')}>
     {query.isLoading ? <Skeleton active /> : <div className="probe-dnspup-section-body">
       <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('unified.purposes.intro')}</Typography.Paragraph>
-      {data ? <Typography.Text strong>{data.monthly_limit > 0
+      {data && !inactive ? <Typography.Text strong>{data.monthly_limit > 0
         ? t('unified.purposes.account', { used: number(data.monthly_used), limit: number(data.monthly_limit), projected: number(data.projected_monthly) })
         : t('unified.purposes.accountUnlimited', { projected: number(data.projected_monthly) })}</Typography.Text> : null}
-      <Table<ProbePurposeStatus> rowKey="purpose" size="small" pagination={false} dataSource={(data?.purposes ?? []).filter((item) => item.purpose !== 'edge_health')} scroll={{ x: true }}
+      {/* 表头按词不折行，表格局部横滚，用途列固定在左侧保留行归属 */}
+      <Table<ProbePurposeStatus> className="probe-dnspup-purposes" rowKey="purpose" size="small" pagination={false} dataSource={(data?.purposes ?? []).filter((item) => item.purpose !== 'edge_health')}
+        scroll={{ x: 'max-content' }}
         columns={[
-          { title: t('unified.purposes.columns.purpose'), render: (_, item) => t(`unified.purposes.names.${item.purpose}`) },
+          { title: t('unified.purposes.columns.purpose'), fixed: 'left', render: (_, item) => t(`unified.purposes.names.${item.purpose}`) },
           { title: t('unified.purposes.columns.class'), render: (_, item) => t(`unified.purposes.classes.${item.class}`) },
           { title: t('unified.purposes.columns.enabled'), render: (_, item) => <Switch size="small"
             aria-label={`${t(`unified.purposes.names.${item.purpose}`)} ${t('unified.purposes.columns.enabled')}`}
@@ -93,7 +96,7 @@ function percent(value: number) {
 
 // Area × carrier matrix with the history curve, and on-demand mtr.
 export function MatrixCard({ token, initialNode }: { token: string; initialNode?: string }) {
-  const { t } = useTranslation('probeDNSPup')
+  const { t, i18n } = useTranslation('probeDNSPup')
   const feedback = useFeedback()
   const reason = useReason()
   // cdncaCE: no aggregated edge, so its purpose row and the edge matrix subject are not shown (the row is still
@@ -110,20 +113,28 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
   const areas = useMemo(() => [...new Set((matrix.data?.cells ?? []).map((cell) => cell.area))].sort(), [matrix.data])
   const carriers = probeCarriers.filter((carrier) => matrix.data?.cells.some((cell) => cell.carrier === carrier))
   const cellOf = (area: string, carrier: string) => matrix.data?.cells.find((cell) => cell.area === area && cell.carrier === carrier)
-  const [diagnosis, setDiagnosis] = useState<ProbeDiagnosis | null>(null)
+  // The submitted diagnosis is in the URL (?diagnosis=<id>): a reload or another layout reads it back with GET, which
+  // never starts or meters a new mtr; only a pending one is polled.
+  const [params, setParams] = useSearchParams()
+  const diagnosisID = params.get('diagnosis') ?? ''
+  const [started, setStarted] = useState<ProbeDiagnosis | null>(null)
   const [target, setTarget] = useState('')
   const [points, setPoints] = useState('')
   const start = useMutation({
     mutationFn: () => probeDNSPupUnifiedApi.diagnose(token, { target: target.trim(),
       node_id: subject === 'node' && shown?.id ? shown.id : undefined,
       checkpoints: points.split(/[,，\s]+/).filter(Boolean).slice(0, 2) }, newIdempotencyKey('probe-dnspup-diagnose')),
-    onSuccess: setDiagnosis,
+    onSuccess: (created) => {
+      setStarted(created)
+      setParams((current) => { const next = new URLSearchParams(current); next.set('diagnosis', created.id); return next }, { replace: true })
+    },
     onError: (error) => void feedback.error(reason(error)),
   })
-  const poll = useQuery({ queryKey: ['probe-dnspup-diagnosis', diagnosis?.id], refetchInterval: 3000,
-    enabled: Boolean(token && diagnosis?.id && diagnosis.status === 'pending'),
-    queryFn: () => probeDNSPupUnifiedApi.diagnosis(token, diagnosis!.id) })
-  useEffect(() => { if (poll.data) setDiagnosis(poll.data) }, [poll.data])
+  const read = useQuery({ queryKey: ['probe-dnspup-diagnosis', diagnosisID], enabled: Boolean(token && diagnosisID),
+    queryFn: () => probeDNSPupUnifiedApi.diagnosis(token, diagnosisID),
+    refetchInterval: (query) => query.state.data?.status === 'pending' ? 3000 : false })
+  const diagnosis = read.data ?? (started?.id === diagnosisID ? started : null)
+  const failure = (code?: string) => code && i18n.exists(`probeDNSPup:errors.${code}`) ? t(`errors.${code}`) : code ?? ''
   const cellText = (cell?: ProbeMatrixCell) => cell ? <Space size={4} wrap>
     <Tag color={cell.availability >= 0.95 ? 'green' : cell.availability >= 0.5 ? 'orange' : 'red'}>
       {t('unified.matrix.cell', { availability: percent(cell.availability), latency: cell.avg_latency_ms })}</Tag>
@@ -132,14 +143,16 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
   return <PageSection title={t('unified.matrix.title')}>
     <div className="probe-dnspup-section-body">
       <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('unified.matrix.intro')}</Typography.Paragraph>
-      <Space wrap>
-        <Select value={subject} onChange={setSubject} aria-label={t('unified.matrix.subject')} style={{ minWidth: 160 }}
+      <Space wrap className="probe-dnspup-controls">
+        {/* 换对象类型时清空不再适用的选择与结果。 */}
+        <Select value={subject} onChange={(next: 'node' | 'edge') => { setSubject(next); setID(''); setShown(null) }} aria-label={t('unified.matrix.subject')} style={{ minWidth: 'min(160px, 100cqi)' }}
           options={(['node'] as const).map((value) => ({ value, label: t(`unified.matrix.subjects.${value}`) }))} />
         {subject === 'node'
-          ? <Input value={id} onChange={(event) => setID(event.target.value)} aria-label={t('unified.matrix.nodeID')}
-            placeholder={t('unified.matrix.nodeID')} style={{ width: 320 }} />
-          : <Select value={id || undefined} onChange={setID} aria-label={t('unified.matrix.edgeHost')} style={{ minWidth: 280 }}
-            placeholder={t('unified.matrix.edgeHost')} options={(edges.data?.items ?? []).map((value) => ({ value, label: value }))} />}
+          // 节点按名称或编号搜索选择（同「添加覆盖」），值仍是节点 UUID。
+          ? <NodePicker token={token} value={id || undefined} onChange={setID} ariaLabel={t('unified.matrix.nodeID')} style={{ minWidth: 'min(280px, 100cqi)' }} />
+          : <Select value={id || undefined} onChange={setID} aria-label={t('unified.matrix.edgeHost')} style={{ minWidth: 'min(280px, 100cqi)' }}
+            placeholder={t('unified.matrix.edgeHost')} loading={edges.isFetching} options={(edges.data?.items ?? []).map((value) => ({ value, label: value }))}
+            notFoundContent={edges.isError ? t('unified.overrides.listFailed') : t('unified.matrix.edgeEmpty')} />}
         <Select value={window} onChange={setWindow} aria-label={t('unified.matrix.window')}
           options={probeWindows.map((value) => ({ value, label: t(`unified.matrix.windows.${value}`) }))} />
         <Button type="primary" disabled={!id.trim()} onClick={() => setShown({ subject, id: id.trim(), window })}>{t('unified.matrix.load')}</Button>
@@ -155,19 +168,20 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
         <MetricTrendChart status="success" points={matrix.data.series.map((point) => ({
           label: new Date(point.at).toLocaleString(), value: Math.round(point.availability * 1000) / 10 }))} />
       </> : null}
-      <Space wrap>
+      <Space wrap className="probe-dnspup-controls">
         <Typography.Text strong className="probe-dnspup-subtitle">{t('unified.matrix.diagnose')}</Typography.Text>
         <Input value={target} onChange={(event) => setTarget(event.target.value)} aria-label={t('unified.matrix.diagnoseTarget')}
-          placeholder={t('unified.matrix.diagnoseTarget')} style={{ width: 240 }} />
+          placeholder={t('unified.matrix.diagnoseTarget')} style={{ width: 'min(240px, 100cqi)' }} />
         <Input value={points} onChange={(event) => setPoints(event.target.value)} aria-label={t('unified.matrix.diagnosePoints')}
-          placeholder={t('unified.matrix.diagnosePoints')} style={{ width: 300 }} />
+          placeholder={t('unified.matrix.diagnosePoints')} style={{ width: 'min(300px, 100cqi)' }} />
         <Button loading={start.isPending} disabled={!target.trim() || !points.trim()} onClick={() => start.mutate()}>
           {t('unified.matrix.diagnoseStart')}</Button>
       </Space>
+      {read.error && !diagnosis ? <Alert showIcon type="error" message={reason(read.error)} /> : null}
       {diagnosis ? <Alert showIcon type={diagnosis.status === 'failed' ? 'error' : diagnosis.status === 'completed' ? 'success' : 'info'}
         message={diagnosis.status === 'pending' ? t('unified.matrix.diagnoseRunning') : diagnosis.status === 'completed'
-          ? t('unified.matrix.diagnoseDone') : t('unified.matrix.diagnoseFailed', { code: diagnosis.error_code ?? '' })}
-        description={diagnosis.status === 'completed' ? <pre className="probe-traces">{JSON.stringify(diagnosis.traces, null, 2)}</pre> : undefined} /> : null}
+          ? t('unified.matrix.diagnoseDone') : t('unified.matrix.diagnoseFailed', { code: failure(diagnosis.error_code) })} /> : null}
+      {diagnosis?.status === 'completed' ? <MTRResult traces={diagnosis.traces} /> : null}
     </div>
   </PageSection>
 }
@@ -185,7 +199,9 @@ interface OverrideForm extends SelectionValues {
 interface SubjectOption { value: string; label: string; tenantScopeID?: string }
 
 // Searchable node picker: the inventory search matches name, IP, display ID and UUID.
-function NodePicker({ token, value, onChange }: { token: string; value?: string; onChange?: (value: string) => void }) {
+function NodePicker({ token, value, onChange, ariaLabel, style }: {
+  token: string; value?: string; onChange?: (value: string) => void; ariaLabel?: string; style?: CSSProperties
+}) {
   const { t } = useTranslation('probeDNSPup')
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<SubjectOption>()
@@ -197,7 +213,7 @@ function NodePicker({ token, value, onChange }: { token: string; value?: string;
   })
   const options = (query.data?.items ?? []).map((node): SubjectOption => ({ value: node.id, label: `${node.name} (ID ${node.display_id})` }))
   if (picked && picked.value === value && !options.some((option) => option.value === picked.value)) options.unshift(picked)
-  return <Select aria-label={t('unified.overrides.node')} showSearch filterOption={false} onSearch={setSearch}
+  return <Select aria-label={ariaLabel ?? t('unified.overrides.node')} showSearch filterOption={false} onSearch={setSearch} style={style}
     placeholder={t('unified.overrides.nodePlaceholder')} loading={query.isFetching} options={options} value={value}
     notFoundContent={query.isError ? t('unified.overrides.listFailed') : t('unified.overrides.noMatch')}
     onChange={(next: string) => { setPicked(options.find((option) => option.value === next)); onChange?.(next) }} />
@@ -223,6 +239,20 @@ export function OverridesCard({ token }: { token: string }) {
   const client = useQueryClient()
   const [form] = Form.useForm<OverrideForm>()
   const [adding, setAdding] = useState(false)
+  // 触发按钮带展开状态并指向表单；展开后焦点给第一个字段，取消收起并回到触发按钮。
+  const formID = useId()
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const firstOpen = useRef(false)
+  useEffect(() => {
+    if (!adding || !firstOpen.current) return
+    firstOpen.current = false
+    form.getFieldInstance('kind')?.focus?.()
+  }, [adding, form])
+  const toggle = (open: boolean) => {
+    firstOpen.current = open
+    setAdding(open)
+    if (!open) { form.resetFields(); toggleRef.current?.focus() }
+  }
   const kind = Form.useWatch('kind', form)
   const groupScope = Form.useWatch('group_scope', form) ?? 'platform'
   const tenantScopeID = Form.useWatch('tenant_scope_id', form) ?? ''
@@ -254,7 +284,8 @@ export function OverridesCard({ token }: { token: string }) {
   })
   if (query.error) return <PageSection title={t('unified.overrides.title')}><FeedbackWhen title={reason(query.error)} /></PageSection>
   return <PageSection title={t('unified.overrides.title')}
-    extra={<Button onClick={() => setAdding((value) => !value)}>{t('unified.overrides.add')}</Button>}>
+    extra={<Button ref={toggleRef} aria-expanded={adding} aria-controls={adding ? formID : undefined} onClick={() => toggle(!adding)}>
+      {t(adding ? 'unified.overrides.collapse' : 'unified.overrides.add')}</Button>}>
     {query.isLoading ? <Skeleton active /> : <div className="probe-dnspup-section-body">
       <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('unified.overrides.intro')}</Typography.Paragraph>
       <Table rowKey="id" size="small" pagination={false} dataSource={query.data?.items ?? []}
@@ -274,9 +305,9 @@ export function OverridesCard({ token }: { token: string }) {
           { title: '', render: (_, item) => <Popconfirm title={t('unified.overrides.remove')} onConfirm={() => remove.mutate(item.id)}>
             <Button size="small" danger>{t('unified.overrides.remove')}</Button></Popconfirm> },
         ]} />
-      {adding ? <Form form={form} layout="vertical" requiredMark={false} className="probe-dnspup-override-form"
+      {adding ? <Form id={formID} form={form} layout="vertical" requiredMark={false} className="probe-dnspup-override-form"
         initialValues={{ kind: 'node', group_scope: 'platform', probe_type: 'inherit', selection_enabled: false, points_per_group: 3 }}>
-        <div className="density-form-grid">
+        <div className="density-form-grid probe-dnspup-form-grid">
         <Form.Item name="kind" label={t('unified.overrides.subject')}>
           <Select aria-label={t('unified.overrides.subject')} options={(['node', 'line_group'] as const).map((value) => ({ value, label: t(`unified.overrides.kinds.${value}`) }))} />
         </Form.Item>
@@ -307,7 +338,10 @@ export function OverridesCard({ token }: { token: string }) {
         </Form.Item>
         <SelectionFields form={form} />
         </div>
-        <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>{t('unified.overrides.save')}</Button>
+        <Space>
+          <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>{t('unified.overrides.save')}</Button>
+          <Button disabled={save.isPending} onClick={() => toggle(false)}>{t('unified.overrides.cancel')}</Button>
+        </Space>
       </Form> : null}
     </div>}
   </PageSection>

@@ -48,8 +48,8 @@ func ensureLineGroupUnused(ctx context.Context, tx pgx.Tx, scopeID, groupID uuid
 			'{}'::text[]),
 		(SELECT count(*) FROM package_subscriptions subscription WHERE subscription.deleted_at IS NULL
 			AND subscription.lifecycle_status='active'
-			AND $3 IN (subscription.product_snapshot->'spec'->>'node_group_id',
-				subscription.product_snapshot->'spec'->>'backup_node_group_id')),
+			AND $3 IN (package_subscription_current_product_snapshot(subscription.id,now())->'spec'->>'node_group_id',
+				package_subscription_current_product_snapshot(subscription.id,now())->'spec'->>'backup_node_group_id')),
 		(SELECT count(*) FROM sites site WHERE site.deleted_at IS NULL AND site.node_group_id=$2),
 		(SELECT count(*) FROM l4_forwards forward WHERE forward.deleted_at IS NULL
 			AND $2 IN (forward.node_group_id, forward.backup_node_group_id)),

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Modal, Pagination, Result, Segmented, Select, Space, Spin, Table, type TableColumnsType } from 'antd'
-import { useFeedback, FeedbackWhen } from '@cdnca/ui'
+import { Alert, Button, Modal, Result, Select, Space, Spin, type TableColumnsType } from 'antd'
+import { useFeedback, FeedbackWhen, Pagination, Table } from '@cdnca/ui'
 import { Eye, MailOpen, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -12,6 +12,8 @@ import { formatDateTime, formatNumber } from '../i18n/formatters'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { AnnouncementBody } from '../components/AnnouncementBody'
 import AccountEventMessages from './AccountEventMessages'
+import { AccountMessageNav } from './AccountMessageNav'
+import { useSearchParams } from 'react-router-dom'
 import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import './AccountMessagesPage.css'
 
@@ -84,14 +86,13 @@ export default function AccountMessagesPage() {
 // SEC-ACCOUNT-07：公告保留原收件箱；事件提醒走本人通知事件投影（带事件时的网站/套餐 ID）。
 function AccountMessagesCategories(props: { accessToken: string; scopeID: string; sessionEpoch: number }) {
   const { t } = useTranslation('accountMessages')
-  const [category, setCategory] = useState<'announcements' | 'events'>('announcements')
+  const [params] = useSearchParams()
+  const category = params.get('category') === 'events' ? 'events' : 'announcements'
   return (
     <section className="identity-page announcement-page account-messages-page" aria-labelledby="account-messages-title">
       {/* tp-b7：不放页内标题（面包屑即标题），h1 只留给读屏。 */}
       <h1 id="account-messages-title" className="visually-hidden">{t('title')}</h1>
-      <Segmented className="account-messages-category" aria-label={t('filters.category')} value={category}
-        onChange={(value) => setCategory(value as 'announcements' | 'events')}
-        options={[{ value: 'announcements', label: t('filters.announcements') }, { value: 'events', label: t('filters.events') }]} />
+      <AccountMessageNav current={category} />
       {category === 'announcements' ? <AccountMessagesContent {...props} /> : <AccountEventMessages {...props} />}
     </section>
   )

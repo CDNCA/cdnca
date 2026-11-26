@@ -13,6 +13,7 @@
 - 一律使用 `apps/control-site/src/lib/register.tsx`，不要自己调接口：
   - `RegisterForm` / `RecoveryForm`：主题只提供 `renderField`（画输入框和旁边的「获取验证码」/图形验证码按钮，输入框属性用 `fieldProps(field)`）、`renderError`、`renderSubmit`（找回密码再加 `renderNote`）；`labels` 可用内容里的文字覆盖默认文案。
   - 需要完全自定义布局时用 `useRegistrationConfig()` + `useRegistration(config)`（吉盾的写法），规则相同。
+  - 错误按字段显示：图形验证码错误在图形验证码下方，邮箱/短信验证码缺失、错误或过期在对应验证码下方，其余在表单错误行。`RegisterForm` 已处理（字段错误经 `ThemeField.error` 传给 `fieldProps` 关联输入框）；自定义布局用 `errorField(key)` 判断错误属于哪个字段。注册返回 `account_registration_verification_required` 时 `useRegistration` 会重读注册配置（页面打开期间后台可能刚开启邮箱验证），验证码字段随之出现。
 - 显示什么由 `GET /v1/auth/registration-config` 决定：只显示 `required && available` 的验证码字段（邮箱验证开才有邮箱验证码，手机验证开且短信已配置才有短信验证码）；都开时两个都要填、都要通过；`ready=false` 时只提示「注册验证服务暂未配置」，不显示无法使用的字段；`human_check` 为 `builtin_captcha` 时显示图形验证码，为 `turnstile` 时用 `TurnstileBox`。
 - 找回密码页只显示 `recovery.channels` 里的方式；`recovery.enabled=false` 时显示「暂未开放在线找回密码」，不显示表单。服务端按账号发重置链接，页面只收账号。
 - 内容里旧的 `/dashboard/register`、`/dashboard/forgot-password` 链接由服务端在渲染时换成本站 `/register/`、`/forgot/`（`services/control-api/internal/controlsite/auth_pages.go`），存量内容不改写；新主题的种子直接写本站路径。

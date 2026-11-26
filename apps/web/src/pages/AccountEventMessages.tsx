@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, Input, Modal, Pagination, Select, Space, Table, type TableColumnsType } from 'antd'
-import { FeedbackWhen, IdOrNameInput, useLiveApply } from '@cdnca/ui'
+import { Button, Input, Modal, Select, Space, type TableColumnsType } from 'antd'
+import { FeedbackWhen, IdOrNameInput, useLiveApply, Pagination, Table } from '@cdnca/ui'
 import { Eye, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -86,9 +86,9 @@ export default function AccountEventMessages({ accessToken, scopeID, sessionEpoc
       <Select allowClear className="account-messages-filter" aria-label={t('filters.type')} placeholder={t('filters.allTypes')} value={type}
         onChange={(value?: string) => { setType(value); setPage(1) }} style={{ width: 200 }}
         options={eventTypes.map((value) => ({ value, label: label(value) }))} />
-      <IdOrNameInput aria-label={t('filters.siteID')} placeholder={t('filters.sitePlaceholder')} value={siteDraft} onChange={setSiteDraft} onPressEnter={search} style={{ width: 200 }}
+      <IdOrNameInput aria-label={t('filters.site')} placeholder={t('filters.sitePlaceholder')} value={siteDraft} onChange={setSiteDraft} onPressEnter={search} style={{ width: 200 }}
         freeText isId={(text) => uuidPattern.test(text.toLowerCase())} search={siteOptions} status={invalid.site ? 'error' : undefined} />
-      <Input aria-label={t('filters.packageID')} placeholder={t('filters.packagePlaceholder')} value={packageDraft} onChange={(event) => setPackageDraft(event.target.value)} onPressEnter={search} style={{ width: 200 }}
+      <Input aria-label={t('filters.package')} placeholder={t('filters.packagePlaceholder')} value={packageDraft} onChange={(event) => setPackageDraft(event.target.value)} onPressEnter={search} style={{ width: 200 }}
         status={invalid.package ? 'error' : undefined} aria-invalid={invalid.package || undefined} aria-describedby={invalid.site || invalid.package ? 'account-messages-filter-error' : undefined} />
       <Space>
         <Button type="primary" onClick={search}>{t('filters.search')}</Button>
@@ -96,7 +96,6 @@ export default function AccountEventMessages({ accessToken, scopeID, sessionEpoc
       </Space>
     </div>
     {invalid.site || invalid.package ? <p id="account-messages-filter-error" className="account-messages-filter-error" role="alert">{t('filters.invalidKeyword')}</p> : null}
-    <p className="account-messages-hint">{t('events.hint')}</p>
     {failure ? <FeedbackWhen title={failure} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
     <div className="identity-table-scroll account-messages-table-scroll" aria-busy={query.isPending || query.isFetching}>
       <Table<OwnNotificationMessage> rowKey="id" size="small" columns={columns} dataSource={query.data?.items ?? []} loading={query.isPending}

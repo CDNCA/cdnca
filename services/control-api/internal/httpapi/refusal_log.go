@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"unicode/utf8"
+
+	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 )
 
 // refusalBodyLimit bounds how much of a 4xx response body is kept to read the
@@ -65,12 +67,17 @@ func (s *Server) withRefusalLog(next http.Handler) http.Handler {
 		tracker := &refusalTracker{ResponseWriter: w}
 		// next (the mux) sets Pattern on the request it receives, so read it
 		// from this copy rather than from r.
-		seen := r.WithContext(context.WithValue(r.Context(), refusalTrackerKey{}, tracker))
+		seen := r.WithContext(refusalreason.WithRecorder(context.WithValue(r.Context(), refusalTrackerKey{}, tracker)))
 		next.ServeHTTP(tracker, seen)
 		if tracker.logged || s.logger == nil || tracker.status < 400 || tracker.status >= 500 {
 			return
 		}
 		code, reason := parseRefusalBody(tracker.body)
+		// A recorded internal reason (refusalreason) is more specific than the
+		// public message and is never in the body.
+		if recorded := refusalreason.Recorded(seen.Context()); recorded != "" {
+			reason = truncateRunes(recorded, refusalReasonLimit)
+		}
 		route := seen.Pattern
 		if route == "" {
 			route = "(unrouted)"

@@ -1,22 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { logListQueryOptions } from './logListQuery'
-import {
-  Alert,
-  Button,
-  Descriptions,
-  Drawer,
-  Input,
-  Result,
-  Select,
-  Space,
-  Table,
-  Tabs,
-  Tag,
-  Typography,
-  type DescriptionsProps,
-  type TableColumnsType,
-} from 'antd'
+import { Alert, Button, Descriptions, Drawer, Input, Result, Select, Space, Tabs, Tag, Typography, type DescriptionsProps, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, Download, Eye } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -45,7 +30,7 @@ import '../i18n/wafLogs'
 import { logASN, logCarrier, logIDC, logRegion } from './logIPIntel'
 import './SiteAccessLogPage.css'
 import dayjs from 'dayjs'
-import { AdvancedFilters, FeedbackWhen, TimeRangeFilter, resolveTimeRangePreset, useLiveApply, type AdvancedFilterItem } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, TimeRangeFilter, resolveTimeRangePreset, useLiveApply, type AdvancedFilterItem, Table } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from './filterUrl'
 
 const pageSize = 10
@@ -600,7 +585,7 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
     .map(([key, label]) => `${label}：${filter[key]}${key === 'uri_path' && filter.uri_path_match === 'prefix' ? ` (${t('parity.uriPathPrefix')})` : ''}`)
     .join('；')
   const appliedTags = ([
-    [t('filters.tenant'), audience === 'admin' ? appliedFilters.tenantId : undefined],
+    [t('filters.tenantId'), audience === 'admin' ? appliedFilters.tenantId : undefined],
     [t('filters.site'), appliedFilters.siteId],
     [t('filters.domain'), appliedFilters.host],
     [t('filters.node'), appliedFilters.nodeId],
@@ -927,7 +912,7 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
   return (
     <section
       className={`analytics-page analytics-log-page${kind === 'access' ? ' site-access-log-page' : ' analytics-block-log-page'}`}
-      aria-label={embedded || kind === 'access' ? t(kind === 'access' ? 'title.access' : 'title.block') : undefined}
+      aria-label={layout === 'waf' ? undefined : embedded || kind === 'access' ? t(kind === 'access' ? 'title.access' : 'title.block') : undefined}
       aria-labelledby={!embedded && kind === 'block' ? 'analytics-log-title' : undefined}
     >
       <div className={`analytics-panel${kind === 'access' ? ` access-view-${accessView}` : ''}`}>
@@ -966,7 +951,7 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
           const number = (value: number | undefined) => value === undefined ? '' : String(value)
           const applied = appliedFilters
           const advanced: Array<AdvancedFilterItem & { key: keyof DraftFilters }> = [
-            ...(audience === 'admin' ? [{ key: 'tenantId' as const, label: t('filters.tenant'), field: textField('tenantId', t('filters.tenant')), applied: applied.tenantId }] : []),
+            ...(audience === 'admin' ? [{ key: 'tenantId' as const, label: t('filters.tenantId'), field: textField('tenantId', t('filters.tenantId')), applied: applied.tenantId }] : []),
             { key: 'siteId', label: t('filters.site'), field: textField('siteId', t('filters.site'), { placeholder: t('filters.sitePlaceholder') }), applied: applied.siteId },
             { key: 'nodeId', label: t('filters.node'), field: textField('nodeId', t('filters.node')), applied: applied.nodeId },
             ...(layout === 'waf' ? [] : [{ key: 'clientIp' as const, label: t('filters.clientIp'), field: textField('clientIp', t('filters.clientIp')), applied: applied.clientIp }]),

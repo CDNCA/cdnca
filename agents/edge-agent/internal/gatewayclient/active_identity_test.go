@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1256,7 +1257,9 @@ func TestLegacyGatewayRetentionIsBoundedAndSurvivesCapabilityUpgrade(t *testing.
 		}
 	}
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
+	// After cancel, runSession returns whichever branch saw the end first:
+	// ctx.Err, io.EOF from a Send, or the stream's Canceled status from Recv.
+	if err := <-done; !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && grpcstatus.Code(err) != codes.Canceled {
 		t.Fatalf("legacy session error = %v, want canceled session", err)
 	}
 	if persisted, err := client.store.record(pendingRecord.RecordKey); err != nil || persisted == nil || persisted.ExecutionDone {
@@ -1283,7 +1286,7 @@ func TestLegacyGatewayRetentionIsBoundedAndSurvivesCapabilityUpgrade(t *testing.
 	assertActiveIdentity(t, upgradedHello.CurrentConfigIdentity, second.ConfigVersionId, second.Artifacts[0].Sha256)
 	assertActiveIdentity(t, upgradedHello.PreviousConfigIdentity, first.ConfigVersionId, first.Artifacts[0].Sha256)
 	upgradeCancel()
-	if err := <-upgradeDone; !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
+	if err := <-upgradeDone; !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && grpcstatus.Code(err) != codes.Canceled {
 		t.Fatalf("upgraded session error = %v, want canceled session", err)
 	}
 }
@@ -1816,6 +1819,9 @@ func TestDeploymentCompactionRecoveryRequiresExactDurableAck(t *testing.T) {
 			if _, err := failedRestart.agentHello(); err == nil {
 				t.Fatalf("restart recovered a live compaction intent with %s ACK state", test.name)
 			}
+			// The closed client's store path is /proc/self/fd/<closed lease fd>
+			// on Linux: look through the restarted client's lease.
+			intentPath = filepath.Join(failedRestart.store.directory, record.RecordKey+deploymentCompactionIntentSuffix)
 			if _, err := os.Stat(intentPath); err != nil {
 				t.Fatalf("failed restart deleted the live compaction intent: %v", err)
 			}
@@ -2088,6 +2094,37 @@ func TestClientJournalLeaseSerializesCompactionMutation(t *testing.T) {
 	}
 }
 
+// replaceWithNewInode replaces path with a new file holding the same bytes.
+// The original stays open until the replacement exists: ext4 and overlayfs
+// give a just-freed inode number to the next file, and with the same bytes,
+// size and (coarse) mtime remove-then-write would leave nothing to detect.
+func replaceWithNewInode(t *testing.T, path string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer original.Close()
+	before, err := original.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil || os.SameFile(before, after) {
+		t.Fatalf("replacement did not change inode: before=%+v after=%+v err=%v", before, after, err)
+	}
+}
+
 func TestDeploymentCompactionReceiptInventoryIsBoundToCleanup(t *testing.T) {
 	for _, mutation := range []string{"add receipt", "add temporary proof", "delete receipt", "replace receipt", "delete cleanup target", "replace cleanup target"} {
 		t.Run(mutation, func(t *testing.T) {
@@ -2124,31 +2161,13 @@ func TestDeploymentCompactionReceiptInventoryIsBoundToCleanup(t *testing.T) {
 						t.Fatal(err)
 					}
 				case "replace receipt":
-					content, err := os.ReadFile(receiptPath)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if err := os.Remove(receiptPath); err != nil {
-						t.Fatal(err)
-					}
-					if err := os.WriteFile(receiptPath, content, 0o600); err != nil {
-						t.Fatal(err)
-					}
+					replaceWithNewInode(t, receiptPath)
 				case "delete cleanup target":
 					if err := os.Remove(orphanPaths[1]); err != nil {
 						t.Fatal(err)
 					}
 				case "replace cleanup target":
-					content, err := os.ReadFile(orphanPaths[1])
-					if err != nil {
-						t.Fatal(err)
-					}
-					if err := os.Remove(orphanPaths[1]); err != nil {
-						t.Fatal(err)
-					}
-					if err := os.WriteFile(orphanPaths[1], content, 0o600); err != nil {
-						t.Fatal(err)
-					}
+					replaceWithNewInode(t, orphanPaths[1])
 				}
 				afterInterleaving = journalTreeSnapshot(t, client.store.directory)
 			})
@@ -2291,7 +2310,7 @@ func TestClientJournalLeaseRejectsNamespaceReplacement(t *testing.T) {
 		}
 		replacementBefore := journalTreeSnapshot(t, parent)
 		movedBefore := journalTreeSnapshot(t, moved)
-		beforeFDs := testOpenFileDescriptorCount(t)
+		beforeFDs := settledOpenFileDescriptorCount(t)
 
 		candidate, err := New(config, &failingDialer{}, manager, client.trust)
 		if err == nil {
@@ -2350,7 +2369,7 @@ func TestClientJournalLeaseRejectsNamespaceReplacement(t *testing.T) {
 		}
 		replacementBefore := journalTreeSnapshot(t, grandparent)
 		movedBefore := journalTreeSnapshot(t, moved)
-		beforeFDs := testOpenFileDescriptorCount(t)
+		beforeFDs := settledOpenFileDescriptorCount(t)
 
 		candidate, err := New(config, &failingDialer{}, manager, client.trust)
 		if err == nil {
@@ -2474,7 +2493,7 @@ func TestDisableDeploymentStatusAckReceiptsValidatesWholeBoundedSet(t *testing.T
 			t.Fatal(err)
 		}
 		before := journalTreeSnapshot(t, client.store.directory)
-		beforeFDs := testOpenFileDescriptorCount(t)
+		beforeFDs := settledOpenFileDescriptorCount(t)
 		if err := client.store.disableDeploymentStatusAckReceipts(); err == nil {
 			t.Fatal("downgrade entry budget+1 was accepted")
 		}
@@ -2539,7 +2558,7 @@ func TestDisableDeploymentStatusAckReceiptsValidatesWholeBoundedSet(t *testing.T
 			_, _, validReceipt := persistTerminalAckReceipt(t, client, command, true)
 			test.setup(t, client, command, validReceipt)
 			before := journalTreeSnapshot(t, client.store.directory)
-			beforeFDs := testOpenFileDescriptorCount(t)
+			beforeFDs := settledOpenFileDescriptorCount(t)
 			if err := client.store.disableDeploymentStatusAckReceipts(); err == nil {
 				t.Fatal("downgrade accepted an invalid unreferenced receipt")
 			}
@@ -2581,24 +2600,7 @@ func TestDisableDeploymentStatusAckReceiptsBindsValidatedInventoryToMutation(t *
 							t.Fatal(err)
 						}
 					case "replace":
-						content, err := os.ReadFile(targetPath)
-						if err != nil {
-							t.Fatal(err)
-						}
-						before, err := os.Stat(targetPath)
-						if err != nil {
-							t.Fatal(err)
-						}
-						if err := os.Remove(targetPath); err != nil {
-							t.Fatal(err)
-						}
-						if err := os.WriteFile(targetPath, content, 0o600); err != nil {
-							t.Fatal(err)
-						}
-						after, err := os.Stat(targetPath)
-						if err != nil || os.SameFile(before, after) {
-							t.Fatalf("replacement did not change inode: before=%+v after=%+v err=%v", before, after, err)
-						}
+						replaceWithNewInode(t, targetPath)
 					}
 					afterInterleaving = journalTreeSnapshot(t, client.store.directory)
 				})
@@ -2835,7 +2837,7 @@ func TestDeploymentJournalAggregateExactBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeFDs := testOpenFileDescriptorCount(t)
+	beforeFDs := settledOpenFileDescriptorCount(t)
 	if err := client.store.disableDeploymentStatusAckReceipts(); err == nil {
 		t.Fatal("downgrade accepted aggregate boundary+1")
 	}
@@ -2893,7 +2895,7 @@ func TestClientJournalLeaseFailureIsMutationAndFDNeutral(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := deploymentCompactionProofSnapshot(t, client.store)
-	beforeFDs := testOpenFileDescriptorCount(t)
+	beforeFDs := settledOpenFileDescriptorCount(t)
 	for range 32 {
 		candidate, err := New(client.config, &failingDialer{}, manager, client.trust)
 		if err == nil {
@@ -2936,7 +2938,7 @@ func TestDeploymentCompactionSnapshotBudgets(t *testing.T) {
 		t.Fatalf("journal boundary fixture has %d entries, want %d: %v", len(entries), deploymentJournalEntryLimit+1, err)
 	}
 	before := deploymentCompactionProofSnapshot(t, client.store)
-	beforeFDs := testOpenFileDescriptorCount(t)
+	beforeFDs := settledOpenFileDescriptorCount(t)
 	for range 16 {
 		if snapshot, err := client.store.snapshotDeploymentCompactionsLocked(); err == nil {
 			snapshot.close()
@@ -2974,7 +2976,7 @@ func TestDeploymentCompactionSnapshotBudgets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeFDs = testOpenFileDescriptorCount(t)
+	beforeFDs = settledOpenFileDescriptorCount(t)
 	for range 16 {
 		if snapshot, err := client.store.snapshotDeploymentCompactionsLocked(); err == nil {
 			snapshot.close()
@@ -2988,6 +2990,26 @@ func TestDeploymentCompactionSnapshotBudgets(t *testing.T) {
 	if err != nil || !os.SameFile(infoBefore, infoAfter) || infoBefore.Size() != infoAfter.Size() || !infoBefore.ModTime().Equal(infoAfter.ModTime()) {
 		t.Fatalf("aggregate budget failure changed oversized proof: before=%+v after=%+v err=%v", infoBefore, infoAfter, err)
 	}
+}
+
+// settledOpenFileDescriptorCount is the baseline for a descriptor leak check.
+// Clients that earlier tests did not Close hold their journal lease
+// descriptors until the garbage collector finalizes them, which otherwise
+// happens at a random point of the measurement (seen on Linux: 63 before, 14
+// after). Collect until two counts agree; the after count stays unforced.
+func settledOpenFileDescriptorCount(t *testing.T) int {
+	t.Helper()
+	previous := -1
+	for range 50 {
+		runtime.GC()
+		count := testOpenFileDescriptorCount(t)
+		if count == previous {
+			return count
+		}
+		previous = count
+		time.Sleep(5 * time.Millisecond)
+	}
+	return previous
 }
 
 func testOpenFileDescriptorCount(t *testing.T) int {
@@ -3199,7 +3221,7 @@ func TestDeploymentStatusAckReceiptHeartbeatBarrierHasOneOutstandingHeartbeat(t 
 		t.Fatalf("heartbeats outstanding before an ACK = %d, want 1", got)
 	}
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
+	if err := <-done; !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && grpcstatus.Code(err) != codes.Canceled {
 		t.Fatalf("receipt heartbeat session error = %v", err)
 	}
 }

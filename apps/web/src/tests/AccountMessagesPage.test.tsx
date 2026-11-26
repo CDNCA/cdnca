@@ -481,6 +481,23 @@ describe('AccountMessagesPage', () => {
     expect(screen.getByRole('columnheader', { name: createdAt })).toBeInTheDocument()
   })
 
+  // 站内消息、公告、事件并列为导航链接；
+  // 事件页刷新仍在事件（?category=events），筛选读作「网站」「套餐」，不常驻说明。
+  it('lists the inbox next to announcements and events and names the event filters by what they accept', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ items: [], total: 0 })))
+    renderWithProviders(<AccountMessagesPage />, ['/account/message?category=events'])
+    await flushUi()
+    const nav = screen.getByRole('navigation', { name: '消息分类' })
+    expect(within(nav).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['站内消息', '/account/inbox'], ['公告', '/account/message'], ['事件提醒', '/account/message?category=events'],
+    ])
+    expect(within(nav).getByRole('link', { name: '事件提醒' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('combobox', { name: '网站' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '套餐' })).toBeInTheDocument()
+    expect(screen.queryByText(/事件提醒不区分已读未读/)).not.toBeInTheDocument()
+  })
+
   // SEC-ACCOUNT-07：事件提醒走本人通知事件投影，按类型/网站 ID 过滤，显示事件时的网站与用户套餐 ID。
   it('SEC-ACCOUNT-07: lists own event alerts with event-time site and package IDs and filters by them', async () => {
     authenticate()
@@ -507,21 +524,21 @@ describe('AccountMessagesPage', () => {
     expect(screen.getByText('共 2 条')).toBeInTheDocument()
 
     // 网站/用户套餐可输名称或展示 ID，边输入边生效；完整 ID 按 ID 过滤。
-    await user.type(screen.getByRole('textbox', { name: '用户套餐ID' }), '基础套餐')
+    await user.type(screen.getByRole('textbox', { name: '套餐' }), '基础套餐')
     await waitFor(() => expect(fetchSpy.mock.calls.some(([url]) => String(url) === `/v1/account/notification-messages?package=${encodeURIComponent('基础套餐')}&limit=10`)).toBe(true))
-    await user.clear(screen.getByRole('textbox', { name: '用户套餐ID' }))
-    await user.type(screen.getByRole('combobox', { name: '网站ID' }), siteID)
+    await user.clear(screen.getByRole('textbox', { name: '套餐' }))
+    await user.type(screen.getByRole('combobox', { name: '网站' }), siteID)
     await waitFor(() => expect(fetchSpy.mock.calls.some(([url]) => String(url) === `/v1/account/notification-messages?site_id=${siteID}&limit=10`)).toBe(true))
     // 超长关键字就地标错（不弹窗），不发请求。
     const calls = fetchSpy.mock.calls.length
-    await user.clear(screen.getByRole('combobox', { name: '网站ID' }))
-    await user.click(screen.getByRole('combobox', { name: '网站ID' }))
+    await user.clear(screen.getByRole('combobox', { name: '网站' }))
+    await user.click(screen.getByRole('combobox', { name: '网站' }))
     await user.paste('a'.repeat(129))
     expect(await screen.findByText('最多 128 个字符，不能含控制字符', { selector: '.account-messages-filter-error' })).toBeInTheDocument()
     expect(document.querySelector('.cdnca-feedback')).toBeNull()
     await new Promise((resolve) => setTimeout(resolve, 500))
     expect(fetchSpy.mock.calls.slice(calls).some(([url]) => String(url).startsWith('/v1/account/notification-messages') && String(url).includes('a'.repeat(129)))).toBe(false)
-    await user.clear(screen.getByRole('combobox', { name: '网站ID' }))
+    await user.clear(screen.getByRole('combobox', { name: '网站' }))
 
     const row = screen.getByText('网站遭受攻击').closest('tr')!
     await user.click(within(row).getByRole('button', { name: /查看/ }))

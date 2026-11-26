@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
@@ -149,7 +150,7 @@ func (h *Handler) pages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": PagesFor(plugins, current.role, current.principal.Permissions,
-		current.modules)})
+		current.modules), "unavailable": h.unavailable(r, current, plugins)})
 }
 
 // SigningKey is the installation public key a plugin backend verifies
@@ -269,7 +270,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	response, err := forward(ctx, h.config.Forwarder, *h.config.Signer, plugin.Declaration.APIBaseURL, request, callContext)
 	payload := map[string]any{"plugin_id": pluginID, "page_id": request.PageID, "method": request.Method,
-		"path": request.Path}
+		"path": request.Path, "request_id": requestID}
 	if request.SiteID != nil {
 		payload["site_id"] = request.SiteID.String()
 	}
@@ -279,8 +280,14 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request) {
 		h.error(w, r, http.StatusBadGateway, "plugin_ui_backend_unavailable")
 		return
 	}
+	response.RequestID = requestID
 	// Reads are not audited (they change nothing here); every write the
-	// plugin backend is asked to make on the user's behalf is.
+	// plugin backend is asked to make on the user's behalf is. A refused read
+	// is logged under the same request id the page shows in its diagnostics.
+	if request.Method == http.MethodGet && response.Status >= 400 {
+		slog.Warn("plugin ui proxy refused", "plugin_id", pluginID, "page_id", request.PageID, "path", request.Path,
+			"status", response.Status, "request_id", requestID)
+	}
 	if request.Method != http.MethodGet {
 		payload["status"] = response.Status
 		result := "success"
@@ -319,6 +326,9 @@ func locale(r *http.Request) string {
 }
 
 func clientIP(r *http.Request) string {
+	if address := audit.SourceIPFrom(r.Context()); address != "" {
+		return address
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

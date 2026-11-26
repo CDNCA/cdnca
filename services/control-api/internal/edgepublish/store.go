@@ -46,6 +46,17 @@ func lockConfigurationScope(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, n
 	return revision, nil
 }
 
+// packageInEffectSQL is the one rule for whether a package subscription's
+// sites and forwards are published and its limits checked: enabled,
+// undeleted, active and not suspended. A cancelled subscription is left out
+// as a suspended one is (user): its sites and forwards stay as they are
+// and the rest of the scope publishes. A package whose term ended stays in,
+// its sites marked expired (package_expiry.go).
+func packageInEffectSQL(alias string) string {
+	return alias + ".admin_enabled AND " + alias + ".deleted_at IS NULL AND " +
+		alias + ".lifecycle_status='active' AND " + alias + ".suspended_at IS NULL"
+}
+
 func loadSiteFacts(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -83,8 +94,7 @@ func loadSiteFacts(
 		  ON package_subscription.tenant_scope_id=site.scope_id AND package_subscription.id=site.package_subscription_id
 		WHERE site.scope_id=$1 AND site.deleted_at IS NULL AND site.enabled=true
 		  AND (site.package_subscription_id IS NULL OR (package_subscription.id IS NOT NULL
-		  AND package_subscription.admin_enabled=true AND package_subscription.deleted_at IS NULL
-		  AND package_subscription.suspended_at IS NULL))
+		  AND `+packageInEffectSQL("package_subscription")+`))
 		  -- package_expired publishes marked (package_expiry.go), never withdrawn
 		  AND (site.status<>'traffic_exceeded' OR site.id=ANY($2::uuid[]))
 		ORDER BY site.id,origin.position`, scopeID, statusRecoverySiteIDs)
@@ -518,8 +528,7 @@ func loadStreamFacts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) ([]snaps
 		) intent ON true
 		WHERE forward.scope_id=$1 AND forward.deleted_at IS NULL AND forward.enabled=true AND forward.admin_status='normal'
 		  AND (forward.package_subscription_id IS NULL OR (package_subscription.id IS NOT NULL
-		  AND package_subscription.admin_enabled=true AND package_subscription.deleted_at IS NULL
-		  AND package_subscription.suspended_at IS NULL))
+		  AND `+packageInEffectSQL("package_subscription")+`))
 		ORDER BY forward.id`, scopeID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: read L4 facts", ErrPersistence)
@@ -565,7 +574,7 @@ func loadPublication(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, key stri
 		SELECT id,source_revision,request_digest,canonical_snapshot_sha256,artifact_sha256,
 		       config_version_id,rollout_id,node_count,created_at,target_kind,
 		       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256,
-		       key_envelope_oversized_node_ids,site_selection_unsupported_node_ids
+		       key_envelope_oversized_node_ids,site_selection_unsupported_node_ids,COALESCE(content_refusal,'')
 		FROM edge_config_publications
 		WHERE configuration_scope_id=$1 AND idempotency_key=$2`, scopeID, key), scopeID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -587,7 +596,8 @@ func scanStoredPublication(row rowScanner, scopeID uuid.UUID) (storedPublication
 		&snapshotDigest, &artifactDigest, &stored.result.ConfigVersionID, &stored.result.RolloutID,
 		&stored.result.NodeCount, &stored.result.CreatedAt, &stored.result.TargetKind,
 		&targetID, &targetRevision, &resolverDigest, &targetDigest,
-		&stored.result.KeyEnvelopeOversizedNodeIDs, &stored.result.SiteSelectionUnsupportedNodeIDs)
+		&stored.result.KeyEnvelopeOversizedNodeIDs, &stored.result.SiteSelectionUnsupportedNodeIDs,
+		&stored.result.NodeSettingsRefusal)
 	if err != nil {
 		return storedPublication{}, err
 	}
@@ -641,6 +651,10 @@ func publicationExistsForRequestID(ctx context.Context, tx pgx.Tx, scopeID, requ
 }
 
 func insertPublication(ctx context.Context, tx pgx.Tx, result PublishResult, request normalizedPublishRequest, digest [32]byte) error {
+	kind, baseConfigID, contentRefusal := PublicationKindContent, (*uuid.UUID)(nil), (*string)(nil)
+	if settings := request.nodeSettings; settings != nil {
+		kind, baseConfigID, contentRefusal = PublicationKindNodeSettings, &settings.base.configID, &settings.refusal
+	}
 	command, err := tx.Exec(ctx, `
 		INSERT INTO edge_config_publications (
 			id,configuration_scope_id,source_revision,idempotency_key,request_digest,
@@ -648,8 +662,9 @@ func insertPublication(ctx context.Context, tx pgx.Tx, result PublishResult, req
 			config_version_id,rollout_id,node_count,created_at,expected_source_revision,
 			actor_user_id,actor_scope_id,target_kind,target_snapshot_id,target_snapshot_revision,
 			target_resolver_sha256,target_snapshot_sha256,contract_version,
-			key_envelope_oversized_node_ids,site_selection_unsupported_node_ids
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,1,$22,$23)
+			key_envelope_oversized_node_ids,site_selection_unsupported_node_ids,
+			publication_kind,node_settings_base_config_version_id,content_refusal
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,1,$22,$23,$24,$25,$26)
 		ON CONFLICT (configuration_scope_id,idempotency_key) DO NOTHING`,
 		result.PublicationID, result.ConfigurationScopeID, result.SourceRevision, request.IdempotencyKey,
 		digest[:], request.RequestUUID, request.CorrelationUUID, result.CanonicalSnapshotSHA256[:],
@@ -657,7 +672,8 @@ func insertPublication(ctx context.Context, tx pgx.Tx, result PublishResult, req
 		request.ExpectedSourceRevision, request.Actor.UserID, request.Actor.ScopeID, result.TargetKind,
 		targetReferenceID(result.TargetSnapshot), targetReferenceRevision(result.TargetSnapshot),
 		targetReferenceDigest(result.TargetSnapshot), result.TargetSnapshotSHA256[:],
-		storedNodeIDs(result.KeyEnvelopeOversizedNodeIDs), storedNodeIDs(result.SiteSelectionUnsupportedNodeIDs))
+		storedNodeIDs(result.KeyEnvelopeOversizedNodeIDs), storedNodeIDs(result.SiteSelectionUnsupportedNodeIDs),
+		kind, baseConfigID, contentRefusal)
 	if err != nil {
 		var databaseError *pgconn.PgError
 		if errors.As(err, &databaseError) && databaseError.ConstraintName == "edge_config_publications_one_contract_source_idx" {

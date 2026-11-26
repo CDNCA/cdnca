@@ -163,7 +163,7 @@ func CRSWAFSeed() []Item {
 				ArgumentsLimit: 1000, JSONDepthLimit: 512, PCREMatchLimit: 100000}}}},
 		{SystemKey: "waf_set:crs_rules", Kind: KindWAFRuleSet, Name: "OWASP CRS 规则文本", Hidden: true, Sort: 101, Revision: 2,
 			Description: "OWASP CRS " + CRSRulesBundle().Version + " 请求侧规则文件与数据文件（Apache-2.0，随附 LICENSE 与 NOTICE），随签名目录下发，节点安装包不内置",
-			Body: ItemBody{WAFRuleSet: &WAFRuleSetBody{Bundle: CRSRulesBundle()}}},
+			Body:        ItemBody{WAFRuleSet: &WAFRuleSetBody{Bundle: CRSRulesBundle()}}},
 	}
 	sortItems(items)
 	return items

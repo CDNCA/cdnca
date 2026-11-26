@@ -268,7 +268,11 @@ enum CapabilityName {
   // the control plane (KeyDocument.node_storage) and reports what it runs in
   // NodeTelemetryV1.storage. Cache directory and limit apply on reload, the
   // log directory on the next Agent start. Control writes the field and
-  // allows editing only for an Agent that declares it.
+  // allows editing only for an Agent that declares it. v2: the node also
+  // takes KeyDocument.node_facts_at and keeps its region and storage from
+  // the release with the latest (a refused newer publication of one scope
+  // cannot bring back an older value); control writes the field only for
+  // an Agent that declares v2.
   CAPABILITY_NAME_NODE_STORAGE = 71;
   // WAF_JA4_NEGATION v1 (number assigned by the main
   // session): bound WAF rules may require the request's JA4 fingerprint to
@@ -995,6 +999,14 @@ message DeploymentCommand {
   // configuration_scope_id binds scoped configuration formats such as the
   // site-runtime v2 bundle. Legacy v1 commands may omit it.
   optional string configuration_scope_id = 12;
+  // released_config_version_ids (apply only):
+  // config versions of this scope that an operator reconciliation on this
+  // node confirmed as served (the source version of a rollback_failed apply,
+  // confirmed directly or by a supplemental confirmation). The Gateway's
+  // telemetry authorization carries them, so the Agent stops holding the
+  // telemetry records of these versions. Canonical UUIDs, at most 64, sorted;
+  // empty when there are none. Older Agents ignore it.
+  repeated string released_config_version_ids = 13;
 }
 
 // CheckResult is a safe health or precheck result; output must be sanitized.

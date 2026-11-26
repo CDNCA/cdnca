@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes } from 'react-router-dom'
 
 import type { L2Config, NodeLineGroup, NodeLineGroupSnapshotInput } from '../api/nodeScheduling'
 import { useSessionStore } from '../auth/session'
@@ -415,9 +416,9 @@ describe('NodeLineGroupsPage', () => {
     expect(document.querySelector('.cdnca-feedback')).toBeNull()
 
     const firstRow = screen.getByText('平台线路一').closest('tr')!
-    await user.click(within(firstRow).getByRole('button', { name: '删除线路分组' }))
+    await user.click(within(firstRow).getByRole('button', { name: '删除线路组平台线路一' }))
     let deleteDialog = await screen.findByRole('dialog', { name: '删除确认' })
-    expect(deleteDialog).toHaveTextContent('是否删除线路分组 id:7')
+    expect(deleteDialog).toHaveTextContent('删除线路组「平台线路一」？')
     expect(Array.from(deleteDialog.querySelectorAll('.ant-modal-footer .ant-btn')).map((button) => button.textContent?.trim()))
       .toEqual(['取消', '确定'])
     await user.click(within(deleteDialog).getByRole('button', { name: '确定' }))
@@ -544,7 +545,7 @@ describe('NodeLineGroupsPage', () => {
       : json({ items: [{ ...group, tenant_scope_id: platformScopeID, name: '香港线路' }] })))
     const user = userEvent.setup()
     renderWithProviders(<NodeLineGroupsPage />)
-    await user.click(within((await screen.findByText('香港线路')).closest('tr')!).getByRole('button', { name: '删除线路分组' }))
+    await user.click(within((await screen.findByText('香港线路')).closest('tr')!).getByRole('button', { name: '删除线路组香港线路' }))
     await user.click(within(await screen.findByRole('dialog', { name: '删除确认' })).getByRole('button', { name: '确定' }))
     expect(await screen.findByText('线路分组删除失败')).toBeInTheDocument()
     expect(screen.getByText(
@@ -1519,7 +1520,7 @@ describe('NodeLineGroupsPage', () => {
     expect(within(table).getByText('100')).toBeInTheDocument()
     expect(within(table).getByRole('button', { name: '配置解析' })).toBeInTheDocument()
     expect(within(table).getByRole('button', { name: '编辑' })).toBeInTheDocument()
-    expect(within(table).getByRole('button', { name: '删除线路分组' })).toBeEnabled()
+    expect(within(table).getByRole('button', { name: '删除线路组华东主线路' })).toBeEnabled()
     expect(fetchSpy.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
 
     expect(nodeLineGroupsCSS).toMatch(/\.node-line-groups-filter-toolbar\s*\{[\s\S]*?display:\s*grid;/)
@@ -1560,6 +1561,32 @@ describe('NodeLineGroupsPage', () => {
     expect(mobileLineGroupsCSS).toMatch(/\.node-line-groups-table-scroll > \.ant-table-wrapper\s*\{[\s\S]*?width:\s*100%;[\s\S]*?max-width:\s*100%;/)
     // fix-dblscroll：表格宽度只来自 scroll.x，CSS 不再把 .ant-table 撑到 1050px。
     expect(mobileLineGroupsCSS).not.toMatch(/\.node-line-groups-table-scroll \.ant-table\s*\{[\s\S]*?width:\s*1050px;/)
+  })
+
+  // 窄屏首屏只到组名列，「配置解析」在组名格；宽屏仍在操作列首位。
+  it.each([
+    { width: 'narrow', wide: false, cell: '.node-line-group-col-name' },
+    { width: 'wide', wide: true, cell: '.node-line-group-col-actions' },
+  ])('puts the configure-resolution entry where the $width table shows it first', async ({ wide, cell }) => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({ ...original(query), matches: wide && /min-width/.test(query) })) as typeof window.matchMedia
+    try {
+      authenticate()
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [group] }))
+      const user = userEvent.setup()
+      renderWithProviders(<Routes>
+        <Route path="/node/line-group" element={<NodeLineGroupsPage />} />
+        <Route path="/node/line-group/line/:id" element={<p data-testid="location">{groupID}</p>} />
+      </Routes>, ['/node/line-group'])
+      expect(await screen.findByText('华东主线路')).toBeInTheDocument()
+      const entries = within(screen.getByRole('table')).getAllByRole('button', { name: '配置解析' })
+      expect(entries).toHaveLength(1)
+      expect(entries[0].closest('td')).toHaveClass(cell.slice(1))
+      await user.click(entries[0])
+      expect(await screen.findByTestId('location')).toHaveTextContent(groupID)
+    } finally {
+      window.matchMedia = original
+    }
   })
 
   it('clears the submitted and draft filters and keeps the region and page-size selects interactive', async () => {

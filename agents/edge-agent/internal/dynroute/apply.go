@@ -264,7 +264,8 @@ func (runtime *Runtime) revertActivation(ctx context.Context, generation uint64,
 
 // rollbackIndex returns the index to the previous generation: one step when
 // the active generation came from one change set, else by activating the
-// previous index file as a new generation (contract §4.3).
+// previous index file as a new generation (contract §4.3); a node's first
+// generation goes back to an empty table.
 func (runtime *Runtime) rollbackIndex(ctx context.Context) (uint64, error) {
 	index, found, err := runtime.activator.Files.Current()
 	if err != nil || !found {
@@ -276,7 +277,17 @@ func (runtime *Runtime) rollbackIndex(ctx context.Context) (uint64, error) {
 	}
 	previous, ok := runtime.activator.Files.Previous(index.Generation)
 	if !ok {
-		return 0, err
+		if runtime.state.Generation != 0 {
+			return 0, err
+		}
+		// The failed generation is the node's first:
+		// nothing ran before it, so the node returns to an empty routing table
+		// (the state before this Apply) instead of staying on it unaccounted.
+		activation, emptyErr := runtime.activator.RollbackToEmpty(ctx)
+		if emptyErr != nil {
+			return 0, errors.Join(err, emptyErr)
+		}
+		return activation.Generation, nil
 	}
 	activation, toErr := runtime.activator.RollbackTo(ctx, previous)
 	if toErr != nil {
@@ -321,6 +332,39 @@ func (e *RollbackFailedError) Unwrap() []error { return []error{e.Err, e.Rollbac
 // RollbackFailedAfterActivation marks the error for the deployment journal
 // (gatewayclient.DynamicRoutingRollbackFailed).
 func (e *RollbackFailedError) RollbackFailedAfterActivation() bool { return true }
+
+// ServesGeneration reports whether generation, the one a RollbackFailedError
+// names, still routes the node: it is the agent's current index file and the
+// site index's active generation, with a heartbeat from every live worker at
+// it (the first generation's
+// rollback failed before switching anything, and it kept serving). Anything
+// else, or a status that cannot be read, is false.
+func (runtime *Runtime) ServesGeneration(ctx context.Context, generation uint64) bool {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if generation == 0 || runtime.activator == nil {
+		return false
+	}
+	current, found, err := runtime.activator.Files.Current()
+	if err != nil || !found || current.Generation != generation {
+		return false
+	}
+	status, err := runtime.activator.Control.Status(ctx)
+	if err != nil || status.Generation != generation || !status.EpochOK || len(status.Workers) == 0 {
+		return false
+	}
+	live := 0
+	for pid, seen := range status.Workers {
+		if runtime.activator.LiveWorker != nil && !runtime.activator.LiveWorker(pid) {
+			continue
+		}
+		if seen != generation {
+			return false
+		}
+		live++
+	}
+	return live > 0
+}
 
 // maintainActivated is what follows an activated, healthy generation: the
 // state save, the DDoS table and retention. The generation is active: a

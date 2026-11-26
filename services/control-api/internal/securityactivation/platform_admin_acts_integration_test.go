@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
+	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/cdnca/cdnca/services/control-api/internal/tenantaccess/tenantaccesstest"
 	"github.com/jackc/pgx/v5"
-	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 )
 
 var _ = time.Now

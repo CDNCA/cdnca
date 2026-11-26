@@ -30,3 +30,31 @@ func TestFailureCodeNamesTheReason(t *testing.T) {
 		t.Fatalf("mapError lost the base error: %v", err)
 	}
 }
+
+// a CNAME without a domain that finds no zone says whether the
+// package lacks a CNAME domain or the site has no package; a missing DNS
+// provider and a named domain keep their codes.
+func TestSiteZoneFailureNamesTheMissingDomain(t *testing.T) {
+	zoneMissing := failWith(FailureCNAMEZoneNotConfigured, ErrNotFound)
+	providerMissing := failWith(FailureDNSProviderNotConfigured, ErrNotFound)
+	for _, tc := range []struct {
+		err      error
+		packaged bool
+		domain   string
+		want     string
+	}{
+		{zoneMissing, true, "", "cname_package_domain_missing"},
+		{zoneMissing, false, "", "cname_no_default_zone"},
+		{zoneMissing, true, "cdn.example.com", "cname_zone_not_configured"},
+		{providerMissing, true, "", "dns_provider_not_configured"},
+		{providerMissing, false, "", "dns_provider_not_configured"},
+	} {
+		err := siteZoneFailure(tc.err, tc.packaged, tc.domain)
+		if got := failureCode(err); got != tc.want {
+			t.Errorf("siteZoneFailure(%s, packaged=%v, %q)=%s want %s", failureCode(tc.err), tc.packaged, tc.domain, got, tc.want)
+		}
+		if !errors.Is(err, ErrNotFound) {
+			t.Errorf("siteZoneFailure lost ErrNotFound: %v", err)
+		}
+	}
+}

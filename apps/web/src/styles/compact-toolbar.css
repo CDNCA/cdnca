@@ -94,6 +94,12 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* 下拉箭头字形只作装饰，替代文本为空，不进按钮的可访问名称（不支持该写法的浏览器沿用上一条）。 */
+.app-shell .ant-dropdown-trigger.ant-btn:has(> .lucide-chevron-down)::after,
+.ant-modal-root .ant-dropdown-trigger.ant-btn:has(> .lucide-chevron-down)::after {
+  content: '\f116' / '';
+}
+
 .site-toolbar,
 .identity-toolbar,
 .analytics-filter-bar,

@@ -355,6 +355,28 @@
   margin-bottom: 8px;
 }
 
+.announcement-member-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.announcement-publish-summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 12px 0;
+}
+
+.announcement-publish-summary dt {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.announcement-publish-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 767px) {
   .announcement-editor-modal {
     top: 0;

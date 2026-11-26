@@ -215,8 +215,21 @@ func (d *Dispatcher) Dispatch(
 	return result
 }
 
+// Pre-1.0.35 default password-reset mail: it announced a finished
+// reset although it carries the reset link. Saved settings that still hold it
+// verbatim are sent with the current default instead; edited templates are kept.
+const (
+	legacyAccountRecoverySubject  = "用户密码已重置"
+	legacyAccountRecoveryBody     = "<p>您好，{{.username}}。您的密码已完成重置。如非本人操作，请立即联系管理员。</p>"
+	currentAccountRecoverySubject = "找回密码"
+	currentAccountRecoveryBody    = "您好，{{.username}}。你正在找回账号密码，请在有效期内打开下面的链接设置新密码；如果不是你本人操作，请忽略本邮件。"
+)
+
 func renderAccountRecoveryTemplate(subject, body, username string) (string, string) {
 	const placeholder = "{{.username}}"
+	if subject == legacyAccountRecoverySubject && body == legacyAccountRecoveryBody {
+		subject, body = currentAccountRecoverySubject, currentAccountRecoveryBody
+	}
 	return strings.ReplaceAll(subject, placeholder, username), strings.ReplaceAll(body, placeholder, username)
 }
 

@@ -4,6 +4,7 @@ import {
   type ControlUpgradeCheckInput,
   type ControlUpgradeCreateInput,
   type ControlUpgradeListParams,
+  type ControlUpgradePreparation,
   type ControlUpgradeRequestMetadata,
   type ControlUpgradeRolloutAction,
   type ControlUpgradeRolloutDetail,
@@ -96,6 +97,14 @@ function summary(overrides: Partial<ControlUpgradeRolloutSummary> = {}): Control
     blockers: [],
     created_at: '2026-08-05T01:00:00Z',
     updated_at: '2026-08-05T01:00:00Z',
+    ...overrides,
+  }
+}
+
+function preparation(overrides: Partial<ControlUpgradePreparation> = {}): ControlUpgradePreparation {
+  return {
+    id: '00000000-0000-4000-8000-0000000000a1', plan_id: ids.plan, state: 'preparing', phase: 'downloading',
+    start_when_ready: true, node_ids: [ids.nodeA], created_at: '2026-11-25T01:02:03.123456Z', updated_at: '2026-11-25T01:02:04Z',
     ...overrides,
   }
 }
@@ -301,7 +310,7 @@ describe('controlUpgradesApi', () => {
       state: 'paused',
       nodeId: ids.nodeA,
     }
-    const response = { data: [summary({ state: 'paused' })], page: 2, page_size: 50, total: 51 }
+    const response = { data: [summary({ state: 'paused' })], page: 2, page_size: 50, total: 51, preparations: [preparation()] }
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(response))
 
     await expect(controlUpgradesApi.list('access-token', params)).resolves.toEqual(response)
@@ -320,7 +329,7 @@ describe('controlUpgradesApi', () => {
       rollback_artifact_id: '', rollback_artifact_sha256: '', rollback_artifact_size_bytes: 0,
       current_release_sequence: 41, release_sequence: 44,
     }
-    const good = { data: [summary({ schema_version: 3 }), summary(rerelease)], page: 1, page_size: 20, total: 2 }
+    const good = { data: [summary({ schema_version: 3 }), summary(rerelease)], page: 1, page_size: 20, total: 2, preparations: [] }
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(good))
     await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).resolves.toEqual(good)
     const detailResponse = { data: detail(rerelease) }
@@ -333,7 +342,7 @@ describe('controlUpgradesApi', () => {
       { ...rerelease, target_version: '1.6.0' },
       { ...rerelease, rollback_artifact_id: ids.rollbackArtifact, rollback_artifact_sha256: `${'B'.repeat(42)}E`, rollback_artifact_size_bytes: 900 },
     ]) {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: [summary(bad)], page: 1, page_size: 20, total: 1 }))
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: [summary(bad)], page: 1, page_size: 20, total: 1, preparations: [] }))
       await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).rejects.toThrow()
     }
   })
@@ -375,9 +384,10 @@ describe('controlUpgradesApi', () => {
     })
   })
 
+  // the create answers 202 with its background preparation.
   it('creates a rollout with canonical input and preserves the durable replay marker', async () => {
-    const response = { data: detail(), replayed: false }
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(response, 201))
+    const response = { data: preparation({ node_ids: createInput.node_ids }), replayed: false }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(response, 202))
 
     await expect(controlUpgradesApi.create('access-token', createInput, metadata)).resolves.toEqual(response)
     expect(fetchSpy).toHaveBeenCalledWith('/v1/admin/control-upgrade-rollouts', {
@@ -440,6 +450,9 @@ describe('controlUpgradesApi', () => {
       ...createInput,
       node_ids: [ids.nodeB, ids.nodeA],
     }, metadata)],
+    ['an explicit false start request', () => controlUpgradesApi.create('access-token', {
+      ...createInput, start_when_ready: false as unknown as true,
+    }, metadata)],
     ['foreign canary', () => controlUpgradesApi.create('access-token', {
       ...createInput,
       canary_node_ids: ['00000000-0000-4000-8000-000000000099'],
@@ -484,13 +497,13 @@ describe('controlUpgradesApi', () => {
   })
 
   it.each([
-    ['extra summary field', { data: [{ ...summary(), secret: 'leak' }], page: 1, page_size: 20, total: 1 }],
-    ['inconsistent node counts', { data: [summary({ healthy_nodes: 1 })], page: 1, page_size: 20, total: 1 }],
-    ['wrong page echo', { data: [summary()], page: 2, page_size: 20, total: 1 }],
-    ['numeric rollout revision', { data: [summary({ revision: 1 as unknown as string })], page: 1, page_size: 20, total: 1 }],
-    ['leading-zero rollout revision', { data: [summary({ revision: '01' })], page: 1, page_size: 20, total: 1 }],
+    ['extra summary field', { data: [{ ...summary(), secret: 'leak' }], page: 1, page_size: 20, total: 1, preparations: [] }],
+    ['inconsistent node counts', { data: [summary({ healthy_nodes: 1 })], page: 1, page_size: 20, total: 1, preparations: [] }],
+    ['wrong page echo', { data: [summary()], page: 2, page_size: 20, total: 1, preparations: [] }],
+    ['numeric rollout revision', { data: [summary({ revision: 1 as unknown as string })], page: 1, page_size: 20, total: 1, preparations: [] }],
+    ['leading-zero rollout revision', { data: [summary({ revision: '01' })], page: 1, page_size: 20, total: 1, preparations: [] }],
     ['overflow rollout revision', {
-      data: [summary({ revision: '9223372036854775808' })], page: 1, page_size: 20, total: 1,
+      data: [summary({ revision: '9223372036854775808' })], page: 1, page_size: 20, total: 1, preparations: [],
     }],
     ['invalid detail event', { data: detail({ events: [{
       id: ids.event,
@@ -522,10 +535,47 @@ describe('controlUpgradesApi', () => {
   })
 
   it('rejects a successful create returned with the wrong HTTP status', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: detail(), replayed: false }, 200))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: preparation({ node_ids: createInput.node_ids }), replayed: false }, 201))
     await expect(controlUpgradesApi.create('access-token', createInput, metadata)).rejects.toMatchObject({
       code: 'invalid_response',
     })
+  })
+
+  it.each([
+    ['a plan detail instead of a preparation', { data: detail(), replayed: false }],
+    ['another node set', { data: preparation({ node_ids: [ids.nodeA] }), replayed: false }],
+    ['a failure without code', { data: preparation({ node_ids: createInput.node_ids, state: 'failed' }), replayed: false }],
+    ['an unknown failure code', { data: preparation({ node_ids: createInput.node_ids, state: 'failed',
+      failure_code: 'disk_full' as 'internal_error' }), replayed: false }],
+    ['a reason outside a License refusal', { data: preparation({ node_ids: createInput.node_ids, state: 'failed',
+      failure_code: 'artifact_invalid', failure_reason: 'installation_banned' }), replayed: false }],
+    ['ready before done', { data: preparation({ node_ids: createInput.node_ids, state: 'ready' }), replayed: true }],
+    ['no start request flag', { data: { ...preparation({ node_ids: createInput.node_ids }), start_when_ready: undefined }, replayed: false }],
+    ['starting without a start request', { data: preparation({ node_ids: createInput.node_ids, phase: 'starting',
+      start_when_ready: false }), replayed: false }],
+    ['a start failure before ready', { data: preparation({ node_ids: createInput.node_ids,
+      start_failure_code: 'approval_required' }), replayed: false }],
+  ] as const)('fails closed for a create answering %s', async (_name, body) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(body, 202))
+    await expect(controlUpgradesApi.create('access-token', createInput, metadata)).rejects.toMatchObject({
+      code: 'invalid_response',
+    })
+  })
+
+  it('accepts a failed License refusal with its reason and refuses a ready preparation in the list', async () => {
+    const failed = preparation({ state: 'failed', failure_code: 'license_rejected', failure_reason: 'installation_banned' })
+    const good = { data: [], page: 1, page_size: 20, total: 0, preparations: [failed] }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(good))
+    await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).resolves.toEqual(good)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ ...good, preparations: [preparation({ state: 'ready', phase: 'done' })] }))
+    await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).rejects.toThrow()
+    // A ready plan left queued is listed with why; a License refusal without a code carries its HTTP status.
+    const unstarted = { ...good, preparations: [preparation({ state: 'ready', phase: 'done', start_failure_code: 'license_rejected',
+      failure_reason: 'http_403' })] }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(unstarted))
+    await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).resolves.toEqual(unstarted)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: [], page: 1, page_size: 20, total: 0 }))
+    await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).rejects.toThrow()
   })
 
   it('keeps raw server text out of a permission error while retaining a safe request ID', async () => {

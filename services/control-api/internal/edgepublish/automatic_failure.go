@@ -22,6 +22,16 @@ const (
 	// AutomaticFailureSiteConfigInvalid: a stored site the publication cannot
 	// compile (SiteConfigInvalidError); the site's next save publishes again.
 	AutomaticFailureSiteConfigInvalid = "site_config_invalid"
+	// The scope's own package, entitlement or site facts refuse it (the
+	// manual publication's codes of the same names); the change that clears
+	// one publishes again.
+	AutomaticFailurePackageSubscriptionInactive = "package_subscription_inactive"
+	AutomaticFailurePackageQuotaExceeded        = "package_resource_quota_exceeded"
+	AutomaticFailurePackageFeatureDenied        = "package_feature_denied"
+	AutomaticFailureModuleNotEntitled           = "entitlement_feature_denied"
+	AutomaticFailureSiteL2Unavailable           = "site_l2_unavailable"
+	AutomaticFailureRulePackOutOfProfile        = "rule_pack_out_of_profile"
+	AutomaticFailureSDKShieldPortShared         = "sdk_shield_port_shared"
 )
 
 // artifactSyncDefaultDelivery is the time one node artifact delivery is
@@ -29,22 +39,38 @@ const (
 const artifactSyncDefaultDelivery = time.Minute
 
 // LatestAutomaticFailureTx is the scope's latest automatic request when it
-// failed for no_target_nodes, node_capability_unavailable,
-// node_artifacts_syncing, node_scope_conflict or site_config_invalid and no later publication of the scope exists. For
+// failed for one of the reasons above and no later content publication of the
+// scope exists, or, when newer, the content refusal its latest publication
+// (an automatic request's node settings redelivery, migration 701) was made
+// for: the node settings went out, the content did not. For
 // node_artifacts_syncing it also reads how far the refused nodes' node
 // artifact sets have arrived.
 func LatestAutomaticFailureTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (*AutomaticPublicationFailure, error) {
 	var failure AutomaticPublicationFailure
-	err := tx.QueryRow(ctx, `SELECT state.terminal_code,request_row.source_revision,state.occurred_at
+	err := tx.QueryRow(ctx, `SELECT reason,source_revision,failed_at FROM (
+		SELECT state.terminal_code AS reason,request_row.source_revision,state.occurred_at AS failed_at
 		FROM edge_automatic_publication_requests request_row
 		JOIN LATERAL (SELECT state,terminal_code,occurred_at FROM edge_automatic_publication_request_state_facts
 		  WHERE request_id=request_row.id ORDER BY sequence DESC LIMIT 1) state ON true
 		WHERE request_row.target_scope_id=$1
-		  AND state.state='failed' AND state.terminal_code IN ('no_target_nodes','node_capability_unavailable','node_artifacts_syncing','node_scope_conflict','site_config_invalid')
+		  AND state.state='failed' AND state.terminal_code IN ('no_target_nodes','node_capability_unavailable','node_artifacts_syncing','node_scope_conflict','site_config_invalid',
+		    'package_subscription_inactive','package_resource_quota_exceeded','package_feature_denied','entitlement_feature_denied',
+		    'site_l2_unavailable','rule_pack_out_of_profile','sdk_shield_port_shared')
 		  AND request_row.id=(SELECT latest.id FROM edge_automatic_publication_requests latest
 		    WHERE latest.target_scope_id=$1 ORDER BY latest.source_revision DESC,latest.created_at DESC,latest.id DESC LIMIT 1)
 		  AND NOT EXISTS(SELECT 1 FROM edge_config_publications publication
-		    WHERE publication.configuration_scope_id=$1 AND publication.source_revision>=request_row.source_revision)`,
+		    WHERE publication.configuration_scope_id=$1 AND publication.source_revision>=request_row.source_revision
+		      AND publication.publication_kind='content')
+		UNION ALL
+		SELECT latest.content_refusal,latest.source_revision,latest.created_at
+		FROM (SELECT publication.publication_kind,publication.content_refusal,publication.source_revision,
+		        publication.created_at,publication.request_id
+		      FROM edge_config_publications publication
+		      WHERE publication.configuration_scope_id=$1 AND publication.contract_version=1
+		      ORDER BY publication.source_revision DESC LIMIT 1) latest
+		WHERE latest.publication_kind='node_settings' AND EXISTS(SELECT 1 FROM edge_automatic_publication_requests request_row
+		  WHERE request_row.id=latest.request_id AND request_row.target_scope_id=$1)
+		) failure ORDER BY source_revision DESC LIMIT 1`,
 		scopeID).Scan(&failure.Reason, &failure.SourceRevision, &failure.FailedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

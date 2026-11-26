@@ -368,6 +368,8 @@ export interface NativeUpgradeOptions {
   options: {
     current_version: string
     current_schema_head: number | null
+    /** Why current_schema_head is null (the installed build is not confirmed). */
+    current_schema_head_reason?: string
     target_mode: 'follow_channel' | 'pinned'
     items: NativeUpgradeOption[]
   }
@@ -381,7 +383,9 @@ function parseOptions(value: unknown): NativeUpgradeOptions {
   const options = value.options
   if (!record(options) || !version(options.current_version) || !Array.isArray(options.items) || options.items.length > 200 ||
     (options.target_mode !== 'follow_channel' && options.target_mode !== 'pinned') ||
-    (options.current_schema_head !== null && !safeInteger(options.current_schema_head, 1))) throw invalid()
+    (options.current_schema_head !== null && !safeInteger(options.current_schema_head, 1)) ||
+    (options.current_schema_head_reason !== undefined &&
+      (options.current_schema_head !== null || !reasonPattern.test(options.current_schema_head_reason as string)))) throw invalid()
   const items = options.items.map((item: unknown): NativeUpgradeOption => {
     if (!record(item) || !matches(item.artifact_id, uuidPattern) || !version(item.version) || typeof item.release_notes !== 'string' ||
       !safeInteger(item.published_at) || !['upgrade', 'rollback', 'reinstall'].includes(item.operation as string) ||
@@ -392,6 +396,7 @@ function parseOptions(value: unknown): NativeUpgradeOptions {
   })
   return { schema: value.schema, observed_at: value.observed_at, options: {
     current_version: options.current_version as string, current_schema_head: options.current_schema_head as number | null,
+    ...(options.current_schema_head_reason !== undefined ? { current_schema_head_reason: options.current_schema_head_reason as string } : {}),
     target_mode: options.target_mode, items } }
 }
 

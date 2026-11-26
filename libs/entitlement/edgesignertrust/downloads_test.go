@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 func artifactPEM(t *testing.T, label string) string {

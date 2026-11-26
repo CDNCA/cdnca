@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/fielderr"
+	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -20,13 +22,15 @@ type Store struct {
 	pool    *pgxpool.Pool
 	auditor *audit.Log
 	now     func() time.Time
+	// policies re-expands the CC policies using an edited matcher / filter.
+	policies *securitypolicy.Store
 }
 
 func NewStoreWithClock(pool *pgxpool.Pool, now func() time.Time) *Store {
 	if now == nil {
 		now = time.Now
 	}
-	return &Store{pool: pool, auditor: audit.New(pool), now: now}
+	return &Store{pool: pool, auditor: audit.New(pool), now: now, policies: securitypolicy.NewStoreWithClock(pool, now)}
 }
 
 func (s *Store) List(ctx context.Context, actor Actor, kind Kind, filter ListFilter) (ListResult, error) {
@@ -243,6 +247,15 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 		if current.Revision != request.ExpectedRevision {
 			return ErrRevisionConflict
 		}
+		enabled := request.Matcher.Enabled
+		if request.Kind == KindFilter {
+			enabled = request.Filter.Enabled
+		}
+		if !current.SystemRule && current.Enabled && !enabled {
+			if err := requireUnused(ctx, tx, current); err != nil {
+				return err
+			}
+		}
 		claimed, err := s.claimWrite(ctx, tx, actor, current.ScopeID, request.Kind, operation, request.IdempotencyKey, digest)
 		if err != nil {
 			return err
@@ -273,6 +286,14 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 		}
 		if err := s.appendAudit(ctx, tx, actor, item, request.RequestID, operation); err != nil {
 			return err
+		}
+		// the CC policies using it run the
+		// new content (or the edit fails).
+		if !current.SystemRule && !request.SystemStateOnly {
+			policyActor := securitypolicy.Actor{UserID: actor.UserID, ScopeID: actor.ScopeID, ScopeKind: actor.ScopeKind}
+			if err := s.policies.ReexpandCCReferencesTx(ctx, tx, policyActor, current.ScopeID, string(request.Kind), request.ID, request.RequestID); err != nil {
+				return rejectedEdit(request.Kind, err)
+			}
 		}
 		if err := s.completeWrite(ctx, tx, actor.UserID, request.Kind, operation, request.IdempotencyKey, item.ID, item); err != nil {
 			return err
@@ -307,6 +328,9 @@ func (s *Store) Delete(ctx context.Context, actor Actor, request DeleteRequest, 
 		}
 		if current.Revision != request.ExpectedRevision {
 			return ErrRevisionConflict
+		}
+		if err := requireUnused(ctx, tx, current); err != nil {
+			return err
 		}
 		claimed, err := s.claimWrite(ctx, tx, actor, current.ScopeID, request.Kind, operation, request.IdempotencyKey, digest)
 		if err != nil {
@@ -344,6 +368,38 @@ func (s *Store) Delete(ctx context.Context, actor Actor, request DeleteRequest, 
 		return DeleteResult{}, fmt.Errorf("delete CC reference: %w", err)
 	}
 	return result, nil
+}
+
+// requireUnused refuses (InUseError) to delete or disable a matcher /
+// filter a live CC policy of its scope uses.
+func requireUnused(ctx context.Context, tx pgx.Tx, item Item) error {
+	users, err := securitypolicy.CCReferenceUsersTx(ctx, tx, item.ScopeID, string(item.Kind), item.ID)
+	if err != nil {
+		return err
+	}
+	if len(users) > 0 {
+		return &InUseError{Policies: users}
+	}
+	return nil
+}
+
+// rejectedEdit names the edited field a CC policy using the matcher / filter
+// cannot run: the match (operator / values) or the filter (type / parameters).
+func rejectedEdit(kind Kind, err error) error {
+	var rejected *securitypolicy.CCReferenceRejectedError
+	if !errors.As(err, &rejected) {
+		return err
+	}
+	field := "values"
+	switch {
+	case kind == KindMatcher && rejected.Reason == securitypolicy.CCReferenceUnsupported:
+		field = "operator"
+	case kind == KindFilter && rejected.Reason == securitypolicy.CCReferenceUnsupported:
+		field = "type"
+	case kind == KindFilter:
+		field = "parameters"
+	}
+	return fielderr.New(ErrInvalidInput, field, rejected.Reason)
 }
 
 type storedWrite struct {
@@ -582,6 +638,9 @@ func listWhere(actor Actor, filter ListFilter, alias string) (string, []any) {
 	}
 	if filter.Type != "" {
 		add(alias+".filter_type=$%d", filter.Type)
+	}
+	if filter.ScopeID != uuid.Nil {
+		add(alias+".scope_id=$%d", filter.ScopeID)
 	}
 	return "WHERE " + strings.Join(conditions, " AND "), args
 }

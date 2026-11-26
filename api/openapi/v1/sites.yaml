@@ -168,7 +168,7 @@ paths:
       operationId: batchSiteAction
       x-summary-zh: "批量启用、停用、软删除网站，排队重新生成 CNAME，或设置 HTTPS 协议"
       summary: Enable, disable, soft-delete, queue CNAME regeneration for, or set the HTTPS protocols of websites
-      description: "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (bulk website protocol settings) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated."
+      description: "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until the DNS provider confirms the write and reading it back returns the exact record (same name, type and value); whether upstream authoritative and public recursive resolvers already serve it is not part of completion, check it with the DNS check. set_protocols (bulk website protocol settings) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Turning http3_enabled on fails per item with package_feature_denied for a site whose HTTP/3 was off and whose current package entitlement sets limits.http3 false; turning it off is never refused. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated."
       x-description-zh: >-
         Requires sites.manage and Idempotency-Key. The response preserves input
         order while rows are locked in UUID order. Business failures are
@@ -184,13 +184,14 @@ paths:
         regenerate_cname applies only to failed CNAME allocations, requires
         sites.manage and dns.manage, and transactionally creates one durable
         CNAME job per accepted site. Its per-item result is queued; the returned
-        site.cname_task_id is the durable task identity and site.cname_state
-        remains pending until provider reconciliation plus authoritative and
-        public recursive convergence completes.
+        site.cname_task_id is the durable task identity. 完成条件是服务商确认写入并精确回读（同名、同类型、同值），此前 site.cname_state 保持 pending；上游权威与公共递归是否已生效请用 DNS 解析检查查看。
         set_protocols (网站协议批量设置) writes basic.http2_enabled,
         basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected
         site at its expected_version, as a single-site basic update would; keys
-        left out of protocols keep each site's value. Each changed site records
+        left out of protocols keep each site's value. Turning http3_enabled on
+        fails per item with package_feature_denied for a site whose HTTP/3 was
+        off and whose current package entitlement sets limits.http3 false;
+        turning it off is never refused. Each changed site records
         site.tls_profile.update, and every scope with an updated site queues its
         automatic publication (site.update). Its per-item result is updated.
       parameters:
@@ -629,7 +630,12 @@ paths:
         without a change: an automatic scope queues the caller's site.update at
         a new source revision; a manual scope redelivers its last publication
         now (system channel, node_sync). 409 publish_in_flight while the site's
-        publication is still running; 409 site_disabled for a disabled site.
+        publication is still running; 409 site_disabled for a disabled site;
+        409 package_subscription_suspended while the site's package
+        subscription is suspended (its sites are left out of every
+        publication and go out again once it is resumed); 409
+        package_subscription_inactive when it is cancelled (left out until the
+        site is bound to another package).
         Returns the site's access_readiness after the request was queued.
       responses:
         '202':
@@ -1148,7 +1154,7 @@ components:
           description: >-
             Stable reason code; empty when ok (https_cert ok may be
             https_disabled). package: no_package, package_disabled,
-            package_deleted (as package_unavailable_reason). line_group:
+            package_deleted, package_suspended, package_cancelled (as package_unavailable_reason). line_group:
             no_line_group, no_online_nodes (online nodes count only endpoints
             the line group publishes now, not standby ones held back).
             cname_generated: cname_pending, cname_failed or the CNAME failure
@@ -1157,7 +1163,9 @@ components:
             certificate_missing, certificate_expired, certificate_not_yet_valid,
             certificate_revoked, certificate_not_active. published: site_disabled,
             not_published, site_not_in_publication (the scope's latest
-            publication does not carry the site), publishing, publish_failed
+            publication does not carry the site), package_suspended (left out
+            because the package subscription is suspended), package_cancelled
+            (left out because it is cancelled), publishing, publish_failed
             (only the current publication on the nodes now serving the site
             counts: retired, deleted or removed-from-line-group nodes do not;
             a node already running the published version counts as published).
@@ -1191,11 +1199,14 @@ components:
             node_scope_conflict, site_config_invalid, ...).
         package_unavailable_reason:
           type: [string, 'null']
-          enum: [no_package, package_disabled, package_deleted, null]
+          enum: [no_package, package_disabled, package_deleted, package_suspended, package_cancelled, null]
           readOnly: true
           description: >-
-            Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are
-            published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid.
+            Why the site is not served for lack of a valid package (only sites on an enabled, undeleted, unsuspended
+            package are published): no_package (none bound), package_disabled, package_deleted, package_suspended (the
+            subscription is suspended; the site is published again once it is resumed), package_cancelled (the
+            subscription is cancelled, e.g. its billing service was terminated; it does not come back, even when it was
+            suspended before). Null while the package is valid.
     SiteAutoDNSStatus:
       type: object
       additionalProperties: false
@@ -1484,7 +1495,33 @@ components:
             HTTP/3 (QUIC, Alt-Svc) on the site's HTTPS ports; only with TLSv1.3
             in tls_protocols. Off: no Alt-Svc and QUIC handshakes for the site
             are refused. Omitted on create: the owner's default http3, else on;
-            omitted on update: unchanged.
+            omitted on update: unchanged. It is the user's choice and is kept
+            when the site's package leaves HTTP/3 out (see http3_effective).
+            A write that turns it on (off before) while the current
+            entitlement of the site's package subscription sets limits.http3
+            false is refused with 400 validation_error, details
+            {field: http3_enabled, reason: package_feature_denied}; turning it
+            off, keeping it, or saving other fields of a site already on is
+            accepted. Creating a site keeps the requested value.
+        http3_effective:
+          type: boolean
+          readOnly: true
+          description: >-
+            Whether HTTP/3 goes out for the site under its package: http3_enabled,
+            and false when the current entitlement of the site's package
+            subscription (package_subscription_current_product_snapshot, the
+            product in effect after an upgrade or downgrade) sets limits.http3
+            false. A site without a package subscription, or whose package
+            does not set limits.http3, follows http3_enabled. TLSv1.3 is still
+            needed on the node. Always present in responses; ignored on writes.
+        http3_unavailable_reason:
+          type: string
+          enum: [package_feature_denied]
+          readOnly: true
+          description: >-
+            Present only when the site's current package entitlement leaves
+            HTTP/3 out (limits.http3 false); http3_effective is then false
+            whatever http3_enabled says. Ignored on writes.
         tls_prefer_server_ciphers:
           type: [boolean, 'null']
           description: >-
@@ -1541,8 +1578,9 @@ components:
           readOnly: true
           description: >-
             Derived by the server from the site's latest automatic publication: succeeded synced,
-            failed failed, otherwise pending; synced without one. Always present in responses; a write carrying it is
-            refused (400).
+            failed failed, otherwise pending. A site not carried by the latest publication (or never published) is
+            pending while it should be served and synced while it is not (disabled, suspended, without a valid
+            package). Always present in responses; a write carrying it is refused (400).
         is_default:
           type: boolean
           description: >-
@@ -1626,11 +1664,30 @@ components:
             - {type: 'null'}
         package_unavailable_reason:
           type: [string, 'null']
-          enum: [no_package, package_disabled, package_deleted, null]
+          enum: [no_package, package_disabled, package_deleted, package_suspended, package_cancelled, null]
           readOnly: true
           description: >-
-            Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are
-            published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid.
+            Why the site is not served for lack of a valid package (only sites on an enabled, undeleted, unsuspended
+            package are published): no_package (none bound), package_disabled, package_deleted, package_suspended (the
+            subscription is suspended; the site is published again once it is resumed), package_cancelled (the
+            subscription is cancelled, e.g. its billing service was terminated; it does not come back, even when it was
+            suspended before). Null while the package is valid.
+        package_suspension:
+          readOnly: true
+          description: >-
+            Who suspended the site's subscription and why; set only while package_unavailable_reason is
+            package_suspended, null otherwise.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [source, reason]
+              properties:
+                source:
+                  type: string
+                  enum: [billing_bridge, admin]
+                  description: billing_bridge (the billing host through the billing bridge service.suspend) or admin (a platform administrator).
+                reason: {type: string, maxLength: 256, description: The reason given with the suspension.}
+            - {type: 'null'}
     Origin:
       type: object
       additionalProperties: false
@@ -2310,13 +2367,27 @@ components:
             message: {type: string}
             request_id: {type: string}
             details:
-              description: For a validation_error of a site write, the refused field.
-              type: object
-              additionalProperties: false
-              required: [field, reason]
-              properties:
-                field: {type: string}
-                reason: {type: string}
+              oneOf:
+                - description: For a validation_error of a site write, the refused field.
+                  type: object
+                  additionalProperties: false
+                  required: [field, reason]
+                  properties:
+                    field: {type: string}
+                    reason: {type: string}
+                - $ref: '#/components/schemas/PackageQuotaExceededDetails'
+    PackageQuotaExceededDetails:
+      description: >-
+        On 409 package_resource_quota_exceeded of a site write: the package resource the change would push above its limit (sites, domains, root_domains or http_ports), its effective limit, the subscription's usage before the change and what the change adds. sites counts the subscription's undeleted websites against the current entitlement's site_limit (-1 unlimited); creating a site or binding one to the subscription adds one. The admission check is unchanged.
+      x-description-zh: 网站写入因套餐资源额度被拒（409 package_resource_quota_exceeded）时附带：超限的资源（sites 为订阅下未删除的网站数，按当前权益的网站数上限，-1 不限）、生效上限、变更前已用量与本次新增量；准入判断不变。
+      type: object
+      additionalProperties: false
+      required: [resource, limit, used, requested]
+      properties:
+        resource: {type: string, enum: [sites, domains, root_domains, http_ports]}
+        limit: {type: integer, format: int64, minimum: 0}
+        used: {type: integer, format: int64, minimum: 0}
+        requested: {type: integer, format: int64, minimum: 1}
   responses:
     BadRequest:
       description: Invalid JSON, field, or query input.

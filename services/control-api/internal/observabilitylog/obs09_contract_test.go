@@ -229,6 +229,31 @@ func TestOBS09AccountLogFiltersAndProjectionStayBoundToCursor(t *testing.T) {
 	}
 }
 
+// 隐藏会话续期的条件进入存储查询，并和其余筛选一样绑定游标。
+func TestOBS09HideSessionRefreshReachesStoreAndBindsCursor(t *testing.T) {
+	now := time.Date(2026, 8, 27, 10, 0, 0, 0, time.UTC)
+	scopeID, userID := uuid.New(), uuid.New()
+	row := func(id string, minutes int) Fact {
+		return Fact{ID: id, ScopeID: scopeID, Kind: KindOperation, ActorUserID: &userID, Action: "site.update", ReasonCode: "site.update",
+			ResultCode: "success", ResourceType: "site", ResourceID: "site-1", SourceIP: "192.0.2.1", GeoCode: "CN",
+			OccurredAt: now.Add(-time.Duration(minutes) * time.Minute), TotalCount: 2}
+	}
+	repository := &fakeRepository09{rows: []Fact{row("event-1", 1), row("event-2", 2)}}
+	service, err := NewService(repository, []byte("0123456789abcdef0123456789abcdef"), func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := Actor{UserID: userID, ScopeID: scopeID, ScopeKind: ScopeTenant, SessionID: uuid.New(), Permissions: []string{"identity.self.read"}}
+	input := Query{Kinds: []Kind{KindOperation}, HideSessionRefresh: true, Limit: 1}
+	page, err := service.List(t.Context(), actor, input)
+	if err != nil || !repository.query.HideSessionRefresh || page.NextCursor == "" {
+		t.Fatalf("page=%#v query=%#v err=%v", page, repository.query, err)
+	}
+	if _, err := service.List(t.Context(), actor, Query{Kinds: []Kind{KindOperation}, Limit: 1, Cursor: page.NextCursor}); !errors.Is(err, ErrInvalidCursor) {
+		t.Fatalf("cursor reused without the filter: %v", err)
+	}
+}
+
 func TestOBS09TenantFactsRequireExactActorOrSubjectWhilePlatformKeepsExactScope(t *testing.T) {
 	now := time.Date(2026, 8, 8, 10, 0, 0, 0, time.UTC)
 	scopeID, userID, sessionID := uuid.New(), uuid.New(), uuid.New()

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Form, Input, Modal, Result, Select, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Checkbox, Form, Input, Modal, Result, Select, Space, Tag, Typography, type InputRef } from 'antd'
+import { Table } from '@cdnca/ui'
 import type { TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +14,8 @@ import { useMfaActive } from '../hooks/useMfaActive'
 import { DataState } from '../components/DataState'
 import '../i18n/customRolesPage'
 import { permissionName } from '../i18n/permissionNames'
+import './CustomRolesPage.css'
+import { SearchInput } from '../components/SearchInput'
 
 type Owner = readonly ['tenant', string, string, string, number]
 type Role = Awaited<ReturnType<typeof customRbacApi.listRoles>>['data'][number]
@@ -57,6 +60,71 @@ function errorKey(error: unknown): string {
     case 'custom_rbac_validation_error': return 'errors.validation'
     default: return error.status === 503 ? 'errors.serviceUnavailable' : 'errors.load'
   }
+}
+
+// the role editor lists the delegable
+// permissions by domain (first segment of the code); unknown domains go to "other".
+const permissionGroups: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ['sites', ['sites', 'site_capture', 'site_protocols', 'certificates', 'challenge_policies', 'error_pages', 'http_policies',
+    'origin_auth', 'url_auth_policies', 'security_policies', 'openresty_security', 'waf_adapt', 'firewall', 'streams', 'edge', 'edge_publications']],
+  ['dns', ['dns', 'domains']],
+  ['billing', ['billing', 'billing_bridge', 'packages', 'package_subscriptions', 'traffic_packages', 'tcp_billing', 'promotions', 'reseller']],
+  ['identity', ['identity', 'identity_verification', 'api_keys', 'approvals', 'jobs']],
+  ['messages', ['announcements', 'tickets']],
+  ['plugins', ['marketplace', 'plugin_installations', 'plugin_webhooks', 'probes', 'tenant_theme']],
+]
+
+function permissionGroup(code: string): string {
+  const domain = code.split('.')[0]
+  return permissionGroups.find(([, domains]) => domains.includes(domain))?.[0] ?? 'other'
+}
+
+// The name only; the explanation some names carry after "：" is not repeated on this page.
+function shortPermissionName(code: string): string {
+  return permissionName(code).split('：')[0]
+}
+
+function PermissionPicker({ permissions, value, onChange, errorId }: {
+  permissions: Permission[]
+  value: string[]
+  onChange: (value: string[]) => void
+  /** Set while 至少选择一项权限 shows: the picker is described by that error. */
+  errorId?: string
+}) {
+  const { t } = useTranslation('customRolesPage')
+  const [search, setSearch] = useState('')
+  const keyword = search.trim().toLowerCase()
+  const groups = [...permissionGroups.map(([group]) => group), 'other'].map((group) => ({
+    group,
+    items: permissions.filter((permission) => permissionGroup(permission.name) === group && (!keyword ||
+      permission.name.toLowerCase().includes(keyword) || shortPermissionName(permission.name).toLowerCase().includes(keyword))),
+  })).filter((entry) => entry.items.length > 0)
+  const toggle = (code: string, checked: boolean) =>
+    onChange(checked ? [...value.filter((item) => item !== code), code] : value.filter((item) => item !== code))
+  return <Space direction="vertical" style={{ width: '100%' }} role="group" aria-label={t('fields.permissions')}
+    aria-invalid={errorId ? true : undefined} aria-describedby={errorId} className="custom-roles-permission-picker">
+    <SearchInput allowClear aria-label={t('fields.permissionSearch')} placeholder={t('fields.permissionSearchPlaceholder')}
+      value={search} onChange={(event) => setSearch(event.target.value)} />
+    <Typography.Text type="secondary">{t('values.selectedCount', { count: value.length })}</Typography.Text>
+    <div className="custom-roles-permission-list cdnca-dialog-scroll">
+      {groups.length === 0
+        ? <Typography.Text type="secondary">{t(permissions.length === 0 ? 'data.emptyPermissions' : 'data.noPermissionMatch')}</Typography.Text>
+        : groups.map(({ group, items }) => <div key={group} role="group" aria-label={t(`groups.${group}`)}>
+          <Typography.Text strong>{t(`groups.${group}`)}</Typography.Text>
+          <Space direction="vertical" size={2} style={{ display: 'flex', margin: '4px 0 12px' }}>
+            {items.map((permission) => {
+              const checked = value.includes(permission.name)
+              return <Checkbox key={permission.name} checked={checked} onChange={(event) => toggle(permission.name, event.target.checked)}>
+                <Space size={4}>
+                  <span title={permission.name}>{shortPermissionName(permission.name)}</span>
+                  {checked && permission.step_up_required ? <Tag color="warning">{t('values.stepUp')}</Tag> : null}
+                </Space>
+              </Checkbox>
+            })}
+          </Space>
+        </div>)}
+    </div>
+  </Space>
 }
 
 function randomHex(bytes: number): string {
@@ -105,6 +173,21 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
   // 未启用 MFA：不显示二次验证凭据输入。
   const requireMfaCode = useMfaActive() !== false
   const [formError, setFormError] = useState<string>()
+  // 空名称、未选权限、未选用户各自标在字段上并关联，聚焦首个错误。
+  type FieldError = 'name' | 'permissions' | 'subject'
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldError, string>>>({})
+  const nameInput = useRef<InputRef>(null)
+  const subjectInput = useRef<{ focus: () => void } | null>(null)
+  const editorBody = useRef<HTMLDivElement>(null)
+  const markFields = (errors: Partial<Record<FieldError, string>>) => {
+    setFieldErrors(errors)
+    if (errors.name) nameInput.current?.focus()
+    else if (errors.permissions) (editorBody.current?.querySelector<HTMLInputElement>('.custom-roles-permission-list input[type="checkbox"]')
+      ?? editorBody.current?.querySelector<HTMLInputElement>('.custom-roles-permission-picker input'))?.focus()
+    else if (errors.subject) subjectInput.current?.focus()
+  }
+  // 旧页上角色刚被停用，写入被 409 拒绝时关窗、提示并刷新
+  const [roleInactiveNotice, setRoleInactiveNotice] = useState(false)
   const [pendingWrite, setPendingWrite] = useState<PendingWrite>()
   const [writing, setWriting] = useState(false)
   const active = useRef(true)
@@ -147,6 +230,7 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
     setSubjectUserID('')
     setStepUpProof('')
     setFormError(undefined)
+    setFieldErrors({})
   }
   const closeEditor = () => { setEditor(undefined); resetForm() }
   const openEditor = (next: Editor) => {
@@ -170,6 +254,10 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
       if (isUnknown(error)) {
         setPendingWrite(operation)
         closeEditor()
+      } else if (error instanceof ApiError && error.code === 'custom_rbac_role_inactive') {
+        closeEditor()
+        setRoleInactiveNotice(true)
+        void refresh()
       } else setFormError(errorKey(error))
     } finally {
       setWriting(false)
@@ -186,17 +274,20 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
     const proof = requireMfaCode ? stepUpProof.trim() : ''
     let operation: PendingWrite
     if (editor.kind === 'create') {
-      if (!name.trim() || selectedPermissions.length === 0) { setFormError('errors.validation'); return }
+      if (!name.trim() || selectedPermissions.length === 0) {
+        markFields({ name: name.trim() ? undefined : t('errors.nameRequired'), permissions: selectedPermissions.length ? undefined : t('errors.permissionsRequired') })
+        return
+      }
       const input = { name: name.trim(), permissions: [...selectedPermissions].sort() }
       const metadata = writeMetadata('create', proof)
       operation = { successKey: 'notices.saved', run: async () => { await customRbacApi.createRole(writeToken(), input, metadata) } }
     } else if (editor.kind === 'rename') {
-      if (!name.trim()) { setFormError('errors.validation'); return }
+      if (!name.trim()) { markFields({ name: t('errors.nameRequired') }); return }
       const input = { name: name.trim() }
       const metadata = writeMetadata('rename', proof)
       operation = { successKey: 'notices.saved', run: async () => { await customRbacApi.renameRole(writeToken(), editor.role.id, editor.role.current_revision, input, metadata) } }
     } else if (editor.kind === 'publish') {
-      if (selectedPermissions.length === 0) { setFormError('errors.validation'); return }
+      if (selectedPermissions.length === 0) { markFields({ permissions: t('errors.permissionsRequired') }); return }
       const input = { permissions: [...selectedPermissions].sort() }
       const metadata = writeMetadata('publish', proof)
       operation = { successKey: 'notices.published', run: async () => { await customRbacApi.publishRole(writeToken(), editor.role.id, editor.role.current_revision, input, metadata) } }
@@ -204,7 +295,7 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
       const metadata = writeMetadata('deactivate', proof)
       operation = { successKey: 'notices.deactivated', run: async () => { await customRbacApi.deactivateRole(writeToken(), editor.role.id, editor.role.current_revision, metadata) } }
     } else if (editor.kind === 'assign') {
-      if (!subjectUserID.trim()) { setFormError('errors.validation'); return }
+      if (!subjectUserID.trim()) { markFields({ subject: t('errors.subjectRequired') }); return }
       const input = { role_id: editor.role.id, subject_user_id: subjectUserID.trim() }
       const metadata = writeMetadata('assign', proof)
       operation = { successKey: 'notices.assigned', run: async () => { await customRbacApi.assignGrant(writeToken(), editor.role.current_revision, input, metadata) } }
@@ -220,19 +311,16 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
   const permissions = permissionsQuery.data?.data ?? []
   const roles = rolesQuery.data?.data ?? []
   const grants = grantsQuery.data?.data ?? []
-  const permissionColumns: TableColumnsType<Permission> = [
-    { title: t('fields.permission'), dataIndex: 'name', render: (value: string) => <span title={value}>{permissionName(value)}</span> },
-    { title: t('fields.stepUpRequired'), dataIndex: 'step_up_required', width: 170, render: (value: boolean) => value ? <Tag color="warning">{t('values.required')}</Tag> : t('values.notRequired') },
-  ]
   const roleColumns: TableColumnsType<Role> = [
     { title: t('fields.name'), dataIndex: 'name' },
-    { title: t('fields.permissions'), dataIndex: 'permissions', render: (value: string[]) => <Space wrap>{value.map((item) => <Tag key={item} title={item}>{permissionName(item)}</Tag>)}</Space> },
+    { title: t('fields.permissions'), dataIndex: 'permissions', render: (value: string[]) => <Space wrap>{value.map((item) => <Tag key={item} title={item}>{shortPermissionName(item)}</Tag>)}</Space> },
     { title: t('fields.status'), key: 'status', width: 110, render: (_, row) => <Tag color={row.deactivated_at ? 'default' : 'success'}>{t(row.deactivated_at ? 'statuses.deactivated' : 'statuses.active')}</Tag> },
-    { title: t('fields.actions'), key: 'actions', width: 360, render: (_, row) => <Space size={4} wrap>
+    // 已停用角色的改名、发布、分配、停用都会被服务端拒绝（custom_rbac_role_inactive），不显示这组写入口；停用状态与历史授权照常可读
+    { title: t('fields.actions'), key: 'actions', width: 360, render: (_, row) => row.deactivated_at ? null : <Space size={4} wrap>
       <Button size="small" onClick={() => openEditor({ kind: 'rename', role: row })}>{t('actions.rename')}</Button>
       <Button size="small" onClick={() => openEditor({ kind: 'publish', role: row })}>{t('actions.publish')}</Button>
       <Button size="small" onClick={() => openEditor({ kind: 'assign', role: row })}>{t('actions.assign')}</Button>
-      {!row.deactivated_at ? <Button danger size="small" onClick={() => openEditor({ kind: 'deactivate', role: row })}>{t('actions.deactivate')}</Button> : null}
+      <Button danger size="small" onClick={() => openEditor({ kind: 'deactivate', role: row })}>{t('actions.deactivate')}</Button>
     </Space> },
   ]
   const members = membersQuery.data ?? []
@@ -249,7 +337,8 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
     { title: t('fields.status'), key: 'state', width: 100, render: (_, row) => t(row.revoked_at ? 'statuses.revoked' : 'statuses.active') },
     { title: t('fields.actions'), key: 'actions', width: 130, render: (_, row) => row.revoked_at ? null : <Button danger size="small" onClick={() => openEditor({ kind: 'revoke', grant: row })}>{t('actions.revoke')}</Button> },
   ]
-  const pageControls = (kind: 'roles' | 'grants', history: Array<string | undefined>, next: string | undefined, previous: () => void, forward: () => void) => (
+  // 没有上一页也没有下一页时不显示分页区。
+  const pageControls = (kind: 'roles' | 'grants', history: Array<string | undefined>, next: string | undefined, previous: () => void, forward: () => void) => history.length === 0 && !next ? null : (
     <Space role="group" aria-label={t(`pagination.${kind}`)}>
       <Button aria-label={t('actions.previous')} disabled={history.length === 0} icon={<ChevronLeft size={14} />} onClick={previous} />
       <Button aria-label={t('actions.next')} disabled={!next} icon={<ChevronRight size={14} />} onClick={forward} />
@@ -264,11 +353,10 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
   const editorTitle = editor ? t(`dialogs.${editor.kind}Title`) : ''
 
   return <section className="identity-page" aria-labelledby="custom-roles-title">
-    <header className="identity-page-header"><div><Typography.Title level={2} id="custom-roles-title">{t('title')}</Typography.Title><Typography.Paragraph type="secondary">{t('description')}</Typography.Paragraph></div><Space><Button type="primary" icon={<Plus size={16} />} onClick={() => openEditor({ kind: 'create' })}>{t('actions.create')}</Button><Button icon={<RefreshCw size={16} />} onClick={() => void refresh()}>{t('actions.refresh')}</Button></Space></header>
+    <header className="identity-page-header"><div><Typography.Title level={2} id="custom-roles-title">{t('title')}</Typography.Title></div><Space><Button type="primary" icon={<Plus size={16} />} onClick={() => openEditor({ kind: 'create' })}>{t('actions.create')}</Button><Button icon={<RefreshCw size={16} />} onClick={() => void refresh()}>{t('actions.refresh')}</Button></Space></header>
     {loading ? <DataState status="loading" message={t('data.loadingRoles')} /> : readError ? <DataState status="error" message={t(errorKey(readError))} onRetry={() => void refresh()} /> : <>
-      <Typography.Title level={3}>{t('sections.permissions')}</Typography.Title>
-      <Table rowKey="name" size="small" columns={permissionColumns} dataSource={permissions} pagination={false} locale={{ emptyText: t('data.emptyPermissions') }} />
       <Typography.Title level={3}>{t('sections.roles')}</Typography.Title>
+      {roleInactiveNotice ? <Alert type="warning" showIcon closable role="alert" message={t('errors.roleInactive')} onClose={() => setRoleInactiveNotice(false)} /> : null}
       <Checkbox checked={includeDeactivated} onChange={(event) => { setIncludeDeactivated(event.target.checked); setRoleCursor(undefined); setRoleHistory([]) }}>{t('fields.includeDeactivated')}</Checkbox>
       <Table rowKey="id" size="small" columns={roleColumns} dataSource={roles} pagination={false} scroll={{ x: 1050 }} locale={{ emptyText: t('data.emptyRoles') }} />
       {pageControls('roles', roleHistory, rolesQuery.data?.page.next_cursor, () => { setRoleCursor(roleHistory.at(-1)); setRoleHistory((value) => value.slice(0, -1)) }, () => { const next = rolesQuery.data?.page.next_cursor; if (next) { setRoleHistory((value) => [...value, roleCursor]); setRoleCursor(next) } })}
@@ -277,17 +365,31 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
       {pageControls('grants', grantHistory, grantsQuery.data?.page.next_cursor, () => { setGrantCursor(grantHistory.at(-1)); setGrantHistory((value) => value.slice(0, -1)) }, () => { const next = grantsQuery.data?.page.next_cursor; if (next) { setGrantHistory((value) => [...value, grantCursor]); setGrantCursor(next) } })}
     </>}
     <Modal open={Boolean(editor)} title={editorTitle} destroyOnHidden onCancel={closeEditor} footer={<Space><Button onClick={closeEditor}>{t('actions.cancel')}</Button><Button type="primary" loading={writing} onClick={save}>{t(editor?.kind === 'publish' ? 'actions.publishConfirm' : editor?.kind === 'deactivate' ? 'actions.deactivateConfirm' : editor?.kind === 'assign' ? 'actions.assignConfirm' : editor?.kind === 'revoke' ? 'actions.revokeConfirm' : 'actions.save')}</Button></Space>}>
-      <Form layout="vertical">
-        {editor?.kind === 'create' || editor?.kind === 'rename' ? <Form.Item label={t('fields.name')}><Input aria-label={t('fields.name')} value={name} onChange={(event) => setName(event.target.value)} /></Form.Item> : null}
-        {editor?.kind === 'create' || editor?.kind === 'publish' ? <Form.Item label={t('fields.permissions')}><Checkbox.Group value={selectedPermissions} onChange={(values) => setSelectedPermissions(values.map(String))} options={permissions.map((permission) => ({ value: permission.name, label: <Space><span title={permission.name}>{permissionName(permission.name)}</span>{permission.step_up_required ? <Tag color="warning">{t('values.stepUp')}</Tag> : null}</Space> }))} /></Form.Item> : null}
+      <div ref={editorBody}><Form layout="vertical">
+        {editor?.kind === 'create' || editor?.kind === 'rename' ? <Form.Item label={t('fields.name')} validateStatus={fieldErrors.name ? 'error' : undefined}
+          help={fieldErrors.name ? <span id="custom-role-name-error">{fieldErrors.name}</span> : undefined}>
+          <Input ref={nameInput} aria-label={t('fields.name')} value={name} aria-invalid={fieldErrors.name ? true : undefined}
+            aria-describedby={fieldErrors.name ? 'custom-role-name-error' : undefined}
+            onChange={(event) => { setName(event.target.value); setFieldErrors((current) => ({ ...current, name: undefined })) }} /></Form.Item> : null}
+        {editor?.kind === 'create' || editor?.kind === 'publish' ? <Form.Item label={t('fields.permissions')} validateStatus={fieldErrors.permissions ? 'error' : undefined}
+          help={fieldErrors.permissions ? <span id="custom-role-permissions-error">{fieldErrors.permissions}</span> : undefined}>
+          <PermissionPicker permissions={permissions} value={selectedPermissions} errorId={fieldErrors.permissions ? 'custom-role-permissions-error' : undefined}
+            onChange={(next) => { setSelectedPermissions(next); setFieldErrors((current) => ({ ...current, permissions: undefined })) }} /></Form.Item> : null}
         {editor?.kind === 'assign' ? (
           membersQuery.isError
             // Without the member list, fall back to the user ID.
-            ? <Form.Item label={t('fields.subjectUserId')}><Input aria-label={t('fields.subjectUserId')} value={subjectUserID} onChange={(event) => setSubjectUserID(event.target.value)} /></Form.Item>
-            : <Form.Item label={t('fields.subjectUser')}>
-              <Select aria-label={t('fields.subjectUser')} showSearch optionFilterProp="label" virtual={false}
+            ? <Form.Item label={t('fields.subjectUserId')} validateStatus={fieldErrors.subject ? 'error' : undefined}
+              help={fieldErrors.subject ? <span id="custom-role-subject-error">{fieldErrors.subject}</span> : undefined}>
+              <Input aria-label={t('fields.subjectUserId')} value={subjectUserID} aria-invalid={fieldErrors.subject ? true : undefined}
+                aria-describedby={fieldErrors.subject ? 'custom-role-subject-error' : undefined}
+                ref={(element) => { subjectInput.current = element }}
+                onChange={(event) => { setSubjectUserID(event.target.value); setFieldErrors((current) => ({ ...current, subject: undefined })) }} /></Form.Item>
+            : <Form.Item label={t('fields.subjectUser')} validateStatus={fieldErrors.subject ? 'error' : undefined}
+              help={fieldErrors.subject ? <span id="custom-role-subject-error">{fieldErrors.subject}</span> : undefined}>
+              <Select ref={(element) => { subjectInput.current = element }} aria-label={t('fields.subjectUser')} showSearch optionFilterProp="label" virtual={false}
+                aria-invalid={fieldErrors.subject ? true : undefined} aria-describedby={fieldErrors.subject ? 'custom-role-subject-error' : undefined}
                 placeholder={t('fields.subjectUserPlaceholder')} loading={membersQuery.isFetching}
-                value={subjectUserID || undefined} onChange={(value: string) => setSubjectUserID(value)}
+                value={subjectUserID || undefined} onChange={(value: string) => { setSubjectUserID(value); setFieldErrors((current) => ({ ...current, subject: undefined })) }}
                 options={members.filter((member) => member.status === 'active').map((member) => ({
                   value: member.user_id, label: `${memberLabel(member)}${member.email ? ` · ${member.email}` : ''}`,
                 }))} />
@@ -295,7 +397,7 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
         ) : null}
         {editor && requireMfaCode ? <Form.Item label={t('fields.stepUpProof')}><Input.Password autoComplete="off" aria-label={t('fields.stepUpProof')} value={stepUpProof} onChange={(event) => setStepUpProof(event.target.value)} /></Form.Item> : null}
         {formError ? <Alert type="error" showIcon message={t(formError)} /> : null}
-      </Form>
+      </Form></div>
     </Modal>
     <Modal open={Boolean(pendingWrite)} title={t('dialogs.unknownTitle')} closable={false} footer={<Space><Button onClick={() => { setPendingWrite(undefined); void refresh() }}>{t('actions.abandon')}</Button><Button type="primary" loading={writing} onClick={() => { if (pendingWrite) void execute(pendingWrite) }}>{t('actions.exactRetry')}</Button></Space>}><Typography.Paragraph>{t('dialogs.unknownDescription')}</Typography.Paragraph></Modal>
   </section>

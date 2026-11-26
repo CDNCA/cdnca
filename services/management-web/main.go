@@ -178,7 +178,14 @@ func servePrecompressedAs(response http.ResponseWriter, request *http.Request, r
 }
 
 func serveStatic(response http.ResponseWriter, request *http.Request, files http.Handler, root, path string, noStore bool) {
-	if !noStore && immutableAssetPattern.MatchString(path) {
+	// /downloads/ files keep their names across releases (latest/…, and the same
+	// version re-cut with new bytes), so their names match the hashed-asset
+	// pattern without being content-addressed: always revalidate them, never
+	// immutable (a cached old bundle failing a new SHA256SUMS).
+	downloads := strings.HasPrefix(cleanStaticPath(path), "/downloads/")
+	if downloads && !noStore {
+		response.Header().Set("Cache-Control", "no-cache")
+	} else if !noStore && immutableAssetPattern.MatchString(path) {
 		response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	} else {
 		response.Header().Set("Cache-Control", "no-store")

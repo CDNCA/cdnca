@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Input, Space, Table, Tag, Typography, type TableColumnsType } from 'antd'
+import { Input, Space, Tag, Typography, type TableColumnsType } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError, type Principal } from '../api/auth'
@@ -14,6 +15,7 @@ import { DataState } from '../components/DataState'
 import '../i18n/certificateOrderStatus'
 import { CertificateFailureReason } from '../components/CertificateFailureReason'
 import { formatDateTime } from '../i18n/formatters'
+import { certificateOrderPollInterval } from './certificateOrderPolling'
 
 type CertificateOrderOwner = readonly [Principal['scope_kind'], string, string, string, number]
 
@@ -107,6 +109,9 @@ function CertificateOrdersContent({ owner, ownerKey }: {
         throw error
       }
     },
+    // 页面可见且有进行中的申请时约 4 秒重读，到终态或离开页面即停。
+    refetchInterval: (current) => certificateOrderPollInterval(current.state.data?.items),
+    refetchIntervalInBackground: false,
   })
 
   const filtered = useMemo(() => {
@@ -190,7 +195,8 @@ function CertificateOrdersContent({ owner, ownerKey }: {
 
       {query.isPending ? <DataState status="loading" message={t('data.loading')} /> : forbidden ? (
         <DataState status="forbidden" message={t('errors.forbiddenTitle')} description={t('errors.forbiddenDescription')} />
-      ) : query.isError ? (
+      ) : query.data === undefined ? (
+        // 只有从未读到数据时才显示读取失败；轮询失败保留上次的列表。
         <DataState status="error" message={t(errorKey(query.error))} onRetry={() => void query.refetch()} />
       ) : query.data.items.length === 0 ? (
         <DataState status="empty" message={t('data.empty')} />

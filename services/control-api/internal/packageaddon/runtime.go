@@ -16,6 +16,27 @@ var (
 	ErrSubscriptionInactive = errors.New("package subscription is not active")
 )
 
+// Resources a QuotaExceededError names (the RuntimeLimits JSON keys).
+const (
+	QuotaResourceDomains     = "domains"
+	QuotaResourceRootDomains = "root_domains"
+	QuotaResourceHTTPPorts   = "http_ports"
+	QuotaResourceStreamPorts = "stream_ports"
+	QuotaResourceSites       = "sites"
+)
+
+// QuotaExceededError is an ErrQuotaExceeded refusal that names the resource:
+// Used is the subscription's usage before the change, Requested what the change
+// adds, Limit the effective limit (base plus addons).
+type QuotaExceededError struct {
+	Resource               string
+	Limit, Used, Requested int64
+}
+
+func (e *QuotaExceededError) Error() string { return ErrQuotaExceeded.Error() + ": " + e.Resource }
+
+func (e *QuotaExceededError) Is(target error) bool { return target == ErrQuotaExceeded }
+
 // RuntimeLimits is the current immutable base entitlement plus active addon
 // snapshots. A numeric limit of -1 is unlimited. Catalog edits never change it.
 type RuntimeLimits struct {
@@ -26,6 +47,9 @@ type RuntimeLimits struct {
 	StreamPorts int64     `json:"stream_ports"`
 	CustomCC    bool      `json:"custom_cc"`
 	WAF         bool      `json:"waf"`
+	// Sites is the effective entitlement's site_limit (no addon adds sites);
+	// -1 is unlimited.
+	Sites int64 `json:"-"`
 }
 
 // LockRuntimeLimits serializes resource admissions with addon changes and
@@ -51,15 +75,18 @@ func LockRuntimeLimits(ctx context.Context, tx pgx.Tx, tenantScopeID, subscripti
 	}
 	var lifecycle, entitlement string
 	var startsAt, endsAt time.Time
+	// site_limit is the effective entitlement version's (upgrades and
+	// downgrades write new versions), else the subscription's, as
+	// package_addon_effective_base_limits reads domain_limit.
 	err = tx.QueryRow(ctx, `SELECT s.lifecycle_status,s.starts_at,s.ends_at,
-		coalesce(e.entitlement_status,''),o.owner_user_id
+		coalesce(e.entitlement_status,''),o.owner_user_id,coalesce(e.site_limit,s.site_limit)
 		FROM package_subscriptions s
 		JOIN package_subscription_state_versions o ON o.subscription_id=s.id
 		  AND o.tenant_scope_id=s.tenant_scope_id AND o.revision=s.revision
 		LEFT JOIN package_subscription_entitlement_versions e ON e.subscription_id=s.id
 		  AND e.revision=package_subscription_effective_entitlement_revision(s.id,$3)
 		WHERE s.tenant_scope_id=$1 AND s.id=$2`, tenantScopeID, subscriptionID, at).
-		Scan(&lifecycle, &startsAt, &endsAt, &entitlement, &limits.OwnerUserID)
+		Scan(&lifecycle, &startsAt, &endsAt, &entitlement, &limits.OwnerUserID, &limits.Sites)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RuntimeLimits{}, ErrSubscriptionInactive
 	}
@@ -76,7 +103,7 @@ func LockRuntimeLimits(ctx context.Context, tx pgx.Tx, tenantScopeID, subscripti
 	if err := json.Unmarshal(raw, &limits); err != nil {
 		return RuntimeLimits{}, ErrUnavailable
 	}
-	for _, count := range []int64{limits.Domains, limits.RootDomains, limits.HTTPPorts, limits.StreamPorts} {
+	for _, count := range []int64{limits.Domains, limits.RootDomains, limits.HTTPPorts, limits.StreamPorts, limits.Sites} {
 		if count < -1 || count > 1_000_000_000 {
 			return RuntimeLimits{}, ErrUnavailable
 		}

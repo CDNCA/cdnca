@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 )
 
 func TestSharedHTTPFailureClassification(t *testing.T) {
@@ -172,14 +174,16 @@ func TestCallerCancellation(t *testing.T) {
 	}
 }
 
-func TestProductionClientUsesFixedHTTPSAndNoProxy(t *testing.T) {
+func TestProductionClientUsesFixedHTTPSAndNoEnvironmentProxy(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:9")
 	adapter := New(&staticSource{})
-	transport, ok := adapter.http.client.Transport.(*http.Transport)
+	transport, ok := adapter.http.client.Transport.(*dnsapiproxy.Transport)
 	if !ok {
 		t.Fatalf("transport type = %T", adapter.http.client.Transport)
 	}
-	if transport.Proxy != nil {
-		t.Fatal("production transport must not use environment proxies")
+	probe, _ := http.NewRequest(http.MethodGet, "https://api.cloudflare.com/client/v4/zones", nil)
+	if proxy, err := transport.Proxy(probe); proxy != nil || err != nil {
+		t.Fatalf("production transport without http代理 uses proxy %v (%v)", proxy, err)
 	}
 	want := map[string]string{
 		"cloudflare": adapter.endpoints.cloudflare.baseURL,

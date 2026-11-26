@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Result, Space,
-  Spin, Table, Tag, Typography,
+  Spin, Tag, Typography,
   type TableColumnsType,
 } from 'antd'
 import { RefreshCw, Send } from 'lucide-react'
@@ -26,7 +26,7 @@ import { DataState } from '../components/DataState'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/originAuthPublications'
-import { FeedbackWhen, OutcomeUnknown, PageSection } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, PageSection, Table } from '@cdnca/ui'
 
 type Owner = readonly [Principal['scope_kind'], string, string | null, string, number]
 interface PublishAttempt {

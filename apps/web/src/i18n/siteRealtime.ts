@@ -28,7 +28,7 @@ const zhCN = {
   evidence: {
     title: '数据快照', finalized: '已结算至 {{time}}', watermark: '来源水位 {{time}}', sources: '访问来源 {{access}} / 连接来源 {{connections}}',
     accuracy: '发生器对账误差 {{ppm}} PPM（{{observed}} / {{expected}}）',
-    coverage: '整小时对账范围 {{from}} 至 {{to}}', snapshot: '数据快照 {{time}}', updated: '每 10 秒自动刷新，更新于 {{time}}',
+    coverage: '整小时对账范围 {{from}} 至 {{to}}', snapshot: '数据快照 {{time}}',
   },
   states: {
     loading: '正在加载实时监控数据', empty: '当前筛选范围内暂无数据', permissionTitle: '无权查看监控数据',
@@ -68,7 +68,7 @@ const enUS = {
   evidence: {
     title: 'Data snapshot', finalized: 'Finalized through {{time}}', watermark: 'Source watermark {{time}}', sources: 'Access {{access}} / Connections {{connections}}',
     accuracy: 'Generator error {{ppm}} PPM ({{observed}} / {{expected}})',
-    coverage: 'Whole-hour reconciliation range {{from}} to {{to}}', snapshot: 'Snapshot {{time}}', updated: 'Refreshes every 10 s, updated {{time}}',
+    coverage: 'Whole-hour reconciliation range {{from}} to {{to}}', snapshot: 'Snapshot {{time}}',
   },
   states: {
     loading: 'Loading real-time monitoring data', empty: 'No data in this range', permissionTitle: 'Monitoring unavailable',

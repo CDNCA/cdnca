@@ -77,6 +77,7 @@ describe('SiteEdit policy tabs integration', () => {
       if (url.endsWith('/v1/sites/site-1/access')) return Promise.resolve(json(accessState))
       if (url.endsWith('/v1/sites/site-1/schedule302')) return Promise.resolve(json(schedule302State))
       if (url.endsWith('/v1/sites/site-1/traffic-limit')) return Promise.resolve(json(trafficLimitState))
+      if (url.includes('/http-policies?')) return Promise.resolve(json({ items: [], system_max_upload_bytes: 104857600 }))
       return Promise.resolve(json({ items: [] }))
     })
     renderAccess()
@@ -95,6 +96,7 @@ describe('SiteEdit policy tabs integration', () => {
       if (url.endsWith('/v1/sites/site-1/access')) return Promise.resolve(json(accessState))
       if (url.endsWith('/v1/sites/site-1/schedule302')) return Promise.resolve(json(schedule302State))
       if (url.endsWith('/v1/sites/site-1/traffic-limit')) return Promise.resolve(json(trafficLimitState))
+      if (url.includes('/http-policies?')) return Promise.resolve(json({ items: [], system_max_upload_bytes: 104857600 }))
       return Promise.resolve(json({ items: [] }))
     })
     const client = renderAdvanced()
@@ -124,7 +126,7 @@ describe('SiteEdit policy tabs integration', () => {
         policyAttempts += 1
         return Promise.resolve(policyAttempts === 1
           ? json({ error: { code: 'service_unavailable', message: 'raw server message' } }, 503)
-          : json({ items: [] }))
+          : json({ items: [], system_max_upload_bytes: 104857600 }))
       }
       return Promise.resolve(json({ items: [] }))
     })

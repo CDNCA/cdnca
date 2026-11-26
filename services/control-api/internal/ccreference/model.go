@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/google/uuid"
 )
 
@@ -23,7 +24,19 @@ var (
 	ErrRevisionConflict    = errors.New("CC reference revision conflict")
 	ErrIdempotencyConflict = errors.New("CC reference idempotency conflict")
 	ErrSystemRuleManaged   = errors.New("system CC reference is managed by the platform")
+	// ErrInUse: a live CC policy's rules use the matcher / filter; it cannot
+	// be deleted or disabled (InUseError names the policies).
+	ErrInUse = errors.New("CC reference is used by a CC policy")
 )
+
+// InUseError names the CC policies (规则组) using a matcher / filter.
+type InUseError struct {
+	Policies []securitypolicy.CCReferenceUser
+}
+
+func (e *InUseError) Error() string { return ErrInUse.Error() }
+
+func (e *InUseError) Unwrap() error { return ErrInUse }
 
 type Actor struct {
 	UserID    uuid.UUID
@@ -87,6 +100,9 @@ type ListFilter struct {
 	ID     uuid.UUID
 	Owner  string
 	Type   string
+	// ScopeID (optional): only rows of this tenant scope (a CC policy
+	// editor offers those of the policy's scope).
+	ScopeID uuid.UUID
 }
 
 type ListResult struct {

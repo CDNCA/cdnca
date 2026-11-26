@@ -24,6 +24,7 @@ const (
 	providerRouteUpload   providerRouteKind = "upload"
 	providerRouteFinalize providerRouteKind = "finalize"
 	providerRouteCallback providerRouteKind = "callback"
+	providerRouteMethods  providerRouteKind = "methods"
 )
 
 type providerRoute struct {
@@ -117,6 +118,14 @@ func (handler *ProviderHandler) handleAuthorized(writer http.ResponseWriter, req
 		handler.writeError(writer, request, ErrInvalidRequest)
 		return
 	}
+	if route.kind == providerRouteMethods {
+		if !handler.requireNoBody(writer, request) {
+			return
+		}
+		result, err := handler.workflow.Methods(request.Context(), actor)
+		handler.writeResult(writer, request, http.StatusOK, result, err)
+		return
+	}
 	metadata, err := writeMetadata(request)
 	if err != nil {
 		handler.writeError(writer, request, err)
@@ -192,6 +201,9 @@ func (handler *ProviderHandler) handleCallback(writer http.ResponseWriter, reque
 }
 
 func resolveProviderRoute(path string) (providerRoute, bool) {
+	if path == apiPrefix+"/methods" {
+		return providerRoute{kind: providerRouteMethods, method: http.MethodGet}, true
+	}
 	if path == apiPrefix+"/provider-sessions" {
 		return providerRoute{kind: providerRouteStart, method: http.MethodPost}, true
 	}

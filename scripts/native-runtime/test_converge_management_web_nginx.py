@@ -97,12 +97,32 @@ class OriginAuthTests(unittest.TestCase):
         self.assertEqual(bound.count(C.XFF_CLIENT.encode()), 12)
         self.assertEqual(C.converge(bound), (bound, 443))
 
+    def test_hosts_rewritten_before_the_verified_header_get_it(self):
+        # CDN-ORIGIN-AUTH-HINT: every client-IP X-Forwarded-For is followed by X-Cdnca-Origin-Verified
+        # $cdnca_origin_verified (a location with its own proxy_set_header does not inherit the http-level one),
+        # the map follows the include in nginx.conf.
+        current = origin_auth(render_current())
+        verified = b'            proxy_set_header X-Cdnca-Origin-Verified $cdnca_origin_verified;\n'
+        self.assertEqual(current.count(verified), current.count(b'X-Forwarded-For $cdnca_client_ip;'))
+        self.assertEqual(current.count(C.XFF_CLIENT.encode()), current.count(verified))
+        self.assertEqual(current.count((C.ORIGIN_AUTH_INCLUDE + C.ORIGIN_AUTH_VERIFIED_MAP).encode()), 1)
+        # a host enabled before the map and the header (its origin-auth.conf unchanged)
+        older = current.replace(verified, b'').replace(C.ORIGIN_AUTH_VERIFIED_MAP.encode(), b'')
+        self.assertEqual(C.converge(older), (current, 443))
+        # install-control.sh origin-auth re-run on such a host adds them, and stays idempotent
+        self.assertEqual(origin_auth(older), current)
+        self.assertEqual(origin_auth(current), current)
+
     def test_hand_edits_in_the_origin_auth_form_are_refused(self):
         current = origin_auth(render_current())
         include, key = C.ORIGIN_AUTH_INCLUDE.encode(), b'            proxy_set_header X-Cdnca-Origin-Key "";\n'
         for name, bad in (
                 ('client XFF without the key line', current.replace(key, b'', 1)),
                 ('key header with a value', current.replace(key, key.replace(b'""', b'"x"'), 1)),
+                ('verified header with another value', current.replace(b'X-Cdnca-Origin-Verified $cdnca_origin_verified;',
+                                                                       b'X-Cdnca-Origin-Verified 1;', 1)),
+                ('verified map edited', current.replace(b'"~^1:." 1;', b'"~^1:" 1;', 1)),
+                ('verified map twice', current.replace(C.ORIGIN_AUTH_VERIFIED_MAP.encode(), C.ORIGIN_AUTH_VERIFIED_MAP.encode() * 2)),
                 ('extra client IP header', current.replace(C.REAL_IP_CLIENT.encode(), C.REAL_IP_CLIENT.encode() +
                                                            b'            proxy_set_header X-Client $cdnca_client_ip;\n', 1)),
                 ('include moved', current.replace(include, b'').replace(b'    server_tokens off;\n', b'    server_tokens off;\n' + include)),
@@ -122,12 +142,12 @@ class OriginAuthTests(unittest.TestCase):
         # nginx.conf.bak-agentv1-20261102054216: converged before /agent/v1/ and the /v1/ upgrade, then origin-auth.
         gateway = ('gateway.example.com', 29407)
         current = render_current(gateway=gateway)
-        tunnel = C.agent_tunnel(gateway).encode()
+        tunnel = C.render_forwarded(C.agent_tunnel(gateway)).encode()
         backup = origin_auth(current.replace(tunnel, b'').replace(C.WS_MAP.encode(), b'').replace(C.WS_HEADERS.encode(), b''))
         self.assertEqual(backup.count(b'X-Forwarded-For $cdnca_client_ip;'), 5)
         # The orchestrator then added the installer's /agent/v1/ block and the /v1/ map plus Upgrade/Connection lines.
-        anchor = (C.BILLING_BRIDGE + C.NODE_INSTALLER_ANCHOR).encode()
-        by_hand = (backup.replace(anchor, C.BILLING_BRIDGE.encode() + tunnel + C.NODE_INSTALLER_ANCHOR.encode())
+        anchor = (C.NODE_INSTALLER + C.NODE_INSTALLER_ANCHOR).encode()
+        by_hand = (backup.replace(anchor, C.NODE_INSTALLER.encode() + tunnel + C.NODE_INSTALLER_ANCHOR.encode())
                    .replace(C.WS_MAP_ANCHOR.encode(), (C.WS_MAP_ANCHOR + C.WS_MAP).encode())
                    .replace(C.API_GZIP.encode(), (C.API_GZIP + C.WS_HEADERS).encode()))
         expected = origin_auth(current)
@@ -136,8 +156,11 @@ class OriginAuthTests(unittest.TestCase):
         self.assertEqual(converged, expected)
         diff = [line for line in difflib.unified_diff(by_hand.decode().splitlines(), converged.decode().splitlines(), lineterm='', n=0)
                 if line[:1] in '+-' and line[:3] not in ('+++', '---')]
-        self.assertEqual(diff, ['-' + C.REAL_IP_PEER.rstrip('\n'), '-' + C.XFF_PEER.rstrip('\n')] +
-                         ['+' + line for line in (C.REAL_IP_CLIENT + C.XFF_CLIENT).splitlines()])
+        # The Forwarded clearing line between them is already the template's and stays (difflib may show it moved).
+        self.assertEqual(sorted(line for line in diff if 'Forwarded ""' not in line),
+                         sorted(['-' + C.REAL_IP_PEER.rstrip('\n'), '-' + C.XFF_PEER.rstrip('\n')] +
+                                ['+' + line for line in (C.REAL_IP_CLIENT + C.XFF_CLIENT).splitlines()]))
+        self.assertEqual(converged.count(C.FORWARDED_CLEAR.encode()), by_hand.count(C.FORWARDED_CLEAR.encode()))
         # Had the block been pasted with origin-auth's rewrite as well, check reports it converged.
         self.assertEqual(C.converge(origin_auth(by_hand), agent=gateway), (expected, 443))
         with tempfile.TemporaryDirectory() as directory:
@@ -149,6 +172,91 @@ class OriginAuthTests(unittest.TestCase):
                     redirect_stdout(out), redirect_stderr(err):
                 self.assertEqual(C.main(['check']), 0)
             self.assertEqual((out.getvalue(), err.getvalue()), ('', 'already converged\n'))
+
+
+class ForwardedTests(unittest.TestCase):
+    """an inbound RFC 7239 Forwarded next to the canonical
+    X-Forwarded-For made the API record source_ip=unknown, behind a CDN with origin-auth too."""
+
+    def test_every_canonical_xff_location_clears_forwarded_and_older_hosts_get_it(self):
+        current = render_current()
+        xff = current.count(C.XFF_PEER.encode())
+        self.assertGreaterEqual(xff, 5)
+        self.assertEqual(current.count(C.FORWARDED_CLEAR.encode() + C.XFF_PEER.encode()), xff)
+        before = C.strip_forwarded(current.decode()).encode()
+        self.assertNotIn(b'Forwarded ""', before)
+        self.assertEqual(C.converge(before), (current, 443))
+        self.assertEqual(C.converge(current), (current, 443))
+        # The origin-auth form keeps the line before its client-IP X-Forwarded-For.
+        auth = origin_auth(current)
+        self.assertEqual(auth.count(C.FORWARDED_CLEAR.encode() + C.XFF_CLIENT.encode()), xff)
+        # install-control.sh origin-auth on a host installed before the rule adds it too (console upgrades never
+        # touch nginx.conf), also when re-run on an older origin-auth host, and stays idempotent.
+        self.assertEqual(origin_auth(before), auth)
+        self.assertEqual(origin_auth(auth.replace(C.FORWARDED_CLEAR.encode(), b"")), auth)
+        self.assertEqual(origin_auth(auth), auth)
+        self.assertEqual(C.converge(origin_auth(before)), (auth, 443))
+        self.assertEqual(C.converge(auth), (auth, 443))
+
+    def test_hand_written_forwarded_is_refused(self):
+        current = render_current()
+        for bad in (current.replace(C.FORWARDED_CLEAR.encode(), b'            proxy_set_header Forwarded $http_forwarded;\n', 1),
+                    current.replace(C.FORWARDED_CLEAR.encode() + C.XFF_PEER.encode(),
+                                    C.XFF_PEER.encode() + C.FORWARDED_CLEAR.encode(), 1)):
+            with self.assertRaises(ValueError):
+                C.converge(bad)
+
+
+class ClientHeaderTests(unittest.TestCase):
+    """源IP请求头 X-Real-IP / X-Forwarded-For reads the client's own values, which
+    nginx rewrites with its TCP peer; every location passes them as X-Cdnca-Client-*, replacing any the client sent."""
+
+    def test_every_proxied_location_passes_and_replaces_the_client_headers(self):
+        current = render_current().decode()
+        xff = current.count(C.XFF_PEER)
+        self.assertEqual(xff, 6)
+        self.assertEqual(current.count(C.FORWARDED_CLEAR + C.XFF_PEER + C.CLIENT_HEADERS), xff)
+        self.assertEqual(current.count('X-Cdnca-Client-X-Real-IP $http_x_real_ip;'), xff)
+        self.assertEqual(current.count('X-Cdnca-Client-X-Forwarded-For $http_x_forwarded_for;'), xff)
+        # A location with its own proxy_set_header inherits none from above, so each one to control-api sets both
+        # (proxy_set_header drops the client's header of the same name); /health/* sets none and passes no IP.
+        for block in re.findall(r'(?ms)^        location [^\n]*\{\n.*?^        \}\n', current):
+            if 'proxy_pass http://127.0.0.1:8080' in block and 'proxy_set_header' in block:
+                with self.subTest(block.splitlines()[0]):
+                    self.assertIn(C.CLIENT_HEADERS, block)
+        self.assertEqual(C.converge(current.encode()), (current.encode(), 443))
+
+    def test_hosts_converged_before_get_them_also_with_origin_auth(self):
+        current = render_current()
+        before = current.replace(C.CLIENT_HEADERS.encode(), b'')
+        self.assertNotIn(b'X-Cdnca-Client-', before)
+        self.assertEqual(C.converge(before), (current, 443))
+        # Before the Forwarded rule too.
+        self.assertEqual(C.converge(C.strip_forwarded(current.decode()).encode()), (current, 443))
+        # origin-auth keeps them right after its X-Cdnca-Origin-Verified line, re-runs are idempotent, and an older
+        # origin-auth host converges to the same text.
+        auth = origin_auth(current)
+        self.assertEqual(auth.count((C.FORWARDED_CLEAR + C.XFF_CLIENT + C.CLIENT_HEADERS).encode()), 6)
+        self.assertEqual(origin_auth(auth), auth)
+        self.assertEqual(origin_auth(before), auth)
+        self.assertEqual(origin_auth(auth.replace(C.CLIENT_HEADERS.encode(), b'')), auth)
+        self.assertEqual(C.converge(auth), (auth, 443))
+        self.assertEqual(C.converge(origin_auth(before)), (auth, 443))
+        self.assertEqual(C.converge(auth.replace(C.CLIENT_HEADERS.encode(), b'')), (auth, 443))
+
+    def test_hand_written_client_headers_are_refused(self):
+        current = render_current()
+        real_ip = b'            proxy_set_header X-Cdnca-Client-X-Real-IP $http_x_real_ip;\n'
+        for name, bad in (
+                ('other value', current.replace(real_ip, real_ip.replace(b'$http_x_real_ip', b'$remote_addr'), 1)),
+                ('one line only', current.replace(C.CLIENT_HEADERS.encode(), real_ip, 1)),
+                ('moved before X-Forwarded-For', current.replace((C.XFF_PEER + C.CLIENT_HEADERS).encode(),
+                                                                 (C.CLIENT_HEADERS + C.XFF_PEER).encode(), 1)),
+                ('outside a location', current.replace(b'    server_tokens off;\n', b'    server_tokens off;\n' + real_ip)),
+                ('another header from the original', current.replace(C.REAL_IP_PEER.encode(),
+                                                                     b'            proxy_set_header X-Real-IP $http_x_real_ip;\n', 1))):
+            with self.subTest(name), self.assertRaises(ValueError):
+                C.converge(bad)
 
 
 class ConvergeTests(unittest.TestCase):
@@ -312,23 +420,28 @@ class ConvergeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             C.converge(converged.replace(b'|control-site/content)$ {', b'|control-site/content|sites)$ {'))
 
-    def test_favicon_fallback_and_billing_bridge_downloads_are_added_once(self):
+    def test_favicon_fallback_is_added_once_and_billing_bridge_downloads_dropped(self):
         converged, _ = C.converge(LEGACY)
         current = render_current()
-        for block in (C.FAVICON_ERROR, C.FAVICON_FALLBACK + C.FAVICON_FALLBACK_ANCHOR,
-                      C.NODE_INSTALLER + C.BILLING_BRIDGE):
+        for block in (C.FAVICON_ERROR, C.FAVICON_FALLBACK + C.FAVICON_FALLBACK_ANCHOR):
             self.assertEqual(converged.count(block.encode()), 1, block)
             self.assertEqual(current.count(block.encode()), 1, block)
         self.assertNotIn(C.FAVICON_ERROR_OLD.encode(), converged)
+        self.assertNotIn(b'billing-bridge/ ', converged)
+        self.assertNotIn(b'billing-bridge/ ', current)
         # A host converged before these steps gets exactly them.
         earlier = (converged.replace(C.FAVICON_ERROR.encode(), C.FAVICON_ERROR_OLD.encode())
-                   .replace(C.FAVICON_FALLBACK.encode(), b'').replace(C.BILLING_BRIDGE.encode(), b'')
+                   .replace(C.FAVICON_FALLBACK.encode(), b'')
                    .replace(C.HTTP_END.encode(), C.HTTP_END_OLD.encode()))
         self.assertEqual(C.converge(earlier), (converged, 443))
+        # A host an older installer wrote the billing integration downloads into loses exactly that block.
+        older = converged.replace(C.NODE_INSTALLER.encode(), C.NODE_INSTALLER.encode() + C.BILLING_BRIDGE.encode())
+        self.assertEqual(older.count(C.BILLING_BRIDGE.encode()), 1)
+        self.assertEqual(C.converge(older), (converged, 443))
         for bad in (converged.replace(C.FAVICON_FALLBACK.encode(), b''),
                     earlier.replace(C.NODE_INSTALLER_ANCHOR.encode(), b'        location ^~ /downloads/billing-bridge/ { root /srv; }\n' +
                                     C.NODE_INSTALLER_ANCHOR.encode()),
-                    converged.replace(b'default_type application/zip;', b'default_type text/html;'),
+                    older.replace(b'default_type application/zip;', b'default_type text/html;'),
                     converged[:-3] + b'\n}\n# local\n'):
             with self.subTest(bad=bad[-60:]), self.assertRaises(ValueError):
                 C.converge(bad)
@@ -339,8 +452,8 @@ class ConvergeTests(unittest.TestCase):
         gateway = ('gateway.example.com', 29407)
         converged, _ = C.converge(LEGACY, agent=gateway)
         self.assertEqual(converged, render_current(gateway=gateway))
-        tunnel = C.agent_tunnel(gateway).encode()
-        self.assertEqual(converged.count(C.BILLING_BRIDGE.encode() + tunnel + C.NODE_INSTALLER_ANCHOR.encode()), 1)
+        tunnel = C.render_forwarded(C.agent_tunnel(gateway)).encode()
+        self.assertEqual(converged.count(C.NODE_INSTALLER.encode() + tunnel + C.NODE_INSTALLER_ANCHOR.encode()), 1)
         self.assertIn(b'proxy_ssl_name gateway.example.com;', tunnel)
         self.assertIn(b'proxy_pass https://127.0.0.1:29407;', tunnel)
         # Idempotent; a host that has the block keeps its own values whatever gateway.env says now.
@@ -368,6 +481,28 @@ class ConvergeTests(unittest.TestCase):
         self.assertEqual(C.converge(earlier), (current, 443))
         with self.assertRaises(ValueError):
             C.converge(current.replace(C.WS_HEADERS.encode(), b''))
+
+    def test_status_page_cache_rule_is_added_once_after_the_brand_asset_rule(self):
+        # Problem 60: /v1/status-page/public sets its own Cache-Control; the default no-store row added a second line.
+        current = render_current()
+        rule = C.STATUS_PAGE_CACHE.encode()
+        self.assertEqual(current.count((C.BRAND_CACHE + C.STATUS_PAGE_CACHE + '    }\n').encode()), 1)
+        self.assertEqual(current.count(b'/v1/status-page/public'), 1)
+        self.assertEqual(C.converge(current), (current, 443))
+        # A host converged before this rule (with or without a bound domain) gets exactly one, and again nothing.
+        earlier = current.replace(rule, b'')
+        self.assertEqual(C.converge(earlier), (current, 443))
+        bound = C.render_bind(C.split_bind(current.decode())[0], ('console.example.com', '/etc/b-cert.pem', '/etc/b-key.pem')).encode()
+        converged, _ = C.converge(bound.replace(rule, b''))
+        self.assertEqual(converged, bound)
+        self.assertEqual(converged.count(rule), 1)
+        self.assertEqual(C.converge(converged), (converged, 443))
+        for name, bad in (('twice', current.replace(rule, rule + rule)),
+                          ('moved', earlier.replace(b'        default "no-store";\n', b'        default "no-store";\n' + rule)),
+                          ('other value', earlier.replace(C.BRAND_CACHE.encode(), C.BRAND_CACHE.encode() +
+                                                          rule.replace(b'"";', b'"no-store";')))):
+            with self.subTest(name), self.assertRaises(ValueError):
+                C.converge(bad)
 
     def test_gateway_agent_reads_gateway_env(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -465,7 +600,7 @@ class ConvergeTests(unittest.TestCase):
                        LEGACY.replace(b'    large_client_header_buffers 4 16k;\n', b''))
         self.assertNotEqual(older, LEGACY)
         converged, _ = C.converge(older)
-        self.assertIn(C.AUTH_LOCATION.encode() + b'        location ^~ /v1/ {\n', converged)
+        self.assertIn(C.render_forwarded(C.AUTH_LOCATION).encode() + b'        location ^~ /v1/ {\n', converged)
 
     def test_unknown_drift_is_refused(self):
         converged, _ = C.converge(LEGACY)

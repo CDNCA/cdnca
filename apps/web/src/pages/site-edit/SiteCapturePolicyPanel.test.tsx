@@ -60,8 +60,12 @@ describe('SiteCapturePolicyPanel', () => {
     expect(toggle).not.toBeChecked()
     expect(screen.queryByText(text('errors.load'))).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByText(text('states.unconfigured'))).toBeInTheDocument()
+    // off: neither the unconfigured note nor the limits show
+    expect(screen.queryByText(text('states.unconfigured'))).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(text('fields.maxValueBytes'))).not.toBeInTheDocument()
     await user.click(toggle)
+    expect(screen.getByText(text('states.unconfigured'))).toBeInTheDocument()
+    expect(screen.getByLabelText(text('fields.maxValueBytes'))).toBeInTheDocument()
     await user.type(screen.getByLabelText(text('fields.requestHeaders')), 'Authorization')
     fireEvent.blur(screen.getByLabelText(text('fields.requestHeaders')))
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))

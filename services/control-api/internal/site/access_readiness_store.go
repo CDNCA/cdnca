@@ -68,6 +68,7 @@ SELECT site.id, site.enabled, site.https_enabled,
 FROM sites site
 LEFT JOIN package_subscriptions subscription
   ON subscription.tenant_scope_id=site.scope_id AND subscription.id=site.package_subscription_id
+LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 LEFT JOIN LATERAL (
 	SELECT line_group.tenant_scope_id, line_group.id AS line_group_id, line_group.current_revision
 	FROM node_line_groups line_group
@@ -77,7 +78,7 @@ LEFT JOIN LATERAL (
 	  AND (line_group.tenant_scope_id=site.scope_id OR line_group.tenant_scope_id=(
 	      SELECT platform.id FROM access_scopes platform WHERE platform.kind='platform'))
 	  AND CASE WHEN site.node_group_id IS NOT NULL THEN line_group.id=site.node_group_id
-	           WHEN site.package_subscription_id IS NOT NULL THEN line_group.id=(subscription.product_snapshot->'spec'->>'node_group_id')::uuid
+	           WHEN site.package_subscription_id IS NOT NULL THEN line_group.id=(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid
 	           ELSE line_group.is_platform_default END
 	ORDER BY (line_group.tenant_scope_id=site.scope_id) DESC LIMIT 1
 ) line ON true
@@ -209,7 +210,7 @@ SELECT site.cname, ` + "%s" + `,
 		      SELECT platform.id FROM access_scopes platform WHERE platform.kind='platform'))
 		  AND CASE WHEN site.node_group_id IS NOT NULL THEN line_group.id=site.node_group_id
 		           WHEN site.package_subscription_id IS NOT NULL THEN line_group.id=(
-		               SELECT (subscription.product_snapshot->'spec'->>'node_group_id')::uuid FROM package_subscriptions subscription
+		               SELECT (package_subscription_current_product_snapshot(subscription.id,now())->'spec'->>'node_group_id')::uuid FROM package_subscriptions subscription
 		               WHERE subscription.tenant_scope_id=site.scope_id AND subscription.id=site.package_subscription_id)
 		           ELSE line_group.is_platform_default END), '{}'::text[])
 FROM sites site WHERE site.id=$1 AND site.deleted_at IS NULL`

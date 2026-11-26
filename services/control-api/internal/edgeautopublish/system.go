@@ -67,6 +67,31 @@ func EnqueueSystemTx(ctx context.Context, tx pgx.Tx, input SystemEnqueueInput) (
 	})
 }
 
+// HandOffSystemRepublicationTx (G8) is edgepublish.AutomaticHandoff: a
+// system republication claim of a scope that turned automatic after its
+// triggers were queued, node settings (node storage) among others. It
+// queues the node settings request the scope would have got had it been
+// automatic then, and a policy request of the scope (a sync retry: it
+// publishes the current rows, which the other triggers changed) that
+// supersedes it at the next revision. That request carries the node settings
+// (nodeSettingsPendingTx): a content refusal redelivers them and ends it
+// refused; one publication either way. The caller holds the scope row.
+func HandOffSystemRepublicationTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, triggers []string) error {
+	settings := SystemEnqueueInput{TargetScopeID: scopeID, SourceKind: SourceNodeNetworks, SourceResourceID: NodeNetworksSourceID,
+		SourceRequestID: edgepublish.NodeSettingsRequestPrefixStorage + uuid.NewString()}
+	for _, input := range []SystemEnqueueInput{settings, {TargetScopeID: scopeID, SourceKind: SourceNodeSync,
+		SourceResourceID: scopeID, SourceRequestID: "system-handoff." + uuid.NewString()}} {
+		// One publication per revision: each request takes its own.
+		if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, scopeID); err != nil {
+			return err
+		}
+		if _, err := EnqueueSystemTx(ctx, tx, input); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func automaticPolicyActor(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (Actor, bool, error) {
 	var actor Actor
 	err := tx.QueryRow(ctx, `SELECT fact.actor_user_id,fact.actor_scope_id,scope.kind
@@ -348,7 +373,7 @@ func (LineGroupPublisher) EnqueueUnrequestedScopeRevisionTx(
 // publicationNodeIDs is the policy's explicit nodes plus every node serving a
 // current line group the scope's live sites use (their own or their package's
 // primary/backup group) and the members of their L2 configurations
-//, restricted to nodes this scope may publish to: active and
+// , restricted to nodes this scope may publish to: active and
 // either owned by the scope or a platform node.
 func publicationNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, policyNodes []uuid.UUID) ([]uuid.UUID, error) {
 	return lineGroupNodeIDs(ctx, tx, scopeID, nil, policyNodes)
@@ -393,11 +418,12 @@ func SitesTargetNodeIDsTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sit
 		FROM sites site
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=site.scope_id AND route.site_id=site.id
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
 		     site.node_group_id,
-		     (subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
-		     (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
 		     route.line_group_id, route.next_group_id)
 		JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision
@@ -413,8 +439,9 @@ func SitesTargetNodeIDsTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sit
 		JOIN site_origin_pools pool ON pool.site_id=site.id AND pool.l2_mode<>'off'
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN node_line_groups line_group ON pool.l2_mode='package' AND line_group.deleted_at IS NULL
-		 AND line_group.id=COALESCE(site.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+		 AND line_group.id=COALESCE(site.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 		JOIN l2_topology_configs config ON config.deleted_at IS NULL AND (
 		     pool.l2_mode='custom' AND config.tenant_scope_id=site.scope_id AND config.id=pool.l2_config_id OR
 		     pool.l2_mode='package' AND config.tenant_scope_id=line_group.tenant_scope_id AND config.id=line_group.l2_config_id)
@@ -424,6 +451,7 @@ func SitesTargetNodeIDsTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sit
 		JOIN access_scopes node_scope ON node_scope.id=node.scope_id
 		WHERE site.scope_id=$1 AND site.deleted_at IS NULL AND site.id=ANY($2::uuid[])
 		  AND (node.scope_id=$1 OR node_scope.kind='platform')
+		  AND COALESCE(subscription_current.product_snapshot#>>'{spec,limits,l2_origin}','')<>'false'
 		ORDER BY 1,2`, scopeID, siteIDs)
 	if err != nil {
 		return nil, err
@@ -447,11 +475,12 @@ func lineGroupNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteID 
 		FROM sites site
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=site.scope_id AND route.site_id=site.id
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
 		     site.node_group_id,
-		     (subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
-		     (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
 		     route.line_group_id, route.next_group_id,
 		     -- community edition: no package, no own group -> the platform default
 		     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND site.node_group_id IS NULL AND site.package_subscription_id IS NULL))
@@ -467,13 +496,15 @@ func lineGroupNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteID 
 		-- fix-autol2b (L2_ROUTING v2): the enabled members of each site's L2
 		-- configuration (its line group's -- own, else its package's primary
 		-- group -- or its custom one) receive the site too: the L2 serves it.
+		-- A package with l2_origin off has no L2 (edgepublish siteServingNodes).
 		SELECT member.node_id
 		FROM sites site
 		JOIN site_origin_pools pool ON pool.site_id=site.id AND pool.l2_mode<>'off'
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN node_line_groups line_group ON pool.l2_mode='package' AND line_group.deleted_at IS NULL
-		 AND line_group.id=COALESCE(site.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+		 AND line_group.id=COALESCE(site.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 		JOIN l2_topology_configs config ON config.deleted_at IS NULL AND (
 		     pool.l2_mode='custom' AND config.tenant_scope_id=site.scope_id AND config.id=pool.l2_config_id OR
 		     pool.l2_mode='package' AND config.tenant_scope_id=line_group.tenant_scope_id AND config.id=line_group.l2_config_id)
@@ -483,15 +514,17 @@ func lineGroupNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteID 
 		JOIN access_scopes node_scope ON node_scope.id=node.scope_id
 		WHERE site.scope_id=$1 AND site.deleted_at IS NULL AND ($2::uuid IS NULL OR site.id=$2)
 		  AND (node.scope_id=$1 OR node_scope.kind='platform')
+		  AND COALESCE(subscription_current.product_snapshot#>>'{spec,limits,l2_origin}','')<>'false'
 		UNION
 		-- A stream's line group / backup group: its own (migration 499, 修改线路分组), else its package's.
 		SELECT endpoint.node_id
 		FROM l4_forwards forward
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=forward.scope_id
 		 AND subscription.id=forward.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
-		     COALESCE(forward.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid),
-		     COALESCE(forward.backup_node_group_id, (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
+		     COALESCE(forward.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid),
+		     COALESCE(forward.backup_node_group_id, (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
 		     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND forward.node_group_id IS NULL AND subscription.id IS NULL))
 		JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision
@@ -518,7 +551,7 @@ func lineGroupNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteID 
 }
 
 // FrozenRepublisher redelivers a scope to a node that refused it while frozen
-//, through the same node_sync channel as a failed-sync
+// , through the same node_sync channel as a failed-sync
 // retry: the scope's last publication goes out again, automatic or not.
 type FrozenRepublisher struct{}
 

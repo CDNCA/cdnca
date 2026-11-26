@@ -275,11 +275,12 @@ func siteServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sites [
 	rows, err := tx.Query(ctx, `SELECT site.id,endpoint.node_id FROM sites site
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=site.scope_id AND route.site_id=site.id
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
 		     site.node_group_id,
-		     (subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
-		     (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+		     (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
 		     route.line_group_id, route.next_group_id)
 		LEFT JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision

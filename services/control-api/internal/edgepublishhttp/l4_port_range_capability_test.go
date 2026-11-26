@@ -16,7 +16,7 @@ import (
 func TestL4PortRangeOnOldNodesIs422NamingTheNodes(t *testing.T) {
 	first, second := uuid.New(), uuid.New()
 	err := fmt.Errorf("publish: %w", &edgepublish.TargetCapabilityError{NodeID: first, AgentVersion: "1.0.35-g5",
-		Feature: "an L4 port range or follow-port origin (四层端口范围 / 跟随端口回源)",
+		Feature:    "an L4 port range or follow-port origin (四层端口范围 / 跟随端口回源)",
 		Capability: agentv1.CapabilityName_CAPABILITY_NAME_TCP_PROXY, Required: 9, Advertised: 8, OtherNodeIDs: []uuid.UUID{second}})
 	status, code, message := classifyError(err)
 	if status != http.StatusUnprocessableEntity || code != "node_capability_unavailable" ||

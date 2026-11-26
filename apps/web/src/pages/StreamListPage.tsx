@@ -9,17 +9,15 @@ import {
   Input,
   InputNumber,
   Modal,
-  Pagination,
   Radio,
   Result,
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   type TableColumnsType,
 } from 'antd'
-import { AdvancedFilters, applyFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, IdOrNameInput, useLiveApply, type AdvancedFilterItem } from '@cdnca/ui'
+import { AdvancedFilters, Pagination, applyFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, IdOrNameInput, useLiveApply, type AdvancedFilterItem, Table } from '@cdnca/ui'
 import { streamSearch, userSearch } from './idNameSources'
 import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Plus, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -51,6 +49,7 @@ import StreamBatchCreatePanel from './StreamBatchCreatePanel'
 import { draftFallback, useApplyDraftDefaults, useStreamDraftDefaults, type DraftDefaultField } from './streamDraftDefaults'
 import { streamOriginShares } from './originWeightShare'
 import '../i18n/originWeight'
+import '../i18n/streamEligibility'
 import StreamLineFilterSelect from './StreamLineFilterSelect'
 import StreamOverrideModal, { type StreamOverrideAction } from './StreamOverrideModal'
 import StreamPublicationModal from './StreamPublicationModal'
@@ -68,6 +67,7 @@ import '../i18n/siteCnameRegeneration'
 import '../i18n/unconfirmedClose'
 import { cnameFailureText } from './site-edit/cnameFailureText'
 import CnameFailureActions from './site-edit/CnameFailureActions'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 type StreamWriteAttempt =
   | { kind: 'create'; input: CreateStreamRequest; key: string }
@@ -85,6 +85,8 @@ type StreamWriteAttempt =
   | { kind: 'action'; input: BatchStreamActionInput; key: string; targets: Stream[] }
 
 type StreamListFilters = Omit<StreamListParams, 'page' | 'limit' | 'search'>
+// 批量确认框正文最多列出的转发条数，更多的显示「等 N 条」。
+const CONFIRM_TARGET_LIMIT = 5
 type StreamFilterDraft = Omit<StreamListFilters, 'listen_port'> & { listen_port?: string }
 
 function dateTime(value: string, language: string): string {
@@ -226,6 +228,11 @@ function StreamFormModal({
   // it carries the request ID).
   useEffect(() => {
     if (!writeError) return
+    // A stream_ports quota refusal is marked on the listen ports (the typed ports stay).
+    if (writeError.code === 'package_resource_quota_exceeded' && writeError.packageQuota?.resource === 'stream_ports') {
+      form.setFields([{ name: 'listen_ports_text', errors: [errorMessage(writeError, t)] }])
+      return
+    }
     applyFormSubmitError(form, writeError, {
       map: streamErrorFormField as Record<string, string>, message: () => errorMessage(writeError, t),
     })
@@ -439,9 +446,11 @@ function StreamListContent({
 }) {
   const { t, i18n } = useTranslation('streams')
   const { t: tW } = useTranslation('originWeight')
+  const { t: tEligibility } = useTranslation('streamEligibility')
   const streamShareText = (share: number | null) => share === null ? tW('down') : tW('share', { share })
   const { t: tCname, i18n: i18nInstance } = useTranslation('siteCnameRegeneration')
   const { t: tu } = useTranslation('unconfirmedClose')
+  const namedRows = useNamedRowSelection()
   const protocolOptions = [
     { value: 'tcp', label: t('values.tcp') },
     { value: 'udp', label: t('values.udp') },
@@ -794,6 +803,17 @@ function StreamListContent({
   }
 
   const selectedStreams = (query.data?.items ?? []).filter((item) => selectedRowKeys.includes(item.id))
+  // 确认框里的对象名与列表「监听端口」列一致，如「TCP 18482」。
+  const streamLabel = (item: Stream) => `${item.protocol.toUpperCase()} ${portLabel(item.listen_port, item.listen_port_end)}`
+  const confirmContent = (action: 'enable' | 'disable' | 'delete' | 'modify', items: Stream[]) => {
+    const effect = action === 'modify' ? null : <p>{t(`confirm.${action}Description`)}</p>
+    if (items.length <= 1) return effect
+    const list = items.slice(0, CONFIRM_TARGET_LIMIT).map(streamLabel).join(t('confirm.separator'))
+    return <>
+      {effect}
+      <p>{items.length > CONFIRM_TARGET_LIMIT ? t('confirm.targetsMore', { list, count: items.length }) : t('confirm.targets', { list })}</p>
+    </>
+  }
 
   const beginBatch = (action: 'enable' | 'disable' | 'delete' | 'modify', patch?: Partial<UpdateStreamRequest>, acl?: StreamBatchACLPatch) => {
     if (selectedStreams.length === 0 || !canWrite() || retryAttempt) return
@@ -805,9 +825,12 @@ function StreamListContent({
       ...(acl ? { acl } : {}),
     }
     modalApi.confirm({
-      title: t(`confirm.batch.${action}Title`, { count: selectedStreams.length }),
-      content: t('confirm.batch.description'),
-      okText: action === 'delete' ? t('actions.confirmDelete') : t('actions.confirm'),
+      title: selectedStreams.length === 1
+        ? t(`confirm.${action}Title`, { name: streamLabel(selectedStreams[0]!) })
+        : t(`confirm.batch.${action}Title`, { count: selectedStreams.length }),
+      content: confirmContent(action, selectedStreams),
+      // 确认按钮与动作同名（停用/启用/删除），批量修改仍是「确认」。
+      okText: action === 'modify' ? t('actions.confirm') : t(`actions.${action}`),
       cancelText: t('actions.cancel'),
       okButtonProps: { danger: action === 'delete' },
       onOk: () => runBatch(attempt),
@@ -859,11 +882,9 @@ function StreamListContent({
   const beginRowAction = (item: Stream, action: 'enable' | 'disable' | 'delete') => {
     if (!canWrite() || retryAttempt) return
     const instance = modalApi.confirm({
-      title: action === 'delete'
-        ? t('confirm.deleteTitle')
-        : action === 'enable' ? t('confirm.enableTitle') : t('confirm.disableTitle'),
-      content: action === 'delete' ? t('confirm.deleteDescription') : t('confirm.stateDescription'),
-      okText: action === 'delete' ? t('actions.confirmDelete') : t('actions.confirm'),
+      title: t(`confirm.${action}Title`, { name: streamLabel(item) }),
+      content: confirmContent(action, [item]),
+      okText: t(`actions.${action}`),
       cancelText: t('actions.cancel'),
       okButtonProps: { danger: action === 'delete' },
       afterClose: () => { rowActionConfirmRef.current = null },
@@ -966,7 +987,7 @@ function StreamListContent({
   // 状态列：设置状态（锁定/流量超限/套餐过期）优先，其次套餐不可用、禁用。
   const streamStatus = (item: Stream): [string, string] => {
     if (item.admin_status !== 'normal') return [t(`adminStatus.${item.admin_status}`), 'warning']
-    if (item.eligibility_state === 'ineligible') return [t('states.ineligible'), 'warning']
+    if (item.eligibility_state === 'ineligible') return [item.ineligible_reason ? tEligibility(item.ineligible_reason) : t('states.ineligible'), 'warning']
     return item.enabled ? [t('states.normal'), 'normal'] : [t('states.disabled'), 'disabled']
   }
   const columns: TableColumnsType<Stream> = [
@@ -989,7 +1010,8 @@ function StreamListContent({
     },
     {
       title: t('columns.cname'), key: 'cname', width: 190,
-      // 已生成 / 生成中 / 失败可重试, as the site list's CNAME column.
+      // 已生成 / 生成中 / 失败可重试, as the site list's CNAME column; no allocation yet (按转发 without its own
+      // CNAME, or the package's not created) is a known empty value: —.
       render: (_, item) => item.cname_state === 'failed' ? (
         <span className="site-cname-cell site-cname-failed" data-testid="stream-cname-failed">
           <CnameFailureActions
@@ -1002,7 +1024,7 @@ function StreamListContent({
         </span>
       ) : item.cname_state === 'pending' && !item.cname ? (
         <Tag color="processing" data-testid="stream-cname-pending">{tCname('cell.pending')}</Tag>
-      ) : item.cname ? <span title={item.cname}>{item.cname}</span> : <span className="stream-unavailable">{t('values.unavailable')}</span>,
+      ) : item.cname ? <span title={item.cname}>{item.cname}</span> : <span className="stream-unavailable">{t('values.placeholder')}</span>,
     },
     {
       title: t('columns.origin'), key: 'origin', width: 240,
@@ -1129,7 +1151,7 @@ function StreamListContent({
         : writeError && !modalOpen ? <FeedbackWhen title={errorMessage(writeError, t)} onClose={() => setWriteError(null)} /> : null}
       {query.isError ? <FeedbackWhen title={t('errors.listFailed')} detail={error ? errorMessage(error, t) : t('errors.requestFailed')} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
       <div className="identity-table-scroll" data-testid="stream-table-scroll" aria-busy={query.isPending || query.isFetching}>
-        <Table<Stream> rowKey="id" size="small" rowSelection={canManageStreams ? { selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys.map(String)) } : undefined} columns={columns} dataSource={query.data?.items ?? []} loading={query.isPending || query.isFetching} pagination={false} locale={{ emptyText: query.isPending ? ' ' : t('values.empty') }} scroll={{ x: 1580 }} />
+        <Table<Stream> rowKey="id" size="small" rowSelection={canManageStreams ? namedRows<Stream>({ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys.map(String)) }, streamLabel, t('selectionScope.streams')) : undefined} columns={columns} dataSource={query.data?.items ?? []} loading={query.isPending || query.isFetching} pagination={false} locale={{ emptyText: query.isPending ? ' ' : t('values.empty') }} scroll={{ x: 1580 }} />
       </div>
       <Pagination className="identity-pagination" current={page} pageSize={limit} total={query.data?.total ?? 0} pageSizeOptions={[10, 20, 50, 100]} showSizeChanger showTotal={(count) => t('values.total', { count })} onChange={(nextPage, nextLimit) => { setPage(nextLimit === limit ? nextPage : 1); setLimit(nextLimit) }} />
 

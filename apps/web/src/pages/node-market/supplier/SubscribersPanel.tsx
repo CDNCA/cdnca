@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Button, Form, Input, Modal, Select, Space, Tag, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
-import { TimeRangeFilter, type TimeRangeValue } from '@cdnca/ui'
+import { TimeRangeFilter, type TimeRangeValue, Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../../api/auth'

@@ -50,8 +50,10 @@ func TestProductionTargetResolverRequiresExactHealthyImmutableAuthority(t *testi
 		t.Fatalf("target authority query is not atomic/exact: %q", database.queries)
 	}
 	// sec-followup: a site following its package (node_group_id NULL) takes
-	// the package's primary line group, not "no target".
-	if !strings.Contains(database.queries[0], "COALESCE(site.node_group_id,(subscription.product_snapshot->'spec'->>'node_group_id')::uuid)") {
+	// the package's primary line group, not "no target" -- of the package in
+	// force now (701 current entitlement), not the purchase snapshot.
+	if !strings.Contains(database.queries[0], "COALESCE(site.node_group_id,(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)") ||
+		!strings.Contains(database.queries[0], "package_subscription_current_product_snapshot(subscription.id,now())") {
 		t.Fatalf("target authority ignores package-following sites: %q", database.queries[0])
 	}
 

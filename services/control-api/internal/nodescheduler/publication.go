@@ -18,11 +18,12 @@ func lockLineGroupUsingScopes(ctx context.Context, tx pgx.Tx, groupID uuid.UUID)
 			SELECT site.scope_id FROM sites site
 			LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 			 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+			LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 			LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=site.scope_id AND route.site_id=site.id
 			WHERE site.deleted_at IS NULL AND $1 IN (
 			    site.node_group_id,
-			    (subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
-			    (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+			    (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+			    (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
 			    route.line_group_id, route.next_group_id,
 			    -- community edition: no package, no own group -> the platform default
 			    (SELECT platform_default.id FROM node_line_groups platform_default
@@ -33,9 +34,10 @@ func lockLineGroupUsingScopes(ctx context.Context, tx pgx.Tx, groupID uuid.UUID)
 			SELECT forward.scope_id FROM l4_forwards forward
 			LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=forward.scope_id
 			 AND subscription.id=forward.package_subscription_id AND subscription.deleted_at IS NULL
+			LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 			WHERE forward.deleted_at IS NULL AND $1 IN (
-			    COALESCE(forward.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid),
-			    COALESCE(forward.backup_node_group_id, (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
+			    COALESCE(forward.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid),
+			    COALESCE(forward.backup_node_group_id, (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
 			    (SELECT platform_default.id FROM node_line_groups platform_default
 			     WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL
 			       AND forward.node_group_id IS NULL AND forward.package_subscription_id IS NULL)))

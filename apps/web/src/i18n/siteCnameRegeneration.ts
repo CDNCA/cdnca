@@ -30,7 +30,8 @@ const zhCN = {
     goDnsConfig: '去 DNS 配置',
     details: '详情',
     failedMark: '生成失败',
-    failedMarkLabel: '生成失败：{{reason}}，点击查看原因',
+    // 53 补充：名称只说失败对象，原因经 aria-describedby 关联。
+    failedMarkLabel: 'CNAME 生成失败',
     failedTitle: 'CNAME 生成失败',
     code: '原因码：{{label}}',
     goLineGroups: '去线路组',
@@ -47,6 +48,7 @@ const zhCN = {
     node_targets_unavailable: '线路组无可用节点',
     cname_no_default_line_group: '未设平台默认线路组',
     cname_no_default_zone: '无可用CNAME域名',
+    cname_package_domain_missing: '套餐未绑定CNAME域名',
     site_authority_unavailable: '操作人无权限',
     domain_blocked: '域名在黑名单',
     intent_superseded: '已被新任务取代',
@@ -79,6 +81,7 @@ const zhCN = {
     node_targets_unavailable: '线路组没有可解析的节点 IP',
     cname_no_default_line_group: '网站未绑定套餐且没有平台默认线路组，请在节点管理 → 线路组设一个平台默认线路组',
     cname_no_default_zone: '网站未绑定套餐，且没有参与随机分配的 CNAME 域名，也没有默认 CNAME 域名（节点管理 → DNS配置 → CNAME域名）',
+    cname_package_domain_missing: '所选套餐未绑定 CNAME 域名，请在套餐管理里为该套餐选择 CNAME 域名',
     site_authority_unavailable: '操作人已无该网站或 DNS 的管理权限',
     domain_blocked: 'CNAME 域名在平台黑名单中',
     intent_superseded: '已有更新的 CNAME 任务',
@@ -98,6 +101,9 @@ const zhCN = {
     cname_label_exhausted: '自动生成的 CNAME 名称连续重名，请重新生成',
     dns_provider_remote_credentials_rejected: 'DNS 服务商拒绝了账号凭据（AccessKey 错误、过期或权限不足），请到节点管理 → DNS配置 检查后重新生成',
     dns_provider_remote_unsupported: 'DNS 服务商不支持该操作，请换用其他 DNS 账号后重新生成',
+    // 清除CDN无关解析的计划项结果（dnsmaintenance）。
+    dns_record_changed: '记录已变化或已被网站使用，已保留未删除',
+    dns_cleanup_plan_stale: '清除计划由旧版本生成，缺少完整记录值，已跳过；请重新执行“清除CDN无关解析”',
     unknown: '原因未知',
   },
   // cname_state=pending 但任务停滞的原因（cname_pending_code）。
@@ -109,11 +115,23 @@ const zhCN = {
     hint: '生成中，点击查看进度',
     stuck: '生成中（已停滞）',
     taskCenter: '去任务中心',
+    // 详情页轮询到上限仍在生成时的下一步。
+    pollTimeout: 'CNAME 仍在生成，可点“刷新状态”查看最新结果',
+    recheck: '刷新状态',
   },
-  // FLOW001：普通用户没有“节点管理”菜单；平台侧配置缺失时只告诉他配置已保存、需联系管理员。
+  // FLOW001：普通用户没有“节点管理”菜单；平台侧配置缺失只写一句具体原因（旁边的按钮就是联系管理员/提交工单）。
   tenantFailures: {
-    platform: '平台尚未配置可用的 DNS 或 CNAME 域名，请联系管理员处理。网站配置已保存，处理后可重新生成。',
+    platform: '平台尚未配置可用的 DNS 或 CNAME 域名，管理员处理后可重新生成。',
     line: '平台尚未配置可用线路，请联系管理员。网站配置已保存，管理员配置后可重新生成。',
+    // 按失败码给一句具体原因；管理员处理后服务端会自动重新生成的，不让用户自己重试。
+    dns_provider_not_configured: '平台 DNS 服务商未配置，管理员处理后会自动重新生成。',
+    cname_package_domain_missing: '所选套餐未绑定 CNAME 域名，管理员处理后会自动重新生成。',
+    cname_zone_not_configured: '套餐的 CNAME 域名 {{domain}} 找不到对应的 DNS 区域，管理员处理后会自动重新生成。',
+    cname_zone_not_configured_default: '平台没有可用的 CNAME 域名，管理员处理后会自动重新生成。',
+    cname_zone_provider_mismatch: 'CNAME 域名 {{domain}} 所在的 DNS 服务商已停用，管理员处理后会自动重新生成。',
+    platform_dns_sync_failed: '平台 DNS 配置未能同步到本账号，管理员处理后会自动重新生成。',
+    cname_no_default_zone: '平台没有可用的 CNAME 域名，管理员处理后可重新生成。',
+    domain_blocked: 'CNAME 域名在平台黑名单中。',
   },
 }
 
@@ -146,7 +164,7 @@ const enUS: typeof zhCN = {
     goDnsConfig: 'Go to DNS configuration',
     details: 'Details',
     failedMark: 'Failed',
-    failedMarkLabel: 'Generation failed: {{reason}}. Open for the reason',
+    failedMarkLabel: 'CNAME generation failed',
     failedTitle: 'CNAME generation failed',
     code: 'Reason code: {{label}}',
     goLineGroups: 'Go to line groups',
@@ -163,6 +181,7 @@ const enUS: typeof zhCN = {
     node_targets_unavailable: 'No usable nodes',
     cname_no_default_line_group: 'No default line group',
     cname_no_default_zone: 'No usable CNAME domain',
+    cname_package_domain_missing: 'Package has no CNAME domain',
     site_authority_unavailable: 'No permission',
     domain_blocked: 'Domain blocked',
     intent_superseded: 'Superseded',
@@ -195,6 +214,7 @@ const enUS: typeof zhCN = {
     node_targets_unavailable: 'The line group has no node IP to resolve to',
     cname_no_default_line_group: 'The site has no package and there is no platform default line group; set one under Nodes → Line groups',
     cname_no_default_zone: 'The site has no package, and no CNAME domain is marked for random allocation or set as default (Nodes → DNS configuration → CNAME domains)',
+    cname_package_domain_missing: 'The selected package has no CNAME domain; choose one for the package under Package management',
     site_authority_unavailable: 'The operator no longer manages this site or its DNS',
     domain_blocked: 'The CNAME domain is blocklisted by the platform',
     intent_superseded: 'A newer CNAME task replaced this one',
@@ -214,6 +234,8 @@ const enUS: typeof zhCN = {
     cname_label_exhausted: 'Every generated CNAME name was already taken. Regenerate to try again',
     dns_provider_remote_credentials_rejected: 'The DNS provider rejected the account credentials (wrong, expired or insufficient AccessKey); check Nodes → DNS settings, then regenerate',
     dns_provider_remote_unsupported: 'The DNS provider does not support this operation; use another DNS account, then regenerate',
+    dns_record_changed: 'The record changed or a site now uses it; kept, not deleted',
+    dns_cleanup_plan_stale: 'The cleanup was planned by an older version without the full record value; skipped. Run "Remove non-CDN records" again',
     unknown: 'Unknown reason',
   },
   pending: {
@@ -224,10 +246,20 @@ const enUS: typeof zhCN = {
     hint: 'Generating, click for progress',
     stuck: 'Generating (stalled)',
     taskCenter: 'Open task center',
+    pollTimeout: 'The CNAME is still being generated; choose Refresh status for the latest result',
+    recheck: 'Refresh status',
   },
   tenantFailures: {
-    platform: 'The platform has no usable DNS or CNAME domain yet; contact the administrator. Your site settings are saved, and you can regenerate once it is fixed.',
+    platform: 'The platform has no usable DNS or CNAME domain yet. You can regenerate once the administrator fixes it.',
     line: 'The platform has no usable line yet; contact the administrator. Your site settings are saved, and you can regenerate once a line is configured.',
+    dns_provider_not_configured: 'The platform has no DNS provider configured. The CNAME is regenerated automatically once the administrator fixes it.',
+    cname_package_domain_missing: 'The selected package has no CNAME domain. The CNAME is regenerated automatically once the administrator fixes it.',
+    cname_zone_not_configured: 'No DNS zone was found for the package CNAME domain {{domain}}. The CNAME is regenerated automatically once the administrator fixes it.',
+    cname_zone_not_configured_default: 'The platform has no usable CNAME domain. The CNAME is regenerated automatically once the administrator fixes it.',
+    cname_zone_provider_mismatch: 'The DNS provider of the CNAME domain {{domain}} is disabled. The CNAME is regenerated automatically once the administrator fixes it.',
+    platform_dns_sync_failed: 'The platform DNS configuration could not be copied to this account. The CNAME is regenerated automatically once the administrator fixes it.',
+    cname_no_default_zone: 'The platform has no usable CNAME domain. You can regenerate once the administrator fixes it.',
+    domain_blocked: 'The CNAME domain is blocklisted by the platform.',
   },
 }
 

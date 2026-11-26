@@ -332,6 +332,28 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      operationId: disconnectPlatformDNSConfig
+      summary: "Disconnect the DNS provider - remove the saved credentials and disable every tenant copy"
+      x-summary-zh: "断开 DNS 服务商：撤销已保存的凭据并停用每个租户副本"
+      description: >-
+        Removes the provider and its encrypted credentials from the installation-wide DNS configuration and
+        disables the provider copy of every tenant (its credential is revoked). The CNAME domains, their tenant
+        zones, the TTL and the DNS records already written are kept. Afterwards CNAME allocation reports
+        dns_provider_not_configured, record repair and cleanup dns_not_configured and DNS-01 orders
+        acme_dns_provider_unavailable until a provider is saved again. A configuration without a provider is
+        returned unchanged.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: The configuration read back (provider_type absent, secret_saved false).
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSConfig'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /v1/dns/platform-config/connection-test:
     post:
       operationId: testPlatformDNSConnection
@@ -384,7 +406,7 @@ paths:
           description: provider_verification_rate_limited.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '503':
-          description: provider_verification_unavailable or credential_encryption_unavailable.
+          description: provider_verification_unavailable, provider_proxy_unavailable (the DNS API HTTP proxy in system other settings could not be used) or credential_encryption_unavailable.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '504':
           description: provider_verification_timeout.

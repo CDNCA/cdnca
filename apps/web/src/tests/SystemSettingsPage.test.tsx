@@ -20,6 +20,7 @@ import i18n, { changeLocale } from '../i18n'
 import SystemSettingsPage from '../pages/SystemSettingsPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { tabPanelOf } from '../test/tabs'
 
 const nginx: NginxConfiguration = {
   worker: {
@@ -120,7 +121,7 @@ const resources: ResourceConfiguration = {
     related_config_min_limit: 1_000, related_config_max_times_limit: 200, black_ip_limit: 50, white_ip_limit: 50,
     daily_clean_url_limit: 2_000, daily_clean_dir_limit: 500, daily_pre_cache_url_limit: 2_000,
     daily_ip_unlock_limit: 1_000, ip_unlock_per_request_limit: 50, cc_rule_max_limit: 5,
-    max_domains_per_site: 100, listen_default_http_80: true, daily_access_log_download_limit: 10,
+    max_domains_per_site: 50, listen_default_http_80: true, daily_access_log_download_limit: 10,
     access_log_tmp_dir: '/data/download-temp/', access_log_retain_hours: 12,
   },
   stream: {
@@ -300,10 +301,64 @@ describe('SystemSettingsPage', () => {
     expect(screen.queryByRole('tab', { name: 'Stream' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: '日志目录' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Worker 运行参数' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'worker_processes' })).toHaveValue('4')
+    expect(screen.getByRole('textbox', { name: '工作进程数（worker_processes）' })).toHaveValue('4')
     expect(screen.queryByText('系统配置')).not.toBeInTheDocument()
     expect(screen.queryByText(/头版本/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '刷新' })).not.toBeInTheDocument()
+  })
+
+  // 两级页签逐级挂在 aria-controls 指向的面板里（外层面板放内层页签，内层面板放字段），
+  // 切页签只挂当前面板，字段值留在同一个表单里，切回来草稿还在、保存时一并提交。
+  it('nests the Nginx scope and detail tabs in their panels and keeps the draft across tab switches', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    const put = vi.spyOn(systemConfigurationApi, 'put').mockResolvedValue(nginxDocument(3))
+    vi.spyOn(regionsApi, 'list').mockResolvedValue({ count: 0, data: [] })
+    vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [] })
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage />)
+
+    const workers = await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })
+    const globalPanel = tabPanelOf('全局配置')
+    expect(within(globalPanel).getByRole('tab', { name: 'Worker' })).toBeInTheDocument()
+    expect(within(tabPanelOf('Worker')).getByRole('textbox', { name: '工作进程数（worker_processes）' })).toBe(workers)
+    await user.clear(workers)
+    await user.type(workers, '6')
+
+    await user.click(screen.getByRole('tab', { name: 'Http' }))
+    expect(within(tabPanelOf('Http')).getByRole('textbox', { name: 'Gzip 压缩级别（gzip_comp_level）' })).toBeInTheDocument()
+    expect(tabPanelOf('Worker')).toBeEmptyDOMElement()
+
+    await user.click(screen.getByRole('tab', { name: '区域及节点配置' }))
+    await waitFor(() => expect(tabPanelOf('区域及节点配置').querySelector('.configuration-overrides-panel--nginx')).not.toBeNull())
+    expect(tabPanelOf('全局配置')).toBeEmptyDOMElement()
+
+    await user.click(screen.getByRole('tab', { name: '全局配置' }))
+    await user.click(screen.getByRole('tab', { name: 'Worker' }))
+    expect(within(tabPanelOf('Worker')).getByRole('textbox', { name: '工作进程数（worker_processes）' })).toHaveValue('6')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(put).toHaveBeenCalledWith(expect.any(String), 'nginx',
+      expect.objectContaining({ worker: expect.objectContaining({ worker_processes: 6 }) }), 2, expect.any(String), expect.any(String)))
+  })
+
+  it('renders the resource and default configuration fields inside the panel of their selected tabs', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockImplementation((_token, category) =>
+      Promise.resolve((category === 'defaults' ? defaultsDocument() : resourcesDocument()) as never))
+    const user = userEvent.setup()
+    const resources = renderSettings(new QueryClient({ defaultOptions: { queries: { retry: false } } }), 'resources')
+    await user.click(await screen.findByRole('tab', { name: '公共' }))
+    expect(within(tabPanelOf('公共')).getByRole('heading', { level: 2 })).toBeInTheDocument()
+    expect(tabPanelOf('网站')).toBeEmptyDOMElement()
+    resources.unmount()
+
+    renderWithProviders(<SystemSettingsPage initialCategory="defaults" />)
+    const httpCard = await screen.findByRole('heading', { name: 'HTTP' })
+    expect(within(tabPanelOf('全局配置')).getByRole('tab', { name: '网站' })).toBeInTheDocument()
+    expect(tabPanelOf('网站')).toContainElement(httpCard)
+    await user.click(screen.getByRole('tab', { name: '证书' }))
+    expect(within(tabPanelOf('证书')).getByRole('radio', { name: 'ZeroSSL' })).toBeInTheDocument()
+    expect(tabPanelOf('网站')).toBeEmptyDOMElement()
   })
 
   it('shows a banner when the shared head carries other categories that are not active yet', async () => {
@@ -328,6 +383,9 @@ describe('SystemSettingsPage', () => {
 
     expect(await screen.findByRole('tab', { name: '全局配置' })).toBeInTheDocument()
     expect(screen.queryByTestId('pending-categories-notice')).not.toBeInTheDocument()
+    // 本分类自己的待生效修改只给一行状态与启用入口。
+    expect(screen.getByTestId('current-category-pending')).toHaveTextContent('本分类有已保存、尚未生效的修改。')
+    expect(screen.getByRole('link', { name: '去节点监控检查并启用' })).toBeInTheDocument()
   })
 
   it('loads only the route-selected category and renders its own secondary tabs', async () => {
@@ -463,7 +521,7 @@ describe('SystemSettingsPage', () => {
     renderWithProviders(<SystemSettingsPage />)
 
     expect(await screen.findByText('只读模式')).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'worker_processes' })).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: '工作进程数（worker_processes）' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
     expect(put).not.toHaveBeenCalled()
   })
@@ -479,7 +537,7 @@ describe('SystemSettingsPage', () => {
 
     renderWithProviders(<SystemSettingsPage />)
 
-    const workers = await screen.findByRole('textbox', { name: 'worker_processes' })
+    const workers = await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })
     await user.clear(workers)
     await user.type(workers, '6')
     await user.click(screen.getByRole('button', { name: '保存' }))
@@ -529,13 +587,13 @@ describe('SystemSettingsPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<SystemSettingsPage />)
     await user.click(await screen.findByRole('tab', { name: 'Http' }))
-    const level = await screen.findByRole('textbox', { name: 'gzip_comp_level' })
+    const level = await screen.findByRole('textbox', { name: 'Gzip 压缩级别（gzip_comp_level）' })
     await user.clear(level)
     await user.type(level, '99')
     await user.tab()
     expect(level).toHaveValue('99')
     expect(await screen.findByText('请输入 1 到 9 的整数')).toBeInTheDocument()
-    const minLength = screen.getByRole('textbox', { name: 'gzip_min_length' })
+    const minLength = screen.getByRole('textbox', { name: 'Gzip 最小压缩长度（gzip_min_length）' })
     await user.clear(minLength)
     await user.type(minLength, 'abc')
     await user.tab()
@@ -544,6 +602,94 @@ describe('SystemSettingsPage', () => {
     await user.click(screen.getByRole('button', { name: '保存' }))
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(put).not.toHaveBeenCalled()
+    // 错误关联到真实输入（id、aria-invalid、aria-describedby），保存后聚焦首个错误。
+    expect(level).toHaveAttribute('aria-invalid', 'true')
+    expect(level).toHaveAccessibleDescription('请输入 1 到 9 的整数')
+    expect(minLength).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(level).toHaveFocus())
+  })
+
+  // 操作条按「草稿与已保存值是否不同」显示，改回原值即消失。
+  it('hides the save bar once every edited value is put back to the saved one', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    const put = vi.spyOn(systemConfigurationApi, 'put').mockResolvedValue(nginxDocument(3))
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage />)
+    await user.click(await screen.findByRole('tab', { name: 'Http' }))
+    const level = await screen.findByRole('textbox', { name: 'Gzip 压缩级别（gzip_comp_level）' })
+    const saveButton = () => screen.queryByRole('button', { name: '保存' })
+    const resetButton = () => screen.queryByRole('button', { name: /重\s*置/ })
+    await user.click(level)
+    await user.tab()
+    expect(saveButton()).not.toBeInTheDocument()
+
+    await user.clear(level)
+    await user.type(level, '99')
+    expect(saveButton()).toBeInTheDocument()
+    await user.click(saveButton()!)
+    expect(await screen.findByText('请输入 1 到 9 的整数')).toBeInTheDocument()
+    await waitFor(() => expect(level).toHaveFocus())
+    await user.clear(level)
+    await user.type(level, '5')
+    await user.tab()
+    await waitFor(() => expect(screen.queryByText('请输入 1 到 9 的整数')).not.toBeInTheDocument())
+    expect(saveButton()).not.toBeInTheDocument()
+    expect(resetButton()).not.toBeInTheDocument()
+
+    // 多处改动只改回一处：仍有改动；未挂载页签里的草稿也算。
+    await user.clear(level)
+    await user.type(level, '7')
+    await user.click(screen.getByRole('tab', { name: 'Worker' }))
+    const workers = screen.getByRole('textbox', { name: '工作进程数（worker_processes）' })
+    await user.clear(workers)
+    await user.type(workers, '6')
+    await user.clear(workers)
+    await user.type(workers, String(nginx.worker.worker_processes))
+    expect(saveButton()).toBeInTheDocument()
+    await user.click(resetButton()!)
+    expect(saveButton()).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Http' }))
+    expect(screen.getByRole('textbox', { name: 'Gzip 压缩级别（gzip_comp_level）' })).toHaveValue('5')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  // 缓存容量两项的说明是可 Tab 聚焦的帮助按钮，Escape 关闭，说明经 aria-describedby 关联到输入。
+  it('reaches the cache capacity help by keyboard and links it to its input without writing', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    const put = vi.spyOn(systemConfigurationApi, 'put')
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage />)
+    await user.click(await screen.findByRole('tab', { name: 'Http' }))
+    const cases = [
+      ['缓存总容量（proxy_cache_max_size）', '缓存总容量说明', '单节点缓存总容量，各网站配额按比例缩小，例如 100g。'],
+      ['缓存最小剩余空间（min_free）', '缓存最小剩余空间说明', '缓存磁盘至少保留的剩余空间，低于该值开始淘汰缓存，例如 10g；须为 MB 的整数倍。'],
+    ] as const
+    for (const [field, name, tip] of cases) {
+      const input = await screen.findByRole('textbox', { name: field })
+      expect(input).toHaveAccessibleDescription(tip)
+      await user.click(input)
+      await user.tab()
+      expect(screen.getByRole('button', { name })).toHaveFocus()
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(tip)
+      await user.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
+    }
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  // 字段用中文名（指令名在括号里），
+  // 分节不再复述说明，常驻范围/保存方式横幅只换成本分类待生效时的一行入口。
+  it('labels nginx fields in plain words without the explanation wall', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    renderWithProviders(<SystemSettingsPage />)
+    expect(await screen.findByRole('textbox', { name: '单进程最大连接数（worker_connections）' })).toBeInTheDocument()
+    expect(screen.queryByText(/控制 Nginx worker 进程和连接容量|作用范围：|保存方式：/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('current-category-pending')).not.toBeInTheDocument()
   })
 
   // A3-12: a cache rule without match content and a set/append header without a value are required fields.
@@ -903,15 +1049,17 @@ describe('SystemSettingsPage', () => {
 
     renderWithProviders(<SystemSettingsPage />)
 
-    const workers = await screen.findByRole('textbox', { name: 'worker_processes' })
+    const workers = await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })
     await user.clear(workers)
     await user.type(workers, '6')
     await user.click(screen.getByRole('button', { name: '保存' }))
     expect(await screen.findByText('配置已被其他管理员更新，已刷新最新版本')).toBeInTheDocument()
-    expect(await screen.findByRole('textbox', { name: 'worker_processes' })).toHaveValue('7')
+    expect(await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })).toHaveValue('7')
 
-    await user.clear(screen.getByRole('textbox', { name: 'worker_processes' }))
-    await user.type(screen.getByRole('textbox', { name: 'worker_processes' }), '8')
+    // The refreshed form re-enables the field once the new revision is in place; under load that can trail the value.
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '工作进程数（worker_processes）' })).toBeEnabled())
+    await user.clear(screen.getByRole('textbox', { name: '工作进程数（worker_processes）' }))
+    await user.type(screen.getByRole('textbox', { name: '工作进程数（worker_processes）' }), '8')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2))
@@ -931,7 +1079,7 @@ describe('SystemSettingsPage', () => {
 
     renderWithProviders(<SystemSettingsPage />)
 
-    const workers = await screen.findByRole('textbox', { name: 'worker_processes' })
+    const workers = await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })
     await user.clear(workers)
     await user.type(workers, '6')
     await user.click(screen.getByRole('button', { name: '保存' }))
@@ -1051,7 +1199,7 @@ describe('SystemSettingsPage session and cache lineage', () => {
     const user = userEvent.setup()
 
     renderSettings(queryClient)
-    const workers = await screen.findByRole('textbox', { name: 'worker_processes' })
+    const workers = await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })
     await user.clear(workers)
     await user.type(workers, '6')
     act(() => setSystemSession(actor, newToken, 'refresh'))
@@ -1060,7 +1208,7 @@ describe('SystemSettingsPage session and cache lineage', () => {
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(await screen.findByText('配置已被其他管理员更新，已刷新最新版本')).toBeInTheDocument()
-    expect(await screen.findByRole('textbox', { name: 'worker_processes' })).toHaveValue('7')
+    expect(await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })).toHaveValue('7')
     expect(put).toHaveBeenCalledWith(
       newToken,
       'nginx',
@@ -1099,14 +1247,14 @@ describe('SystemSettingsPage session and cache lineage', () => {
     renderSettings(queryClient)
     expect(screen.getByLabelText('正在加载系统配置')).toBeInTheDocument()
     act(() => setSystemSession(actorB, tokenB))
-    expect(await screen.findByRole('textbox', { name: 'worker_processes' })).toHaveValue('9')
+    expect(await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })).toHaveValue('9')
 
     await act(async () => pendingA.resolve(nginxDocument(9, {
       ...nginx,
       worker: { ...nginx.worker, worker_processes: 2 },
     })))
 
-    expect(screen.getByRole('textbox', { name: 'worker_processes' })).toHaveValue('9')
+    expect(screen.getByRole('textbox', { name: '工作进程数（worker_processes）' })).toHaveValue('9')
     expect(queryClient.getQueryData(configurationKey(actorA, epochA, 'nginx'))).toBeUndefined()
     expect(get).toHaveBeenCalledWith(tokenB, 'nginx')
   })
@@ -1121,7 +1269,7 @@ describe('SystemSettingsPage session and cache lineage', () => {
     const user = userEvent.setup()
 
     renderSettings(queryClient)
-    const workers = await screen.findByRole('textbox', { name: 'worker_processes' })
+    const workers = await screen.findByRole('textbox', { name: '工作进程数（worker_processes）' })
     await user.clear(workers)
     await user.type(workers, '6')
     await user.click(screen.getByRole('button', { name: '保存' }))
@@ -1136,7 +1284,7 @@ describe('SystemSettingsPage session and cache lineage', () => {
       worker: { ...nginx.worker, worker_processes: 6 },
     })))
 
-    expect(screen.getByRole('textbox', { name: 'worker_processes' })).toHaveValue('6')
+    expect(screen.getByRole('textbox', { name: '工作进程数（worker_processes）' })).toHaveValue('6')
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
     expect(put).toHaveBeenCalledTimes(1)
   })

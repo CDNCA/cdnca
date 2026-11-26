@@ -44,6 +44,7 @@ const zhCN = {
     filterUnset: '未设置区域',
     filterAreas: '大区',
     filterRegions: '区域',
+    lockedBy: '先从这些线路分组移出才能改区域',
   },
   network: {
     addressStatus: '{{family}}：{{address}}；{{status}}',
@@ -268,6 +269,10 @@ const zhCN = {
     initializeTitle: '初始化节点 {{name}}？',
     initializeContent: '初始化后节点转为正常，开始同步系统与网站配置并加入 DNS 解析。节点必须已执行安装命令并完成注册。',
   },
+  join: {
+    initializedTitle: '节点 {{name}} 已初始化', connected: '已连接', inLineGroup: '已进线路组', inDNS: '已进入 DNS 解析',
+    toResolution: '去「{{name}}」配置解析', createLineGroup: '新建线路分组', close: '知道了',
+  },
   failed: { empty: '暂无同步失败已禁用节点' },
   regions: {
     add: '新增区域',
@@ -405,6 +410,7 @@ const enUS: typeof zhCN = {
     filterUnset: 'No region',
     filterAreas: 'Area',
     filterRegions: 'Regions',
+    lockedBy: 'Remove it from these line groups to change the region',
   },
   network: {
     addressStatus: '{{family}}: {{address}}; {{status}}',
@@ -628,6 +634,10 @@ const enUS: typeof zhCN = {
     empty: 'No nodes pending initialization',
     initializeTitle: 'Initialize node {{name}}?',
     initializeContent: 'The node becomes active, starts syncing system and site configuration, and joins DNS. It must have run the install command and completed registration.',
+  },
+  join: {
+    initializedTitle: 'Node {{name}} initialized', connected: 'Connected', inLineGroup: 'In a line group', inDNS: 'In DNS resolution',
+    toResolution: 'Configure resolution of {{name}}', createLineGroup: 'Create a line group', close: 'Got it',
   },
   failed: { empty: 'No nodes disabled after synchronization failure' },
   regions: {

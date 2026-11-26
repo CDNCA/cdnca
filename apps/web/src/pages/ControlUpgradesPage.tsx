@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -10,7 +10,6 @@ import {
   Modal,
   Result,
   Space,
-  Table,
   Tag,
   type TableColumnsType,
 } from 'antd'
@@ -27,6 +26,7 @@ import {
   createControlUpgradeRequestMetadata,
   type ControlUpgradeNodeState,
   type ControlUpgradePlanState,
+  type ControlUpgradePreparation,
   type ControlUpgradeRequestMetadata,
   type ControlUpgradeRolloutDetail,
 } from '../api/controlUpgrades'
@@ -40,16 +40,19 @@ import ControlBackupPanel from './ControlBackupPanel'
 import ControlDBPoolPanel from './ControlDBPoolPanel'
 import NodeGatewayAddressPanel from './NodeGatewayAddressPanel'
 import { nativeControlUpgradesApi } from '../api/controlUpgrades.native'
-import UpgradeLogModal from './UpgradeLogModal'
+import UpgradeLogModal, { type UpgradeLogStatus } from './UpgradeLogModal'
 import { masterProgramLogLines, masterRunLogLines, masterUpgradeLogLines, nodeUpgradeLogLines, rolloutVersionText } from './controlUpgradeLogs'
 import { runLogMessage } from '../i18n/controlUpgradeRunLog'
-import { maintenanceUpgradeCandidateHint, maintenanceUpgradeMessage, maintenanceUpgradeReasonMessage } from '../i18n/maintenanceUpgrade'
+import { maintenanceUpgradeCandidateHint, maintenanceUpgradeMessage, maintenanceUpgradeReasonMessage, maintenanceUpgradeRuntimeHint, autoStartFailureMessage, preparationFailureMessage } from '../i18n/maintenanceUpgrade'
 import './ControlUpgradesPage.css'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 // A node upgrade is one rollout plan with fixed safe defaults: the selected
 // nodes, the first selected node as the only canary, one node per batch and
-// automatic rollback. planID is kept after create so a retry resumes at start.
+// automatic rollback. Without planID the attempt creates the plan, which is
+// prepared in the background (license grant, package download) and started by
+// the server once ready (start_when_ready); with planID it starts that queued plan.
 interface UpgradeAttempt {
   nodeIDs: string[]
   createMetadata: ControlUpgradeRequestMetadata
@@ -61,7 +64,7 @@ interface UpgradeAttempt {
 const rolloutFactsPageSize = 10
 const activeRolloutStates = new Set<ControlUpgradePlanState>(['queued', 'canary', 'running', 'paused', 'rolling_back'])
 
-type NodeRolloutStatus = 'waiting' | 'upgrading' | 'paused' | 'rollingBack' | 'failed' | 'rolledBack'
+type NodeRolloutStatus = 'waiting' | 'upgrading' | 'paused' | 'rollingBack' | 'failed' | 'rolledBack' | 'preparing' | 'prepareFailed'
 
 function nodeRolloutStatus(plan: ControlUpgradeRolloutDetail, state: ControlUpgradeNodeState): NodeRolloutStatus | undefined {
   if (activeRolloutStates.has(plan.state)) {
@@ -90,8 +93,9 @@ function compareMaintenanceNodeID(left: NodeInventoryItem, right: NodeInventoryI
   return a < b ? -1 : a > b ? 1 : 0
 }
 
-function errorText(error: unknown, operation: 'read' | 'write', t: TFunction<'controlUpgrades'>): string {
+function errorText(error: unknown, operation: 'read' | 'write', t: TFunction<'controlUpgrades'>, preparing: string): string {
   if (!(error instanceof ApiError)) return t('errors.requestFailed')
+  if (error.code === 'control_upgrade_rollout_preparing') return preparing
   const known = new Set([
     'invalid_request', 'invalid_idempotency_key', 'permission_denied', 'forbidden',
     'control_upgrade_rollout_not_found', 'rollout_not_found', 'node_not_found', 'idempotency_conflict',
@@ -110,7 +114,7 @@ function errorText(error: unknown, operation: 'read' | 'write', t: TFunction<'co
 }
 
 // 节点设置：fix-nodegw「更换主控连接地址」（签名指令经网关下发，节点探测成功才切换）；
-// 其他设置只列出对应入口（日志走 Agent 直报，不再有 ES/filebeat），不提供草稿表单或灰按钮。
+// 其他设置只给网关管理、节点列表两个入口，不提供草稿表单或灰按钮。
 function MaintenanceActionsPanel({ accessToken, canManage, canNodeRead, canNodeManage }: {
   accessToken: string
   canManage: boolean
@@ -140,11 +144,6 @@ function MaintenanceActionsPanel({ accessToken, canManage, canNodeRead, canNodeM
         <aside className="control-backup-side">
           <div className="control-backup-card maintenance-node-settings-card">
             <h3>{mt('nodeSettingsUnavailableTitle')}</h3>
-            <ul className="maintenance-node-settings-paths">
-              <li>{mt('nodeSettingsPathMaster')}</li>
-              <li>{mt('nodeSettingsPathLogs')}</li>
-              <li>{mt('nodeSettingsPathPerNode')}</li>
-            </ul>
             <div className="maintenance-operation-actions maintenance-settings-actions">
               <Button href="/dashboard/sys/gateways">{mt('nodeSettingsGateways')}</Button>
               <Button href="/dashboard/node/list">{mt('nodeSettingsNodeList')}</Button>
@@ -155,6 +154,9 @@ function MaintenanceActionsPanel({ accessToken, canManage, canNodeRead, canNodeM
     </section>
   </div>
 }
+
+type MaintenanceTab = 'system' | 'maintenance'
+const maintenanceTabs: MaintenanceTab[] = ['system', 'maintenance']
 
 function MaintenanceOverview({
   accessToken,
@@ -176,19 +178,46 @@ function MaintenanceOverview({
   const { i18n } = useTranslation()
   const { t } = useTranslation('controlUpgrades')
   const { message } = AntApp.useApp()
+  const namedRows = useNamedRowSelection()
   const mt = (key: Parameters<typeof maintenanceUpgradeMessage>[1]) => maintenanceUpgradeMessage(i18n.resolvedLanguage ?? 'zh-CN', key)
   const reasonText = (reason: string) => maintenanceUpgradeReasonMessage(i18n.resolvedLanguage ?? 'zh-CN', reason)
   const queryClient = useQueryClient()
   // ?tab=maintenance 直达维护操作（系统设置「数据备份」链接到这里）。
-  const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState<'system' | 'maintenance'>(searchParams.get('tab') === 'maintenance' ? 'maintenance' : 'system')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTabState] = useState<MaintenanceTab>(searchParams.get('tab') === 'maintenance' ? 'maintenance' : 'system')
+  const tabsID = useId()
+  const tabID = (tab: MaintenanceTab) => `${tabsID}-${tab}-tab`
+  const panelID = (tab: MaintenanceTab) => `${tabsID}-${tab}-panel`
+  // The selected tab is kept in ?tab= so a reload or shared link opens it again.
+  const setActiveTab = (tab: MaintenanceTab) => {
+    setActiveTabState(tab)
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params)
+      if (tab === 'maintenance') next.set('tab', 'maintenance')
+      else next.delete('tab')
+      return next
+    }, { replace: true })
+  }
+  // WAI-ARIA tabs: Left/Right move and wrap, Home/End jump; focus follows the selection.
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const index = maintenanceTabs.indexOf(activeTab)
+    const next = event.key === 'ArrowRight' ? maintenanceTabs[(index + 1) % maintenanceTabs.length]
+      : event.key === 'ArrowLeft' ? maintenanceTabs[(index - 1 + maintenanceTabs.length) % maintenanceTabs.length]
+        : event.key === 'Home' ? maintenanceTabs[0] : event.key === 'End' ? maintenanceTabs[maintenanceTabs.length - 1] : undefined
+    if (!next) return
+    event.preventDefault()
+    setActiveTab(next)
+    document.getElementById(tabID(next))?.focus()
+  }
   // Once opened, the maintenance panel stays mounted (hidden) so switching tabs
   // keeps unsaved backup settings.
   const [maintenanceOpened, setMaintenanceOpened] = useState(false)
   if (activeTab === 'maintenance' && !maintenanceOpened) setMaintenanceOpened(true)
   const [buildDetailsOpen, setBuildDetailsOpen] = useState(false)
   const [masterLogOpen, setMasterLogOpen] = useState(false)
-  const [nodeLogID, setNodeLogID] = useState<string | null>(null)
+  // The node log dialog stays on the plan it opened with (planID, adopted once the
+  // node has one), so a plan finishing or a newer one does not clear the log.
+  const [nodeLog, setNodeLog] = useState<{ nodeID: string; planID?: string } | null>(null)
   const controlQuery = useQuery({
     queryKey: ['maintenance-upgrade-status', ownerKey],
     queryFn: () => controlUpgradesApi.maintenanceStatus(accessToken),
@@ -220,6 +249,8 @@ function MaintenanceOverview({
   // by its newest plan, so every recent plan up to the oldest one still active
   // or with a failed/rolled-back node is read in detail (a newer completed plan
   // hides an older failure); older plans cannot change any node's status.
+  // Creates still preparing (or failed) come with the list and describe their
+  // nodes until a newer plan does.
   const rolloutQuery = useQuery({
     queryKey: ['maintenance-node-rollouts', ownerKey],
     queryFn: async () => {
@@ -227,11 +258,21 @@ function MaintenanceOverview({
       const shown = list.data.map((plan, index) =>
         activeRolloutStates.has(plan.state) || plan.failed_nodes > 0 || plan.rolled_back_nodes > 0 ? index : -1)
       const relevant = list.data.slice(0, Math.max(-1, ...shown) + 1)
-      return Promise.all(relevant.map(async (plan) => (await controlUpgradesApi.detail(accessToken, plan.id)).data))
+      const plans = await Promise.all(relevant.map(async (plan) => (await controlUpgradesApi.detail(accessToken, plan.id)).data))
+      return { plans, preparations: list.preparations }
     },
     enabled: canNodeRead,
-    refetchInterval: (query) => query.state.data?.some((plan) => activeRolloutStates.has(plan.state)) ? 5000 : 30000,
+    refetchInterval: (query) => query.state.data?.plans.some((plan) => activeRolloutStates.has(plan.state)) ||
+      query.state.data?.preparations.some((item) => item.state === 'preparing') ? 5000 : 30000,
     retry: false,
+  })
+  const nodeLogPlanID = nodeLog?.planID
+  const nodeLogQuery = useQuery({
+    queryKey: ['maintenance-node-upgrade-log', ownerKey, nodeLogPlanID],
+    queryFn: async () => (await controlUpgradesApi.detail(accessToken, nodeLogPlanID!)).data,
+    enabled: canNodeRead && Boolean(nodeLogPlanID),
+    refetchInterval: (query) => query.state.data && !activeRolloutStates.has(query.state.data.state) ? false : 5000,
+    retry: false, gcTime: 0,
   })
   // The master upgrade log is the native runner's checkpoint journal; it is
   // read only while its dialog is open.
@@ -270,12 +311,30 @@ function MaintenanceOverview({
         lines: runLog ? masterProgramLogLines(runLog, language) : [] },
     ]
   }
-  const rolloutPlans = canNodeRead && !rolloutQuery.isError ? rolloutQuery.data : undefined
+  const rolloutPlans = canNodeRead && !rolloutQuery.isError ? rolloutQuery.data?.plans : undefined
   // Plans are newest first, so the first plan naming a node describes it.
   const nodeRollouts = new Map<string, { plan: ControlUpgradeRolloutDetail; state: ControlUpgradeNodeState }>()
   for (const plan of rolloutPlans ?? []) {
     for (const node of plan.nodes) if (!nodeRollouts.has(node.node_id)) nodeRollouts.set(node.node_id, { plan, state: node.state })
   }
+  // A preparation (newest first) describes a node unless a plan created after it does.
+  const nodePreparations = new Map<string, ControlUpgradePreparation>()
+  const listedPreparations = canNodeRead && !rolloutQuery.isError ? rolloutQuery.data?.preparations ?? [] : []
+  for (const preparation of listedPreparations) {
+    if (preparation.state === 'ready') continue
+    for (const id of preparation.node_ids) {
+      const plan = nodeRollouts.get(id)?.plan
+      if (!nodePreparations.has(id) && (!plan || Date.parse(preparation.created_at) > Date.parse(plan.created_at))) {
+        nodePreparations.set(id, preparation)
+      }
+    }
+  }
+  useEffect(() => {
+    const planID = nodeLog && !nodeLog.planID ? nodeRollouts.get(nodeLog.nodeID)?.plan.id : undefined
+    if (planID) setNodeLog({ nodeID: nodeLog!.nodeID, planID })
+  })
+  const nodeLogPlan = nodeLogPlanID
+    ? nodeLogQuery.data ?? rolloutPlans?.find((plan) => plan.id === nodeLogPlanID) : undefined
   const rows = canNodeRead ? [...new Map((nodeQuery.data?.pages ?? []).flatMap((page) => page.items).map((node) => [node.id, node])).values()] : []
   const nodeStates = new Map((canNodeRead ? nodeStatusQueries : []).flatMap((query) => query.isError ? [] : query.data?.nodes ?? []).map((node) => [node.node_id, node]))
   const control = controlQuery.isError ? undefined : controlQuery.data?.control
@@ -311,6 +370,21 @@ function MaintenanceOverview({
   // The signed master upgrade is offered only when a fresh newer candidate exists.
   const controlUpgradeAvailable = Boolean(control && !controlQuery.isError && freshCandidate(control.candidate) &&
     control.candidate.state === 'available')
+  // Runner states: ready; execution unavailable (up but refusing upgrades, with an
+  // operator hint); otherwise unconfirmed, which keeps the compact generic text.
+  const controlRuntimeHint = control && !(control.runtime.ready && control.runtime.reason === 'ready')
+    ? maintenanceUpgradeRuntimeHint(language, control.runtime.reason) : undefined
+  // The tag (up to date) or the inline upgrade action already names the reason.
+  const controlRuntimeReasonShown = Boolean(control && freshCandidate(control.candidate) &&
+    (control.candidate.state === 'up_to_date' || control.candidate.state === 'available'))
+  // The master log dialog's status area, shared by both tabs, uses the summary
+  // card's runner state: unconfirmed, execution unavailable (reason and next
+  // step), or ready.
+  const masterLogStatus: UpgradeLogStatus = !control
+    ? { label: mt('status'), type: 'warning', message: mt('statusUnavailable') }
+    : control.runtime.ready && control.runtime.reason === 'ready'
+      ? { label: mt('status'), type: 'success', message: reasonText('ready') }
+      : { label: mt('status'), type: 'warning', message: reasonText(control.runtime.reason), description: controlRuntimeHint }
   const nodeUpToDate = (node?: MaintenanceUpgradeNode) => Boolean(node && ['eligible', 'same_version'].includes(node.reason) &&
     node.runtime.ready && node.runtime.reason === 'ready' && freshCandidate(node.candidate) &&
     node.candidate.state === 'up_to_date' && node.current_version && node.current_version === node.candidate.version)
@@ -331,7 +405,7 @@ function MaintenanceOverview({
   // A node already named by an active plan is never put into a second plan.
   const nodeInActiveRollout = (id: string) => {
     const rollout = nodeRollouts.get(id)
-    return Boolean(rollout && activeRolloutStates.has(rollout.plan.state))
+    return Boolean(rollout && activeRolloutStates.has(rollout.plan.state)) || nodePreparations.get(id)?.state === 'preparing'
   }
   const nodeUpgradable = (id: string) => Boolean(rolloutPlans) && nodeEligible(nodeStates.get(id)) && !nodeInActiveRollout(id)
   const refresh = () => Promise.all([
@@ -346,29 +420,28 @@ function MaintenanceOverview({
   const upgradeMutation = useMutation({
     mutationFn: async (attempt: UpgradeAttempt) => {
       if (!accessToken || !hasPermission('control.upgrades.manage')) throw new ApiError('Permission changed', 403, 'permission_denied')
-      let plan: ControlUpgradeRolloutDetail | undefined
       if (!attempt.planID) {
-        plan = (await controlUpgradesApi.create(accessToken, {
+        // The create returns at once; the plan is prepared in the background.
+        await controlUpgradesApi.create(accessToken, {
           schema: 'cdnca.control-upgrade-rollout.create/v1',
           node_ids: [...attempt.nodeIDs].sort(),
           canary_node_ids: [attempt.nodeIDs[0]],
           batch_size: 1,
           automatic_rollback: true,
-        }, attempt.createMetadata)).data
-        // A retry after an unknown start outcome must not create another plan.
-        attempt.planID = plan.id
-      } else {
-        plan = (await controlUpgradesApi.detail(accessToken, attempt.planID)).data
+          start_when_ready: true,
+        }, attempt.createMetadata)
+        return
       }
-      if (plan.state !== 'queued') return plan
-      return (await controlUpgradesApi.start(accessToken, plan.id, { expected_revision: plan.revision, reason: 'operator_upgrade' },
-        attempt.startMetadata)).data
+      const plan = (await controlUpgradesApi.detail(accessToken, attempt.planID)).data
+      if (plan.state !== 'queued') return
+      await controlUpgradesApi.start(accessToken, plan.id, { expected_revision: plan.revision, reason: 'operator_upgrade' },
+        attempt.startMetadata)
     },
-    onSuccess: () => {
+    onSuccess: (_, attempt) => {
       setUnknownAttempt(null)
       setUpgradeError(null)
       setConfirmNodeIDs(null)
-      message.success(mt('upgradeStarted'))
+      message.success(mt(attempt.planID ? 'upgradeStarted' : 'upgradePreparing'))
       void refresh()
     },
     onError: (error, attempt) => {
@@ -430,7 +503,11 @@ function MaintenanceOverview({
   }
   const confirmVersions = new Set((confirmNodeIDs ?? []).map((id) => nodeStates.get(id)?.candidate.version))
 
-  const rolloutStatus = (item: NodeInventoryItem) => {
+  const rolloutStatus = (item: NodeInventoryItem): NodeRolloutStatus | undefined => {
+    const preparation = nodePreparations.get(item.id)
+    if (preparation?.state === 'preparing') return 'preparing'
+    // Like a failed plan, a failed preparation no longer describes a node that is now current.
+    if (preparation?.state === 'failed') return nodeUpToDate(nodeStates.get(item.id)) ? undefined : 'prepareFailed'
     const rollout = nodeRollouts.get(item.id)
     const status = rollout ? nodeRolloutStatus(rollout.plan, rollout.state) : undefined
     // A finished plan's failure no longer describes a node that is now current.
@@ -439,13 +516,20 @@ function MaintenanceOverview({
   const rolloutStatusKeys = {
     waiting: 'nodeUpgradeWaiting', upgrading: 'nodeUpgrading', paused: 'nodeUpgradePaused',
     rollingBack: 'nodeUpgradeRollingBack', failed: 'nodeUpgradeFailed', rolledBack: 'nodeUpgradeRolledBack',
+    prepareFailed: 'nodeUpgradePrepareFailed',
   } as const
   const rolloutStatusColors: Record<NodeRolloutStatus, string> = {
     waiting: 'processing', upgrading: 'processing', rollingBack: 'processing', paused: 'warning', failed: 'error', rolledBack: 'warning',
+    preparing: 'processing', prepareFailed: 'error',
   }
+  const preparingKeys = {
+    queued: 'nodeUpgradePreparing_queued', issuing: 'nodeUpgradePreparing_issuing', downloading: 'nodeUpgradePreparing_downloading',
+    finalizing: 'nodeUpgradePreparing_finalizing', starting: 'nodeUpgradePreparing_starting', done: 'nodeUpgradePreparing_starting',
+  } as const
   const maintenanceNodeStatus = (item: NodeInventoryItem) => {
     const node = nodeStates.get(item.id)
     const rollout = rolloutStatus(item)
+    if (rollout === 'preparing') return mt(preparingKeys[nodePreparations.get(item.id)!.phase])
     if (rollout) return mt(rolloutStatusKeys[rollout])
     if (node && ['node_disabled', 'node_offline', 'node_capability_unavailable', 'version_unavailable'].includes(node.reason)) {
       return reasonText(node.reason)
@@ -472,12 +556,18 @@ function MaintenanceOverview({
         const tag = <Tag color={rollout ? rolloutStatusColors[rollout] : nodeEligible(node) ? 'warning' : undefined}
           className={current ? 'maintenance-current-status' : undefined}
           icon={current ? <CircleCheck size={12} aria-hidden="true" /> : undefined}>{maintenanceNodeStatus(item)}</Tag>
+        const failed = rollout === 'prepareFailed' ? nodePreparations.get(item.id) : undefined
+        if (failed) return <>{tag}<span className="maintenance-candidate-hint">{preparationFailureMessage(language, failed.failure_code!, failed.failure_reason)}</span></>
+        // A queued plan the server did not start after its preparation says why.
+        const queued = queuedPlan(item.id)
+        const unstarted = queued && listedPreparations.find((preparation) => preparation.plan_id === queued.id && preparation.start_failure_code)
+        if (unstarted) return <>{tag}<span className="maintenance-candidate-hint">{autoStartFailureMessage(language, unstarted.start_failure_code!, unstarted.failure_reason)}</span></>
         // Nodes that cannot take a same-version re-release yet get a one-line note.
         return current && node?.current_release_sequence === undefined
           ? <>{tag}<span className="maintenance-candidate-hint">{mt('rereleaseManualOnce')}</span></> : tag
       } },
     { title: mt('action'), key: 'actions', width: '15%', render: (_, item) => <Space size={4} wrap={false}>
-      <Button type="link" size="small" className="maintenance-row-action" icon={<FileText size={14} />} onClick={() => setNodeLogID(item.id)}>{mt('logs')}</Button>
+      <Button type="link" size="small" className="maintenance-row-action" icon={<FileText size={14} />} onClick={() => setNodeLog({ nodeID: item.id, planID: nodeRollouts.get(item.id)?.plan.id })}>{mt('logs')}</Button>
       {queuedPlan(item.id)
         ? <>
           <Button type="link" size="small" icon={<UploadCloud size={14} />} title={mt('startQueuedHint')} loading={upgradeMutation.isPending && upgradeMutation.variables?.planID === queuedPlan(item.id)?.id}
@@ -488,20 +578,25 @@ function MaintenanceOverview({
         : pausedPlan(item.id)
           ? <Button type="link" size="small" danger icon={<CircleX size={14} />} title={mt('cancelPausedHint')}
             onClick={() => openCancel(item.id)} disabled={!canManage || Boolean(unknownAttempt) || writeBusy}>{mt('cancelQueued')}</Button>
-          : <Button type="link" size="small" icon={<UploadCloud size={14} />} onClick={() => openUpgrade([item.id])} disabled={!canManage || Boolean(unknownAttempt) || !nodeUpgradable(item.id)}>{mt('upgrade')}</Button>}
+          : rolloutStatus(item) === 'prepareFailed'
+            ? <Button type="link" size="small" icon={<RefreshCw size={14} />} title={mt('retryPrepareHint')}
+              onClick={() => openUpgrade(nodePreparations.get(item.id)!.node_ids.filter(nodeUpgradable))}
+              disabled={!canManage || Boolean(unknownAttempt) || !nodeUpgradable(item.id)}>{mt('retryPrepare')}</Button>
+            : <Button type="link" size="small" icon={<UploadCloud size={14} />} onClick={() => openUpgrade([item.id])} disabled={!canManage || Boolean(unknownAttempt) || !nodeUpgradable(item.id)}>{mt('upgrade')}</Button>}
     </Space> },
   ]
 
   return <section className="maintenance-overview" aria-label={mt('typeLabel')}>
     <div className="maintenance-overview-tabs" role="tablist" aria-label={mt('typeLabel')}>
-      <button type="button" role="tab" aria-selected={activeTab === 'system'} className={activeTab === 'system' ? 'is-active' : ''} onClick={() => setActiveTab('system')}>{mt('system')}</button>
-      <button type="button" role="tab" aria-selected={activeTab === 'maintenance'} className={activeTab === 'maintenance' ? 'is-active' : ''} onClick={() => setActiveTab('maintenance')}>{mt('maintenance')}</button>
+      {maintenanceTabs.map((tab) => <button key={tab} type="button" role="tab" id={tabID(tab)} aria-controls={panelID(tab)}
+        aria-selected={activeTab === tab} tabIndex={activeTab === tab ? 0 : -1} className={activeTab === tab ? 'is-active' : ''}
+        onClick={() => setActiveTab(tab)} onKeyDown={onTabKeyDown}>{mt(tab)}</button>)}
     </div>
-    {maintenanceOpened && <div hidden={activeTab !== 'maintenance'}><MaintenanceActionsPanel accessToken={accessToken} canManage={canManage}
-      canNodeRead={canNodeRead} canNodeManage={canNodeManage} /></div>}
-    {activeTab === 'maintenance' ? null : <>
+    <div role="tabpanel" id={panelID('maintenance')} aria-labelledby={tabID('maintenance')} hidden={activeTab !== 'maintenance'}>
+      {maintenanceOpened ? <MaintenanceActionsPanel accessToken={accessToken} canManage={canManage} canNodeRead={canNodeRead} canNodeManage={canNodeManage} /> : null}</div>
+    <div role="tabpanel" id={panelID('system')} aria-labelledby={tabID('system')} hidden={activeTab === 'maintenance'}>{activeTab === 'maintenance' ? null : <>
       <section className="maintenance-card control-upgrade-summary" aria-labelledby="maintenance-overview-title">
-        <div className="maintenance-section-heading"><div><h2 id="maintenance-overview-title">{mt('controlTitle')}</h2><p>{mt('controlDescription')}</p></div><Button disabled={!canManage} title={canManage ? undefined : mt('logPermissionDenied')} className="maintenance-view-logs" icon={<FileText size={14} />} onClick={() => setMasterLogOpen(true)}>{mt('viewLogs')}</Button></div>
+        <div className="maintenance-section-heading"><div><h2 id="maintenance-overview-title">{mt('controlTitle')}</h2></div><Button disabled={!canManage} title={canManage ? undefined : mt('logPermissionDenied')} className="maintenance-view-logs" icon={<FileText size={14} />} onClick={() => setMasterLogOpen(true)}>{mt('viewLogs')}</Button></div>
         <div className="maintenance-stat-grid">
           <div><span>{mt('currentVersion')}</span><button type="button" className="maintenance-version-value" aria-label={mt('versionDetails')} disabled={!control} onClick={() => setBuildDetailsOpen(true)}><strong>{control?.current_version ?? mt('versionUnconfirmed')}</strong></button></div>
           <div><span>{mt('latestVersion')}</span><strong>{freshCandidate(control?.candidate) ? control?.candidate.version : mt('versionUnconfirmed')}</strong></div>
@@ -510,26 +605,29 @@ function MaintenanceOverview({
             icon={controlUpToDate ? <CircleCheck size={12} aria-hidden="true" /> : undefined}>{controlQuery.isError
               ? mt(controlQuery.error instanceof ApiError && controlQuery.error.status === 403 ? 'statusPermissionDenied' : 'statusLoadFailed')
               : !control ? mt('pendingCheck') : !freshCandidate(control.candidate) ? candidateText(control.candidate)
-                : controlUpToDate ? mt('latest') : control.candidate.state === 'up_to_date' ? mt('reasonUnknown') : candidateText(control.candidate)}</Tag>
+                : controlUpToDate ? mt('latest') : control.candidate.state === 'up_to_date'
+                  ? controlRuntimeHint ? reasonText(control.runtime.reason) : mt('reasonUnknown') : candidateText(control.candidate)}</Tag>
             {control && !controlQuery.isError && !freshCandidate(control.candidate)
               ? <span className="maintenance-candidate-hint">{maintenanceUpgradeCandidateHint(language, control.candidate.expires_at && Date.parse(control.candidate.expires_at) <= now ? 'candidate_expired' : control.candidate.reason)}</span> : null}
+            {control && controlRuntimeHint ? <span className="maintenance-candidate-hint">
+              {controlRuntimeReasonShown ? null : <>{reasonText(control.runtime.reason)}<br /></>}{controlRuntimeHint}</span> : null}
             {controlUpgradeAvailable ? <ControlUpgradesNative variant="inline" /> : null}</div>
         </div>
       </section>
       <ControlDBPoolPanel accessToken={accessToken} />
       <section className="maintenance-card node-upgrade-section" aria-labelledby="node-upgrade-title">
-        <div className="maintenance-section-heading"><div><h2 id="node-upgrade-title">{mt('nodeTitle')}</h2><p>{mt('nodeDescription')}</p></div><Space><Button type="primary" icon={<UploadCloud size={15} />} disabled={!canUpgradeSelection} onClick={() => openUpgrade(selectedNodeIDs.length > 0 ? selectedNodeIDs.filter(nodeUpgradable) : upgradableNodeIDs)}>{selectedNodeIDs.length ? `${mt('upgradeNodes')}（${selectedNodeIDs.length}）` : mt('upgradeNodes')}</Button><Button icon={<RefreshCw size={15} />} loading={controlQuery.isFetching || nodeQuery.isFetching || rolloutQuery.isFetching || nodeStatusQueries.some((query) => query.isFetching)} onClick={() => void refresh()}>{mt('refresh')}</Button></Space></div>
+        <div className="maintenance-section-heading"><div><h2 id="node-upgrade-title">{mt('nodeTitle')}</h2></div><Space><Button type="primary" icon={<UploadCloud size={15} />} disabled={!canUpgradeSelection} onClick={() => openUpgrade(selectedNodeIDs.length > 0 ? selectedNodeIDs.filter(nodeUpgradable) : upgradableNodeIDs)}>{selectedNodeIDs.length ? `${mt('upgradeNodes')}（${selectedNodeIDs.length}）` : mt('upgradeNodes')}</Button><Button icon={<RefreshCw size={15} />} loading={controlQuery.isFetching || nodeQuery.isFetching || rolloutQuery.isFetching || nodeStatusQueries.some((query) => query.isFetching)} onClick={() => void refresh()}>{mt('refresh')}</Button></Space></div>
         <div className="maintenance-pills" aria-label={mt('nodeVersionSummary')}><span>{mt('requiredVersion')} <strong>{requiredVersion}</strong></span><span>{mt(nodeQuery.hasNextPage || cursorRepeated || nodeQuery.isError ? 'loadedNodes' : 'nodeCount')} <strong>{canNodeRead && nodeQuery.data ? formatNumber(rows.length, i18n.resolvedLanguage) : mt('nodeCountUnavailable')}</strong></span></div>
         {!canNodeRead ? <Alert type="info" showIcon message={mt('noNodePermission')} /> : null}
         {nodeQuery.error ? <FeedbackWhen title={mt('nodeLoadFailed')} /> : null}
         {nodeStatusQueries.some((query) => query.isError) ? <FeedbackWhen title={mt('nodeStatusLoadFailed')} /> : null}
         {cursorRepeated ? <Alert type="error" showIcon message={mt('nodeCursorRepeated')} /> : null}
         {canNodeRead && rolloutQuery.isError ? <FeedbackWhen title={mt('nodeRolloutLoadFailed')} /> : null}
-        {unknownAttempt ? <OutcomeUnknown title={mt('upgradeOutcomeUnknown')} detail={upgradeError ? errorText(upgradeError, 'write', t) : undefined} action={<Space wrap>
+        {unknownAttempt ? <OutcomeUnknown title={mt('upgradeOutcomeUnknown')} detail={upgradeError ? errorText(upgradeError, 'write', t, mt('upgradePreparingConflict')) : undefined} action={<Space wrap>
             <Button size="small" type="primary" loading={upgradeMutation.isPending} onClick={() => upgradeMutation.mutate(unknownAttempt)}>{t('actions.retrySameRequest')}</Button>
             <Button size="small" onClick={() => { setUnknownAttempt(null); setUpgradeError(null); void refresh() }}>{t('actions.closeAndRefresh')}</Button>
-          </Space>} className="maintenance-write-result" /> : upgradeError ? <FeedbackWhen title={errorText(upgradeError, 'write', t)} /> : null}
-        <div className="maintenance-node-table"><Table<NodeInventoryItem> rowKey="id" size="small" tableLayout="fixed" columns={nodeColumns} dataSource={rows} loading={canNodeRead && nodeQuery.isPending} locale={{ emptyText: nodeQuery.isError ? <DataState status="error" message={mt('nodeLoadFailed')} onRetry={() => void nodeQuery.refetch()} /> : mt('noNodes') }} rowSelection={canNodeRead ? { columnWidth: '5%', selectedRowKeys: selectedNodeIDs, onChange: (keys) => onSelectedNodeIDsChange(keys.map(String)) } : undefined} pagination={false} scroll={{ x: 1000 }} /></div>
+          </Space>} className="maintenance-write-result" /> : upgradeError ? <FeedbackWhen title={errorText(upgradeError, 'write', t, mt('upgradePreparingConflict'))} /> : null}
+        <div className="maintenance-node-table"><Table<NodeInventoryItem> rowKey="id" size="small" tableLayout="fixed" columns={nodeColumns} dataSource={rows} loading={canNodeRead && nodeQuery.isPending} locale={{ emptyText: nodeQuery.isError ? <DataState status="error" message={mt('nodeLoadFailed')} onRetry={() => void nodeQuery.refetch()} /> : mt('noNodes') }} rowSelection={canNodeRead ? namedRows<NodeInventoryItem>({ columnWidth: '5%', selectedRowKeys: selectedNodeIDs, onChange: (keys) => onSelectedNodeIDsChange(keys.map(String)) }, (item) => item.name, mt('nodeSelectionScope')) : undefined} pagination={false} scroll={{ x: 1000 }} /></div>
         {nodeQuery.hasNextPage ? <Button loading={nodeQuery.isFetchingNextPage} onClick={() => void nodeQuery.fetchNextPage()}>{mt('loadMoreNodes')}</Button> : null}
         {canNodeRead && canNodeManage ? <div className="maintenance-node-footer"><a href="/dashboard/node/list">{mt('installNewNode')}</a></div> : null}
       </section>
@@ -538,14 +636,15 @@ function MaintenanceOverview({
         loading={masterLogQuery.isFetching || masterRunLogQuery.isFetching}
         onRefresh={() => { void masterLogQuery.refetch(); void masterRunLogQuery.refetch() }} onClose={() => setMasterLogOpen(false)}
         error={masterLogError(masterLogQuery.isError ? masterLogQuery.error : masterRunLogQuery.isError ? masterRunLogQuery.error : null)}
-        sections={masterLogSections()} />
-      <UpgradeLogModal title={mt('nodeLogTitle')} open={nodeLogID !== null} contentLabel={mt('logContent')} refreshLabel={mt('logRefresh')}
+        sections={masterLogSections()} status={masterLogStatus} />
+      <UpgradeLogModal title={mt('nodeLogTitle')} open={nodeLog !== null} contentLabel={mt('logContent')} refreshLabel={mt('logRefresh')}
         copyLabel={rl('copy')} copiedLabel={rl('copied')} copyFailedLabel={rl('copyFailed')}
-        loading={rolloutQuery.isFetching} onRefresh={() => void rolloutQuery.refetch()} onClose={() => setNodeLogID(null)}
-        error={rolloutQuery.isError ? mt('logLoadFailed') : undefined}
+        loading={rolloutQuery.isFetching || nodeLogQuery.isFetching}
+        onRefresh={() => { void rolloutQuery.refetch(); if (nodeLogPlanID) void nodeLogQuery.refetch() }} onClose={() => setNodeLog(null)}
+        error={(rolloutQuery.isError && !nodeLogPlan) || (nodeLogQuery.isError && !nodeLogQuery.data) ? mt('logLoadFailed') : undefined}
         sections={[
           { key: 'script', label: rl('tabScript'), emptyText: mt('logEmpty'),
-            lines: nodeLogID && nodeRollouts.has(nodeLogID) ? nodeUpgradeLogLines(nodeRollouts.get(nodeLogID)!.plan, nodeLogID, mt, language) : [] },
+            lines: nodeLog && nodeLogPlan ? nodeUpgradeLogLines(nodeLogPlan, nodeLog.nodeID, mt, language) : [] },
           { key: 'program', label: rl('tabProgram'), emptyText: rl('nodeProgramEmpty'), lines: [] },
         ]} />
       <Modal title={mt('upgradeConfirmTitle')} open={Boolean(confirmNodeIDs)} okText={mt('upgradeConfirm')} cancelText={mt('upgradeCancel')}
@@ -578,7 +677,7 @@ function MaintenanceOverview({
           errorText={(error) => mt(error.status === 403 ? 'installTokenPermissionDenied' : 'installTokenError')} />
           : <Alert type="info" showIcon message={mt('installTokenPermissionDenied')} />}
       </section>
-    </>}
+    </>}</div>
     <Drawer title={mt('versionDetails')} open={buildDetailsOpen} width={640} onClose={() => setBuildDetailsOpen(false)} destroyOnHidden>
       <Descriptions size="small" column={1} className="maintenance-build-facts" items={[
         { key: 'version', label: mt('currentVersion'), children: control?.current_version ?? mt('versionUnconfirmed') },

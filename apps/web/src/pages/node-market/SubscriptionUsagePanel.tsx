@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Descriptions, InputNumber, Progress, Segmented, Space, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Card, Descriptions, InputNumber, Progress, Segmented, Space, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -14,7 +14,7 @@ import { formatDateTime } from '../../i18n/formatters'
 import { SellerCreditTags } from './DirectBalancesTab'
 import { formatCap } from './limitsModel'
 import { availabilityColor, hoursLeft, recoveryKey, seriesOf, stateColor, supplyAvailability, usagePercent, usageStatus } from './subscriberModel'
-import { useFeedback } from '@cdnca/ui'
+import { useFeedback, Table } from '@cdnca/ui'
 import { LoadFailure } from './supplier/shared'
 
 const actionColor = { throttle: 'gold', pause: 'orange', stop: 'red' } as const

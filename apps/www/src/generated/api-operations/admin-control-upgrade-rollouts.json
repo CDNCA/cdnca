@@ -61,6 +61,12 @@
        "name": "total",
        "type": "integer(int64)",
        "required": true
+      },
+      {
+       "name": "preparations",
+       "type": "array<ControlUpgradeRolloutPreparation>",
+       "required": true,
+       "description": "The newest 20 creates still preparing or failed, and ready ones whose plan was not started as asked, newest first, independent of the page and the state filter; node_id filters them too."
       }
      ]
     },
@@ -94,7 +100,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires control.upgrades.manage in a platform scope. The canonical request freezes the sorted target cohort, canary subset, batch size, and mandatory automatic rollback. A replay rechecks live RBAC and returns the original durable snapshot without another license call or NATS publication. A changed request under the same idempotency key returns 409.",
+   "description": "Requires control.upgrades.manage in a platform scope. The canonical request freezes the sorted target cohort, canary subset, batch size, and mandatory automatic rollback. The request validates the input and the current target cohort, records the create intent and returns 202 with its preparation; License issuance and the download and verification of the forward and rollback artifacts run in the background, and the plan (state queued) exists once the preparation is ready. A failed preparation keeps a stable failure_code; it is retried by a new create. A replay rechecks live RBAC and returns the same preparation without another license call, download, or plan. A changed request under the same idempotency key returns 409.",
    "permissions": [
     "control.upgrades.manage"
    ],
@@ -138,17 +144,22 @@
       "name": "automatic_rollback",
       "type": "boolean",
       "required": true
+     },
+     {
+      "name": "start_when_ready",
+      "type": "boolean",
+      "description": "Start the plan once its preparation made it, as the creator's start with reason operator_upgrade (the console's create-then-start). Omitted when not wanted; the approval center's control.upgrade rule leaves the plan queued with start_failure_code approval_required."
      }
     ]
    },
    "responses": [
     {
-     "status": "201",
-     "description": "The rollout was created or replayed.",
+     "status": "202",
+     "description": "The create was accepted or replayed; its preparation is returned.",
      "fields": [
       {
        "name": "data",
-       "type": "ControlUpgradeRolloutDetail",
+       "type": "ControlUpgradeRolloutPreparation",
        "required": true
       },
       {
@@ -673,7 +684,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires control.upgrades.manage and a current expected revision.",
+   "description": "Requires control.upgrades.manage and a current expected revision. The plan ID of a create whose preparation is not ready returns 409 control_upgrade_rollout_preparing.",
    "permissions": [
     "control.upgrades.manage"
    ],

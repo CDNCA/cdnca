@@ -39,6 +39,11 @@ type PublishRequest struct {
 	// of this kind: PolicyID/PolicyVersion are the binding's active ones, and
 	// once promoted the site enforces no rule of the kind.
 	Detach bool
+	// Reclaim (migration 695) claims the binding's last claimed version of
+	// the same library again: its candidate was healthy on the nodes but not
+	// promoted (another publication of the scope moved the source revision)
+	// and has recovered. The database guard checks that candidate.
+	Reclaim bool
 }
 
 type Publication struct {

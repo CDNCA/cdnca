@@ -27,8 +27,8 @@ func TestPublicationSnapshotRequiresEnabledExactCurrentRevision(t *testing.T) {
 	}
 
 	for name, mutate := range map[string]func(*storedPolicy, *int64){
-		"disabled": func(value *storedPolicy, _ *int64) { value.Enabled = false },
-		"deleted": func(value *storedPolicy, _ *int64) { value.Deleted = true },
+		"disabled":       func(value *storedPolicy, _ *int64) { value.Enabled = false },
+		"deleted":        func(value *storedPolicy, _ *int64) { value.Deleted = true },
 		"stale revision": func(_ *storedPolicy, revision *int64) { *revision = 6 },
 	} {
 		t.Run(name, func(t *testing.T) {

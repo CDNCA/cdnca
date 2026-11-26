@@ -112,6 +112,19 @@
   margin: 0 0 12px 100px;
 }
 
+.error-page-field-error {
+  margin-top: 4px;
+  color: var(--cdnca-color-error);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.error-page-draft-mark {
+  margin-left: 4px;
+  color: var(--cdnca-color-warning);
+  font-size: 12px;
+}
+
 .error-page-global-editor {
   min-width: 0;
 }
@@ -155,12 +168,6 @@
 .error-page-regional-toolbar .ant-btn {
   min-width: 88px;
   height: 32px;
-}
-
-.error-page-regional-toolbar > span {
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 .error-page-regional-alert {
@@ -207,13 +214,6 @@
 
 .error-page-regional-table .ant-table-tbody > tr:last-child > td {
   border-bottom: 0;
-}
-
-.error-page-regional-table .ant-checkbox-inner {
-  width: 16px;
-  height: 16px;
-  border-color: var(--cdnca-color-border);
-  border-radius: 2px;
 }
 
 .error-page-regional-table .ant-btn-link {
@@ -465,16 +465,12 @@
     margin-inline: 8px;
   }
 
-  .error-page-regional-table col.ant-table-selection-col {
-    width: 48px !important;
-  }
-
-  .error-page-regional-table col:nth-child(2),
-  .error-page-regional-table col:nth-child(3) {
+  .error-page-regional-table col:nth-child(1),
+  .error-page-regional-table col:nth-child(2) {
     width: 160px !important;
   }
 
-  .error-page-regional-table col:nth-child(4) {
+  .error-page-regional-table col:nth-child(3) {
     width: 120px !important;
   }
 

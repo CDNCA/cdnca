@@ -553,7 +553,6 @@
 .firewall-section-heading {
   width: calc(100% - 4px);
   min-width: 0;
-  min-height: 48px;
   padding-left: 10px;
   margin: 4px 0 20px 2px;
   border-left: 4px solid var(--cdnca-color-primary);
@@ -569,14 +568,6 @@
   font-size: 17px;
   font-weight: 600;
   line-height: 24px;
-}
-
-.firewall-section-heading p {
-  margin: 4px 0 0;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 20px;
 }
 
 .firewall-card-grid {
@@ -930,12 +921,6 @@
 .firewall-cc-policy-row--traffic {
   min-height: 22px;
   margin-top: 14px;
-}
-
-.firewall-cc-policy-row--traffic .firewall-cc-policy-inline > span {
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 .firewall-subsection > .firewall-help {
@@ -1555,10 +1540,6 @@
   align-self: center;
 }
 
-.firewall-tab-panel > .firewall-setting-card:has(.firewall-template-options) .firewall-setting-card-heading p {
-  display: none;
-}
-
 .firewall-tab-panel > .firewall-setting-card:has(.firewall-template-options) .firewall-template-options {
   grid-column: 2;
   grid-row: 1;
@@ -1573,47 +1554,6 @@
   height: 234px;
   min-height: 234px;
   margin: 0;
-}
-
-@media (min-width: 768px) {
-  .firewall-tab-panel > .firewall-section-heading:first-child + .firewall-card-grid > .firewall-setting-card:nth-child(1),
-  .firewall-tab-panel > .firewall-section-heading:first-child + .firewall-card-grid > .firewall-setting-card:nth-child(2) {
-    min-height: 213px;
-  }
-
-  .firewall-tab-panel > .firewall-section-heading:first-child + .firewall-card-grid > .firewall-setting-card:nth-child(3) {
-    min-height: 375.4px;
-  }
-
-  .firewall-tab-panel > .firewall-section-heading:first-child + .firewall-card-grid > .firewall-setting-card:nth-child(4) {
-    min-height: 123px;
-  }
-
-  .firewall-tab-panel > .firewall-section-heading:first-child + .firewall-card-grid > .firewall-setting-card:nth-child(5),
-  .firewall-tab-panel > .firewall-section-heading:first-child + .firewall-card-grid > .firewall-setting-card:nth-child(6) {
-    min-height: 237px;
-  }
-
-  .firewall-tab-panel > .firewall-card-grid:nth-child(4) > .firewall-setting-card:nth-child(6) {
-    min-height: 123px;
-  }
-
-  .firewall-tab-panel > .firewall-card-grid:nth-child(6) {
-    grid-template-columns: minmax(0, 301fr) minmax(0, 180fr);
-  }
-
-  .firewall-tab-panel > .firewall-card-grid:nth-child(6) > .firewall-setting-card {
-    min-height: 177.4px;
-  }
-
-  .firewall-tab-panel > .firewall-card-grid:nth-child(10) > .firewall-setting-card:nth-child(1),
-  .firewall-tab-panel > .firewall-card-grid:nth-child(10) > .firewall-setting-card:nth-child(2) {
-    min-height: 153px;
-  }
-
-  .firewall-tab-panel > .firewall-card-grid:nth-child(10) > .firewall-setting-card:nth-child(3) {
-    min-height: 394.4px;
-  }
 }
 
 @media (max-width: 767px) {
@@ -1672,7 +1612,6 @@
 
   .firewall-section-heading {
     width: calc(100% - 8px);
-    min-height: 68px;
     margin: 4px 0 14px 4px;
   }
 
@@ -1755,10 +1694,6 @@
     gap: 10px 12px;
   }
 
-  .firewall-tab-panel > .firewall-card-grid:nth-child(2) > .firewall-setting-card:nth-child(2) > .firewall-help {
-    margin-top: 24px;
-  }
-
   .firewall-cc-policy-row {
     display: block;
     min-height: 0;
@@ -1788,10 +1723,6 @@
 
   .firewall-setting-card > .firewall-image-controls ~ .firewall-help {
     margin-top: 14px;
-  }
-
-  .firewall-tab-panel > .firewall-card-grid:nth-child(10) > .firewall-setting-card:nth-child(3) {
-    min-height: 578.4px;
   }
 
   .firewall-number-field > p {
@@ -1975,4 +1906,61 @@
 .firewall-effective-node-error { grid-column: 1 / -1; color: var(--cdnca-color-error); margin: 0; }
 @media (max-width: 720px) {
   .firewall-effective-node { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 漏选目标/配置项的就地错误，占控件列，紧贴上一行。 */
+.firewall-override-error {
+  grid-column: 2;
+  margin-top: -14px;
+  color: var(--cdnca-color-error);
+  font-size: 13px;
+}
+
+@media (max-width: 767px) {
+  .firewall-override-error {
+    grid-column: 1;
+    margin: 4px 0 12px;
+  }
+}
+
+/* （CC 全局页）：面板占满内容区，卡片网格按宽度自适应列数、按内容定高（不再用固定高度撑卡）；
+   单独的开关排成标题下的一行「名称 + 开关」，不再各占一张卡。 */
+.firewall-cc-panel {
+  width: 100%;
+}
+
+.firewall-cc-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
+  align-items: start;
+}
+
+.firewall-cc-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 32px;
+  width: calc(100% - 4px);
+  min-width: 0;
+  margin: -6px 0 14px 2px;
+}
+
+.firewall-cc-switch {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.firewall-cc-title-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.firewall-cc-panel .firewall-cc-policy-row + .firewall-number-field {
+  margin-top: 12px;
 }

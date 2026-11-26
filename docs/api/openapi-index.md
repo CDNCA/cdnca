@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 961 个 operation，并包含
-935 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 968 个 operation，并包含
+941 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -10,7 +10,7 @@
 
 ## 跨契约兼容重叠
 
-以下 26 个 wire tuple 在多个契约中完全一致：
+以下 27 个 wire tuple 在多个契约中完全一致：
 
 | 方法 | 路径 | operationId | 契约 |
 | --- | --- | --- | --- |
@@ -28,6 +28,7 @@
 | `POST` | `/v1/certificate-assets/{asset_id}/versions/{version_id}/activate` | `activateCertificateAssetVersion` | `control.yaml`、`dns-acme.yaml` |
 | `GET` | `/v1/dns/platform-config` | `getPlatformDNSConfig` | `control.yaml`、`dns-acme.yaml` |
 | `PUT` | `/v1/dns/platform-config` | `savePlatformDNSConfig` | `control.yaml`、`dns-acme.yaml` |
+| `DELETE` | `/v1/dns/platform-config` | `disconnectPlatformDNSConfig` | `control.yaml`、`dns-acme.yaml` |
 | `POST` | `/v1/dns/platform-config/connection-test` | `testPlatformDNSConnection` | `control.yaml`、`dns-acme.yaml` |
 | `POST` | `/v1/dns/platform-config/{kind}` | `startPlatformDNSOperation` | `control.yaml`、`dns-acme.yaml` |
 | `GET` | `/v1/dns/platform-zones` | `listPlatformDNSZones` | `control.yaml`、`dns-acme.yaml` |
@@ -43,7 +44,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，683 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，688 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -162,6 +163,7 @@
 | `control.yaml` | `GET` | `/v1/admin/control-backup/runs/{run_id}` | `getControlBackupRun` |
 | `control.yaml` | `PUT` | `/v1/admin/control-backup/settings` | `putControlBackupSettings` |
 | `control.yaml` | `POST` | `/v1/admin/control-backup/targets/probe` | `probeControlBackupTarget` |
+| `control.yaml` | `GET` | `/v1/admin/control-origin-auth` | `getControlOriginAuthStatus` |
 | `control.yaml` | `POST` | `/v1/admin/control-upgrade-checks` | `checkControlUpgradeEligibility` |
 | `control.yaml` | `GET` | `/v1/admin/control-upgrade-plan` | `getNativeControlUpgradePlanStatus` |
 | `control.yaml` | `POST` | `/v1/admin/control-upgrade-plan` | `publishControlUpgradePlan` |
@@ -270,6 +272,7 @@
 | `control.yaml` | `GET` | `/v1/admin/system-db-pool` | `readControlDBPool` |
 | `control.yaml` | `GET` | `/v1/admin/system-mail-settings` | `getPlatformSystemMailSettings` |
 | `control.yaml` | `PUT` | `/v1/admin/system-mail-settings` | `updatePlatformSystemMailSettings` |
+| `control.yaml` | `POST` | `/v1/admin/system-mail-settings/tests` | `testPlatformSystemMailSettings` |
 | `control.yaml` | `GET` | `/v1/admin/system-other-settings` | `getPlatformSystemOtherSettings` |
 | `control.yaml` | `PUT` | `/v1/admin/system-other-settings` | `updatePlatformSystemOtherSettings` |
 | `control.yaml` | `GET` | `/v1/admin/system-settings` | `getPlatformSystemSettings` |
@@ -344,6 +347,7 @@
 | `control.yaml` | `POST` | `/v1/auth/registration-challenge-verifications` | `verifyAccountRegistrationChallenge` |
 | `control.yaml` | `POST` | `/v1/auth/registration-challenges` | `createAccountRegistrationChallenge` |
 | `control.yaml` | `GET` | `/v1/auth/registration-config` | `getAccountRegistrationConfig` |
+| `control.yaml` | `GET` | `/v1/auth/registration-terms` | `getAccountRegistrationTerms` |
 | `control.yaml` | `POST` | `/v1/auth/session-region-verifications` | `verifySessionRegion` |
 | `control.yaml` | `GET` | `/v1/brand-assets/{slot}` | `readPublicBrandAsset` |
 | `control.yaml` | `GET` | `/v1/cache-operation-requests/{idempotency_key}` | `getTenantCacheWriteReceipt` |
@@ -397,6 +401,7 @@
 | `control.yaml` | `POST` | `/v1/dns/hub/records/batch` | `batchTenantDNSHubRecords` |
 | `control.yaml` | `GET` | `/v1/dns/platform-config` | `getPlatformDNSConfig` |
 | `control.yaml` | `PUT` | `/v1/dns/platform-config` | `savePlatformDNSConfig` |
+| `control.yaml` | `DELETE` | `/v1/dns/platform-config` | `disconnectPlatformDNSConfig` |
 | `control.yaml` | `POST` | `/v1/dns/platform-config/connection-test` | `testPlatformDNSConnection` |
 | `control.yaml` | `POST` | `/v1/dns/platform-config/{kind}` | `startPlatformDNSOperation` |
 | `control.yaml` | `GET` | `/v1/dns/platform-zones` | `listPlatformDNSZones` |
@@ -446,6 +451,7 @@
 | `control.yaml` | `POST` | `/v1/identity-verification/cases/{case_id}/expire` | `expireMyIdentityVerificationCase` |
 | `control.yaml` | `POST` | `/v1/identity-verification/cases/{case_id}/submit` | `submitMyIdentityVerificationCase` |
 | `control.yaml` | `POST` | `/v1/identity-verification/cases/{case_id}/withdraw` | `withdrawMyIdentityVerificationCase` |
+| `control.yaml` | `GET` | `/v1/identity-verification/methods` | `getMyIdentityVerificationMethods` |
 | `control.yaml` | `POST` | `/v1/identity-verification/provider-callbacks/{provider}` | `acceptIdentityVerificationProviderCallback` |
 | `control.yaml` | `POST` | `/v1/identity-verification/provider-sessions` | `startIdentityVerificationProviderSession` |
 | `control.yaml` | `POST` | `/v1/identity-verification/provider-sessions/{session_id}/uploads` | `createIdentityVerificationPrivateUpload` |
@@ -733,7 +739,7 @@
 
 ## dns-acme.yaml
 
-源文件：[`dns-acme.yaml`](../../api/openapi/v1/dns-acme.yaml)，42 个 operation。
+源文件：[`dns-acme.yaml`](../../api/openapi/v1/dns-acme.yaml)，43 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -756,6 +762,7 @@
 | `dns-acme.yaml` | `POST` | `/v1/certificate-orders` | `createCertificateOrder` |
 | `dns-acme.yaml` | `GET` | `/v1/dns/platform-config` | `getPlatformDNSConfig` |
 | `dns-acme.yaml` | `PUT` | `/v1/dns/platform-config` | `savePlatformDNSConfig` |
+| `dns-acme.yaml` | `DELETE` | `/v1/dns/platform-config` | `disconnectPlatformDNSConfig` |
 | `dns-acme.yaml` | `POST` | `/v1/dns/platform-config/connection-test` | `testPlatformDNSConnection` |
 | `dns-acme.yaml` | `POST` | `/v1/dns/platform-config/{kind}` | `startPlatformDNSOperation` |
 | `dns-acme.yaml` | `GET` | `/v1/dns/platform-zones` | `listPlatformDNSZones` |
@@ -782,7 +789,7 @@
 
 ## license.yaml
 
-源文件：[`license.yaml`](../../api/openapi/v1/license.yaml)，210 个 operation。
+源文件：[`license.yaml`](../../api/openapi/v1/license.yaml)，211 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -996,6 +1003,7 @@
 | `license.yaml` | `GET` | `/public/v1/edge-signer-trust` | `getLatestEdgeSignerTrust` |
 | `license.yaml` | `GET` | `/public/v1/signing-keyset` | `getPublicSigningKeySet` |
 | `license.yaml` | `OPTIONS` | `/public/v1/signing-keyset` | `preflightPublicSigningKeySet` |
+| `license.yaml` | `GET` | `/v1/plugin-backends/{plugin_id}/trusted-installations` | `getPluginBackendTrustedInstallations` |
 
 ## sites.yaml
 

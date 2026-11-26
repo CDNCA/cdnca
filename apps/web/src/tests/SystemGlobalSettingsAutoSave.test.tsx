@@ -7,6 +7,7 @@ import { brandAssetApi } from '../api/brandAsset'
 import { systemSettingsApi, type PlatformSystemSettingsDocument } from '../api/systemSettings'
 import { useSessionStore } from '../auth/session'
 import SystemGlobalSettingsPage from '../pages/SystemGlobalSettingsPage'
+import { useNavigationGuardStore } from '../routes/navigationGuard'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
 
@@ -95,6 +96,65 @@ describe('SystemGlobalSettingsPage auto-save', () => {
     const item = (await within(panel).findByText('长度超过上限', {}, { timeout: 3_000 })).closest('.ant-form-item')
     expect(item?.textContent).toContain('系统名称')
     expect(document.querySelector('.cdnca-feedback')).toBeNull()
+  })
+
+  // 清空必填的系统名称后不再一直「稍后自动保存」：
+  // 字段下给出原因，顶部显示有未保存的错误并能定位到字段，不发 PUT；改成合法值后自动保存，「已保存」只在回执后出现。
+  it('marks a cleared system name under the field, says the edit cannot be saved, and saves once it is valid', async () => {
+    authenticate()
+    vi.spyOn(systemSettingsApi, 'get').mockResolvedValue(initial)
+    vi.spyOn(brandAssetApi, 'list').mockResolvedValue({ schema: 'cdnca.platform-brand-asset/v1', assets: [] })
+    const put = vi.spyOn(systemSettingsApi, 'put').mockImplementation(async (_token, revision, value) => ({
+      ...initial, revision: revision + 1, value,
+    }))
+    const user = userEvent.setup()
+    renderWithProviders(<SystemGlobalSettingsPage />)
+    const panel = await screen.findByTestId('system-settings-baseline-system')
+    const name = within(panel).getByLabelText('系统名称')
+    await user.clear(name)
+    await user.tab()
+
+    const item = within(panel).getByText('此项为必填').closest('.ant-form-item')
+    expect(item?.textContent).toContain('系统名称')
+    expect(name).toHaveAttribute('aria-invalid', 'true')
+    expect(name.getAttribute('aria-describedby')).toBe('system-system_name-help')
+    const status = within(panel).getByTestId('system-settings-save-status')
+    expect(status).toHaveTextContent('有未保存的错误')
+    expect(status).not.toHaveTextContent('稍后自动保存')
+    expect(within(panel).getByTestId('system-settings-saved-receipt')).toBeEmptyDOMElement()
+    // leaving the page asks first; the draft stays until then
+    expect(useNavigationGuardStore.getState().dirty).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 1_200))
+    expect(put).not.toHaveBeenCalled()
+    expect(name).toHaveValue('')
+
+    await user.click(within(status).getByRole('button', { name: '定位到「系统名称」' }))
+    expect(name).toHaveFocus()
+
+    await user.type(name, '合法名称')
+    expect(within(panel).queryByText('此项为必填')).not.toBeInTheDocument()
+    expect(name).not.toHaveAttribute('aria-invalid')
+    expect(within(panel).getByTestId('system-settings-save-status')).toHaveTextContent('有修改，稍后自动保存')
+    expect(useNavigationGuardStore.getState().dirty).toBe(false)
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1), { timeout: 2_000 })
+    expect(put.mock.calls[0][2]).toEqual(expect.objectContaining({ system_name: '合法名称' }))
+    expect(await within(panel).findByTestId('system-settings-saved-receipt')).toHaveTextContent('系统配置已保存')
+    await waitFor(() => expect(within(panel).queryByTestId('system-settings-save-status')).not.toBeInTheDocument())
+  })
+
+  // 与后端 settingsFieldError 同构：超过 128 个字符的系统名称在本地拦下，不发 PUT。
+  it('holds a system name over 128 characters with the too-long reason', async () => {
+    authenticate()
+    vi.spyOn(systemSettingsApi, 'get').mockResolvedValue(initial)
+    vi.spyOn(brandAssetApi, 'list').mockResolvedValue({ schema: 'cdnca.platform-brand-asset/v1', assets: [] })
+    const put = vi.spyOn(systemSettingsApi, 'put')
+    renderWithProviders(<SystemGlobalSettingsPage />)
+    const panel = await screen.findByTestId('system-settings-baseline-system')
+    fireEvent.change(within(panel).getByLabelText('系统名称'), { target: { value: '名'.repeat(129) } })
+    expect(within(panel).getByText('长度超过上限').closest('.ant-form-item')?.textContent).toContain('系统名称')
+    expect(within(panel).getByTestId('system-settings-save-status')).toHaveTextContent('有未保存的错误')
+    await new Promise((resolve) => setTimeout(resolve, 1_000))
+    expect(put).not.toHaveBeenCalled()
   })
 
   it('queues a newer edit behind an in-flight save and persists the new revision', async () => {

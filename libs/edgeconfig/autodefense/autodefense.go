@@ -43,7 +43,7 @@ const (
 	MaxSignatureItems     = 3
 	MaxMitigationsPerSite = 4096
 	// MaxReleasesPerSite bounds Site.Releases (the newest are kept).
-	MaxReleasesPerSite = 256
+	MaxReleasesPerSite    = 256
 	MaxWhitelistNetworks  = 256
 	MaxJA4Allow           = 64
 	MaxLoginEndpoints     = 32

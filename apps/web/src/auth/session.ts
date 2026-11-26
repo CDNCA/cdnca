@@ -13,7 +13,7 @@ interface SessionState {
   sessionEpoch: number
   status: SessionStatus
   setSession: (response: AuthResponse, principal: Principal, update?: SessionUpdate) => void
-  updatePrincipal: (changes: Pick<Principal, 'display_name'>) => void
+  updatePrincipal: (changes: Partial<Pick<Principal, 'display_name' | 'permissions'>>) => void
   // A14: entering, leaving or timing out of impersonation swaps the principal
   // on the same access token. It is a new identity, so it starts a new epoch
   // (SessionQueryBoundary clears the previous identity's cache); applied only
@@ -148,6 +148,22 @@ async function applyAuthResponse(
   if (!validPrincipal(principal)) throw new Error('Refresh principal identity changed')
   useSessionStore.getState().setSession(response, principal, update)
   return principal
+}
+
+// after a write refused for a missing
+// permission the page re-reads /v1/auth/me and follows the current
+// permissions. Applied only while the same identity is signed in on the same
+// epoch; nothing else in the session changes.
+export async function refreshPrincipalPermissions(): Promise<void> {
+  const { accessToken, principal, sessionEpoch } = useSessionStore.getState()
+  if (!accessToken || !principal) return
+  const latest = await authApi.me(accessToken)
+  const current = useSessionStore.getState()
+  if (
+    current.status !== 'authenticated' || current.sessionEpoch !== sessionEpoch || !current.principal ||
+    !latest || !Array.isArray(latest.permissions) || !samePrincipalIdentity(current.principal, latest)
+  ) return
+  current.updatePrincipal({ permissions: latest.permissions })
 }
 
 export function hydrateLoginSession(response: AuthResponse, canApply: () => boolean = () => true, signal?: AbortSignal): Promise<Principal> {

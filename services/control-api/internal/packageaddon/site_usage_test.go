@@ -10,7 +10,7 @@ func TestSiteUsageCanonicalDomainsAndNonstandardPorts(t *testing.T) {
 		{domains: []string{"a.example.co.uk", "b.example.co.uk", "*.Example.co.uk.", "店铺.公司.cn"}, ports: []int64{80, 443, 8080, 8080}},
 		{domains: []string{"A.example.co.uk.", "xn--hxtq42j.xn--55qx5d.cn", "tenant.github.io"}, ports: []int64{443, 8080}},
 	})
-	if err != nil || got != (SiteUsageCounts{Domains: 5, RootDomains: 3, HTTPPorts: 2}) {
+	if err != nil || got != (SiteUsageCounts{Sites: 2, Domains: 5, RootDomains: 3, HTTPPorts: 2}) {
 		t.Fatalf("counts=%+v err=%v", got, err)
 	}
 }

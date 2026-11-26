@@ -8,6 +8,7 @@ import (
 
 	"github.com/cdnca/cdnca/libs/mail"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/fielderr"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -55,9 +56,17 @@ func (s *Service) Test(ctx context.Context, actor Actor, request TestRequest, se
 	if err := validActor(actor); err != nil {
 		return TestResult{}, err
 	}
-	if send == nil || !validMetadata(request.RequestID) || !validSettings(request.Value) || !mail.ValidAddress(request.To) ||
+	if send == nil || !validMetadata(request.RequestID) || !validSettings(request.Value) ||
 		!validMailProvider(request.Value, request.MailSecret) || request.MailSecret != "" && s.cipher == nil {
 		return TestResult{}, ErrInvalidInput
+	}
+	// a refused recipient names the body field "to"
+	// (same code; details.field lets the page mark the input).
+	if request.To == "" {
+		return TestResult{}, fielderr.New(ErrInvalidInput, "to", fielderr.Required)
+	}
+	if !mail.ValidAddress(request.To) {
+		return TestResult{}, fielderr.New(ErrInvalidInput, "to", fielderr.InvalidFormat)
 	}
 	target := TestTarget{Value: request.Value, To: request.To}
 	official := MailProviderKind(request.Value.MailProvider) == MailKindOfficial

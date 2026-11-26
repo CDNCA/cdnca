@@ -45,6 +45,24 @@ export const wafTimeOperators = ['in_time_range', 'not_in_time_range']
 /** edgeconfig browserVersionPattern. */
 export const browserVersionPattern = /^\d{1,5}(\.\d{1,5}){0,2}$/
 
+/**
+ * the node capability a WAF condition needs beyond the base engine
+ * (the editor explains it next to that condition only); null for a plain condition such as a path.
+ * ja4: JA4 v1, not_in also WAF_JA4_NEGATION; geo fields: IP_INTEL v2; content type / HTTP version /
+ * IP list: WAF v4; string sets and browser / device / version / time: WAF v6.
+ */
+export type ConditionCapability = 'ja4' | 'ja4Negation' | 'ipIntel' | 'wafV4' | 'wafV6'
+const wafV4Fields = ['content_type', 'http_version', 'ip_list']
+
+export function conditionCapability(field?: string, operator?: string): ConditionCapability | null {
+  if (!field) return null
+  if (field === 'ja4') return operator === 'not_in' ? 'ja4Negation' : 'ja4'
+  if (isStringSetOperator(operator) || wafClientFields.includes(field)) return 'wafV6'
+  if (wafGeoFields.includes(field)) return 'ipIntel'
+  if (wafV4Fields.includes(field)) return 'wafV4'
+  return null
+}
+
 /** Grouped Select options for the given fields, in their listed order within a group. */
 export function groupedFieldOptions(t: TFunction<'securityPolicies'>, fields: string[]) {
   return groupOrder

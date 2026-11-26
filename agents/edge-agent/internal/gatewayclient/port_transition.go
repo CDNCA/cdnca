@@ -106,29 +106,47 @@ func (c *Client) probePortTransition(ctx context.Context, gateway agentv1.AgentG
 	probeCtx, cancel := context.WithTimeout(ctx, c.config.HandshakeTimeout)
 	defer cancel()
 	stream, err := gateway.Connect(probeCtx, grpc.WaitForReady(false))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	hello, err := c.agentHello()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	hello.GatewayPortTransitionProof = &agentv1.GatewayPortTransitionProof{TransitionId: state.TransitionID, Revision: state.Revision,
 		ActiveEndpoint: &agentv1.GatewayEndpoint{Address: state.Address, ServerName: state.ServerName}}
 	if err := stream.Send(&agentv1.ConnectRequest{Stream: streamMetadata(1, c.now()), Payload: &agentv1.ConnectRequest_Hello{Hello: hello}}); err != nil {
 		return err
 	}
 	response, err := stream.Recv()
-	if err != nil { return err }
-	if err := validateResponseEnvelope(response, 1); err != nil { return err }
-	if err := validateGatewayHello(response.GetHello(), c.config); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if err := validateResponseEnvelope(response, 1); err != nil {
+		return err
+	}
+	if err := validateGatewayHello(response.GetHello(), c.config); err != nil {
+		return err
+	}
 	enabled, err := negotiateGatewayPortTransitionV1(response.GetHello(), hello.Capabilities)
-	if err != nil { return err }
-	if !enabled { return fmt.Errorf("%w: Gateway did not confirm port transition capability", ErrInvalidMessage) }
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return fmt.Errorf("%w: Gateway did not confirm port transition capability", ErrInvalidMessage)
+	}
 	return nil
 }
 
 func negotiateGatewayPortTransitionV1(gateway *agentv1.GatewayHello, local *agentv1.AgentCapabilities) (bool, error) {
 	localV1, err := singleCapabilityV1(local.GetFeatures(), agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_PORT_TRANSITION, "local gateway port transition")
-	if err != nil { return false, err }
+	if err != nil {
+		return false, err
+	}
 	gatewayV1, err := singleCapabilityV1(gateway.GetEnabledCapabilities(), agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_PORT_TRANSITION, "Gateway port transition")
-	if err != nil { return false, err }
+	if err != nil {
+		return false, err
+	}
 	if gatewayV1 && !localV1 {
 		return false, fmt.Errorf("%w: Gateway enabled an unadvertised port transition capability", ErrInvalidMessage)
 	}
@@ -136,7 +154,9 @@ func negotiateGatewayPortTransitionV1(gateway *agentv1.GatewayHello, local *agen
 }
 
 func sendGatewayPortTransitionStatus(stream grpc.BidiStreamingClient[agentv1.ConnectRequest, agentv1.ConnectResponse], sequence uint64, status *agentv1.GatewayPortTransitionStatus, now time.Time) error {
-	if status == nil { return fmt.Errorf("%w: gateway port transition status is missing", ErrInvalidMessage) }
+	if status == nil {
+		return fmt.Errorf("%w: gateway port transition status is missing", ErrInvalidMessage)
+	}
 	return stream.Send(&agentv1.ConnectRequest{Stream: streamMetadata(sequence, now),
 		Payload: &agentv1.ConnectRequest_GatewayPortTransitionStatus{GatewayPortTransitionStatus: status}})
 }
@@ -313,7 +333,9 @@ func (r *PortTransitionRuntime) storedStatus(active GatewayEndpointState) (*agen
 }
 
 func agentGatewayEndpoint(value *agentv1.GatewayEndpoint) *agentv1.GatewayEndpoint {
-	if value == nil { return nil }
+	if value == nil {
+		return nil
+	}
 	return &agentv1.GatewayEndpoint{Address: value.Address, ServerName: value.ServerName}
 }
 

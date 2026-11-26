@@ -88,7 +88,7 @@ func (s *Service) Get(ctx context.Context, actor Actor) (Document, error) {
 		if err != nil {
 			return err
 		}
-		result = Document{Schema: schema, Revision: revision, UpdatedAt: updatedAt.UTC(), Value: value}
+		result = Document{Schema: schema, Revision: revision, UpdatedAt: updatedAt.UTC(), Value: adminTermsView(value)}
 		result.setSecrets(fingerprints)
 		return nil
 	})
@@ -146,6 +146,10 @@ func GetPublicTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (PublicSetti
 		DefaultPhoneCountryCode:  value.DefaultPhoneCountryCode,
 		LoginFailureLimitPerHour: value.LoginFailureLimitPerHour, LoginCaptchaThresholdPerHour: value.LoginCaptchaThresholdPerHour,
 		SessionRegionCheck: value.SessionRegionCheck,
+		QQRequired:         value.QQRequired, UsernameRequired: value.UsernameRequired,
+		TermsTitle: value.TermsTitle, TermsBody: value.TermsBody,
+		TermsVersion:   TermsVersion(value.TermsTitle, value.TermsBody),
+		TermsPublished: TermsPublished(value.TermsTitle, value.TermsBody),
 	}, nil
 }
 
@@ -316,6 +320,14 @@ func decodeSettings(raw []byte, secrets ...string) (Settings, error) {
 	}
 	if value.DefaultPhoneCountryCode == "" {
 		value.DefaultPhoneCountryCode = phonenumber.DefaultCountryCode
+	}
+	// saved before username_required was read, sign-up
+	// asked for a username; such a document keeps asking.
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) == nil {
+		if _, ok := fields["username_required"]; !ok {
+			value.UsernameRequired = true
+		}
 	}
 	if !validSettings(value, secrets...) {
 		return Settings{}, ErrUnavailable
@@ -547,7 +559,7 @@ func settingsFieldError(value Settings, secrets ...string) error {
 	}{
 		{"verification_subject", value.VerificationSubject, 1, 256, false}, {"verification_body", value.VerificationBody, 1, 65536, true},
 		{"verification_sms_body", value.VerificationSMSBody, 1, 1024, false}, {"verification_sms_template_id", value.VerificationSMSTemplateID, 0, 256, false},
-		{"terms_title", value.TermsTitle, 1, 256, false}, {"terms_body", value.TermsBody, 1, 65536, false},
+		{"terms_title", value.TermsTitle, 1, 256, false}, {"terms_body", value.TermsBody, 0, 65536, false},
 	} {
 		if err := textFieldError(field, item.name, item.value, item.min, item.max, item.template); err != nil {
 			return err

@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-
 // SockDiag is Linux only.
 type SockDiag struct{}
 
@@ -20,4 +19,6 @@ func (SockDiag) EmptySockets(context.Context, []PortRange, time.Duration) ([]Emp
 
 func (SockDiag) Destroy(context.Context, []EmptySocket) error { return errUnsupported }
 
-func (SockDiag) Connections(context.Context, []PortRange) ([]EmptySocket, error) { return nil, errUnsupported }
+func (SockDiag) Connections(context.Context, []PortRange) ([]EmptySocket, error) {
+	return nil, errUnsupported
+}

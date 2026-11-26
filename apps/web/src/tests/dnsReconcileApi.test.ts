@@ -149,7 +149,7 @@ const task: DNSReconcileTask = {
   updated_at: '2026-08-04T00:02:00Z',
   replayed: false,
 }
-const dryRunResult: DNSReconcileResult = { ...result, status: 'dry_run' }
+const dryRunResult = { ...result, status: 'dry_run', provider: { zone_id: zoneID, revision: 7, records: [] } }
 
 function identity(action: string, revision: number): DNSReconcileCommandIdentity {
   return {
@@ -313,7 +313,8 @@ describe('dnsReconcileApi', () => {
     expect(JSON.stringify(error)).not.toContain('secret upstream provider row')
   })
 
-  it.each([7, 9])('rejects UUIDv%s on the public tenant contract', async (version) => {
+  // Site IDs are UUIDv7 in production (the contract allows versions 1–8); other versions are refused before fetch.
+  it.each([9])('rejects UUIDv%s on the public tenant contract', async (version) => {
     const invalidSite = `22222222-2222-${version}222-8222-222222222222`
     await expect(dnsReconcileApi.get(
       'token', invalidSite, taskID, { requestID: `dns-reconcile-v${version}-request`, traceparent },
@@ -326,6 +327,42 @@ describe('dnsReconcileApi', () => {
       ...identity('apply-invalid-key', 7), idempotencyKey: 'dns-reconcile:invalid',
     })).rejects.toMatchObject({ status: 400, code: 'invalid_request' })
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  // 生产的站点 ID 是 UUIDv7，校验不得在发请求前拒绝。
+  it('sends a dry run for a UUIDv7 site', async () => {
+    const v7 = '01a20a02-783d-7007-8e56-0966241b0cd6'
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }))
+    const withoutProvider: Omit<DNSReconcileCheckRequest, 'provider'> = { ...check }
+    delete (withoutProvider as Partial<DNSReconcileCheckRequest>).provider
+    await dnsReconcileApi.dryRun('token', v7, withoutProvider, identity('v7-dry-run', 1)).catch(() => undefined)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(String(fetch.mock.calls[0]?.[0])).toContain(`/v1/sites/${v7}/dns-reconcile/dry-run`)
+  })
+
+  // 不带 provider 时由服务端解析区域；响应必须带回方案依据的快照，且与方案的区域、版本一致。
+  it('lets the server resolve the zone and requires the snapshot the plan was built on', async () => {
+    const withoutProvider: Omit<DNSReconcileCheckRequest, 'provider'> = { ...check }
+    delete (withoutProvider as Partial<DNSReconcileCheckRequest>).provider
+    const bodies: unknown[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return response(dryRunResult, 200, new Headers(init?.headers).get('X-Request-ID') ?? '')
+    })
+    const planned = await dnsReconcileApi.dryRun('token', siteID, withoutProvider, {
+      requestID: 'dns-reconcile-resolve-request', traceparent,
+    })
+    expect(bodies[0]).not.toHaveProperty('provider')
+    expect(planned.provider).toEqual({ zone_id: zoneID, revision: 7, records: [] })
+    for (const value of [{ ...dryRunResult, provider: undefined }, { ...dryRunResult, provider: { ...dryRunResult.provider, revision: 8 } },
+      { ...dryRunResult, provider: { ...dryRunResult.provider, zone_id: taskID } }]) {
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce((_, init) => response(
+        value, 200, new Headers(init?.headers).get('X-Request-ID') ?? '',
+      ))
+      await expect(dnsReconcileApi.dryRun('token', siteID, withoutProvider, {
+        requestID: 'dns-reconcile-resolve-invalid', traceparent,
+      })).rejects.toMatchObject({ code: 'response_invalid' })
+    }
   })
 
   it('rejects a non-dry-run status from the dry-run route', async () => {

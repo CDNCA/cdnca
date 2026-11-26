@@ -25,6 +25,8 @@ import './styles.css'
 import './styles/compact-toolbar.css'
 import './styles/tech-look.css'
 import { ThemeProvider } from './theme/ThemeProvider'
+import { InputNumberStepNames } from './components/InputNumberStepNames'
+import { useTabsConfig } from './components/tabsConfig'
 
 setApiErrorObserver(createGlobalApiErrorReporter({
   getAccessToken:()=>useSessionStore.getState().accessToken,
@@ -49,6 +51,7 @@ function RoutedApplication() {
           <SessionRegionGate />
           <PasswordChangeGate />
           <ApprovalPromptHost />
+          <InputNumberStepNames />
           <AppRoutes />
         </SessionBootstrap>
       </MigrationHoldGate>
@@ -59,10 +62,11 @@ function RoutedApplication() {
 export function RootApplication() {
   const { i18n } = useTranslation()
   const antdLocale = antdLocaleFor(i18n.resolvedLanguage)
+  const tabs = useTabsConfig()
   const router = useMemo(() => createBrowserRouter([{ path: '*', element: <RoutedApplication /> }], { basename: '/dashboard' }), [])
 
   return (
-    <ThemeProvider locale={antdLocale}>
+    <ThemeProvider locale={antdLocale} tabs={tabs}>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>

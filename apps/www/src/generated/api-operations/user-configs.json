@@ -223,7 +223,7 @@
     },
     {
      "status": "409",
-     "description": "Revision, idempotency, name, or listener-port conflict."
+     "description": "Revision, idempotency, name, listener-port or package quota conflict."
     },
     {
      "status": "415",
@@ -376,7 +376,7 @@
     },
     {
      "status": "409",
-     "description": "Revision, idempotency, name, or listener-port conflict."
+     "description": "Revision, idempotency, name, listener-port or package quota conflict."
     },
     {
      "status": "500",

@@ -11,13 +11,14 @@ import { embedded } from '../scripts/sync-install-preflight.mjs'
 const library = readFileSync(new URL('../scripts/lib/install-progress.sh', import.meta.url), 'utf8')
 const installers = ['install-control.sh', 'install-node.sh'].map((name) => [name, readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8')])
 
-// SECONDS 可写：fake_elapsed N 让后续计时从 N 秒开始，测试不用真等。
+// SECONDS 可写：fake_elapsed N 让后续计时从 N 秒开始，测试不用真等。只在第一步里调用：把总计时和本步起点归零，
+// 机器高负载时 progress_init/progress_stage 本身用掉的一两秒不会让“已用”少于 N（全量并发时 1:29 误报）。
 function run(body, { env = {}, stages = ["'甲|60|120|'", "'乙|60|120|'", "'丙|60|120|'"], tty = false } = {}) {
   const logDir = mkdtempSync(join(tmpdir(), 'cdnca-progress-'))
   const script = ['set -Eeuo pipefail', `PROGRESS_LABEL='[t]'`, 'PROGRESS_ROLE=test', `PROGRESS_STAGES=(${stages.join(' ')})`, library,
     // 测试里没有终端：用 [ 的包装模拟 “stderr 是终端”。
     tty ? '[() { if [[ "$1" == -t && "$2" == 2 ]]; then return 0; fi; builtin [ "$@"; }' : '',
-    'fake_elapsed() { SECONDS=$1; }', body].join('\n')
+    'fake_elapsed() { PROGRESS_START=0 PROGRESS_STAGE_START=0; SECONDS=$1; }', body].join('\n')
   const result = spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { PATH: process.env.PATH, PROGRESS_LOG_DIR: logDir, TERM: 'xterm', ...env } })
   const logs = readdirSync(logDir)
   const log = logs.length ? readFileSync(join(logDir, logs[0]), 'utf8') : ''
@@ -32,7 +33,8 @@ test('stage headers show index, interval, bar, elapsed and remaining from the st
   assert.match(lines[0], /^\[t\] 共 3 个步骤，预计约 3–6 分钟；完整输出写入 .*cdnca-install-test-\d{8}-\d{6}\.log$/)
   assert.equal(lines[1], '[t] [1/3] 甲（约 1–2 分钟）……')
   assert.match(lines[2], /^\[t\] \[-{24}\]   0%  已用 0:0\d  预计剩余约 3–6 分钟$/)
-  assert.equal(lines[3], '[t] ✓ [1/3] 甲 完成（用时 1:30）')
+  // 测试跑的墙钟可能跨过一秒（fake_elapsed 只设起点），同下面两行一样按 1:3x 比较。
+  assert.match(lines[3], /^\[t\] ✓ \[1\/3\] 甲 完成（用时 1:3\d）$/)
   // 90 秒正好等于甲的权重中值，剩余不放大。
   assert.match(lines[5], /^\[t\] \[#{7}-{17}\]  33%  已用 1:3\d  预计剩余约 2–4 分钟$/)
   assert.match(result.stderr, /\[#{24}\] 100%  全部 3 个步骤完成，总用时 1:3\d。安装日志：/)
@@ -103,6 +105,23 @@ test('a non-terminal heartbeat appears every 15 seconds with the apt package cou
   assert.equal(beats.length, 1, result.stderr)
   assert.match(beats[0], /^\[t\]   仍在安装依赖……已用 0:1[5-6]  正在安装 1\/3：postgresql-17$/)
 })
+
+// 同一安装日志里先跑带 apt 进度的命令，再跑不输出 apt 事件的长命令，
+// 后面的心跳只显示自己的阶段与用时，不继承上一步的包名（中英文都一样）。
+for (const [lang, beatText, aptWord] of [['zh', '仍在初始化ClickHouse', '正在安装'], ['en', 'still running:初始化ClickHouse', 'installing']]) {
+  test(`a later long command does not inherit the previous apt package in its heartbeat (${lang})`, () => {
+    const apt = ['0 upgraded, 16 newly installed, 0 to remove and 0 not upgraded.', 'Unpacking clamav (1.0.7) ...', 'Setting up clamav (1.0.7) ...']
+      .map((line) => `echo '${line}'`).join('; ')
+    const result = run(`progress_init; progress_stage; progress_run 安装依赖 bash -c "${apt}"; progress_run 初始化ClickHouse sleep 16; progress_run 安装RustFS sleep 16`,
+      { env: { INSTALL_LANG: lang } })
+    assert.equal(result.status, 0, result.stderr)
+    const beats = result.stderr.split('\n').filter((line) => line.includes(beatText) || line.includes('RustFS'))
+    assert.ok(beats.length >= 2, result.stderr)
+    for (const beat of beats) assert.doesNotMatch(beat, new RegExp(`${aptWord}|clamav`), beat)
+    // 安装日志仍保留原始 apt 输出，诊断不受影响。
+    assert.match(result.log, /Setting up clamav/)
+  })
+}
 
 test('polling ticks print one line per 10 seconds with the timeout when not on a terminal', () => {
   const result = run('progress_init; progress_stage; for i in $(seq 0 25); do fake_elapsed $((100 + i)); progress_tick " Redis 就绪" 30; done')

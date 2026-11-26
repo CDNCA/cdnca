@@ -96,10 +96,48 @@
 .user-profile-title-row {
   display: flex;
   min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-height: 24px;
   margin-bottom: 8px;
+}
+
+/* 用户名与编辑按钮不拆开；实名认证跟在后面，放不下时整体换到下一行。 */
+.user-profile-name {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-profile-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  margin: 0 0 0 6px;
+}
+
+.user-profile-identity > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.user-profile-identity dt,
+.user-profile-identity dd {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16.8px;
+}
+
+.user-profile-identity dt {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.user-profile-identity dd {
+  color: var(--cdnca-color-title);
 }
 
 .user-profile-title-row h1 {
@@ -134,23 +172,13 @@
   background: var(--cdnca-color-blue12, #eef7ff);
 }
 
-.user-profile-title-row p {
-  min-width: 0;
-  margin: 0 0 0 10px;
-  overflow: hidden;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
-  line-height: 16.8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* 账号 ID、余额、最近登录、登录 IP 一行（1440 下内容宽 738px），放不下时按内容自然换行。 */
 .user-profile-facts {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: 8px;
   margin: 0;
 }
 
@@ -159,8 +187,8 @@
   min-width: 0;
   min-height: 34px;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 6px 8px;
   color: var(--cdnca-color-text-secondary);
   background: var(--cdnca-color-bg-panel, #fbfdff);
   border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
@@ -284,11 +312,24 @@
   white-space: nowrap;
 }
 
+/* 监控趋势与 TOP10 是否并排按主内容区宽度（容器查询）决定，不按视口：
+   TOP10 卡至少 360px，排行标签与选中底色完整、排名表首列可读；主内容区不足 760px 时上下排列。 */
+.user-dashboard-main {
+  container: user-home-main / inline-size;
+}
+
 .user-monitor-grid {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, calc(75% - 6px)) minmax(0, calc(25% - 18px));
+  grid-template-columns: minmax(0, 1fr) minmax(360px, calc(25% - 18px));
   gap: 24px;
+}
+
+@container user-home-main (max-width: 759px) {
+  .user-monitor-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
 }
 
 .user-monitor-card,
@@ -368,6 +409,17 @@
   min-width: 0;
   align-items: center;
   gap: 2px;
+}
+
+/* 标签按固有宽度排在轨道里不被压缩；是否溢出只比较标签栏与轨道宽度，与箭头无关。 */
+.user-top-card .dashboard-rank-tabtrack {
+  display: flex;
+  width: max-content;
+  flex: 0 0 auto;
+}
+
+.user-top-card .dashboard-rank-tablist button {
+  flex: 0 0 auto;
 }
 
 .user-top-card .dashboard-rank-tab-arrow {
@@ -561,6 +613,10 @@
   color: var(--cdnca-color-text-dark, #e5e7eb);
 }
 
+.app-shell.is-dark .tenant-overview .user-profile-identity dd {
+  color: var(--cdnca-color-text-dark, #e5e7eb);
+}
+
 .app-shell.is-dark .tenant-overview .user-profile-facts > div,
 .app-shell.is-dark .tenant-overview .user-network-metrics > div {
   background: var(--cdnca-color-surface-muted-dark, #111c2e);
@@ -615,17 +671,8 @@
 
   .user-profile-title-row {
     grid-column: 2;
-    align-items: flex-start;
-    flex-direction: column;
-    flex-wrap: nowrap;
     gap: 2px;
     margin-bottom: 0;
-  }
-
-  .user-profile-title-row p {
-    width: 100%;
-    margin-left: 0;
-    white-space: normal;
   }
 
   .user-profile-facts {
@@ -725,9 +772,3 @@
   }
 }
 
-/* fix-overview：结算水位落后时的卡片提示（只提示，不拦截展示） */
-.dashboard-analytics-settling {
-  padding: 2px 0 6px;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
-}

@@ -362,6 +362,11 @@ func (s *Store) Cancel(ctx context.Context, actor Actor, request CancelRequest, 
 		if err := authorizeActor(ctx, tx, actor, request.TenantScopeID, permissionManage, now); err != nil {
 			return err
 		}
+		// Publication lock order: configuration scope before the subscription.
+		fromRevision, err := lockConfigurationScopeTx(ctx, tx, request.TenantScopeID, now)
+		if err != nil {
+			return err
+		}
 		write, err := s.replayOrClaim(ctx, tx, actor, request.TenantScopeID, operationCancel,
 			request.IdempotencyKey, digest, now)
 		if err != nil {
@@ -417,6 +422,15 @@ func (s *Store) Cancel(ctx context.Context, actor Actor, request CancelRequest, 
 		if _, err := packageautopublish.StopTx(ctx, tx, subscription.TenantScopeID, stopScope, stopUser, now); err != nil {
 			return err
 		}
+		// A cancelled subscription's sites and forwards are left out of every
+		// publication as a suspended one's are (user): take them off the
+		// nodes at once (a suspended one's are off already).
+		if s.republishTx != nil && subscription.SuspendedAt == nil {
+			if err := s.republishTx(ctx, tx, subscription.TenantScopeID, subscription.ID, fromRevision,
+				true, request.RequestID); err != nil {
+				return err
+			}
+		}
 		if s.cancelTx != nil {
 			if err := s.cancelTx(ctx, tx, subscription.TenantScopeID, subscription.ID, now); err != nil {
 				return err
@@ -453,13 +467,8 @@ func (s *Store) Suspend(ctx context.Context, actor Actor, request SuspendRequest
 			return err
 		}
 		// Publication lock order: configuration scope before resource rows.
-		if _, err := tx.Exec(ctx, `INSERT INTO edge_configuration_scopes(scope_id,source_revision,updated_at)
-			VALUES($1,1,$2) ON CONFLICT(scope_id) DO NOTHING`, request.TenantScopeID, now); err != nil {
-			return err
-		}
-		var fromRevision int64
-		if err := tx.QueryRow(ctx, `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1 FOR UPDATE`,
-			request.TenantScopeID).Scan(&fromRevision); err != nil {
+		fromRevision, err := lockConfigurationScopeTx(ctx, tx, request.TenantScopeID, now)
+		if err != nil {
 			return err
 		}
 		write, err := s.replayOrClaim(ctx, tx, actor, request.TenantScopeID, operation,
@@ -491,8 +500,12 @@ func (s *Store) Suspend(ctx context.Context, actor Actor, request SuspendRequest
 		if request.Suspend {
 			reason, version = &request.Reason, "suspend"
 			subscription.SuspendedAt, subscription.SuspendReason = &now, request.Reason
+			subscription.SuspendSource = SuspendSourceAdmin
+			if actor.Bridge() {
+				subscription.SuspendSource = SuspendSourceBillingBridge
+			}
 		} else {
-			subscription.SuspendedAt, subscription.SuspendReason = nil, ""
+			subscription.SuspendedAt, subscription.SuspendReason, subscription.SuspendSource = nil, "", ""
 		}
 		subscription.Revision++
 		subscription.UpdatedAt = now
@@ -536,6 +549,20 @@ func (s *Store) Suspend(ctx context.Context, actor Actor, request SuspendRequest
 		return MutationResult{}, fmt.Errorf("%s package subscription: %w", operation, err)
 	}
 	return result, nil
+}
+
+// lockConfigurationScopeTx locks the tenant's configuration scope (created
+// at revision 1 when missing) and returns its source revision before the
+// caller changes the subscription.
+func lockConfigurationScopeTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, now time.Time) (int64, error) {
+	if _, err := tx.Exec(ctx, `INSERT INTO edge_configuration_scopes(scope_id,source_revision,updated_at)
+		VALUES($1,1,$2) ON CONFLICT(scope_id) DO NOTHING`, scopeID, now); err != nil {
+		return 0, err
+	}
+	var revision int64
+	err := tx.QueryRow(ctx, `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1 FOR UPDATE`,
+		scopeID).Scan(&revision)
+	return revision, err
 }
 
 // authorizeBridgeActor is the billing bridge branch (ADR 0019 §4.4): in tx
@@ -900,7 +927,8 @@ const subscriptionSelect = `
 	       site_limit, domain_limit, node_limit, traffic_limit_bytes,
 	       starts_at, ends_at, timezone, cycle_kind, custom_cycle_days,
 	       tcp_factor_numerator, tcp_factor_denominator,
-	       lifecycle_status, cancelled_at, suspended_at, COALESCE(suspend_reason, ''), revision, created_at, updated_at
+	       lifecycle_status, cancelled_at, suspended_at, COALESCE(suspend_reason, ''),
+	       COALESCE(package_subscription_suspend_source_698(id), ''), revision, created_at, updated_at
 	FROM package_subscriptions `
 
 // LoadSystem reads one subscription for a platform worker (no actor). The
@@ -928,7 +956,7 @@ func scanSubscription(scanner rowScanner) (Subscription, error) {
 		&subscription.Quotas.TrafficBytes, &subscription.Period.StartsAt, &subscription.Period.EndsAt,
 		&subscription.Period.TimeZone, &cycleKind, &customDays, &numerator, &denominator,
 		&subscription.LifecycleStatus, &subscription.CancelledAt, &subscription.SuspendedAt,
-		&subscription.SuspendReason, &subscription.Revision,
+		&subscription.SuspendReason, &subscription.SuspendSource, &subscription.Revision,
 		&subscription.CreatedAt, &subscription.UpdatedAt,
 	); err != nil {
 		return Subscription{}, err

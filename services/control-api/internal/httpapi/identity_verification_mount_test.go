@@ -92,6 +92,7 @@ func identityVerificationMountTestPaths() []string {
 	uploadID := "33333333-3333-4333-8333-333333333333"
 	return []string{
 		"/v1/identity-verification/status",
+		"/v1/identity-verification/methods",
 		"/v1/identity-verification/cases",
 		"/v1/identity-verification/cases/" + caseID,
 		"/v1/identity-verification/cases/" + caseID + "/submit",

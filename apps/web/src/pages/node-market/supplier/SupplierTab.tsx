@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Tabs } from 'antd'
+import { Tabs } from '../../../components/Tabs'
 import { useTranslation } from 'react-i18next'
 
 import { marketApi } from '../../../api/market'

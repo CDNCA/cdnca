@@ -51,7 +51,7 @@ feedback.warning(t('selectNodeFirst'))
 - 同一条反馈（类型 + 标题 + 原因文本相同，或同一个 `key`）在弹窗还开着时再触发，不会叠第二个；关掉后再触发会重新弹。
 - 下一步按钮点了先关弹窗再执行。至多一个 `primary`；有 primary 时「知道了」是次按钮。
 - 排版对齐管理端 iView `Modal.confirm`：28px 图标与标题同一行，标题 16px / 500，正文 14px 左缩进 40px 与标题对齐；所有按钮（下一步、页面传入的 `action`、「知道了」）在底部同一行右对齐，主按钮在最右。
-- 标题只放简短原因。文本末尾的「（请求 ID：xxx）」「(Request ID: xxx)」由组件自动拆出，在正文下方以小字一行显示并可复制；带请求 ID 的服务端整句（如「请求内容无效，请检查输入」）首分句留在标题，其余进正文。页面不用自己拆。
+- 标题只放简短原因。文本末尾的「（请求 ID：xxx）」「(Request ID: xxx)」以及拒绝原因句的「（错误码 x，请求 ID y）」「(error code x, request ID y)」由组件自动拆出，放进正文下方默认收起的「诊断详情」，错误码与请求 ID 各自可复制；带这些诊断的服务端整句（如「请求内容无效，请检查输入」）首分句留在标题，其余进正文。页面不用自己拆。
 - 字段校验类错误（前端校验、400 且带 `details.field`）不弹窗：标在对应字段下方（`form.setFields` / `validateStatus` + `help`，或字段下的 `role="alert"` 提示行）。只有非字段性失败才弹窗。
 - 不直接调用 `Modal.error` / `Modal.warning` / `modal.error` / `modal.warning`（守卫 `feedback-static.guard.test.ts`）；`modal.confirm` 照常用，共享样式已把它统一到同一组尺寸。
 - 成功类轻提示（「保存成功」「已复制」）继续用 `App.useApp().message.success`，不需要用户确认；中性提示（「未修改」）用 `message.info`。

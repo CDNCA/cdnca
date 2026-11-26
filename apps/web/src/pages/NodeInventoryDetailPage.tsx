@@ -6,7 +6,7 @@ import { NodeStaleConfigurationAlert } from '../components/NodeStaleConfiguratio
 import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Result, Space, Spin, Tag, Typography } from 'antd'
 import { Check, Plus, RefreshCw, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { ApiError, type Principal } from '../api/auth'
 import {
@@ -17,6 +17,9 @@ import {
   type NodeDDoSProtection,
   type NodeInventoryItem,
 } from '../api/nodes'
+import { nodeSchedulingApi } from '../api/nodeScheduling'
+import { systemConfigurationApi } from '../api/systemConfiguration'
+import { NodeJoinProgress } from '../components/NodeJoinProgress'
 import { useSessionStore } from '../auth/session'
 import { DataState } from '../components/DataState'
 import { NodeConfigurationScopesPanel } from '../components/NodeConfigurationScopesPanel'
@@ -63,6 +66,10 @@ function currentAccess(ownerKey: string): string | null {
 
 function canManage(principal: Principal): boolean {
   return principal.permissions.includes('nodes.manage') || principal.permissions.includes('platform.admin')
+}
+
+function hasPermission(principal: Principal | null, permission: string): boolean {
+  return Boolean(principal && (principal.permissions.includes(permission) || principal.permissions.includes('platform.admin')))
 }
 
 function displayTime(value: string | undefined, locale: string, fallback: string): string {
@@ -187,13 +194,26 @@ const protectionColors: Record<NodeDDoSProtection['state'], string> = {
   applied: 'green', off: 'default', pending: 'blue', failed: 'red', unavailable: 'orange',
 }
 
-// The node's DDoS protection table state (telemetry ddos_protection)
+// the node's DDoS protection table state (telemetry ddos_protection)
 // in its own block; the node list only shows faults in the XDP column.
+// a node that has applied no table yet
+// ("pending") is read against the platform's DDoS settings: never saved
+// (configured: false) is "not configured"; saved but not in the active
+// revision (active_configured: false: the revision stream is shared, another
+// category being active says nothing about DDoS) "not published"; in the
+// active revision "waiting for the node". An older response without
+// active_configured, or no read access, is the neutral "settings not applied
+// yet". A draft saved over the published settings is a separate hint, the
+// state stays the node's own. Readers of the settings get the way to them
+// unless the category read is refused. The report time and the node's own
+// detail are diagnostics.
 function ProtectionPanel({ nodeID, queryKey, accessToken }: {
   nodeID: string; queryKey: readonly unknown[]; accessToken: () => string | null
 }) {
   const { t, i18n } = useTranslation('nodeInventoryDetail')
   const { t: tn } = useTranslation('nodes')
+  const canReadSettings = useSessionStore((state) => state.principal?.scope_kind === 'platform' &&
+    hasPermission(state.principal, 'system_configuration.read'))
   const latest = useQuery({
     // Under the owner-scoped detail key: a new session drops it with the detail.
     queryKey: [...queryKey, 'protection'],
@@ -207,6 +227,30 @@ function ProtectionPanel({ nodeID, queryKey, accessToken }: {
   })
   const locale = i18n.resolvedLanguage ?? i18n.language
   const protection = latest.data?.known ? latest.data.telemetry?.ddos_protection : undefined
+  const settings = useQuery({
+    queryKey: [...queryKey, 'protection-settings'],
+    enabled: protection !== undefined && canReadSettings,
+    queryFn: () => {
+      const token = accessToken()
+      if (!token) throw staleRead
+      return systemConfigurationApi.get(token, 'ddos_protection')
+    },
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const settingsDocument = settings.data
+  // What is in force decides first (active_configured), the head (configured) and pending_categories only say
+  // what a draft would change: a rollback draft that removes the settings (configured false over an active
+  // true) still has the active settings to apply, plus the pending change (02:51).
+  const configured = settingsDocument?.configured
+  const activeConfigured = settingsDocument?.active_configured ?? (configured === false ? false : undefined)
+  const notConfigured = activeConfigured === false && configured === false
+  const pendingLabel = activeConfigured === true ? t('protection.awaitingNode')
+    : notConfigured ? t('protection.notConfigured')
+      : activeConfigured === false && configured === true ? t('protection.notPublished')
+        : t('protection.notApplied')
+  const draftOverActive = activeConfigured === true && settingsDocument!.pending_categories.includes('ddos_protection')
+  const refused = settings.error instanceof ApiError && settings.error.status === 403
   return (
     <section className="node-inventory-protection" aria-labelledby="node-inventory-protection-title">
       <Typography.Title level={4} id="node-inventory-protection-title">{t('protection.title')}</Typography.Title>
@@ -214,24 +258,37 @@ function ProtectionPanel({ nodeID, queryKey, accessToken }: {
         : latest.isError ? <Alert type="warning" showIcon message={t('protection.loadFailed')} />
           : !protection ? <Typography.Text type="secondary">{t('protection.notReported')}</Typography.Text>
             : (
-              <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
-                <Descriptions.Item label={t('protection.state')}>
-                  <Tag color={protectionColors[protection.state]}>{tn(`ddosProtection.states.${protection.state}`)}</Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label={t('protection.observedAt')}>
-                  {displayTime(latest.data?.observed_at, locale, t('telemetry.notReported'))}
-                </Descriptions.Item>
-                {protection.state === 'unavailable' || protection.state === 'failed' ? (
-                  <Descriptions.Item label={t('protection.reason')} span={2}>
-                    {protection.state === 'unavailable' ? tn(`ddosProtection.reasons.${protection.reason}`) : tn('ddosProtection.failedHint')}
+              <>
+                <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                  <Descriptions.Item label={t('protection.state')}>
+                    <Tag color={protection.state === 'pending' && notConfigured ? 'default' : protectionColors[protection.state]}>
+                      {protection.state === 'pending' ? pendingLabel : tn(`ddosProtection.states.${protection.state}`)}
+                    </Tag>
+                    {draftOverActive ? <Tag color="gold">{t('protection.draftPending')}</Tag> : null}
+                    {canReadSettings && !refused ? (
+                      <Link to="/node/ddos-protection">{t('protection.openSettings')}</Link>
+                    ) : null}
                   </Descriptions.Item>
-                ) : null}
-                {protection.detail ? (
-                  <Descriptions.Item label={t('protection.detail')} span={2}>
-                    <Typography.Text code>{protection.detail}</Typography.Text>
-                  </Descriptions.Item>
-                ) : null}
-              </Descriptions>
+                  {protection.state === 'unavailable' || protection.state === 'failed' ? (
+                    <Descriptions.Item label={t('protection.reason')}>
+                      {protection.state === 'unavailable' ? tn(`ddosProtection.reasons.${protection.reason}`) : tn('ddosProtection.failedHint')}
+                    </Descriptions.Item>
+                  ) : null}
+                </Descriptions>
+                <details className="node-inventory-diagnostics">
+                  <summary aria-label={t('diagnostics.protection')}>{t('diagnostics.title')}</summary>
+                  <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+                    <Descriptions.Item label={t('protection.observedAt')}>
+                      {displayTime(latest.data?.observed_at, locale, t('telemetry.notReported'))}
+                    </Descriptions.Item>
+                    {protection.detail ? (
+                      <Descriptions.Item label={t('protection.detail')}>
+                        <Typography.Text code>{protection.detail}</Typography.Text>
+                      </Descriptions.Item>
+                    ) : null}
+                  </Descriptions>
+                </details>
+              </>
             )}
     </section>
   )
@@ -276,7 +333,7 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   })
-  // The node's last reported service ticket; frozen shows
+  // the node's last reported service ticket; frozen shows
   // reason and recovery here. A failed read leaves the row as not reported.
   const ticketQuery = useQuery({
     queryKey: [...queryKey, 'installation-ticket'],
@@ -294,6 +351,23 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
     refetchOnWindowFocus: false,
   })
   const frozenDetails = useNodeFrozenText(ticketQuery.data)
+  // Line groups holding the node: its join progress (line group, DNS) reads them.
+  const canReadLineGroups = useSessionStore((state) => state.principal?.permissions.includes('node_scheduling.read') ?? false)
+  // the same permission as the reconcile action of the tenants panel.
+  const lineGroupsQuery = useQuery({
+    queryKey: [...prefix, 'line-groups'],
+    queryFn: async () => {
+      const token = currentSessionAccess()
+      if (!token) throw staleRead
+      const result = await nodeSchedulingApi.list(token, { kind: 'platform', targetScopeId: fixedOwner[1] })
+      if (!currentSessionAccess()) throw staleRead
+      return result.items
+    },
+    enabled: query.isSuccess && canReadLineGroups,
+    retry: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
 
   const submitTransition = async (values: TransitionFormValues) => {
     const token = currentSessionAccess()
@@ -356,6 +430,26 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
   const presence = item.presence
   const locale = i18n.resolvedLanguage ?? i18n.language
   const fallback = t('telemetry.notReported')
+  const toolsetFailed = presence.toolset_refresh_status === 'failed' || presence.toolset_helper_status === 'failed'
+  const toolset = !presence.toolset_refresh_status ? t('toolset.notReported') : (
+    <>
+      <Typography.Text type={presence.toolset_refresh_status === 'failed' ? 'danger' : undefined}>
+        {t(`toolset.${presence.toolset_refresh_status}`, {
+          version: presence.toolset_refresh_version, reason: presence.toolset_refresh_reason ?? '',
+        })}
+      </Typography.Text>
+      {presence.toolset_helper_status && (
+        <Typography.Text type={presence.toolset_helper_status === 'failed' ? 'danger' : 'secondary'} style={{ display: 'block' }}>
+          {t(`toolset.helper.${presence.toolset_helper_status}`, { reason: presence.toolset_helper_reason ?? '' })}
+        </Typography.Text>
+      )}
+      {presence.toolset_refreshed_at && (
+        <Typography.Text type="secondary" style={{ display: 'block' }}>
+          {t('toolset.refreshedAt', { time: displayTime(presence.toolset_refreshed_at, locale, fallback) })}
+        </Typography.Text>
+      )}
+    </>
+  )
   return (
     <section className="identity-page node-inventory-detail-page" aria-labelledby="node-inventory-detail-title">
       <header className="identity-page-header">
@@ -373,11 +467,12 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
               {t('transition.actions.start')}
             </Button>
           )}
-          <Button icon={<RefreshCw size={16} aria-hidden="true" />} loading={query.isFetching} onClick={() => { void query.refetch(); void ticketQuery.refetch() }}>
+          <Button icon={<RefreshCw size={16} aria-hidden="true" />} loading={query.isFetching} onClick={() => { void query.refetch(); void ticketQuery.refetch(); if (canReadLineGroups) void lineGroupsQuery.refetch() }}>
             {t('actions.refresh')}
           </Button>
         </Space>
       </header>
+      {item.admin_state === 'active' && lineGroupsQuery.isSuccess ? <NodeJoinProgress node={item} groups={lineGroupsQuery.data} /> : null}
       <Descriptions bordered size="small" column={{ xs: 1, sm: 2, lg: 3 }}>
         <Descriptions.Item label={t('fields.id')}>{item.id}</Descriptions.Item>
         <Descriptions.Item label={t('fields.adminState')}>
@@ -399,49 +494,13 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
             ? nativeRuntimeSummary(presence, t(`nativeRuntimeStates.${presence.native_runtime_state}`), t('fields.nativeRuntimePrevious'))
             : fallback}
         </Descriptions.Item>
-        <Descriptions.Item label={t('fields.toolset')}>
-          {!presence.toolset_refresh_status ? t('toolset.notReported') : (
-            <>
-              <Typography.Text type={presence.toolset_refresh_status === 'failed' ? 'danger' : undefined}>
-                {t(`toolset.${presence.toolset_refresh_status}`, {
-                  version: presence.toolset_refresh_version, reason: presence.toolset_refresh_reason ?? '',
-                })}
-              </Typography.Text>
-              {presence.toolset_helper_status && (
-                <Typography.Text type={presence.toolset_helper_status === 'failed' ? 'danger' : 'secondary'} style={{ display: 'block' }}>
-                  {t(`toolset.helper.${presence.toolset_helper_status}`, { reason: presence.toolset_helper_reason ?? '' })}
-                </Typography.Text>
-              )}
-              {presence.toolset_refreshed_at && (
-                <Typography.Text type="secondary" style={{ display: 'block' }}>
-                  {t('toolset.refreshedAt', { time: displayTime(presence.toolset_refreshed_at, locale, fallback) })}
-                </Typography.Text>
-              )}
-            </>
-          )}
-        </Descriptions.Item>
-        <Descriptions.Item label={t('fields.marketProbe')}>
-          {presence.market_probe_role ? t(`marketProbeRoles.${presence.market_probe_role}`) : fallback}
-        </Descriptions.Item>
-        <Descriptions.Item label={t('fields.sequence')}>
-          {presence.session_epoch && presence.heartbeat_sequence
-            ? t('telemetry.sequence', { epoch: presence.session_epoch, sequence: presence.heartbeat_sequence })
-            : fallback}
+        <Descriptions.Item label={t('fields.lease')}>
+          <Tag color={leaseColors[presence.lease_signal]}>{t(`lease.${presence.lease_signal}`)}</Tag>
         </Descriptions.Item>
         <Descriptions.Item label={t('fields.lastHeartbeat')}>
           {displayTime(presence.last_heartbeat_at, locale, fallback)}
         </Descriptions.Item>
-        <Descriptions.Item label={t('fields.projection')}>
-          <Tag color={freshnessColors[presence.projection_freshness]}>
-            {t(`freshness.${presence.projection_freshness}`)}
-          </Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label={t('fields.lease')}>
-          <Tag color={leaseColors[presence.lease_signal]}>{t(`lease.${presence.lease_signal}`)}</Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label={t('fields.projectedAt')}>
-          {displayTime(presence.projected_at, locale, fallback)}
-        </Descriptions.Item>
+        {toolsetFailed && <Descriptions.Item label={t('fields.toolset')}>{toolset}</Descriptions.Item>}
         <Descriptions.Item label={t('fields.ticket')} span={frozenDetails.length > 0 ? 3 : 1}>
           {frozenDetails.length > 0
             ? <div className="node-frozen-detail" role="status">
@@ -453,6 +512,29 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
               : fallback}
         </Descriptions.Item>
       </Descriptions>
+      {/* Low-frequency facts: projection, session sequence, scripts, last recovery, market probe. */}
+      <details className="node-inventory-diagnostics">
+        <summary aria-label={t('diagnostics.status')}>{t('diagnostics.title')}</summary>
+        <Descriptions bordered size="small" column={{ xs: 1, sm: 2, lg: 3 }}>
+          <Descriptions.Item label={t('fields.projection')}>
+            <Tag color={freshnessColors[presence.projection_freshness]}>
+              {t(`freshness.${presence.projection_freshness}`)}
+            </Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label={t('fields.projectedAt')}>
+            {displayTime(presence.projected_at, locale, fallback)}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('fields.sequence')}>
+            {presence.session_epoch && presence.heartbeat_sequence
+              ? t('telemetry.sequence', { epoch: presence.session_epoch, sequence: presence.heartbeat_sequence })
+              : fallback}
+          </Descriptions.Item>
+          {!toolsetFailed && <Descriptions.Item label={t('fields.toolset')}>{toolset}</Descriptions.Item>}
+          <Descriptions.Item label={t('fields.marketProbe')}>
+            {presence.market_probe_role ? t(`marketProbeRoles.${presence.market_probe_role}`) : fallback}
+          </Descriptions.Item>
+        </Descriptions>
+      </details>
       <NodeStaleConfigurationAlert items={item.stale_configurations} />
       <ProtectionPanel nodeID={nodeID} queryKey={queryKey} accessToken={currentSessionAccess} />
       <NodeConfigurationScopesPanel nodeID={nodeID} queryKey={queryKey} accessToken={currentSessionAccess} />

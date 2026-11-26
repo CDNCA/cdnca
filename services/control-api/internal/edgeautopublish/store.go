@@ -582,7 +582,40 @@ func (s *Store) PrepareAutomaticPublication(
 			return edgepublish.PreparedAutomaticPublication{}, ErrNoTargetNodes
 		}
 	}
-	return edgepublish.PreparedAutomaticPublication{Request: publishRequest, DatabaseNow: now}, nil
+	prepared := edgepublish.PreparedAutomaticPublication{Request: publishRequest, DatabaseNow: now,
+		NodeSettingsOnly: nodeSettingsOnly(request)}
+	if !prepared.NodeSettingsOnly {
+		if prepared.NodeSettingsPending, err = nodeSettingsPendingTx(ctx, tx, request); err != nil {
+			return edgepublish.PreparedAutomaticPublication{}, err
+		}
+	}
+	return prepared, nil
+}
+
+// nodeSettingsOnly: node storage rides the node_networks
+// source kind.
+func nodeSettingsOnly(request Request) bool {
+	return request.SourceKind == SourceNodeNetworks && edgepublish.NodeSettingsOnlyRequest(request.SourceRequestID)
+}
+
+// nodeSettingsPendingTx (G8): a node settings only request of the
+// scope was superseded by a later one (EnqueueTx, Claim, Reauthorize) below
+// request's revision, and no publication of the scope came after it: no
+// release carried the settings since, so request carries them (every
+// publication builds its key documents from the node settings read then). A
+// publication of a later revision, content or redelivery, delivered them.
+func nodeSettingsPendingTx(ctx context.Context, tx pgx.Tx, request Request) (bool, error) {
+	var pending bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM edge_automatic_publication_requests request_row
+		JOIN LATERAL (SELECT fact.state FROM edge_automatic_publication_request_state_facts fact
+		  WHERE fact.request_id=request_row.id ORDER BY fact.sequence DESC LIMIT 1) latest ON latest.state=$5
+		WHERE request_row.target_scope_id=$1 AND request_row.source_revision<$2
+		  AND request_row.source_revision>COALESCE((SELECT max(publication.source_revision) FROM edge_config_publications publication
+		    WHERE publication.configuration_scope_id=$1 AND publication.contract_version=1),0)
+		  AND request_row.source_kind=$3 AND starts_with(request_row.source_request_id,$4))`,
+		request.TargetScopeID, request.SourceRevision, SourceNodeNetworks,
+		edgepublish.NodeSettingsRequestPrefixStorage, StateSuperseded).Scan(&pending)
+	return pending, err
 }
 
 func (s *Store) Retry(ctx context.Context, claim Claim, reason string, delay time.Duration) error {
@@ -622,7 +655,9 @@ func (s *Store) RetryAutomaticPublication(
 		if err != nil {
 			return err
 		}
-		available := now.Add(delay)
+		// delay is the first retry's; later ones back off (a refusal
+		// retried every 5 seconds until its deadline, 351 attempts).
+		available := now.Add(retryBackoff(delay, state.Attempt))
 		return appendStateTx(ctx, tx, reference.RequestID, state.Sequence+1, StateRetryWait,
 			state.Attempt, nil, nil, nil, nil, nil, &available, "", &reason, now)
 	})
@@ -718,8 +753,10 @@ func (s *Store) RecordAutomaticPublication(
 	if err != nil {
 		return err
 	}
+	// A replay is a publication this request committed before (its outcome
+	// lost): it keeps its own time.
 	if result.ConfigurationScopeID != request.TargetScopeID || result.SourceRevision != request.SourceRevision ||
-		!result.CreatedAt.Equal(databaseNow) {
+		!result.Replayed && !result.CreatedAt.Equal(databaseNow) {
 		return ErrInvalidInput
 	}
 	var matches bool
@@ -731,6 +768,19 @@ func (s *Store) RecordAutomaticPublication(
 	}
 	if !matches {
 		return ErrInvalidInput
+	}
+	if result.NodeSettingsRefusal != "" && !nodeSettingsOnly(request) {
+		// G8: the node settings it carried for a superseded request went out
+		// (node settings redelivery); its own content stays refused, as its
+		// site's sync status and the publication page say.
+		if !validTerminalReason(result.NodeSettingsRefusal) {
+			return ErrInvalidInput
+		}
+		if err := appendStateTx(ctx, tx, reference.RequestID, state.Sequence+1, StateFailed,
+			state.Attempt, nil, nil, nil, nil, nil, nil, result.NodeSettingsRefusal, nil, databaseNow); err != nil {
+			return err
+		}
+		return s.appendTerminalAudit(ctx, tx, request, StateFailed, result.NodeSettingsRefusal)
 	}
 	return appendStateTx(ctx, tx, reference.RequestID, state.Sequence+1, StateReconciling,
 		state.Attempt, nil, nil, nil, &result.PublicationID, &result.RolloutID, nil, "", nil, databaseNow)
@@ -763,41 +813,10 @@ func (s *Store) ReconcileOne(ctx context.Context) (bool, error) {
 		if state.RolloutID == nil {
 			return ErrInvalidInput
 		}
-		var action, persistedState string
-		var contractVersion int16
-		if err := tx.QueryRow(ctx, `SELECT action,status,contract_version FROM rollouts
-			WHERE configuration_scope_id=$1 AND id=$2`, request.TargetScopeID, *state.RolloutID).
-			Scan(&action, &persistedState, &contractVersion); err != nil {
-			return err
-		}
-		// An ignored old release reads as "superseded" (classifyRollout).
-		rows, err := tx.Query(ctx, `
-			SELECT latest.state
-			FROM (
-				SELECT DISTINCT ON (deployment.id) deployment.id,deployment.node_id,
-				       CASE WHEN `+edgedeployment.SupersededDeploymentSQL+` THEN 'superseded' ELSE deployment.state END AS state
-				FROM node_deployments deployment
-				WHERE deployment.rollout_id=$1
-				ORDER BY deployment.id,deployment.attempt DESC
-			) latest ORDER BY latest.node_id,latest.id`, *state.RolloutID)
+		terminal, outcome, reason, err := RolloutOutcomeTx(ctx, tx, request.TargetScopeID, *state.RolloutID)
 		if err != nil {
 			return err
 		}
-		states := make([]string, 0)
-		for rows.Next() {
-			var value string
-			if err := rows.Scan(&value); err != nil {
-				rows.Close()
-				return err
-			}
-			states = append(states, value)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return err
-		}
-		rows.Close()
-		terminal, outcome, reason := classifyPersistedRollout(contractVersion, action, persistedState, states)
 		if !terminal {
 			return nil
 		}
@@ -816,6 +835,38 @@ func (s *Store) ReconcileOne(ctx context.Context) (bool, error) {
 		return nil
 	})
 	return processed, err
+}
+
+// RolloutOutcomeTx decides a publication's rollout as a reconciling request's
+// (ReconcileOne): terminal, then StateSucceeded or StateFailed with its
+// reason; not terminal while its deployments run.
+func RolloutOutcomeTx(ctx context.Context, tx pgx.Tx, scopeID, rolloutID uuid.UUID) (bool, string, string, error) {
+	var action, persistedState string
+	var contractVersion int16
+	if err := tx.QueryRow(ctx, `SELECT action,status,contract_version FROM rollouts
+		WHERE configuration_scope_id=$1 AND id=$2`, scopeID, rolloutID).
+		Scan(&action, &persistedState, &contractVersion); err != nil {
+		return false, "", "", err
+	}
+	// An ignored old release reads as "superseded" (classifyRollout).
+	rows, err := tx.Query(ctx, `
+		SELECT latest.state
+		FROM (
+			SELECT DISTINCT ON (deployment.id) deployment.id,deployment.node_id,
+			       CASE WHEN `+edgedeployment.SupersededDeploymentSQL+` THEN 'superseded' ELSE deployment.state END AS state
+			FROM node_deployments deployment
+			WHERE deployment.rollout_id=$1
+			ORDER BY deployment.id,deployment.attempt DESC
+		) latest ORDER BY latest.node_id,latest.id`, rolloutID)
+	if err != nil {
+		return false, "", "", err
+	}
+	states, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return false, "", "", err
+	}
+	terminal, outcome, reason := classifyPersistedRollout(contractVersion, action, persistedState, states)
+	return terminal, outcome, reason, nil
 }
 
 func (s *Store) appendTerminalAudit(ctx context.Context, tx pgx.Tx, request Request, outcome, reason string) error {
@@ -1141,7 +1192,9 @@ func validTerminalReason(reason string) bool {
 	case FailureRBACRevoked, FailureApplyReverted, FailureRollbackUnexpected,
 		FailureDeploymentFailed, FailureRollbackFailed, FailureCancelled,
 		FailureNoTargetNodes, FailureNodeCapability, FailureNodeArtifactsSyncing, FailureNodeScopeConflict,
-		FailureSiteConfigInvalid:
+		FailureSiteConfigInvalid, FailurePackageSubscriptionInactive, FailurePackageQuotaExceeded,
+		FailurePackageFeatureDenied, FailureModuleNotEntitled, FailureSiteL2Unavailable,
+		FailureRulePackOutOfProfile, FailureSDKShieldPortShared:
 		return true
 	default:
 		return false

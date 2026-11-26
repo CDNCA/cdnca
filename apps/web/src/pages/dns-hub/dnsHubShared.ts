@@ -38,6 +38,7 @@ const providerCodeKeys: Record<string, string> = {
   record_not_found: 'errors.notFound',
   invalid_response: 'errors.invalidResponse',
   invalid_input: 'errors.validation',
+  proxy_unavailable: 'errors.proxyUnavailable',
 }
 
 export function providerCodeKey(code: string | undefined): string {

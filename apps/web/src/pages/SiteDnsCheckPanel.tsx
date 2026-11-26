@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Button, Input, Pagination, Select, Space, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Input, Select, Space, Tag, type TableColumnsType } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FeedbackWhen, IdOrNameInput, useFeedbackMessage, useLiveApply } from '@cdnca/ui'
+import { FeedbackWhen, IdOrNameInput, useFeedbackMessage, useLiveApply, Pagination, Table } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import { dnsApi, ownDNSProviders } from '../api/dns'
@@ -12,6 +12,7 @@ import { sitesApi, type SiteAutoDNSStatus, type SiteListItem } from '../api/site
 import { useSessionStore } from '../auth/session'
 import '../i18n/siteListTabs'
 import { siteSearch } from './idNameSources'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 // 网站列表 > 解析检测（用户端）：全站域名一张表，不再要求先勾选网站。
 // 解析状态取「DNS API 自动添加记录」任务：写入服务商且回查一致即正常，
@@ -48,6 +49,7 @@ export default function SiteDnsCheckPanel({ onConfigureDnsApi, restore }: {
   restore?: SiteDnsCheckContext['back']
 }) {
   const { t } = useTranslation('siteListTabs')
+  const namedRows = useNamedRowSelection()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const principal = useSessionStore((state) => state.principal)
@@ -242,7 +244,7 @@ export default function SiteDnsCheckPanel({ onConfigureDnsApi, restore }: {
         action={<Button size="small" onClick={() => void query.refetch()}>{t('defaults.actions.retry')}</Button>} /> : null}
       <Table rowKey="key" size="small" columns={columns} dataSource={visible} pagination={false} scroll={{ x: 900 }}
         loading={query.isPending || query.isFetching} locale={{ emptyText: query.isPending ? ' ' : t('dnsCheck.empty') }}
-        rowSelection={canSync ? { selectedRowKeys: selected, onChange: (keys) => setSelected(keys.map(String)) } : undefined} />
+        rowSelection={canSync ? namedRows<Row>({ selectedRowKeys: selected, onChange: (keys) => setSelected(keys.map(String)) }, (row) => row.domain, t('dnsCheck.selectionScope')) : undefined} />
       <div className="identity-pagination">
         <Pagination current={page} pageSize={limit} total={query.data?.total ?? 0} showSizeChanger pageSizeOptions={[10, 20, 50]}
           showTotal={(count) => t('dnsCheck.total', { count })}

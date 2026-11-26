@@ -967,25 +967,29 @@ func validTelemetryCaptureBodyKey(value string) bool {
 		strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\r\n\x00")
 }
 
+// telemetryCapturePathSafe: every sensitive query parameter carries the redaction marker. The query is read as
+// pairs split on "&" and ";" (origins and proxies accept both), each name and value percent-decoded when it decodes
+// and read raw when it does not, so a query url.ParseQuery refuses (";" separators, a stray "%") is still checked
+// pair by pair instead of failing the whole batch.
 func telemetryCapturePathSafe(value string) bool {
 	parsed, err := url.ParseRequestURI(value)
 	if err != nil {
 		return false
 	}
-	query, err := url.ParseQuery(parsed.RawQuery)
-	if err != nil {
-		return false
-	}
-	for name, values := range query {
-		if telemetrySensitiveCaptureName(name) {
-			for _, item := range values {
-				if item != telemetryRedactedCaptureValue {
-					return false
-				}
-			}
+	for _, pair := range strings.FieldsFunc(parsed.RawQuery, func(character rune) bool { return character == '&' || character == ';' }) {
+		name, item, _ := strings.Cut(pair, "=")
+		if telemetrySensitiveCaptureName(telemetryQueryUnescape(name)) && telemetryQueryUnescape(item) != telemetryRedactedCaptureValue {
+			return false
 		}
 	}
 	return true
+}
+
+func telemetryQueryUnescape(value string) string {
+	if decoded, err := url.QueryUnescape(value); err == nil {
+		return decoded
+	}
+	return value
 }
 
 func telemetrySensitiveCaptureName(value string) bool {

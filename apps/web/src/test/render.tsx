@@ -4,7 +4,7 @@ import { CdncaProvider } from '@cdnca/ui'
 import { render } from '@testing-library/react'
 import { MemoryRouter, type InitialEntry } from 'react-router-dom'
 
-export function renderWithProviders(ui: ReactElement, initialEntries: InitialEntry[] = ['/']) {
+export function renderWithProviders(ui: ReactElement, initialEntries: InitialEntry[] = ['/'], basename?: string) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
@@ -15,7 +15,7 @@ export function renderWithProviders(ui: ReactElement, initialEntries: InitialEnt
   return render(
     <CdncaProvider>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
+        <MemoryRouter basename={basename} initialEntries={initialEntries}>{ui}</MemoryRouter>
       </QueryClientProvider>
     </CdncaProvider>,
   )

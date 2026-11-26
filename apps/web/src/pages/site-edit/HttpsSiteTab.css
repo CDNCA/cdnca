@@ -12,6 +12,13 @@
   line-height: 20px;
 }
 
+.site-https-http3-package {
+  margin-top: 4px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
 .site-https-disabled-note {
   max-width: 800px;
   /* aligned with the control column: 120px label + 16px gap */

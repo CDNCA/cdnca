@@ -60,6 +60,23 @@ func TestClickHouseReadsUTCWindowOnShanghaiServer(t *testing.T) {
 		!page.Rows[0].Bucket.Equal(finalized) {
 		t.Fatalf("aggregates in [%s, %s) = %+v; want the 02:30 UTC session", filter.From, filter.To, page)
 	}
+	// the protocol and port
+	// filters read the columns, not the any aggregates of the same name.
+	filtered := filter
+	filtered.Protocol, filtered.ListenPort = "tcp", 18080
+	if page, err := source.Read(t.Context(), scope, filtered); err != nil || len(page.Rows) != 1 ||
+		page.Rows[0].Protocol != "tcp" || page.Rows[0].ListenPort != 18080 {
+		t.Fatalf("aggregates for tcp/18080 = %+v, %v; want the session", page, err)
+	}
+	portOnly := filter
+	portOnly.ListenPort = 18080
+	if page, err := source.Read(t.Context(), scope, portOnly); err != nil || len(page.Rows) != 1 {
+		t.Fatalf("aggregates for port 18080 alone = %+v, %v; want the session", page, err)
+	}
+	filtered.ListenPort = 443
+	if page, err := source.Read(t.Context(), scope, filtered); err != nil || len(page.Rows) != 0 {
+		t.Fatalf("aggregates for port 443 = %+v, %v; want none", page, err)
+	}
 	// The cursor at the row's own bucket excludes it.
 	filter.Snapshot = page.Snapshot
 	filter.After = &After{Bucket: finalized, NodeID: testNode, SiteID: testSite, StreamID: testStream, ListenerID: testStream}

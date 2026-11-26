@@ -304,7 +304,7 @@ func validSummaryWire() map[string]any {
 		"status_4xx":            uint64(1),
 		"status_5xx":            uint64(1),
 		"security_events":       uint64(2),
-		"security_event_rows": uint64(2),
+		"security_event_rows":   uint64(2),
 		"cache_hit_requests":    uint64(0),
 		"cache_hit_bytes":       uint64(0),
 		"unique_client_ips":     uint64(0),

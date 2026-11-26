@@ -146,3 +146,81 @@ func TestLicenseIssueErrorKeepsBusinessRefusalCode(t *testing.T) {
 		}
 	}
 }
+
+// builds of one SemVer carry different schema heads
+// . The master reports the runner-verified digest of its installed
+// build; without it no head License names is taken as this database's.
+func TestLicenseClientListUpgradeOptionsCurrentSchemaIdentity(t *testing.T) {
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x73}, ed25519.SeedSize))
+	installationID := uuid.MustParse("00000000-0000-4000-8000-000000000073")
+	now := time.Unix(1_800_000_000, 0)
+	digest := strings.Repeat("ab", 32)
+	options := func(schema string) string {
+		return `{"schema":"cdnca.upgrade.options/v1","installation_id":"` + installationID.String() + `","component":"control-api",` +
+			`"current_version":"1.0.35",` + schema + `,"target_mode":"follow_channel","items":[]}` + "\n"
+	}
+	list := func(t *testing.T, sent, reply string) (UpgradeOptions, error) {
+		t.Helper()
+		transport := roundTripUpgradeFunc(func(request *http.Request) (*http.Response, error) {
+			payload, _ := io.ReadAll(request.Body)
+			want := `{"schema":"cdnca.upgrade.options.request/v1","component":"control-api","current_version":"1.0.35","protocol_version":1`
+			if sent != "" {
+				want += `,"current_artifact_sha256":"` + sent + `"`
+			}
+			if string(payload) != want+"}" {
+				t.Fatalf("request body = %s", payload)
+			}
+			return licenseResponse(http.StatusOK, reply), nil
+		})
+		client, _ := NewLicenseClient("https://license.example.test", transport, installationID, privateKey, func() time.Time { return now })
+		return client.ListUpgradeOptions(context.Background(), UpgradeOptionsRequest{IdempotencyKey: "options-identity",
+			Component: "control-api", CurrentVersion: "1.0.35", ProtocolVersion: 1, CurrentArtifactSHA256: sent})
+	}
+
+	t.Run("installed build head is passed through", func(t *testing.T) {
+		result, err := list(t, digest, options(`"current_schema_head":692`))
+		if err != nil || result.CurrentSchemaHead == nil || *result.CurrentSchemaHead != 692 || result.CurrentSchemaHeadReason != "" {
+			t.Fatalf("options = %#v, %v", result, err)
+		}
+	})
+	t.Run("unconfirmed head keeps the License reason", func(t *testing.T) {
+		result, err := list(t, digest, options(`"current_schema_head":null,"current_schema_head_reason":"current_artifact_unregistered"`))
+		if err != nil || result.CurrentSchemaHead != nil || result.CurrentSchemaHeadReason != "current_artifact_unregistered" {
+			t.Fatalf("options = %#v, %v", result, err)
+		}
+	})
+	t.Run("without a verified digest a License head is not taken as current", func(t *testing.T) {
+		result, err := list(t, "", options(`"current_schema_head":697`))
+		if err != nil || result.CurrentSchemaHead != nil || result.CurrentSchemaHeadReason != CurrentSchemaReasonArtifactUnverified {
+			t.Fatalf("options = %#v, %v", result, err)
+		}
+		encoded, _ := json.Marshal(result)
+		if !bytes.Contains(encoded, []byte(`"current_schema_head":null,"current_schema_head_reason":"current_artifact_unverified"`)) {
+			t.Fatalf("encoded = %s", encoded)
+		}
+	})
+	for name, schema := range map[string]string{
+		"null head without reason": `"current_schema_head":null`,
+		"head with reason":         `"current_schema_head":692,"current_schema_head_reason":"current_artifact_unregistered"`,
+		"malformed reason":         `"current_schema_head":null,"current_schema_head_reason":"Bad Reason"`,
+		"zero head":                `"current_schema_head":0`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := list(t, digest, options(schema)); !errors.Is(err, ErrLicenseUnavailable) {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+	t.Run("malformed digest is refused before sending", func(t *testing.T) {
+		client, _ := NewLicenseClient("https://license.example.test", roundTripUpgradeFunc(func(*http.Request) (*http.Response, error) {
+			t.Fatal("malformed digest was sent")
+			return nil, nil
+		}), installationID, privateKey, func() time.Time { return now })
+		for _, sent := range []string{strings.ToUpper(digest), digest[:62]} {
+			if _, err := client.ListUpgradeOptions(context.Background(), UpgradeOptionsRequest{IdempotencyKey: "options-identity",
+				Component: "control-api", CurrentVersion: "1.0.35", ProtocolVersion: 1, CurrentArtifactSHA256: sent}); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("digest %q = %v", sent, err)
+			}
+		}
+	})
+}

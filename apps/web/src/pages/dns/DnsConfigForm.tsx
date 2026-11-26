@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Form, Input, Modal, Select, Switch } from 'antd'
 import { useFeedbackMessage, useFeedback, FeedbackWhen, fieldReasonText, submitErrorFields } from '@cdnca/ui'
-import { Check, PlugZap, Trash2, Wrench } from 'lucide-react'
+import { Check, PlugZap, Trash2, Unplug, Wrench } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
@@ -34,7 +34,7 @@ function fieldsFrom(config: PlatformDNSConfig | undefined, type: ProviderChoice)
 }
 
 // The form box a refused save field is shown under (fix-fielderr-be3).
-type RefusedBox = 'provider' | 'secret' | 'ttl'
+type RefusedBox = 'provider' | 'secret' | 'ttl' | 'identifier' | 'projectID' | 'sourceIP'
 const refusedBoxes: Record<string, RefusedBox> = { provider_type: 'provider', credentials: 'secret', ttl: 'ttl' }
 
 export default function DnsConfigForm({ accessToken, owner, canManage }: { accessToken: string; owner: string[]; canManage: boolean }) {
@@ -65,13 +65,18 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
   // 连接测试 result for the fields as entered; any edit makes it stale, and a
   // result that arrives after an edit is dropped (draftEpoch).
   const [connection, setConnection] = useState<{ ok: boolean; text: string } | null>(null)
+  // The provider line list is long; it stays folded behind a one-line summary.
+  const [linesExpanded, setLinesExpanded] = useState(false)
   const draftEpoch = useRef(0)
   // A refused save field, shown under its box until the next edit.
   const [refused, setRefused] = useState<{ box: RefusedBox; help: string } | null>(null)
   const edit = (patch: Partial<Fields>) => {
     delete keys.current.save; draftEpoch.current++; setConnection(null); setRefused(null); setEdited((value) => ({ ...value, ...patch }))
   }
-  const refusedStatus = (box: RefusedBox) => refused?.box === box ? { validateStatus: 'error' as const, help: refused.help } : {}
+  // 字段错误：help 带稳定 id，对应输入 aria-invalid 并 aria-describedby 到它（refusedInput），改值后 refused 清空即一并解除。
+  const refusedStatus = (box: RefusedBox) => refused?.box === box
+    ? { validateStatus: 'error' as const, help: <span id={`dns-${box}-help`}>{refused.help}</span> } : {}
+  const refusedInput = (box: RefusedBox) => refused?.box === box ? { 'aria-invalid': true, 'aria-describedby': `dns-${box}-help` } : {}
   // DNS维护 P2-1（审测卡 10）：记录修复/清除只用已保存配置；有未保存的修改时先问。
   const dirty = choice !== null || Object.keys(edited).length > 0
   const discardDraft = () => { draftEpoch.current++; delete keys.current.save; setEdited({}); setChoice(null); setConnection(null); setRefused(null) }
@@ -87,20 +92,25 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
     (type !== 'huawei' || (fields.region === config.identifiers.region && fields.projectID.trim() === config.identifiers.project_id)) &&
     (type !== 'dns_com' || fields.plan === dnsComPlanOf(config.identifiers.plan)) &&
     (type !== 'namecheap' || fields.sourceIP.trim() === config.identifiers.source_ip)
-  const validate = (): string | null => {
+  // 本地校验与服务端拒绝同样写在出错字段下（refused），不弹遮罩。
+  const validate = (): { box: RefusedBox; help: string } | null => {
+    const ttlProblem = validTTL(type, fields.ttl) ? null : { box: 'ttl' as const, help: t('errors.ttlRange', { min: spec.minTTL, max: spec.maxTTL }) }
     if (type === 'plugin') {
-      if (!pluginCredentials(selected)) return t('errors.pluginRequired')
-      return validTTL(type, fields.ttl) ? null : t('errors.ttlRange', { min: spec.minTTL, max: spec.maxTTL })
+      if (!pluginCredentials(selected)) return { box: 'provider', help: t('errors.pluginRequired') }
+      return ttlProblem
     }
-    if (spec.identifier && !fields.identifier.trim()) return t('errors.identifierRequired', { label: idLabel })
-    if (type === 'huawei' && !/^[a-f0-9]{32}$/.test(fields.projectID.trim())) return t('errors.projectRequired')
-    if (type === 'namecheap' && !isValidKeyedDNSCredential('source_ip', fields.sourceIP.trim())) return t('errors.sourceIPRequired')
-    if (!validTTL(type, fields.ttl)) return t('errors.ttlRange', { min: spec.minTTL, max: spec.maxTTL })
+    if (spec.identifier && !fields.identifier.trim()) return { box: 'identifier', help: t('errors.identifierRequired', { label: idLabel }) }
+    if (type === 'huawei' && !/^[a-f0-9]{32}$/.test(fields.projectID.trim())) return { box: 'projectID', help: t('errors.projectRequired') }
+    if (type === 'namecheap' && !isValidKeyedDNSCredential('source_ip', fields.sourceIP.trim())) return { box: 'sourceIP', help: t('errors.sourceIPRequired') }
+    if (ttlProblem) return ttlProblem
     if (!fields.secret.trim() && !unchanged) {
-      return config?.secret_saved ? t('errors.secretNeeded', { label: secretLabel }) : t('errors.secretRequired', { label: secretLabel })
+      return { box: 'secret', help: config?.secret_saved ? t('errors.secretNeeded', { label: secretLabel }) : t('errors.secretRequired', { label: secretLabel }) }
     }
     return null
   }
+  const panel = useRef<HTMLDivElement>(null)
+  const boxLabel = (box: RefusedBox) => ({ provider: t('fields.provider'), secret: secretLabel, ttl: t('fields.ttl'), identifier: idLabel,
+    projectID: t('fields.projectID'), sourceIP: t('fields.sourceIP') })[box]
   const saveMutation = useMutation({
     mutationKey: ['dns-platform-config-write', ...owner],
     mutationFn: () => {
@@ -137,6 +147,19 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
     },
     onError: (cause, kind) => feedback.error(failure(t(kind === 'repair' ? 'errors.repairFailed' : 'errors.cleanupFailed'), cause)),
   })
+  // 断开 DNS 服务商: the saved credentials are removed; the form returns to the
+  // unconfigured state read back from the server.
+  const disconnectMutation = useMutation({
+    mutationKey: ['dns-platform-config-write', ...owner],
+    mutationFn: () => dnsPlatformApi.disconnect(accessToken, config!.version, keyFor('disconnect')),
+    onSuccess: (value) => {
+      delete keys.current.disconnect
+      discardDraft()
+      queryClient.setQueryData(queryKey, value)
+      messageApi.success(t('messages.disconnected'))
+    },
+    onError: (cause) => feedback.error(failure(t('errors.disconnectFailed'), cause)),
+  })
   // 连接测试: the entered credentials, or the saved ones when the secret is
   // left blank. Read-only: nothing is saved and no record is written.
   const testMutation = useMutation({
@@ -169,9 +192,18 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
     else if (unchanged) testMutation.mutate({ credentials: null, epoch: draftEpoch.current })
     else setConnection({ ok: false, text: t('connection.noSaved', { label: secretLabel }) })
   }
+  const focusBox = (box: RefusedBox) => {
+    const label = boxLabel(box)
+    requestAnimationFrame(() => [...(panel.current?.querySelectorAll<HTMLElement>('[aria-label]') ?? [])]
+      .find((element) => element.getAttribute('aria-label') === label)?.focus())
+  }
   const save = (then?: () => void) => {
     const problem = validate()
-    if (problem) { feedback.error(problem); return }
+    if (problem) {
+      setRefused(problem)
+      focusBox(problem.box)
+      return
+    }
     // A failed save runs nothing after it.
     saveMutation.mutate(undefined, then ? { onSuccess: then } : undefined)
   }
@@ -179,15 +211,33 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
     title: t('actions.cleanup'), content: t('messages.cleanupConfirm'), okText: t('actions.ok'), cancelText: t('actions.cancel'),
     onOk: () => operation.mutate('cleanup'),
   })
+  const savedProviderName = () => {
+    if (config?.provider_type !== 'plugin') return t(`providers.${config?.provider_type}`, { defaultValue: config?.provider_type ?? '' })
+    const id = config.identifiers.plugin_id ?? ''
+    const plugin = dnsPlugins.find((item) => item.plugin_id === id)
+    return plugin ? t('providers.plugin', { id, version: plugin.version }) : id
+  }
+  const confirmDisconnect = () => void modal.confirm({
+    title: t('actions.disconnect'), content: t('messages.disconnectConfirm', { name: savedProviderName() }),
+    okText: t('actions.disconnect'), cancelText: t('actions.cancel'), okButtonProps: { danger: true },
+    onOk: () => disconnectMutation.mutate(),
+  })
   const runMaintenance = (kind: 'repair' | 'cleanup') => {
     const run = kind === 'repair' ? () => operation.mutate('repair') : confirmCleanup
     if (!dirty) { run(); return }
+    // 「保存后执行」遇到本地校验错误：弹窗关闭时会把焦点还给触发按钮，所以等 afterClose 再聚焦出错字段；取消、放弃仍回触发按钮。
+    let invalidBox: RefusedBox | null = null
     const dialog = modal.confirm({
       title: t(kind === 'repair' ? 'actions.repair' : 'actions.cleanup'), content: t('draft.maintenancePrompt'),
+      afterClose: () => { if (invalidBox) focusBox(invalidBox) },
       footer: <div className="dns-draft-choices">
         <Button onClick={() => dialog.destroy()}>{t('actions.cancel')}</Button>
         <Button onClick={() => { dialog.destroy(); discardDraft(); run() }}>{t('draft.discardThenRun')}</Button>
-        <Button type="primary" onClick={() => { dialog.destroy(); save(run) }}>{t('draft.saveThenRun')}</Button>
+        <Button type="primary" onClick={() => {
+          const problem = validate()
+          if (problem) { invalidBox = problem.box; setRefused(problem); dialog.destroy(); return }
+          dialog.destroy(); save(run)
+        }}>{t('draft.saveThenRun')}</Button>
       </div>,
     })
   }
@@ -197,14 +247,15 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
   const disabled = !canManage || !config
   // One write at a time for this configuration: save, test and maintenance
   // share the gate (the server's version check stays).
-  const busy = saveMutation.isPending || testMutation.isPending || operation.isPending
+  const busy = saveMutation.isPending || testMutation.isPending || operation.isPending || disconnectMutation.isPending
   const carrierLines = dnsProviderSplitsCarrierLines(type)
   // Weights are a separate capability (only DNSPod writes them).
   const weights = dnsProviderWritesWeights(type)
   const configured = Boolean(config?.provider_type)
+  const linesHint = spec.lines === 'plan' ? dnsComPlanLineHint(dnsComPlanOf(fields.plan)) : spec.lines
   const enter = (label: string) => t('placeholders.enter', { label })
 
-  return <div className="dns-config-panel">
+  return <div className="dns-config-panel" ref={panel}>
     {messageContext}{modalContext}
     {configQuery.isError ? <FeedbackWhen title={config ? t('errors.refreshFailed') : t('errors.loadFailedNoWrite')} action={<Button size="small" onClick={() => void configQuery.refetch()}>{t('actions.retry')}</Button>} /> : null}
     {configQuery.isPending ? <Alert className="identity-alert" type="info" showIcon message={t('hints.loading')} /> : null}
@@ -218,9 +269,12 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
       <Form.Item label={t('fields.provider')} className="dns-field-provider" {...refusedStatus('provider')}
         extra={!spec.supported ? <span className="dns-field-warning">{t('hints.dnspodIntl')}</span>
           : !carrierLines ? <span className="dns-field-warning" role="note">{t('hints.linesUnsupported')}</span>
-            : <span className="dns-field-note">{t(`hints.lines.${spec.lines === 'plan'
-              ? dnsComPlanLineHint(dnsComPlanOf(fields.plan)) : spec.lines}`)}</span>}>
-        <Select aria-label={t('fields.provider')} value={selected} disabled={disabled} virtual={false}
+            : <span className="dns-field-note">{t(`hints.linesSummary.${linesHint}`)}{' '}
+              <Button type="link" size="small" className="dns-lines-toggle" aria-expanded={linesExpanded}
+                onClick={() => setLinesExpanded((value) => !value)}>
+                {linesExpanded ? t('actions.hideLines') : t('actions.showLines')}</Button>
+              {linesExpanded ? <span className="dns-lines-detail">{t(`hints.lines.${linesHint}`)}</span> : null}</span>}>
+        <Select aria-label={t('fields.provider')} {...refusedInput('provider')} value={selected} disabled={disabled} virtual={false}
           options={[
             { label: t('groups.official'), options: providerChoices.filter((value) => value !== 'plugin')
               .map((value) => ({ value, label: t(`providers.${value}`) })) },
@@ -237,15 +291,15 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
               ...(current.weight !== undefined ? { weight: current.weight } : {}) }))
           }} />
       </Form.Item>
-      {spec.identifier ? <Form.Item label={idLabel} className="dns-field-wide">
-        <Input aria-label={idLabel} value={fields.identifier} disabled={disabled || !spec.supported} autoComplete="off"
+      {spec.identifier ? <Form.Item label={idLabel} className="dns-field-wide" {...refusedStatus('identifier')}>
+        <Input aria-label={idLabel} {...refusedInput('identifier')} value={fields.identifier} disabled={disabled || !spec.supported} autoComplete="off"
           placeholder={enter(idLabel)} onChange={(event) => edit({ identifier: event.target.value })} />
       </Form.Item> : null}
       {type === 'plugin' ? <Alert className="identity-alert" type="info" showIcon message={t('hints.plugin')} /> : null}
       {type !== 'plugin' ? <Form.Item label={secretLabel} className="dns-field-wide" {...refusedStatus('secret')} extra={type === 'cloudflare' ? t('hints.cloudflareToken') : type === 'namecom' ? t('hints.nameComToken') : type === 'custom_http' ? t('hints.customHTTP')
         : type === 'dnspod_com' ? t('hints.dnspodComToken') : type === 'godaddy' ? t('hints.goDaddyKey') : type === 'namesilo' ? t('hints.namesiloKey')
           : type === 'cloudns' || type === 'jdcloud' ? t(`hints.${type}Credentials`) : undefined}>
-        <Input.Password aria-label={secretLabel} value={fields.secret} disabled={disabled || !spec.supported} autoComplete="new-password"
+        <Input.Password aria-label={secretLabel} {...refusedInput('secret')} value={fields.secret} disabled={disabled || !spec.supported} autoComplete="new-password"
           placeholder={config?.secret_saved && config.provider_type === type ? t('placeholders.secretKept') : enter(secretLabel)}
           onChange={(event) => edit({ secret: event.target.value })} />
       </Form.Item> : null}
@@ -254,13 +308,13 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
           <Select aria-label={t('fields.region')} value={fields.region} disabled={disabled}
             options={huaweiRegions.map((value) => ({ value, label: value }))} onChange={(value: string) => edit({ region: value })} />
         </Form.Item>
-        <Form.Item label={t('fields.projectID')} className="dns-field-wide">
-          <Input aria-label={t('fields.projectID')} value={fields.projectID} disabled={disabled} autoComplete="off"
+        <Form.Item label={t('fields.projectID')} className="dns-field-wide" {...refusedStatus('projectID')}>
+          <Input aria-label={t('fields.projectID')} {...refusedInput('projectID')} value={fields.projectID} disabled={disabled} autoComplete="off"
             placeholder={enter(t('fields.projectID'))} onChange={(event) => edit({ projectID: event.target.value })} />
         </Form.Item>
       </> : null}
-      {type === 'namecheap' ? <Form.Item label={t('fields.sourceIP')} className="dns-field-wide" extra={t('hints.namecheapSourceIP')}>
-        <Input aria-label={t('fields.sourceIP')} value={fields.sourceIP} disabled={disabled} autoComplete="off"
+      {type === 'namecheap' ? <Form.Item label={t('fields.sourceIP')} className="dns-field-wide" extra={t('hints.namecheapSourceIP')} {...refusedStatus('sourceIP')}>
+        <Input aria-label={t('fields.sourceIP')} {...refusedInput('sourceIP')} value={fields.sourceIP} disabled={disabled} autoComplete="off"
           placeholder={enter(t('fields.sourceIP'))} onChange={(event) => edit({ sourceIP: event.target.value })} />
       </Form.Item> : null}
       {type === 'dns_com' ? <Form.Item label={t('fields.dnsComPlan')} className="dns-field-provider" extra={t('hints.dnsComPlan')}>
@@ -269,7 +323,7 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
           onChange={(value: string) => edit({ plan: value })} />
       </Form.Item> : null}
       <Form.Item label={t('fields.ttl')} className="dns-field-ttl" {...refusedStatus('ttl')}>
-        <Input aria-label={t('fields.ttl')} value={fields.ttl} disabled={disabled} inputMode="numeric" placeholder={t('placeholders.ttl')}
+        <Input aria-label={t('fields.ttl')} {...refusedInput('ttl')} value={fields.ttl} disabled={disabled} inputMode="numeric" placeholder={t('placeholders.ttl')}
           addonAfter={t('units.seconds')} onChange={(event) => edit({ ttl: event.target.value })} />
       </Form.Item>
       <Form.Item label={t('fields.ipWeight')}>
@@ -278,8 +332,9 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
         <span className="dns-field-note">{weights ? t('hints.weightSupported') : t('hints.weightUnsupported')}</span>
       </Form.Item>
       <Form.Item label={t('fields.dnsError')}>
-        {config ? <DnsErrorStatus error={config.last_error ?? null} />
-          : <span className="dns-status is-unknown" role="status">{t('status.unread')}</span>}
+        {!config ? <span className="dns-status is-unknown" role="status">{t('status.unread')}</span>
+          : !configured ? <span className="dns-status is-unknown" role="status">{t('status.unconfigured')}</span>
+            : <DnsErrorStatus error={config.last_error ?? null} />}
       </Form.Item>
       <Form.Item label=" " className="dns-config-actions">
         <Button type="primary" icon={<Check size={14} />} loading={saveMutation.isPending} disabled={disabled || !spec.supported || busy}
@@ -291,6 +346,8 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
         <Button className="dns-button-warning" icon={<Trash2 size={14} />}
           loading={operation.isPending && operation.variables === 'cleanup'} disabled={disabled || !configured || busy}
           onClick={() => runMaintenance('cleanup')}>{t('actions.cleanup')}</Button>
+        {configured ? <Button danger icon={<Unplug size={14} />} loading={disconnectMutation.isPending} disabled={disabled || busy}
+          onClick={confirmDisconnect}>{t('actions.disconnect')}</Button> : null}
         <span className="dns-field-note dns-config-scope">
           {dirty ? t('draft.unsavedNote') : t('draft.scopeNote')}
         </span>

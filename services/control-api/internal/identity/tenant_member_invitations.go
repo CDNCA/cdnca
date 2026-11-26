@@ -31,8 +31,10 @@ import (
 const (
 	TenantMemberInvitationEventType = "identity.tenant_member_invitation"
 	TenantMemberInvitationTTL       = 72 * time.Hour
-	tenantMemberInvitationTemplate  = "tenant_member_invitation"
-	tenantMemberInvitationDomain    = "cdnca/identity/tenant-member-invitation/v1\x00"
+	// TenantMemberInvitationTemplate is the invitation mail's template id; the
+	// mail transports label its action link by it.
+	TenantMemberInvitationTemplate = "tenant_member_invitation"
+	tenantMemberInvitationDomain   = "cdnca/identity/tenant-member-invitation/v1\x00"
 )
 
 var (
@@ -125,7 +127,7 @@ func (s *Service) InviteTenantMember(ctx context.Context, actor Principal, email
 			ScopeID: actor.ScopeID, SourceEventID: id.String(), AnonymousDispatchReference: reference,
 			EventType: TenantMemberInvitationEventType, SelectedChannel: notification.ChannelEmail,
 			Templates: map[notification.Channel]notification.TemplateRef{notification.ChannelEmail: {
-				ID: tenantMemberInvitationTemplate, Version: 1, Channel: notification.ChannelEmail}},
+				ID: TenantMemberInvitationTemplate, Version: 1, Channel: notification.ChannelEmail}},
 			AuditRequestID: requestID,
 		})
 		if errors.Is(err, notification.ErrInvalidPolicy) {

@@ -51,7 +51,6 @@ func quickBlockNetworks(count int) []string {
 	return networks
 }
 
-
 // G3-d #13: the switches expand to system-managed WAF rules placed before
 // every user rule (priority 1, IDs sorting first): block IDC (one rule over
 // the chosen idc:* tags), block carriers (one rule over carrier:*), then one

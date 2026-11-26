@@ -185,12 +185,81 @@ describe('ErrorPagesPage', () => {
     renderWithProviders(<ErrorPagesPage />)
     const content = await screen.findByRole('textbox', { name: '页面内容' })
     await waitFor(() => expect(content).toBeEnabled())
-    for (const [body, marker] of [['<h1>{{ip}}</h1>', '{{'], ['<p>${host}</p>', '${'], ['<% x %>', '<%']] as const) {
+    for (const [body, marker, line, column] of [['<h1>{{ip}}</h1>', '{{', 1, 5], ['<p>${host}</p>', '${', 1, 4], ['<p>ok</p>\n  <% x %>', '<%', 2, 3]] as const) {
       fireEvent.change(content, { target: { value: body } })
       await user.click(screen.getByRole('button', { name: '保存' }))
-      expect(await screen.findByText(`页面内容含模板标记「${marker}」，节点不做变量替换，请删除后再保存`)).toBeInTheDocument()
+      // 字段校验：就地指出位置，编辑器标记为无效
+      const alert = await screen.findByText(`第 ${line} 行第 ${column} 列含模板标记「${marker}」，节点不做变量替换，请删除后再保存`)
+      expect(alert).toHaveAttribute('role', 'alert')
+      expect(content).toHaveAttribute('aria-invalid', 'true')
+      expect(content).toHaveAttribute('aria-describedby', alert.id)
+      // 保存被拒后焦点回到内容框
+      await waitFor(() => expect(content).toHaveFocus())
     }
+    // 空内容同样就地标在内容框上并聚焦，不弹「知道了」
+    fireEvent.change(content, { target: { value: '' } })
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    expect(await screen.findByText('请输入页面内容后再保存')).toHaveAttribute('role', 'alert')
+    expect(content).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(content).toHaveFocus())
+    expect(document.querySelector('.cdnca-feedback')).toBeNull()
+    fireEvent.change(content, { target: { value: '<p>clean</p>' } })
+    // 改动内容即清掉字段错误（投放说明的提示框不属于校验错误，照常显示）
+    expect(screen.queryByText(/含模板标记/)).not.toBeInTheDocument()
+    expect(content).not.toHaveAttribute('aria-invalid')
+    expect(content).not.toHaveAttribute('aria-describedby')
     expect(errorPagesApi.initiateAsset).not.toHaveBeenCalled()
+  })
+
+  // 切换错误类型与外层页签都保留草稿，回读不覆盖
+  it('keeps the draft of each error type across type and tab switches', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ErrorPagesPage />)
+    const content = await screen.findByRole('textbox', { name: '页面内容' })
+    await waitFor(() => expect(content).toHaveValue('<html>builtin blacklist</html>'))
+    fireEvent.change(content, { target: { value: '<html>my draft</html>' } })
+    expect(screen.getByRole('radio', { name: /^拉黑页面\s*未保存$/ })).toBeChecked()
+
+    fireEvent.click(screen.getByRole('radio', { name: '400错误' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '页面内容' })).toHaveValue('<html>builtin http_400</html>'))
+    fireEvent.click(screen.getByRole('radio', { name: /^拉黑页面\s*未保存$/ }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '页面内容' })).toHaveValue('<html>my draft</html>'))
+    expect(errorPagesApi.getSlot).toHaveBeenCalledWith('error-token', 'http_400')
+
+    await openRegional(user)
+    await user.click(screen.getByRole('tab', { name: '全局配置' }))
+    expect(screen.getByRole('textbox', { name: '页面内容' })).toHaveValue('<html>my draft</html>')
+    expect(screen.getByRole('radio', { name: /^拉黑页面\s*未保存$/ })).toBeChecked()
+
+    // 有草稿时不写「系统默认（未修改）」
+    expect(screen.getByTestId('error-page-global-status')).not.toHaveTextContent('系统默认（未修改）')
+
+    // 改回服务端内容即视为未改动，来源标签按已保存来源恢复
+    fireEvent.change(screen.getByRole('textbox', { name: '页面内容' }), { target: { value: '<html>builtin blacklist</html>' } })
+    expect(screen.getByRole('radio', { name: '拉黑页面' })).toBeChecked()
+    expect(screen.getByTestId('error-page-global-status')).toHaveTextContent('系统默认（未修改）')
+  })
+
+  // 
+  it('renders each panel inside its tabpanel with a single empty state and no row selection', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ErrorPagesPage />)
+    const globalTab = await screen.findByRole('tab', { name: '全局配置' })
+    const globalPanel = document.getElementById(globalTab.getAttribute('aria-controls')!)!
+    expect(globalPanel).toHaveAttribute('role', 'tabpanel')
+    expect(within(globalPanel).getByRole('textbox', { name: '页面内容' })).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('可用变量')
+
+    await openRegional(user)
+    const regionalTab = screen.getByRole('tab', { name: '区域及节点配置' })
+    const regionalPanel = document.getElementById(regionalTab.getAttribute('aria-controls')!)!
+    expect(regionalPanel).toHaveAttribute('role', 'tabpanel')
+    expect(await within(regionalPanel).findByText('暂无区域或节点覆盖')).toBeInTheDocument()
+    expect(within(regionalPanel).getByRole('table')).toBeInTheDocument()
+    expect(within(regionalPanel).getByRole('button', { name: '新增设置' })).toBeInTheDocument()
+    expect(within(regionalPanel).queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(regionalPanel).not.toHaveTextContent('覆盖配置 0 项')
+    expect(regionalPanel).not.toHaveTextContent('暂无数据')
   })
 
   it('restores the system default by unbinding the override with its revision', async () => {
@@ -245,7 +314,7 @@ describe('ErrorPagesPage', () => {
     expect(await screen.findByText('错误页服务暂不可用，请稍后重试')).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('private database detail')
     await user.click(screen.getByRole('button', { name: '重试' }))
-    expect(await screen.findByText('暂无数据')).toBeInTheDocument()
+    expect(await screen.findByText('暂无区域或节点覆盖')).toBeInTheDocument()
     expect(errorPagesApi.listScopeOverrides).toHaveBeenCalledTimes(2)
   })
 
@@ -299,7 +368,8 @@ describe('ErrorPagesPage', () => {
     await selectOption(within(dialog).getByRole('combobox', { name: '配置项' }), '400错误')
     fireEvent.change(within(dialog).getByRole('textbox', { name: '400错误' }), { target: { value: '<h1>{{ip}}</h1>' } })
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
-    expect(await screen.findByText('页面内容含模板标记「{{」，节点不做变量替换，请删除后再保存')).toBeInTheDocument()
+    expect(await within(dialog).findByText('第 1 行第 5 列含模板标记「{{」，节点不做变量替换，请删除后再保存')).toHaveAttribute('role', 'alert')
+    expect(within(dialog).getByRole('textbox', { name: '400错误' })).toHaveAttribute('aria-invalid', 'true')
     expect(errorPagesApi.initiateAsset).not.toHaveBeenCalled()
   })
 

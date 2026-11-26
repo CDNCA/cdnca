@@ -150,14 +150,6 @@
   stroke-width: 2;
 }
 
-.l4-realtime-baseline-chart-zero {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
-  transform: translate(-50%, -50%);
-}
-
 .l4-realtime-loading {
   display: flex;
   align-items: center;

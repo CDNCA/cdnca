@@ -10,9 +10,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -30,8 +32,9 @@ const (
 	activationBatchDomain         = "cdnca-plugin-installation-activation-batch/v1"
 	activationFactDomain          = "cdnca-plugin-installation-activation-fact/v1"
 	activationIdempotencyDomain   = "cdnca-plugin-installation-activation-idempotency/v1"
-	candidateSyncRequestSchema    = "cdnca.plugin-installation-candidate-sync-request/v1"
+	candidateSyncRequestSchema    = "cdnca.plugin-installation-candidate-sync-request/v2"
 	candidateSyncBatchSchema      = "cdnca.plugin-installation-candidate-sync-batch/v1"
+	candidateSyncBatchSchemaV2    = "cdnca.plugin-installation-candidate-sync-batch/v2"
 	lifecycleReceiptRequestSchema = "cdnca.plugin-installation-lifecycle-receipt-request/v1"
 	lifecycleReceiptSchema        = "cdnca.plugin-installation-lifecycle-receipt/v1"
 	candidateSyncRequestDomain    = "cdnca-plugin-installation-candidate-sync-request/v1"
@@ -279,7 +282,7 @@ func (client *ActivationClient) sync(ctx context.Context, schema string, input C
 	}
 	digest := sha256.Sum256(framed("cdnca-plugin-installation-candidate-sync-idempotency/v1",
 		append(canonical, proof...)))
-	if batch.Schema != candidateSyncBatchSchema || batch.RequestID != input.RequestID ||
+	if batch.Schema != candidateSyncBatchSchemaFor(schema) || batch.RequestID != input.RequestID ||
 		batch.RequestDigest != hex.EncodeToString(digest[:]) || batch.CustomerID == uuid.Nil ||
 		batch.InstallationID != client.installationID || len(batch.Candidates) > input.Limit ||
 		batch.Algorithm != "Ed25519" || batch.KeyID == "" || len(batch.KeyID) > 128 {
@@ -298,8 +301,11 @@ func (client *ActivationClient) sync(ctx context.Context, schema string, input C
 	}
 	page := Page{Items: make([]InstallationView, 0, len(batch.Candidates))}
 	for _, candidate := range batch.Candidates {
-		// The regular sync never carries pending rows; the pending sync carries nothing else.
-		if (candidate.Status == StatusPendingConfirmation) != (schema == pendingSyncRequestSchema) {
+		// The regular sync never carries pending rows; the pending sync carries nothing else. Only a v2 batch
+		// proposes upgrades, and only for installed rows.
+		if (candidate.Status == StatusPendingConfirmation) != (schema == pendingSyncRequestSchema) ||
+			candidate.UpgradeProposal != nil && (batch.Schema != candidateSyncBatchSchemaV2 ||
+				!candidate.UpgradeProposal.valid(candidate)) {
 			return Page{}, ErrActivationInvalid
 		}
 		view, err := candidate.toView(input.TenantID, batch.InstallationID, input.Status, input.PluginID)
@@ -318,6 +324,15 @@ func (client *ActivationClient) sync(ctx context.Context, schema string, input C
 		page.NextCursor = "license:" + batch.NextCursor.String()
 	}
 	return page, nil
+}
+
+// candidateSyncBatchSchemaFor is the batch schema the license service answers a sync request schema with. The regular
+// sync asks for v2 (license 176: installed market rows may carry an upgrade proposal); the pending sync stays v1.
+func candidateSyncBatchSchemaFor(requestSchema string) string {
+	if requestSchema == candidateSyncRequestSchema {
+		return candidateSyncBatchSchemaV2
+	}
+	return candidateSyncBatchSchema
 }
 
 // PendingConfirmRequest is the controller administrator's confirmation of a pending market authorization.
@@ -413,9 +428,9 @@ func (client *ActivationClient) ReportLifecycle(ctx context.Context,
 	if err != nil {
 		return LifecycleReportResult{}, ErrInvalidInput
 	}
-	responseBody, err := client.post(ctx, body)
+	responseBody, cause, err := client.exchange(ctx, body)
 	if err != nil {
-		return LifecycleReportResult{}, err
+		return LifecycleReportResult{}, licenseCallError{cause: cause, err: err}
 	}
 	var response lifecycleReportResponseWire
 	if strictJSON(responseBody, &response) != nil {
@@ -447,29 +462,62 @@ func (client *ActivationClient) ReportLifecycle(ctx context.Context,
 		LifecycleRevision: response.LifecycleRevision, Status: response.Status}, nil
 }
 
+// InstallationID is the control installation this client proves (its receipts are the only ones it can report).
+func (client *ActivationClient) InstallationID() uuid.UUID { return client.installationID }
+
 func (client *ActivationClient) post(ctx context.Context, body []byte) ([]byte, error) {
+	responseBody, _, err := client.exchange(ctx, body)
+	return responseBody, err
+}
+
+// licenseCallError names why a license service call failed (timeout, transport, the license refusal code) for the
+// log; it unwraps to the same sentinel post returns, so classification does not change.
+type licenseCallError struct {
+	cause string
+	err   error
+}
+
+func (err licenseCallError) Error() string { return err.err.Error() + " (" + err.cause + ")" }
+func (err licenseCallError) Unwrap() error { return err.err }
+
+var licenseRefusalCode = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+// exchange is post plus the cause of a failure: timeout or transport (no answer), refused:<code> or status_<n>
+// (a non-200 answer), response_invalid (an answer outside the framing).
+func (client *ActivationClient) exchange(ctx context.Context, body []byte) ([]byte, string, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, client.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, ErrInvalidInput
+		return nil, "request_invalid", ErrInvalidInput
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
 	response, err := client.http.Do(request)
 	if err != nil || response == nil || response.Body == nil {
-		return nil, ErrFactUnavailable
+		var timeout interface{ Timeout() bool }
+		if err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.As(err, &timeout) && timeout.Timeout()) {
+			return nil, "timeout", ErrFactUnavailable
+		}
+		return nil, "transport", ErrFactUnavailable
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 1<<20+1))
 	if err != nil || len(responseBody) > 1<<20 {
-		return nil, ErrActivationInvalid
+		return nil, "response_invalid", ErrActivationInvalid
 	}
 	if response.StatusCode != http.StatusOK {
-		return nil, activationHTTPError(response.StatusCode, responseBody)
+		cause := fmt.Sprintf("status_%d", response.StatusCode)
+		var refusal struct {
+			Code string `json:"code"`
+		}
+		if json.Unmarshal(responseBody, &refusal) == nil && licenseRefusalCode.MatchString(refusal.Code) {
+			cause = "refused:" + refusal.Code
+		}
+		return nil, cause, activationHTTPError(response.StatusCode, responseBody)
 	}
 	if len(responseBody) < 2 || responseBody[len(responseBody)-1] != '\n' || responseBody[len(responseBody)-2] == '\n' {
-		return nil, ErrActivationInvalid
+		return nil, "response_invalid", ErrActivationInvalid
 	}
-	return responseBody[:len(responseBody)-1], nil
+	return responseBody[:len(responseBody)-1], "", nil
 }
 
 func lifecycleReportAction(result string) string {
@@ -594,7 +642,9 @@ func activationHTTPError(status int, body []byte) error {
 	case "scope_approval_required":
 		return ErrConsentRequired
 	case "controller_confirmation_unavailable":
-		return ErrFactDenied
+		// Only the controller confirmation answers this: the authorization is no longer the pending one
+		// (another version, or already confirmed or ended) that the controller synced.
+		return ErrApprovalStale
 	case "lifecycle_stale":
 		return ErrRevisionConflict
 	case "platform_paused":
@@ -767,6 +817,29 @@ type candidateSyncCandidateWire struct {
 	UpdatedAt                 time.Time `json:"updated_at"`
 	PausedBy                  string    `json:"paused_by,omitempty"`
 	PausedReason              string    `json:"paused_reason,omitempty"`
+	// UpgradeProposal: a newer market version this installation may upgrade to (batch v2, license 176).
+	UpgradeProposal *candidateSyncUpgradeProposalWire `json:"upgrade_proposal,omitempty"`
+}
+
+type candidateSyncUpgradeProposalWire struct {
+	VerificationID  uuid.UUID `json:"verification_id"`
+	PluginVersion   string    `json:"plugin_version"`
+	ManifestScopes  []string  `json:"manifest_scopes"`
+	ApprovedScopes  []string  `json:"approved_scopes"`
+	SensitiveScopes []string  `json:"sensitive_scopes"`
+	NewScopes       []string  `json:"new_scopes"`
+}
+
+// valid: a newer version of an installed row, with well-formed scopes inside its manifest.
+func (proposal candidateSyncUpgradeProposalWire) valid(candidate candidateSyncCandidateWire) bool {
+	return (candidate.Status == StatusEnabled || candidate.Status == StatusDisabled) &&
+		proposal.VerificationID != uuid.Nil && proposal.VerificationID != candidate.VerificationID &&
+		versionPattern.MatchString(proposal.PluginVersion) && semver.IsValid("v"+proposal.PluginVersion) &&
+		semver.Compare("v"+proposal.PluginVersion, "v"+candidate.PluginVersion) > 0 &&
+		validScopes(proposal.ManifestScopes) && validScopes(proposal.ApprovedScopes) &&
+		validScopes(proposal.SensitiveScopes) && validScopes(proposal.NewScopes) &&
+		subset(proposal.ApprovedScopes, proposal.ManifestScopes) &&
+		subset(proposal.SensitiveScopes, proposal.ManifestScopes) && subset(proposal.NewScopes, proposal.ManifestScopes)
 }
 
 type candidateSyncBatchWire struct {
@@ -811,8 +884,16 @@ func (candidate candidateSyncCandidateWire) toView(tenantID, installationID uuid
 	if statusFilter != "" && statusFilter != status || pluginFilter != "" && candidate.PluginID != pluginFilter {
 		return InstallationView{}, nil
 	}
-	return InstallationView{Installation: value, NewScopes: append([]string{}, candidate.NewScopes...),
-		AuthorizationStatus: candidate.Status, PausedBy: candidate.PausedBy, PausedReason: candidate.PausedReason}, nil
+	view := InstallationView{Installation: value, NewScopes: append([]string{}, candidate.NewScopes...),
+		AuthorizationStatus: candidate.Status, PausedBy: candidate.PausedBy, PausedReason: candidate.PausedReason}
+	if proposal := candidate.UpgradeProposal; proposal != nil {
+		view.AvailableUpgrade = &AvailableUpgrade{VerificationID: proposal.VerificationID, Version: proposal.PluginVersion,
+			ManifestScopes:  append([]string{}, proposal.ManifestScopes...),
+			ApprovedScopes:  append([]string{}, proposal.ApprovedScopes...),
+			SensitiveScopes: append([]string{}, proposal.SensitiveScopes...),
+			NewScopes:       append([]string{}, proposal.NewScopes...)}
+	}
+	return view, nil
 }
 
 func (candidate candidateSyncCandidateWire) valid() bool {

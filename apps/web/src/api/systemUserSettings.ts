@@ -180,7 +180,7 @@ function isSettings(value: unknown, saved: readonly UserSettingsSecretName[] = [
     !validText(value.password_reset_subject, 1, 256) || !validTemplate(value.password_reset_body) ||
     !validText(value.verification_subject, 1, 256) || !validTemplate(value.verification_body) ||
     !validText(value.verification_sms_body, 1, 1024) || !validText(value.verification_sms_template_id, 0, 256) ||
-    !validText(value.terms_title, 1, 256) || !validText(value.terms_body, 1, 65536) || !validText(value.captcha_app_id, 0, 256) ||
+    !validText(value.terms_title, 1, 256) || !validText(value.terms_body, 0, 65536) || !validText(value.captcha_app_id, 0, 256) ||
     typeof value.captcha_turnstile_site_key !== 'string' || !/^([A-Za-z0-9_-]{1,256})?$/.test(value.captcha_turnstile_site_key) ||
     !validReference(value.captcha_secret_id_reference) || !validReference(value.captcha_secret_key_reference) || !validReference(value.captcha_app_secret_reference) ||
     !kycProviderKeys.every((key) => validText(value[key], 0, 512)) || !kycIssuerKeys.every((key) => validText(value[key], 0, 65536))) return false
@@ -246,3 +246,10 @@ export const systemUserSettingsApi = {
   get(accessToken: string) { return request(accessToken, 'GET') },
   put(accessToken: string, revision: number, value: PlatformSystemUserSettings, requestId?: string, idempotencyKey?: string, secrets?: UserSettingsSecrets) { return request(accessToken, 'PUT', revision, value, requestId, idempotencyKey, secrets) },
 }
+
+/** the saved terms are
+ * published, shown on the sign-up page: a body that is not blank and not the
+ * old default placeholder pair (the controller reads that pair back with an
+ * empty body anyway). */
+export const termsPublished = (value: Pick<PlatformSystemUserSettings, 'terms_title' | 'terms_body'>) =>
+  value.terms_body.trim() !== '' && !(value.terms_title === '用户协议、法律声明和隐私政策' && value.terms_body === '这里填写协议内容')

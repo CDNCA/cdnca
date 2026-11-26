@@ -199,7 +199,7 @@ func (watcher *NodeNetworksWatcher) republishStorage(ctx context.Context, tx pgx
 	if err != nil {
 		return nil, err
 	}
-	requestID := "node-storage." + uuid.NewSHA1(NodeNetworksSourceID, storageDigest).String()
+	requestID := edgepublish.NodeSettingsRequestPrefixStorage + uuid.NewSHA1(NodeNetworksSourceID, storageDigest).String()
 	for _, scopeID := range scopes {
 		if _, err := RequestRepublicationTx(ctx, tx, RepublishRequest{
 			ScopeID: scopeID, Trigger: edgepublish.SystemTriggerNodeStorage, SourceResourceID: NodeNetworksSourceID,

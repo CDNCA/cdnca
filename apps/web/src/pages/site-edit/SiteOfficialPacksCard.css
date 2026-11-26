@@ -1,33 +1,20 @@
-/* 官方系统规则包改为等宽卡片网格。 */
+/* 官方系统规则包：每包一行（名称、当前动作、差异状态），完整说明展开查看。 */
 .site-official-packs-summary { margin-inline-start: auto; align-self: center; }
-.site-official-packs-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.site-official-pack {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--cdnca-color-border-secondary);
-  border-radius: 8px;
-  background: var(--cdnca-color-bg-container);
-}
-.site-official-pack-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
-.site-official-pack-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.site-official-pack-head .ant-tag { flex: none; margin: 0; }
+.site-official-packs.ant-collapse > .ant-collapse-item > .ant-collapse-header { align-items: center; }
+.site-official-packs .ant-collapse-header-text { min-width: 0; }
+.site-official-pack-name { display: block; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.site-official-pack-meta { display: inline-flex; align-items: center; gap: 8px; color: var(--cdnca-color-text-secondary); font-size: 12px; white-space: nowrap; }
+.site-official-pack-meta .ant-tag { margin: 0; }
 .site-official-pack-desc {
-  display: -webkit-box;
   margin: 0;
-  overflow: hidden;
   color: var(--cdnca-color-text-secondary);
   font-size: 12px;
   line-height: 1.6;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  white-space: pre-line;
+}
+/* 组头“对本站生效 x/y”与展开按钮，逐包列表默认收起。 */
+.site-official-packs-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-inline-start: auto; }
+.site-official-packs-head .site-official-packs-summary { margin-inline-start: 0; }
+@media (max-width: 760px) {
+  .site-official-packs-head { margin-inline-start: 0; }
 }

@@ -140,6 +140,12 @@ func (handler *NativeHandler) current() (controlplaneupgrade.NativeStandaloneSta
 	if err != nil {
 		return status, result
 	}
+	// The runner is up but refuses every plan on an unverified current release;
+	// it carries no version facts, so report the runner's own reason.
+	if !status.Ready && status.Reason == controlplaneupgrade.NativeReasonCurrentReleaseUnverified {
+		result.Reason = controlplaneupgrade.NativeReasonCurrentReleaseUnverified
+		return status, result
+	}
 	if (status.ArtifactFormat != controlplaneupgrade.NativeManifestSchema && status.ArtifactFormat != controlplaneupgrade.NativeManifestSignedSchema) || status.InstallationID != handler.config.InstallationID ||
 		status.CurrentVersion != handler.config.CurrentVersion || status.ProtocolVersion != handler.config.ProtocolVersion {
 		result.Reason = "execution_unavailable"
@@ -151,6 +157,18 @@ func (handler *NativeHandler) current() (controlplaneupgrade.NativeStandaloneSta
 		result.Reason = "execution_unavailable"
 	}
 	return status, result
+}
+
+// currentArtifactDigest is the runner-verified SHA-256 of the installed signed
+// release when it belongs to this API's installation and version, else "". It
+// identifies the exact build (hence schema head) of the version for License.
+func (handler *NativeHandler) currentArtifactDigest() string {
+	status, err := handler.readStatus(handler.config.StatusFile, handler.config.InstallationID, handler.config.Now())
+	if err != nil || status.InstallationID != handler.config.InstallationID || status.CurrentVersion != handler.config.CurrentVersion ||
+		(status.ArtifactFormat != controlplaneupgrade.NativeManifestSchema && status.ArtifactFormat != controlplaneupgrade.NativeManifestSignedSchema) {
+		return ""
+	}
+	return status.CurrentArtifactSHA256
 }
 
 func (handler *NativeHandler) MaintenanceRuntimeStatus(ctx context.Context) controlupgrade.MaintenanceRuntimeState {
@@ -469,7 +487,8 @@ func (handler *NativeHandler) options(w http.ResponseWriter, r *http.Request) {
 	}
 	options, err := handler.config.License.ListUpgradeOptions(r.Context(), controlupgrade.UpgradeOptionsRequest{
 		IdempotencyKey: "options-" + uuid.NewString(), Component: "control-api",
-		CurrentVersion: handler.config.CurrentVersion, ProtocolVersion: handler.config.ProtocolVersion})
+		CurrentVersion: handler.config.CurrentVersion, ProtocolVersion: handler.config.ProtocolVersion,
+		CurrentArtifactSHA256: handler.currentArtifactDigest()})
 	if err != nil {
 		writeError(w, r, http.StatusServiceUnavailable, "upgrade_options_unavailable")
 		return

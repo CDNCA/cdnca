@@ -86,6 +86,10 @@ type Config struct {
 	DispatchEnqueuer  DispatchEnqueuer
 	DispatchTemplates map[notification.Channel]notification.TemplateRef
 	TemplateResolver  DispatchTemplateResolver
+	// RegistrationProofKeys are the digest keys of the registration proofs
+	// (Turnstile and built-in flows). With none, an email identifier is
+	// looked up as a username only.
+	RegistrationProofKeys [][]byte
 }
 
 type RecoveryDelivery struct {

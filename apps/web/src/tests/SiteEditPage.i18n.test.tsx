@@ -154,6 +154,7 @@ describe('SiteEditPage internationalization', () => {
               host_redirects: [], hsts: null, compression: null, limits: null, basic_auth: null, maintenance: null,
               force_https: { status: 301, exclude_hosts: [] } } }))
         }
+        if (String(input).includes('/http-policies?')) return Promise.resolve(jsonResponse({ items: [], system_max_upload_bytes: 104857600 }))
         return Promise.resolve(jsonResponse({ items: [] }))
       })
       const t = i18n.getFixedT(locale, 'sites')
@@ -165,10 +166,14 @@ describe('SiteEditPage internationalization', () => {
 
       // 条件源站已是独立可用的「条件源站」标签（ConditionalOriginSiteTab），基本信息里不再有禁用占位按钮。
       expect(screen.queryByRole('button', { name: t('edit.actions.addConditionalOrigin') })).not.toBeInTheDocument()
-      const balanceGroup = await screen.findByRole('radiogroup', { name: t('edit.basic.aria.balanceMethod') })
+      // 负载方式是一个下拉，展开后每种方式都有本地化名称。
+      const balanceSelect = await screen.findByRole('combobox', { name: t('edit.basic.aria.balanceMethod') })
+      await user.click(balanceSelect)
       for (const key of ['round_robin', 'ip_hash', 'url_hash', 'least_conn', 'random', 'hash', 'sticky'] as const) {
-        expect(within(balanceGroup).getByRole('radio', { name: t(`edit.basic.balanceChoice.${key}.name`) })).toBeInTheDocument()
+        expect((await screen.findAllByTitle(t(`edit.basic.balanceChoice.${key}.name`)))
+          .some((node) => node.classList.contains('ant-select-item-option'))).toBe(true)
       }
+      await user.keyboard('{Escape}')
 
       await user.click(screen.getByRole('tab', { name: t('edit.tabs.advanced') }))
       // tp-b3c: 高级设置 shows the competitor's groups instead of one HTTP policy section.
@@ -279,7 +284,9 @@ describe('SiteEditPage internationalization', () => {
     await user.click(screen.getByRole('button', { name: 'Return to site list' }))
 
     expect(confirm).toHaveBeenCalledWith('This page has unsaved changes. Leave anyway?')
-    expect(screen.getByRole('heading', { name: 'dirty.example.com' })).toBeInTheDocument()
+    // declining keeps the page and the draft; the header names the saved domain
+    expect(screen.getByRole('heading', { name: 'www.example.com' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Domain')).toHaveValue('dirty.example.com')
   })
 
   it('localizes a stable save error and hides the server message', async () => {

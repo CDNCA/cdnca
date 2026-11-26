@@ -2,13 +2,17 @@ package securityactivation
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
+	"github.com/cdnca/cdnca/services/control-api/internal/securitybinding"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/google/uuid"
 )
@@ -183,5 +187,53 @@ func TestRebindIncludesACLBindings(t *testing.T) {
 	if len(store.starts) != 1 || store.starts[0].PolicyID != acl.policyID || store.starts[0].PolicyVersion != 9 ||
 		len(store.starts[0].TargetNodeIDs) != 0 || store.actors[0].ScopeID != scopeID || len(store.stale) != 0 {
 		t.Fatalf("acl binding not started once with default targets: %+v", store.starts)
+	}
+}
+
+// a new site's WAF and CC defaults start together; the one that finds
+// the scope's node target held (ErrTargetBusy) retries after rebindBusyRetry, not the five-minute backoff.
+func TestRebindRetriesABusyTargetSoon(t *testing.T) {
+	now := time.Date(2026, 11, 23, 15, 13, 0, 0, time.UTC)
+	scopeID := uuid.New()
+	cc := staleItem(scopeID, 1)
+	store := &fakeRebindStore{stale: []rebindItem{cc},
+		startErr: map[uuid.UUID]error{cc.siteID: mapDependencyError(securitybinding.ErrTargetConflict)}}
+	if !errors.Is(store.startErr[cc.siteID], ErrTargetBusy) || !errors.Is(store.startErr[cc.siteID], ErrConflict) {
+		t.Fatalf("target conflict maps to %v", store.startErr[cc.siteID])
+	}
+	clock := now
+	r := newRebinder(store, func() time.Time { return clock }, 15*time.Minute)
+	if err := r.run(t.Context()); err != nil || len(store.starts) != 1 {
+		t.Fatalf("first start: %d, %v", len(store.starts), err)
+	}
+	clock = now.Add(rebindBusyRetry - time.Second)
+	if err := r.run(t.Context()); err != nil || len(store.starts) != 1 {
+		t.Fatalf("retried inside the busy retry: %d, %v", len(store.starts), err)
+	}
+	delete(store.startErr, cc.siteID)
+	clock = now.Add(rebindBusyRetry)
+	if err := r.run(t.Context()); err != nil || len(store.starts) != 2 || len(store.stale) != 0 {
+		t.Fatalf("not retried after the busy retry: %d starts, %d stale, %v", len(store.starts), len(store.stale), err)
+	}
+}
+
+// A reclaim of the last claimed version has its own idempotency key per
+// attempt; an ordinary start keeps the key it always had.
+func TestRebindInputReclaimKeys(t *testing.T) {
+	item := rebindItem{bindingID: uuid.New(), scopeID: uuid.New(), siteID: uuid.New(), policyID: uuid.New(), policyRevision: 1}
+	now := time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
+	ordinary := rebindInput(item, now, 15*time.Minute)
+	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\n%s\n%d", item.scopeID, item.bindingID, item.policyRevision)))
+	if ordinary.IdempotencyKey != "rebind."+hex.EncodeToString(digest[:]) || ordinary.reclaim {
+		t.Fatalf("ordinary start = %q reclaim %v", ordinary.IdempotencyKey, ordinary.reclaim)
+	}
+	keys := map[string]bool{ordinary.IdempotencyKey: true}
+	for attempt := 1; attempt <= promotionReclaimLimit; attempt++ {
+		item.reclaim = attempt
+		input := rebindInput(item, now, 15*time.Minute)
+		if !input.reclaim || keys[input.IdempotencyKey] || input.PolicyVersion != item.policyRevision {
+			t.Fatalf("reclaim %d = %+v", attempt, input)
+		}
+		keys[input.IdempotencyKey] = true
 	}
 }

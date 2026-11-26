@@ -2,6 +2,7 @@ import i18n from './index'
 
 const zhCN = {
   title: '工单',
+  selectionScope: '工单',
   adminTitle: '工单管理',
   subtitle: '遇到问题可以提交工单，客服回复后会按你的消息订阅通知你。',
   adminSubtitle: '处理用户工单：认领、回复、内部备注、改状态和优先级。超过 24 小时未首次回复的工单标为超时。',
@@ -91,13 +92,13 @@ const zhCN = {
       ticket_created: '工单已提交', ticket_replied: '客服回复', ticket_status_changed: '工单状态变化',
       ticket_staff_created: '有新工单', ticket_staff_replied: '用户回复了工单', ticket_staff_overdue: '工单超时未响应',
     },
-    // fix-notifsub：消息订阅的 6 个消息类型。
+    // 消息订阅的 6 个消息类型；只有证书组带说明（含自动续期失败，标题读不出来）。
     groups: {
-      expiration: { label: '套餐到期', hint: '套餐即将到期或已经到期时通知。' },
-      traffic: { label: '流量超限', hint: '套餐流量接近或超过限制时通知。' },
-      ccSwitch: { label: '防护规则切换', hint: 'CC 防护规则自动切换时通知。' },
-      bandwidth: { label: '带宽超限', hint: '带宽使用超过阈值时通知。' },
-      connections: { label: '连接数超限', hint: '连接数超过阈值时通知。' },
+      expiration: { label: '套餐到期' },
+      traffic: { label: '流量超限' },
+      ccSwitch: { label: '防护规则切换' },
+      bandwidth: { label: '带宽超限' },
+      connections: { label: '连接数超限' },
       certificate: { label: '证书到期', hint: '证书即将到期、已过期或自动续期失败时通知。' },
     },
     // notif-sub A7：读取失败的行保留并可重试；自动重试成功后恢复显示。
@@ -119,6 +120,7 @@ type Messages = MessageShape<typeof zhCN>
 
 const enUS: Messages = {
   title: 'Tickets',
+  selectionScope: 'tickets',
   adminTitle: 'Ticket management',
   subtitle: 'File a ticket when you need help. You are notified of replies according to your message subscriptions.',
   adminSubtitle: 'Work customer tickets: claim, reply, add internal notes, change status and priority. Tickets without a first reply after 24 hours are flagged.',
@@ -206,11 +208,11 @@ const enUS: Messages = {
       ticket_staff_created: 'New ticket', ticket_staff_replied: 'Customer replied', ticket_staff_overdue: 'Ticket overdue',
     },
     groups: {
-      expiration: { label: 'Package expiration', hint: 'Notifies you when a package is about to expire or has expired.' },
-      traffic: { label: 'Traffic limit exceeded', hint: 'Notifies you when package traffic nears or exceeds its limit.' },
-      ccSwitch: { label: 'Protection rule switch', hint: 'Notifies you when CC protection rules switch automatically.' },
-      bandwidth: { label: 'Bandwidth limit exceeded', hint: 'Notifies you when bandwidth usage exceeds the threshold.' },
-      connections: { label: 'Connection limit exceeded', hint: 'Notifies you when connections exceed the threshold.' },
+      expiration: { label: 'Package expiration' },
+      traffic: { label: 'Traffic limit exceeded' },
+      ccSwitch: { label: 'Protection rule switch' },
+      bandwidth: { label: 'Bandwidth limit exceeded' },
+      connections: { label: 'Connection limit exceeded' },
       certificate: { label: 'Certificate expiration', hint: 'Notifies you when a certificate is about to expire, has expired, or failed to renew.' },
     },
     loading: 'Loading…', loadFailed: 'Failed to load ({{code}})', saveFailed: 'Some changes were not saved ({{code}})', retry: 'Retry',

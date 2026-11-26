@@ -48,7 +48,8 @@ func TestIAM02RegistrationOpenAPIContract(t *testing.T) {
 		}
 	}
 	request := document.Components.Schemas["AccountRegistrationRequest"]
-	wantRequired := []string{"username", "password", "display_name", "email", "phone", "terms_accepted", "terms_version", "verification_channel"}
+	// terms_accepted / terms_version are required only while registration-config terms_required is true
+	wantRequired := []string{"username", "password", "display_name", "email", "phone", "verification_channel"}
 	if strings.Join(request.Required, ",") != strings.Join(wantRequired, ",") {
 		t.Fatalf("request required = %v", request.Required)
 	}

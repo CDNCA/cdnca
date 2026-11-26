@@ -2,6 +2,7 @@ package dnsmaintenance
 
 import (
 	"context"
+	"errors"
 	"sort"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
@@ -20,11 +21,14 @@ type Platform interface {
 	PlatformZoneApex(ctx context.Context, zoneID uuid.UUID, providerType string, credentials map[string]string) (string, error)
 }
 
-// Job is one background job to create: its tenant and result items.
+// Job is one background job to create: its tenant and result items. A
+// cleanup job also carries the full record behind each item (by item text),
+// stored with the job (migration 686).
 type Job struct {
 	TenantID uuid.UUID
 	ScopeID  uuid.UUID
 	Items    []string
+	Records  map[string]CleanupRecord
 }
 
 // PlannerStore is the Store subset the planner uses (faked in tests).
@@ -100,8 +104,11 @@ func (planner *Planner) PlanCleanup(ctx context.Context) ([]Job, error) {
 	}
 	host := tenants[0]
 	providerType, credentials, err := planner.platform.PlatformCredentials(ctx)
-	if err != nil {
+	if errors.Is(err, dnsacme.ErrPlatformNotConfigured) {
 		return nil, ErrNotConfigured
+	}
+	if err != nil {
+		return nil, ErrProviderListed
 	}
 	defer clear(credentials)
 	zones, err := planner.platform.PlatformZoneNames(ctx)
@@ -113,7 +120,7 @@ func (planner *Planner) PlanCleanup(ctx context.Context) ([]Job, error) {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return zones[ids[i]] < zones[ids[j]] })
-	items := make([]string, 0)
+	items, planned := make([]string, 0), map[string]CleanupRecord{}
 	for _, zoneID := range ids {
 		claimed, err := planner.claimed(ctx, tenants, zoneID)
 		if err != nil {
@@ -133,14 +140,19 @@ func (planner *Planner) PlanCleanup(ctx context.Context) ([]Job, error) {
 			if record.Name == zoneOwner || claimed[record.Name] {
 				continue
 			}
-			items = append(items, CleanupItem(CleanupRecord{ZoneID: zoneID, Name: record.Name,
-				Type: recordTypeName(record.Type), Value: record.Value, RecordID: record.ID}))
+			full := CleanupRecord{ZoneID: zoneID, Name: canonicalOwner(record.Name),
+				Type: recordTypeName(record.Type), Value: record.Value, RecordID: record.ID}
+			item := CleanupItem(full)
+			if _, seen := planned[item]; !seen {
+				planned[item] = full
+				items = append(items, item)
+			}
 		}
 	}
 	if len(items) == 0 {
-		items = append(items, NothingToClean)
+		return []Job{{TenantID: host.TenantID, ScopeID: host.ScopeID, Items: []string{NothingToClean}}}, nil
 	}
-	return []Job{{TenantID: host.TenantID, ScopeID: host.ScopeID, Items: dedupe(items)}}, nil
+	return []Job{{TenantID: host.TenantID, ScopeID: host.ScopeID, Items: items, Records: planned}}, nil
 }
 
 func (planner *Planner) claimed(ctx context.Context, tenants []dnsacme.PlatformTenant, zoneID uuid.UUID) (map[string]bool, error) {
@@ -161,16 +173,4 @@ func providerConfig(tenant dnsacme.PlatformTenant, providerType string, credenti
 		ProviderID: dnsacme.PlatformProviderCopyID(tenant.ScopeID), ProviderType: providerType,
 		ZoneID: dnsacme.PlatformZoneCopyID(tenant.ScopeID, zoneID), ZoneName: zoneName, ProviderZoneName: apex,
 		Credentials: scopeCopy}
-}
-
-func dedupe(items []string) []string {
-	seen := make(map[string]bool, len(items))
-	result := items[:0]
-	for _, item := range items {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-	return result
 }

@@ -91,16 +91,24 @@ components:
       additionalProperties: false
       required: [source_ip_header, api_key_enabled, dns_protection, record_repair_mode, sync_batch, sync_scope, disable_failed_sync_nodes, resource_rank, http_proxy, tcp_factor]
       properties:
-        source_ip_header: {type: string, maxLength: 256}
+        source_ip_header:
+          type: string
+          enum: ['', CF-Connecting-IP, True-Client-IP, X-Forwarded-For, X-Real-IP]
+          description: >-
+            源IP请求头: the header the console takes the visitor address from behind a CDN; '' takes the direct
+            connection's. X-Forwarded-For takes its leftmost address. A value that is not one valid IP address (or a
+            missing header) keeps the connection's address. A request the console nginx confirmed with the origin key
+            (install-control.sh origin-auth) keeps the address origin authentication gave. Applies from the save on,
+            without a restart.
         api_key_enabled: {type: boolean, description: Globally enables tenant API key authentication and issuance}
-        dns_protection: {type: string, maxLength: 2048, description: Comma-separated hostname prefixes protected during DNS reconciliation}
-        record_repair_mode: {type: string, enum: [off, repair, repair_delete_extra]}
-        sync_batch: {type: integer, minimum: 1, maximum: 10000}
-        sync_scope: {type: string, enum: [region, line_group]}
+        dns_protection: {type: string, maxLength: 2048, deprecated: true, description: "Comma-separated hostname prefixes. Stored and returned unchanged for compatibility; nothing reads it (not shown in the console)."}
+        record_repair_mode: {type: string, enum: [off, repair, repair_delete_extra], deprecated: true, description: "Stored and returned unchanged for compatibility; nothing reads it (not shown in the console)."}
+        sync_batch: {type: integer, minimum: 1, maximum: 10000, deprecated: true, description: "Stored and returned unchanged for compatibility; nothing reads it (not shown in the console)."}
+        sync_scope: {type: string, enum: [region, line_group], deprecated: true, description: "Stored and returned unchanged for compatibility; nothing reads it (not shown in the console)."}
         disable_failed_sync_nodes: {type: boolean}
-        resource_rank: {type: integer, minimum: 1, maximum: 1000}
-        http_proxy: {type: string, maxLength: 2048}
-        tcp_factor: {type: number, minimum: 0.01, maximum: 100}
+        resource_rank: {type: integer, minimum: 1, maximum: 1000, deprecated: true, description: "Stored and returned unchanged for compatibility; nothing reads it (not shown in the console)."}
+        http_proxy: {type: string, maxLength: 2048, description: "HTTP(S) proxy the control plane's DNS provider API requests (record management, ACME DNS-01, credential checks) go through: http(s)://[user[:password]@]host[:port]; empty for direct. Environment proxies are never used for these requests and provider TLS is still verified. Reads show the password as ********; a save that sends the read value back keeps the stored password, a ******** password with another scheme, host, port or user is refused (value.http_proxy invalid). Applies on save in this instance and within 5 seconds in others. A request that cannot use the proxy fails with provider_proxy_unavailable (credential checks) or dns_provider_remote_proxy_unavailable (DNS jobs)."}
+        tcp_factor: {type: number, minimum: 0.01, maximum: 100, deprecated: true, description: "Stored and returned unchanged for compatibility; nothing reads it (not shown in the console)."}
         l4_drain_max_seconds:
           type: integer
           minimum: 0

@@ -339,6 +339,11 @@ func scanValue(value any, field string) error {
 		if strings.HasSuffix(field, ".body_base64") || field == "layout_slots.header_links[].url" {
 			return nil
 		}
+		if field == "templates.email" {
+			// The email template's action link: its target is the
+			// server-built address, never package text.
+			typed = strings.ReplaceAll(typed, EmailActionHref, "")
+		}
 		lower := strings.ToLower(typed)
 		for _, fragment := range forbiddenFragments {
 			if strings.Contains(lower, fragment) {

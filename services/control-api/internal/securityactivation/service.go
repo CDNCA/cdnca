@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -148,7 +149,7 @@ func (store *Store) startTx(
 		ExpectedBindingRevision: input.ExpectedBindingRevision,
 		ExpectedActiveVersion:   input.ExpectedActivePolicyVersion,
 		RolloutID:               publicationRolloutID, IdempotencyKey: derivedKey("publication", input.IdempotencyKey),
-		RequestID: input.RequestID, Detach: input.Detach,
+		RequestID: input.RequestID, Detach: input.Detach, Reclaim: input.reclaim,
 	})
 	if err != nil {
 		return StartResult{}, mapDependencyError(err)
@@ -458,6 +459,10 @@ func (store *Store) Reconcile(
 		promoted, err := store.Promote(ctx, actor, result.Candidate.ID, input.PromotionCAS)
 		if err != nil {
 			if errors.Is(err, ErrConflict) || errors.Is(err, ErrSourceRevisionConflict) || errors.Is(err, ErrNotHealthy) {
+				// The worker skips these errors silently; the refusal is the
+				// only trace of why a healthy candidate failed.
+				slog.Warn("security activation promotion refused; failing the candidate", "candidate_id",
+					result.Candidate.ID, "source_revision", result.Candidate.CandidateSourceRevision, "error", err)
 				recoveryContext, cancelRecovery := context.WithTimeout(context.WithoutCancel(ctx), store.config.HealthCheck)
 				defer cancelRecovery()
 				if recoveryErr := store.failPromotion(recoveryContext, actor, result.Candidate.ID,
@@ -1763,10 +1768,11 @@ func startDigest(input StartInput) ([sha256.Size]byte, error) {
 		Recovery                    *CIDRRecoveryIntent `json:"recovery,omitempty"`
 		SiteRuntimeSchema           string              `json:"site_runtime_schema,omitempty"`
 		Detach                      bool                `json:"detach,omitempty"`
+		Reclaim                     bool                `json:"reclaim,omitempty"`
 	}{input.TenantScopeID, input.SiteID, input.PolicyID, input.PolicyVersion,
 		input.ExpectedBindingRevision, input.ExpectedActivePolicyVersion, input.TargetNodeIDs,
 		input.CanarySize, input.ExpiresAt.UTC().Format(time.RFC3339Nano), input.Recovery,
-		input.SiteRuntimeSchema, input.Detach})
+		input.SiteRuntimeSchema, input.Detach, input.reclaim})
 }
 
 func reconcileDigest(input ReconcileInput) ([sha256.Size]byte, error) {
@@ -1843,9 +1849,10 @@ func mapDependencyError(err error) error {
 	case errors.Is(err, securitybinding.ErrPolicyDeleted):
 		return ErrPolicyDeleted
 	case errors.Is(err, securitybinding.ErrBindingRevision), errors.Is(err, securitybinding.ErrActiveVersionConflict),
-		errors.Is(err, securitybinding.ErrPolicyVersionConflict), errors.Is(err, securitybinding.ErrBindingConflict),
-		errors.Is(err, securitybinding.ErrTargetConflict), errors.Is(err, edgepublish.ErrTargetSnapshotConflict):
+		errors.Is(err, securitybinding.ErrPolicyVersionConflict), errors.Is(err, securitybinding.ErrBindingConflict):
 		return ErrConflict
+	case errors.Is(err, securitybinding.ErrTargetConflict), errors.Is(err, edgepublish.ErrTargetSnapshotConflict):
+		return ErrTargetBusy
 	default:
 		return fmt.Errorf("security activation dependency: %w", err)
 	}

@@ -12,6 +12,21 @@ import { useSessionStore } from '../auth/session'
 const regionNames = (items: RegionRecord[]) => items.map((item) => item.name)
 const regionRecords = (items: RegionRecord[]) => items
 
+/**
+ * Whether a query reads the region catalog for a picker: the node forms,
+ * line groups, L2, packages, stream filters and configuration overrides. A
+ * region write refetches them so a new region is offered without a reload.
+ */
+export function regionCatalogQuery(key: readonly unknown[]): boolean {
+  const [root] = key
+  if (root === 'node-region-catalog' || root === 'package-resource-names' || root === 'package-resource-options' ||
+    root === 'configuration-override-target-names') return true
+  if (root === 'node-line-groups') return key.at(-1) === 'region-catalog'
+  if (root === 'node-l2-topology') return key.at(-1) === 'regions'
+  if (root === 'stream-line-filter-options') return key.at(-1) === 'region'
+  return root === 'configuration-override-targets' && key[2] === 'region'
+}
+
 /** Region catalog names, in catalog order; [] without regions.read. */
 export function useRegionCatalogNames(ownerKey: string, enabled = true) {
   return useRegionCatalogQuery(ownerKey, enabled, regionNames)

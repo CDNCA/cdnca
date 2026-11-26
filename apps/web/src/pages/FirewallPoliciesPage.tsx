@@ -14,11 +14,10 @@ import {
   Space,
   Spin,
   Switch,
-  Table,
-  Tabs,
   Tag,
   Typography,
 } from 'antd'
+import { Tabs } from '../components/Tabs'
 import { List, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -40,7 +39,9 @@ import {
 import { useSessionStore } from '../auth/session'
 import '../i18n/firewall'
 import './FirewallPoliciesPage.css'
-import { useFeedback, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedback, OutcomeUnknown, Table } from '@cdnca/ui'
+import { useNamedRowSelection } from '../components/namedRowSelection'
+import { HelpTip } from './site-edit/SiteEditFields'
 
 
 const recommendedLimits: OpenRestyWAFResourceLimits = {
@@ -129,6 +130,20 @@ function normalizeConfig(config: OpenRestySecurityConfig): SecurityDraft {
   }
 }
 
+// sameSetting compares a submitted value with the saved one by content (object key order does not matter).
+// A recovery time of 0 is the server default of 300 seconds (securitypolicy.recoverSeconds), as the field shows it.
+function sameSetting(field: string, submitted: unknown, saved: unknown): boolean {
+  const comparable = (value: unknown) => field === 'auto_switch' && value && typeof value === 'object'
+    ? { ...value, seconds: (value as OpenRestyAutoSwitch).seconds || 300 } : value
+  const same = (left: unknown, right: unknown): boolean => {
+    if (left === right) return true
+    if (!left || !right || typeof left !== 'object' || typeof right !== 'object' || Array.isArray(left) !== Array.isArray(right)) return false
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+    return [...keys].every((key) => same((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]))
+  }
+  return same(comparable(submitted), comparable(saved))
+}
+
 function ownerFor(principal: Principal, sessionEpoch: number): readonly [string, string, null, string, number] | null {
   if (principal.scope_kind !== 'platform' || principal.tenant_id !== null || !principal.scope_id || !principal.user_id || sessionEpoch < 1) return null
   return ['platform', principal.scope_id, null, principal.user_id, sessionEpoch]
@@ -146,24 +161,42 @@ function currentAccess(ownerKey: string, requireManage = false): string | null {
   return owner && JSON.stringify(owner) === ownerKey ? accessToken : null
 }
 
-function SectionHeading({ title, description }: { title: string; description: string }) {
-  return <div className="firewall-section-heading"><h2>{title}</h2><p>{description}</p></div>
+// CC 全局页的分节与卡片只留标题，不再逐组复述说明；
+// 影响决定的约束留在字段旁，术语解释放标题旁按需打开的帮助（HelpTip）。
+function SectionHeading({ title }: { title: string }) {
+  return <div className="firewall-section-heading"><h2>{title}</h2></div>
 }
 
-function SettingCard({ title, description, action, wide = false, children }: {
+function SettingCard({ title, description, tip, action, wide = false, children }: {
   title: string
-  description: string
+  description?: string
+  tip?: string
   action?: ReactNode
   wide?: boolean
-  children: ReactNode
+  children?: ReactNode
 }) {
   return <section className={`firewall-setting-card${wide ? ' firewall-setting-card--wide' : ''}`}>
     <div className="firewall-setting-card-heading">
-      <div><h3>{title}</h3><p>{description}</p></div>
+      <div className={tip ? 'firewall-cc-title-line' : undefined}><h3>{title}</h3>{tip ? <HelpTip tip={tip} /> : null}{description ? <p>{description}</p> : null}</div>
       {action}
     </div>
     {children}
   </section>
+}
+
+// SwitchItem is one global switch on a compact line (label then switch); like
+// every global switch it asks before saving because the save publishes to all nodes.
+function SwitchItem({ label, checked, disabled, onChange }: {
+  label: string
+  checked: boolean
+  disabled: boolean
+  onChange: (checked: boolean) => void
+}) {
+  const confirm = useGlobalConfirm()
+  return <div className="firewall-cc-switch">
+    <span>{label}</span>
+    <Switch aria-label={label} checked={checked} disabled={disabled} onChange={(next) => confirm.toggle(label, next, () => onChange(next))} />
+  </div>
 }
 
 function NumberControl({ label, value, unit, minimum = 0, maximum = 2_147_483_647, disabled, hint, onChange, onCommit }: {
@@ -274,13 +307,17 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
   const switchRuleOptions = ruleGroups.filter((group) => group.kind === 'system' && group.system_rule && group.system_rule_id)
     .map((group) => ({ value: group.system_rule_id!, label: group.name, disabled: !group.enabled }))
 
-  return <div className="firewall-tab-panel">
-    <SectionHeading title={t('openresty.cc.section')} description={t('openresty.cc.sectionDescription')} />
-    <div className="firewall-card-grid">
-      <ToggleSetting title={t('openresty.cc.enable')} description={t('openresty.cc.enableDescription')}
-        checked={draft.cc_enable} disabled={locked} onChange={(checked) => { update('cc_enable', checked); saveField('cc_enable', checked) }} />
-      <SettingCard title={t('openresty.cc.duration')} description={t('openresty.cc.durationDescription')}>
-        <div className="firewall-field-grid firewall-field-grid--stacked">
+  // 每节「标题 → 一行开关 → 卡片网格」，网格按宽度自适应列数、卡片按内容高度；
+  // 条件字段只在所属开关/选项开启时挂载，隐藏不改草稿值也不写入。
+  return <div className="firewall-tab-panel firewall-cc-panel">
+    <SectionHeading title={t('openresty.cc.section')} />
+    <div className="firewall-cc-switches">
+      <SwitchItem label={t('openresty.cc.enable')} checked={draft.cc_enable} disabled={locked}
+        onChange={(checked) => { update('cc_enable', checked); saveField('cc_enable', checked) }} />
+    </div>
+    <div className="firewall-card-grid firewall-cc-grid">
+      <SettingCard title={t('openresty.cc.duration')}>
+        <div className="firewall-field-grid">
           <NumberControl label={t('openresty.cc.blockTime')} value={draft.block_time} unit={t('openresty.units.seconds')} disabled={locked}
             onChange={(value) => update('block_time', value)} onCommit={(value) => saveField('block_time', value)} />
           <NumberControl label={t('openresty.cc.whiteTime')} value={draft.white_time} unit={t('openresty.units.seconds')} minimum={600} disabled={locked}
@@ -288,8 +325,16 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
         </div>
         <p className="firewall-help">{t('openresty.cc.whiteTimeHint')}</p>
       </SettingCard>
+      <SettingCard title={t('openresty.cc.temporaryWhitelist')}>
+        <div className="firewall-field-grid">
+          <NumberControl label={t('openresty.cc.totalRequests')} value={draft.tmp_white_total_limit} unit={t('openresty.units.perFiveSeconds')}
+            disabled={locked} onChange={(value) => update('tmp_white_total_limit', value)} onCommit={(value) => saveField('tmp_white_total_limit', value)} />
+          <NumberControl label={t('openresty.cc.sameURLRequests')} value={draft.tmp_white_per_limit} unit={t('openresty.units.perFiveSeconds')}
+            disabled={locked} onChange={(value) => update('tmp_white_per_limit', value)} onCommit={(value) => saveField('tmp_white_per_limit', value)} />
+        </div>
+      </SettingCard>
 
-      <SettingCard wide title={t('openresty.cc.blockWay')} description={t('openresty.cc.blockWayDescription')}>
+      <SettingCard wide title={t('openresty.cc.blockWay')}>
         <Radio.Group aria-label={t('openresty.cc.blockWay')} value={draft.default_block_way} disabled={locked}
           onChange={(event) => { update('default_block_way', event.target.value); saveField('default_block_way', event.target.value) }}>
           <Radio value="ipset">{t('openresty.cc.blockWayIPSet')}</Radio>
@@ -304,13 +349,13 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
             <div className="firewall-cc-policy-inline">
               <Switch aria-label={t('openresty.cc.autoSwitchIPSet')} checked={draft.ipset_auto_enable} disabled={locked}
                 onChange={(checked) => confirm.toggle(t('openresty.cc.autoSwitchIPSet'), checked, () => { update('ipset_auto_enable', checked); saveField('ipset_auto_enable', checked) })} />
-              <div className="firewall-cc-policy-threshold">
+              {draft.ipset_auto_enable ? <div className="firewall-cc-policy-threshold">
                 <NumberControl label={t('openresty.cc.siteBlockQPS')} value={draft.site_block_qps} unit={t('openresty.units.blocksPerSecond')}
                   disabled={locked} onChange={(value) => update('site_block_qps', value)} onCommit={(value) => saveField('site_block_qps', value)} />
-              </div>
+              </div> : null}
             </div>
           </div>
-          <p className="firewall-help">{t('openresty.cc.autoSwitchHint')}</p>
+          {draft.ipset_auto_enable ? <p className="firewall-help">{t('openresty.cc.autoSwitchHint')}</p> : null}
           <NumberControl label={t('openresty.cc.blockPageLimit')} value={draft.block_page_num_limit} unit={t('openresty.units.perMinute')}
             disabled={locked} onChange={(value) => update('block_page_num_limit', value)} onCommit={(value) => saveField('block_page_num_limit', value)} />
           <div className="firewall-cc-policy-row firewall-cc-policy-row--traffic">
@@ -318,46 +363,37 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
             <div className="firewall-cc-policy-inline">
               <Switch aria-label={t('openresty.cc.blockPageTraffic')} checked={draft.block_page_not_counted} disabled={locked}
                 onChange={(checked) => confirm.toggle(t('openresty.cc.blockPageTraffic'), checked, () => { update('block_page_not_counted', checked); saveField('block_page_not_counted', checked) })} />
-              <span>{t('openresty.cc.blockPageTrafficDescription')}</span>
             </div>
           </div>
         </div>
       </SettingCard>
 
-      <SettingCard wide title={t('openresty.cc.temporaryWhitelist')} description={t('openresty.cc.temporaryWhitelistDescription')}>
-        <div className="firewall-field-grid">
-          <NumberControl label={t('openresty.cc.totalRequests')} value={draft.tmp_white_total_limit} unit={t('openresty.units.perFiveSeconds')}
-            disabled={locked} onChange={(value) => update('tmp_white_total_limit', value)} onCommit={(value) => saveField('tmp_white_total_limit', value)} />
-          <NumberControl label={t('openresty.cc.sameURLRequests')} value={draft.tmp_white_per_limit} unit={t('openresty.units.perFiveSeconds')}
-            disabled={locked} onChange={(value) => update('tmp_white_per_limit', value)} onCommit={(value) => saveField('tmp_white_per_limit', value)} />
-        </div>
-      </SettingCard>
-
       {(['custom_white', 'custom_black'] as const).map((field) => <SettingCard key={field}
-        title={t(`openresty.cc.${field === 'custom_white' ? 'whiteIPs' : 'blackIPs'}`)} description={t('openresty.cc.ipListDescription')}>
+        title={t(`openresty.cc.${field === 'custom_white' ? 'whiteIPs' : 'blackIPs'}`)}>
         <Input.TextArea aria-label={t(`openresty.cc.${field === 'custom_white' ? 'whiteIPs' : 'blackIPs'}`)} rows={5}
           value={draft[field]} disabled={locked} placeholder={t('openresty.cc.ipPlaceholder')}
           onChange={(event) => update(field, event.target.value)} onBlur={(event) => saveField(field, event.currentTarget.value)} />
       </SettingCard>)}
     </div>
 
-    <SectionHeading title={t('openresty.node.section')} description={t('openresty.node.sectionDescription')} />
-    <div className="firewall-card-grid">
-      <ToggleSetting title={t('openresty.node.tls')} description={t('openresty.node.tlsDescription')}
-        checked={draft.ssl_handshake_limit > 0} disabled={locked}
+    <SectionHeading title={t('openresty.node.section')} />
+    <div className="firewall-cc-switches">
+      <SwitchItem label={t('openresty.node.tls')} checked={draft.ssl_handshake_limit > 0} disabled={locked}
         onChange={(checked) => { update('ssl_handshake_limit', checked ? 1 : 0); saveField('ssl_handshake_limit', checked ? 1 : 0) }} />
-      <ToggleSetting title={t('openresty.node.rejectUnbound')} description={t('openresty.node.rejectUnboundDescription')}
-        checked={draft.default_page_refuse} disabled={locked}
+      <SwitchItem label={t('openresty.node.rejectUnbound')} checked={draft.default_page_refuse} disabled={locked}
         onChange={(checked) => { update('default_page_refuse', checked); saveField('default_page_refuse', checked) }} />
-
-      <SettingCard wide title={t('openresty.node.defaultPage')} description={t('openresty.node.defaultPageDescription')}>
+      <SwitchItem label={t('openresty.node.disablePing')} checked={draft.icmp_drop} disabled={locked}
+        onChange={(checked) => { update('icmp_drop', checked); saveField('icmp_drop', checked) }} />
+    </div>
+    <div className="firewall-card-grid firewall-cc-grid">
+      <SettingCard wide title={t('openresty.node.defaultPage')}>
         <div className="firewall-default-page-grid">
           <div><label>{t('openresty.node.enableMode')}</label><Radio.Group value={draft.force_default_page_cc} disabled={locked}
             onChange={(event) => { update('force_default_page_cc', event.target.value); saveField('force_default_page_cc', event.target.value) }}>
             <Radio value="force">{t('openresty.node.force')}</Radio><Radio value="auto">{t('openresty.node.auto')}</Radio>
           </Radio.Group></div>
-          <NumberControl label={t('openresty.node.defaultPageQPS')} value={draft.auto_default_page_cc_qps} unit={t('openresty.units.enableAtQPS')}
-            disabled={locked} onChange={(value) => update('auto_default_page_cc_qps', value)} onCommit={(value) => saveField('auto_default_page_cc_qps', value)} />
+          {draft.force_default_page_cc === 'auto' ? <NumberControl label={t('openresty.node.defaultPageQPS')} value={draft.auto_default_page_cc_qps} unit={t('openresty.units.enableAtQPS')}
+            disabled={locked} onChange={(value) => update('auto_default_page_cc_qps', value)} onCommit={(value) => saveField('auto_default_page_cc_qps', value)} /> : null}
           <div className="firewall-select-field"><label>{t('openresty.node.ruleGroup')}</label><Select aria-label={t('openresty.node.ruleGroup')}
             classNames={{ popup: { root: 'firewall-rule-group-dropdown' } }} listHeight={190} virtual={false}
             value={selectedRule?.id ?? (draft.default_page_rule || undefined)} disabled={locked || unknownRule} options={ruleOptions}
@@ -372,10 +408,7 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
         </div>
       </SettingCard>
 
-      <ToggleSetting title={t('openresty.node.disablePing')} description={t('openresty.node.disablePingDescription')}
-        checked={draft.icmp_drop} disabled={locked}
-        onChange={(checked) => { update('icmp_drop', checked); saveField('icmp_drop', checked) }} />
-      <SettingCard title={t('openresty.node.secret')} description={t('openresty.node.secretDescription')}>
+      <SettingCard title={t('openresty.node.secret')} tip={t('openresty.node.secretDescription')}>
         <Input.Password aria-label={t('openresty.node.secret')} value={secret} disabled={locked}
           placeholder={document.key_configured ? t('openresty.node.secretConfigured') : t('openresty.node.secretPlaceholder')}
           autoComplete="new-password" onChange={(event) => setSecret(event.target.value)} onBlur={() => {
@@ -383,7 +416,7 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
           }} />
       </SettingCard>
 
-      <SettingCard wide title={t('openresty.node.cleanup')} description={t('openresty.node.cleanupDescription')}>
+      <SettingCard title={t('openresty.node.cleanup')}>
         <div className="firewall-radio-row"><label>{t('openresty.node.cleanupPolicy')}</label><Radio.Group value={draft.auto_delete_access_log} disabled={locked}
           onChange={(event) => { update('auto_delete_access_log', event.target.value); saveField('auto_delete_access_log', event.target.value) }}>
           <Radio value={0}>{t('openresty.node.cleanupNever')}</Radio>
@@ -393,9 +426,9 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
       </SettingCard>
     </div>
 
-    <SectionHeading title={t('openresty.automation.section')} description={t('openresty.automation.sectionDescription')} />
-    <div className="firewall-card-grid">
-      <SettingCard title={t('openresty.automation.switch')} description={t('openresty.automation.switchDescription')}
+    <SectionHeading title={t('openresty.automation.section')} />
+    <div className="firewall-card-grid firewall-cc-grid">
+      <SettingCard title={t('openresty.automation.switch')}
         action={<Switch checkedChildren={t('openresty.states.enabled')} unCheckedChildren={t('openresty.states.disabled')}
           aria-label={t('openresty.automation.switch')} checked={draft.auto_switch.enable} disabled={locked}
           onChange={(checked) => confirm.toggle(t('openresty.automation.switch'), checked, () => {
@@ -422,9 +455,9 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
             minimum={60} maximum={86400} disabled={locked} hint={t('openresty.automation.recoverHint')}
             onChange={(value) => update('auto_switch', { ...draft.auto_switch, seconds: value })}
             onCommit={(value) => saveField('auto_switch', { ...draft.auto_switch, seconds: value })} />
-        </div> : <span className="firewall-card-spacer" />}
+        </div> : null}
       </SettingCard>
-      <SettingCard title={t('openresty.automation.image')} description={t('openresty.automation.imageDescription')}>
+      <SettingCard title={t('openresty.automation.image')}>
         <div className="firewall-image-controls">
           <Radio.Group value={draft.cc_img_url_type} disabled={locked}
             onChange={(event) => { update('cc_img_url_type', event.target.value); saveField('cc_img_url_type', event.target.value) }}>
@@ -440,8 +473,8 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
       </SettingCard>
     </div>
 
-    <SectionHeading title={t('openresty.template.section')} description={t('openresty.template.sectionDescription')} />
-    <SettingCard wide title={t('openresty.template.title')} description={t('openresty.template.description')}>
+    <SectionHeading title={t('openresty.template.section')} />
+    <SettingCard wide title={t('openresty.template.title')}>
       <Radio.Group className="firewall-template-options" value={template} disabled={locked} onChange={(event) => setTemplate(event.target.value)}>
         {templateFields.map((field) => <Radio key={field} value={field}>{t(`openresty.template.${field}`)}</Radio>)}
       </Radio.Group>
@@ -450,9 +483,9 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
         onBlur={(event) => saveField(template, event.currentTarget.value)} />
     </SettingCard>
 
-    <SectionHeading title={t('openresty.diagnostics.section')} description={t('openresty.diagnostics.sectionDescription')} />
-    <div className="firewall-card-grid">
-      <SettingCard title={t('openresty.diagnostics.log')} description={t('openresty.diagnostics.logDescription')}
+    <SectionHeading title={t('openresty.diagnostics.section')} />
+    <div className="firewall-card-grid firewall-cc-grid">
+      <SettingCard title={t('openresty.diagnostics.log')}
         action={<Switch aria-label={t('openresty.diagnostics.log')} checked={draft.log.log_level === 'debug'} disabled={locked}
           onChange={(checked) => confirm.toggle(t('openresty.diagnostics.log'), checked, () => {
             const value = { log_level: checked ? 'debug' as const : 'info' as const, debug_ip: checked ? draft.log.debug_ip : '' }
@@ -460,15 +493,15 @@ function CCGlobalPanel({ draft, document, disabled, savePending, persist, setDra
           })} />}>
         {draft.log.log_level === 'debug' ? <Input aria-label={t('openresty.diagnostics.debugIP')} value={draft.log.debug_ip} disabled={locked}
           placeholder={t('openresty.diagnostics.debugIPPlaceholder')} onChange={(event) => update('log', { ...draft.log, debug_ip: event.target.value })}
-          onBlur={(event) => saveField('log', { ...draft.log, debug_ip: event.currentTarget.value })} /> : <span className="firewall-card-spacer" />}
+          onBlur={(event) => saveField('log', { ...draft.log, debug_ip: event.currentTarget.value })} /> : null}
       </SettingCard>
-      <SettingCard title={t('openresty.diagnostics.wellKnown')} description={t('openresty.diagnostics.wellKnownDescription')}>
+      <SettingCard title={t('openresty.diagnostics.wellKnown')}>
         <NumberControl label={t('openresty.diagnostics.threshold')} value={draft.well_known_auto_protect_count} unit={t('openresty.units.perMinute')}
           disabled={locked} onChange={(value) => update('well_known_auto_protect_count', value)}
           onCommit={(value) => saveField('well_known_auto_protect_count', value)} />
         <p className="firewall-help">{t('openresty.diagnostics.wellKnownHint')}</p>
       </SettingCard>
-      <SettingCard wide title={t('openresty.diagnostics.internal')} description={t('openresty.diagnostics.internalDescription')}>
+      <SettingCard wide title={t('openresty.diagnostics.internal')} tip={t('openresty.diagnostics.internalDescription')}>
         <div className="firewall-field-grid">
           <NumberControl label={t('openresty.diagnostics.triggerQPS')} value={draft.internal_qps} unit={t('openresty.units.requestsPerSecond')}
             disabled={locked} onChange={(value) => update('internal_qps', value)} onCommit={(value) => saveField('internal_qps', value)} />
@@ -589,6 +622,7 @@ function EffectiveNodePanel({ ownerKey }: { ownerKey: string }) {
 
 function RegionalPanel({ ownerKey, draft, disabled }: { ownerKey: string; draft: SecurityDraft; disabled: boolean }) {
   const { t } = useTranslation('firewall')
+  const namedRows = useNamedRowSelection()
   const { message } = App.useApp()
   const feedback = useFeedback()
   const client = useQueryClient()
@@ -601,6 +635,8 @@ function RegionalPanel({ ownerKey, draft, disabled }: { ownerKey: string; draft:
   const [selectedFields, setSelectedFields] = useState<OpenRestySecurityOverrideField[]>([])
   const [overrideDraft, setOverrideDraft] = useState<OpenRestySecurityOverrideConfig>({})
   const [secret, setSecret] = useState('')
+  // 漏选目标或配置项就地提示在对应选择框并聚焦首错，不弹「配置保存失败」。
+  const [missing, setMissing] = useState<{ target: boolean; items: boolean }>({ target: false, items: false })
   const queryKey = ['openresty-security', 'overrides', ownerKey, page]
   const overrides = useQuery({ queryKey, enabled: Boolean(token), queryFn: () => openrestySecurityApi.listOverrides(token!, { page, pageSize: 20 }) })
   const targets = useQuery({
@@ -611,6 +647,7 @@ function RegionalPanel({ ownerKey, draft, disabled }: { ownerKey: string; draft:
 
   const closeEditor = () => {
     setEditor(null)
+    setMissing({ target: false, items: false })
     setScopeID('')
     setSelectedFields([])
     setOverrideDraft({})
@@ -637,6 +674,7 @@ function RegionalPanel({ ownerKey, draft, disabled }: { ownerKey: string; draft:
   }
   const addOverrideField = (field: OpenRestySecurityOverrideField) => {
     if (selectedFields.includes(field)) return
+    setMissing((current) => ({ ...current, items: false }))
     setSelectedFields((current) => [...current, field])
     if (field !== 'key') {
       const value = draft[field]
@@ -787,7 +825,7 @@ function RegionalPanel({ ownerKey, draft, disabled }: { ownerKey: string; draft:
     {overrides.isError ? <Result status="error" title={t('openresty.errors.loadFailed')} extra={<Button onClick={() => void overrides.refetch()}>{t('openresty.actions.retry')}</Button>} /> :
       <Table className="firewall-regional-table" loading={overrides.isLoading} size="small" rowKey="id" dataSource={data}
         tableLayout="fixed"
-        rowSelection={{ columnWidth: 70, selections: false, getCheckboxProps: () => ({ disabled: true }) }}
+        rowSelection={namedRows<OpenRestySecurityDocument>({ columnWidth: 70, selections: false, getCheckboxProps: () => ({ disabled: true }) }, (item) => `${t(item.scope_type === 'region' ? 'openresty.regional.region' : 'openresty.regional.node')} ${item.scope_label || item.scope_id}`, t('openresty.regional.selectionScope'))}
         columns={[
           { title: t('openresty.regional.scope'), key: 'scope', width: 360, render: (_value, item: OpenRestySecurityDocument) => <div><strong>{item.scope_type === 'region' ? t('openresty.regional.region') : t('openresty.regional.node')}</strong><span>{item.scope_label || item.scope_id}</span></div> },
           { title: t('openresty.regional.items'), key: 'items', width: 360, render: (_value, item: OpenRestySecurityDocument) => <Space size={[4, 4]} wrap>{Object.keys(item.config).map((field) => <Tag key={field}>{t(`openresty.overrideFields.${field}`)}</Tag>)}</Space> },
@@ -802,24 +840,38 @@ function RegionalPanel({ ownerKey, draft, disabled }: { ownerKey: string; draft:
     <Modal className="firewall-override-modal" width={780} open={Boolean(editor)} title={editor?.item ? t('openresty.regional.edit') : t('openresty.regional.add')}
       onCancel={closeEditor} destroyOnHidden footer={<Space><Button type="primary" loading={write.isPending}
         disabled={disabled}
-        onClick={() => write.mutate()}>{t('openresty.actions.confirm')}</Button><Button onClick={closeEditor}>{t('openresty.actions.cancel')}</Button></Space>}>
+        onClick={() => {
+          const next = { target: !scopeID, items: selectedFields.length === 0 }
+          setMissing(next)
+          if (next.target || next.items) {
+            document.getElementById(next.target ? 'firewall-override-target' : 'firewall-override-items')?.focus()
+            return
+          }
+          write.mutate()
+        }}>{t('openresty.actions.confirm')}</Button><Button onClick={closeEditor}>{t('openresty.actions.cancel')}</Button></Space>}>
       <div className="firewall-override-form">
         <label>{t('openresty.regional.scopeType')}{t('openresty.regional.labelSuffix')}</label>
         <Radio.Group value={scopeType} disabled={Boolean(editor?.item)} onChange={(event) => { setScopeType(event.target.value); setScopeID(''); setTargetSearch('') }}>
           <Radio.Button value="node">{t('openresty.regional.node')}</Radio.Button><Radio.Button value="region">{t('openresty.regional.region')}</Radio.Button>
         </Radio.Group>
         <label>{scopeType === 'node' ? t('openresty.regional.nodeSelect') : t('openresty.regional.regionSelect')}{t('openresty.regional.labelSuffix')}</label>
-        <Select className="firewall-override-target" aria-label={scopeType === 'node' ? t('openresty.regional.nodeSelect') : t('openresty.regional.regionSelect')} showSearch filterOption={false} value={scopeID || undefined} disabled={Boolean(editor?.item)} loading={targets.isLoading}
+        <Select id="firewall-override-target" className="firewall-override-target" aria-label={scopeType === 'node' ? t('openresty.regional.nodeSelect') : t('openresty.regional.regionSelect')} showSearch filterOption={false} value={scopeID || undefined} disabled={Boolean(editor?.item)} loading={targets.isLoading}
+          status={missing.target ? 'error' : undefined} aria-invalid={missing.target || undefined} aria-describedby={missing.target ? 'firewall-override-target-error' : undefined}
           placeholder={scopeType === 'node' ? t('openresty.regional.nodePlaceholder') : t('openresty.regional.regionPlaceholder')}
-          onSearch={setTargetSearch} onChange={setScopeID} options={editor?.item
+          onSearch={setTargetSearch} onChange={(value: string) => { setScopeID(value); setMissing((current) => ({ ...current, target: false })) }} options={editor?.item
             ? [{ value: editor.item.scope_id, label: editor.item.scope_label || editor.item.scope_id, title: undefined }]
             : targets.data?.items.map((item) => ({ value: item.value, label: item.label, title: item.description })) ?? []} />
+        {missing.target ? <div id="firewall-override-target-error" className="firewall-override-error" role="alert">
+          {t(scopeType === 'node' ? 'openresty.regional.targetRequiredNode' : 'openresty.regional.targetRequiredRegion')}</div> : null}
         <label>{t('openresty.regional.configItems')}{t('openresty.regional.labelSuffix')}</label>
-        <Select key={selectedFields.join('|') || 'empty'} aria-label={t('openresty.regional.configItems')} value={undefined} placeholder={t('openresty.regional.configItemsPlaceholder')} virtual={false} listHeight={284}
+        <Select id="firewall-override-items" key={selectedFields.join('|') || 'empty'} aria-label={t('openresty.regional.configItems')}
+          status={missing.items ? 'error' : undefined} aria-invalid={missing.items || undefined} aria-describedby={missing.items ? 'firewall-override-items-error' : undefined} value={undefined} placeholder={t('openresty.regional.configItemsPlaceholder')} virtual={false} listHeight={284}
           classNames={{ popup: { root: 'firewall-override-config-popup' } }}
           onChange={addOverrideField} options={overrideFields
             .filter((field) => !selectedFields.includes(field))
             .map((field) => ({ value: field, label: t(`openresty.overrideFields.${field}`) }))} />
+        {missing.items ? <div id="firewall-override-items-error" className="firewall-override-error" role="alert">
+          {t('openresty.regional.itemsRequired')}</div> : null}
         {selectedFields.map((field) => <div className="firewall-override-field" key={field}>
           <label>{t(`openresty.overrideFields.${field}`)}{t('openresty.regional.labelSuffix')}</label>
           <div className="firewall-override-field-control">
@@ -895,7 +947,12 @@ export default function FirewallPoliciesPage() {
 
   const persist = (patch: OpenRestySecurityConfig) => {
     if (!global.data || save.isPending || !currentAccess(ownerKey, true)) return
-    save.mutate({ ownerKey, revision: global.data.revision, patch, identity: newOpenRestySecurityIdentity('openresty-global') })
+    // 失焦/回车/保存按钮提交的值与已保存值相同时不写（不发请求、不推修订）；
+    // 只去掉这种等值写，改了的字段照原样提交。
+    const saved = normalizeConfig(global.data.config)
+    const changed = Object.entries(patch).filter(([field, value]) => field === 'key' || !sameSetting(field, value, saved[field as keyof SecurityDraft]))
+    if (changed.length === 0) return
+    save.mutate({ ownerKey, revision: global.data.revision, patch: Object.fromEntries(changed) as OpenRestySecurityConfig, identity: newOpenRestySecurityIdentity('openresty-global') })
   }
 
   const scrollTabs = (direction: -1 | 1) => {

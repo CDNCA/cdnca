@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
+	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/cdnca/cdnca/services/control-api/internal/sessioncredential"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -83,6 +85,21 @@ func TestRuleGroupStatePostgreSQLScopeBindingAndWritePermission(t *testing.T) {
 			tenantID, tenantScopeID, userID); err != nil {
 			t.Fatal(err)
 		}
+		// One tenant CC policy per tenant: the platform's custom rule groups list both (as its policy list does).
+		// security_policies.rules holds 1..100 rules (026).
+		rules, _ := json.Marshal([]securitypolicy.Rule{{
+			ID: uuid.New(), Name: "limit", Priority: 1, Enabled: true,
+			Conditions: []securitypolicy.Condition{{Field: "path", Operator: "prefix", Values: []string{"/"}}},
+			Action:     securitypolicy.ActionRateLimit, Flow: securitypolicy.FlowStop,
+			ActionConfig: securitypolicy.ActionConfig{RateLimit: &securitypolicy.RateLimitConfig{
+				Algorithm: "fixed_window", WindowSeconds: 60, MaxRequests: 10, ResponseAction: "reject_429",
+			}},
+		}})
+		if _, err := pool.Exec(t.Context(), `INSERT INTO security_policies(id,scope_id,tenant_id,owner_user_id,kind,name,enabled,default_action,rules,
+			revision,created_by_user_id,updated_by_user_id,created_at,updated_at) VALUES($1,$2,$3,$4,'cc','tenant cc',true,'allow',$6,1,$4,$4,$5,$5)`,
+			uuid.New(), tenantScopeID, tenantID, userID, now, rules); err != nil {
+			t.Fatal(err)
+		}
 		for _, table := range []string{"cc_reference_matchers", "cc_reference_filters"} {
 			fields, values := "field,operator,values", "'path','prefix','[\"/\"]'::jsonb"
 			if table == "cc_reference_filters" {
@@ -149,6 +166,21 @@ func TestRuleGroupStatePostgreSQLScopeBindingAndWritePermission(t *testing.T) {
 		Permissions: []string{PermissionRead, PermissionManage}}.WithCredential(CredentialSession, sessionID, rawSession, nil)
 	request := RuleGroupStateRequest{Actor: actor, TargetScopeID: scopeID, SystemRuleID: "cc.js-verify", Enabled: false}
 
+	t.Run("platform custom rule groups count every tenant's CC policies", func(t *testing.T) {
+		groups, err := store.RuleGroups(t.Context(), RuleGroupsRequest{Actor: actor, TargetScopeID: scopeID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		custom := 0
+		for _, group := range groups {
+			if group.Kind == "custom" {
+				custom++
+			}
+		}
+		if custom != 2 {
+			t.Fatalf("custom rule groups = %d, want 2 (one per tenant)", custom)
+		}
+	})
 	t.Run("logical key updates both tenant projections without unrelated rows", func(t *testing.T) {
 		if err := store.SetRuleGroupEnabled(t.Context(), request); err != nil {
 			t.Fatal(err)

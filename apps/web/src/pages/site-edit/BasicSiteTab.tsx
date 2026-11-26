@@ -30,8 +30,7 @@ import '../../i18n/siteHttps'
 import type { BasicValidationErrors } from './siteEditValidation'
 import BalanceKeyFields from './BalanceKeyFields'
 import BalanceMethodChoices from './BalanceMethodChoices'
-import { FormRow } from './SiteEditFields'
-import { SiteTabSummary } from './SiteTabSummary'
+import { FormRow, HelpTip } from './SiteEditFields'
 import { SiteOriginStatusCard } from './SiteOriginStatusCard'
 import CnameFailureReason from './CnameFailureReason'
 import CnameFailureActions from './CnameFailureActions'
@@ -42,16 +41,19 @@ import { SiteGroupSelect } from './SitePackageGroupSelects'
 import '../../i18n/siteOriginForwarding'
 import '../../i18n/originWeight'
 import { weightShares } from '../originWeightShare'
+import { SitePackageQuotaError, type SitePackageQuotaField, type SitePackageQuotaNotice } from './SitePackageQuotaError'
 import './BasicSiteTab.css'
 
-const statusLabels: Record<SiteStatus, { color: string }> = {
-  active: { color: 'success' },
-  disabled: { color: 'default' },
-  package_expired: { color: 'warning' },
-  traffic_exceeded: { color: 'warning' },
-  locked: { color: 'error' },
-  syncing: { color: 'processing' },
-  sync_failed: { color: 'error' },
+// basic.status 是站点开关（enabled 为假时只能是 disabled），不是访问状态，不译成“正常”；
+// 访问状态看页头（siteHeadlineTag）。syncing/sync_failed 是早期存量值，站点同样是启用的（同步状态在页头单独显示）。
+const statusLabels: Record<SiteStatus, { color: string; key: string }> = {
+  active: { color: 'success', key: 'states.siteSwitch.enabled' },
+  disabled: { color: 'default', key: 'states.siteSwitch.disabled' },
+  package_expired: { color: 'warning', key: 'states.package_expired' },
+  traffic_exceeded: { color: 'warning', key: 'states.traffic_exceeded' },
+  locked: { color: 'error', key: 'states.locked' },
+  syncing: { color: 'success', key: 'states.siteSwitch.enabled' },
+  sync_failed: { color: 'success', key: 'states.siteSwitch.enabled' },
 }
 
 // A new origin uses the pool's 回源端口 (the competitor's 源地址 without a port).
@@ -85,6 +87,8 @@ export interface BasicSiteTabProps {
   value: SiteBasicConfig
   originPool: SiteOriginPool
   errors: BasicValidationErrors
+  // A save refused by the package quota: marked under its field with the way to more quota.
+  packageQuota?: SitePackageQuotaNotice
   originError?: string
   readOnly?: boolean
   canManageDNS?: boolean
@@ -101,6 +105,9 @@ export interface BasicSiteTabProps {
   selectScopeID?: string
   // 更换所属用户 (platform administrator): opens the transfer dialog.
   onTransfer?: () => void
+  // 生成中的轮询到上限仍未出结果时给“刷新状态”（缺省不显示）。
+  cnamePollExpired?: boolean
+  onCnameRecheck?: () => void
 }
 
 export default function BasicSiteTab({
@@ -109,6 +116,7 @@ export default function BasicSiteTab({
   value,
   originPool,
   errors,
+  packageQuota,
   originError,
   readOnly = false,
   canManageDNS = false,
@@ -119,6 +127,8 @@ export default function BasicSiteTab({
   canManageOrigins = false,
   selectScopeID,
   onTransfer,
+  cnamePollExpired = false,
+  onCnameRecheck,
 }: BasicSiteTabProps) {
   const { t, i18n } = useTranslation(['sites', 'cnameAllocations', 'siteOriginForwarding'])
   const { t: tW } = useTranslation('originWeight')
@@ -126,15 +136,23 @@ export default function BasicSiteTab({
   const { t: tLabel } = useTranslation('cnameLabel')
   const queryClient = useQueryClient()
   const { modal } = App.useApp()
-  const { t: tV4 } = useTranslation('siteEditV4')
   const { t: tHttps } = useTranslation('siteHttps')
   const { t: tTransfer } = useTranslation('siteTransfer')
   const cnameReason = cnameFailureText(value.cname_failure_code, value.cname_domain, tCname, i18n.exists, role === 'admin')
+  // 失败码有具体原因时弹窗只写这一句；诊断明细（含管理员菜单路径）只在管理员遇到未知码时附上。
+  const cnameReasonKnown = Boolean(value.cname_failure_code) && i18n.exists(`siteCnameRegeneration:failures.${value.cname_failure_code}`)
   const [, setSearchParams] = useSearchParams()
   // Turning HTTPS off is always allowed; turning it on needs a bound certificate (the service refuses it too).
   const httpsLocked = detail.https_certificate_bound === false && !value.https_enabled
   const language = i18n.resolvedLanguage ?? i18n.language
   const [newDomain, setNewDomain] = useState('')
+  const fieldError = (field: SitePackageQuotaField) => {
+    const text = errors[field]
+    if (!text) return null
+    return packageQuota?.field === field && packageQuota.text === text
+      ? <SitePackageQuotaError notice={packageQuota} admin={role === 'admin'} />
+      : <span className="site-field-error">{text}</span>
+  }
   const [domainsOpen, setDomainsOpen] = useState(false)
   const [domainsDraft, setDomainsDraft] = useState('')
   const [cnameOpen, setCnameOpen] = useState(false)
@@ -234,18 +252,6 @@ export default function BasicSiteTab({
 
   return (
     <div className="site-edit-tab-panel site-basic-panel">
-      <SiteTabSummary items={[
-        { key: 'status', label: t('edit.basic.fields.status'), value: t(`states.${value.status}`), target: 'site-basic-settings',
-          tone: value.status === 'active' ? 'on' : value.status === 'disabled' ? 'off' : 'warn' },
-        { key: 'cname', label: t('edit.basic.fields.cname'), target: 'site-basic-settings', tone: value.cname_state === 'failed' ? 'error' : 'plain',
-          value: value.cname || (value.cname_state === 'failed' ? tV4('summary.basic.cnameFailed') : t('values.placeholder')) },
-        { key: 'domains', label: t('edit.basic.sections.domains'), target: 'site-basic-domains',
-          value: value.domains.length === 1 ? value.domains[0] : t('edit.basic.counts.domains', { count: value.domains.length }) },
-        { key: 'https', label: 'HTTPS', target: 'site-basic-access', tone: value.https_enabled ? 'on' : 'off',
-          value: value.https_enabled ? tV4('summary.on') : tV4('summary.off') },
-        { key: 'origins', label: t('edit.basic.sections.originList'), target: 'site-basic-origins',
-          value: tV4('summary.basic.origins', { primary: primaries.length, backup: originPool.origins.length - primaries.length }) },
-      ]} />
       <section className="site-basic-block" aria-labelledby="site-basic-block-basic">
       {blockHead('basic', 'site-basic-block-basic')}
       <section className="site-basic-section" id="site-basic-settings">
@@ -260,7 +266,7 @@ export default function BasicSiteTab({
           ) : null}
           <div className="site-basic-fact">
             <span>{t('edit.basic.fields.status')}</span>
-            <Tag color={status.color}>{t(`states.${value.status}`)}</Tag>
+            <Tag color={status.color} data-testid="site-basic-status">{t(status.key)}</Tag>
           </div>
           <div className="site-basic-fact">
             <span>{t('edit.basic.fields.createdAt')}</span>
@@ -287,7 +293,13 @@ export default function BasicSiteTab({
               {!value.cname && value.cname_state === 'pending' ? <CnamePending code={value.cname_pending_code} taskID={value.cname_task_id} admin={role === 'admin'} /> : null}
               {/* CNAME state next to the CNAME itself (it used to be an Alert at the bottom of the tab). */}
               {value.cname && value.cname_state === 'pending' ? <Tag color="processing">{t('cnameAllocations:states.pending')}</Tag> : null}
-              {value.cname_state === 'failed' ? <CnameFailureActions code={value.cname_failure_code} reason={cnameReason} admin={role === 'admin'} siteID={detail.id} onRegenerate={canManageDNS ? () => onChange({ ...value, cname_regenerate: true }) : undefined} regenerateDisabled={readOnly} extraDetail={accessToken && (role !== 'admin' || detail.scope_id) ? <CnameFailureReason accessToken={accessToken} siteID={detail.id} audience={role === 'admin' ? { kind: 'platform', scopeID: detail.scope_id! } : { kind: 'tenant' }} /> : null} /> : null}
+              {value.cname_state === 'failed' ? <CnameFailureActions code={value.cname_failure_code} reason={cnameReason} admin={role === 'admin'} siteID={detail.id} onRegenerate={canManageDNS ? () => onChange({ ...value, cname_regenerate: true }) : undefined} regenerateDisabled={readOnly} extraDetail={accessToken && role === 'admin' && detail.scope_id && !cnameReasonKnown ? <CnameFailureReason accessToken={accessToken} siteID={detail.id} audience={{ kind: 'platform', scopeID: detail.scope_id }} /> : null} /> : null}
+              {value.cname_state === 'pending' && cnamePollExpired ? (
+                <span className="site-cname-poll-timeout" role="status" data-testid="site-basic-cname-poll-timeout">
+                  {tCname('pending.pollTimeout')}
+                  {onCnameRecheck ? <Button type="link" size="small" onClick={onCnameRecheck}>{tCname('pending.recheck')}</Button> : null}
+                </span>
+              ) : null}
               {value.cname ? (
                 <Tooltip title={t('edit.basic.actions.copyCname')}>
                   <Button type="text" size="small" aria-label={t('edit.basic.actions.copyCname')} icon={<Clipboard size={14} aria-hidden="true" />} onClick={() => { if (navigator.clipboard) void navigator.clipboard.writeText(value.cname) }} />
@@ -359,7 +371,7 @@ export default function BasicSiteTab({
             <Button type="primary" aria-label={t('edit.basic.aria.addDomain')} disabled={readOnly || !newDomain.trim()} icon={<Plus size={15} aria-hidden="true" />} onClick={addDomain} />
           </div>
         </div>
-        {errors.domains ? <span className="site-field-error">{errors.domains}</span> : null}
+        {fieldError('domains')}
         <div className="site-basic-ipv6-row">
           <div><strong>{t('edit.basic.fields.cacheShared')}</strong><p>{t('edit.basic.help.cacheShared')}</p></div>
           <Switch aria-label={t('edit.basic.aria.cacheShared')} checked={value.cache_shared_across_domains ?? false} disabled={readOnly} onChange={(checked) => onChange({ ...value, cache_shared_across_domains: checked })} />
@@ -383,7 +395,7 @@ export default function BasicSiteTab({
                 <span>{t('edit.basic.fields.listenPorts')}</span>
                 <Input aria-label={t('edit.basic.aria.httpPorts')} status={errors.http_listen_ports ? 'error' : undefined} disabled={readOnly} value={value.http_listen_ports.join(' ')} placeholder={t('edit.basic.placeholders.ports')} onChange={(event) => onChange({ ...value, http_listen_ports: splitValues(event.target.value) })} />
               </div>
-              {errors.http_listen_ports ? <span className="site-field-error">{errors.http_listen_ports}</span> : null}
+              {fieldError('http_listen_ports')}
               <div className="site-basic-access-ports">
                 <span>IPv6</span>
                 <div className="site-basic-access-ipv6">
@@ -416,7 +428,7 @@ export default function BasicSiteTab({
               <div className="site-basic-access-actions">
                 <Button size="small" onClick={() => goToTab('https')}>{t('edit.basic.actions.httpsSettings')}</Button>
               </div>
-              {errors.https_listen_ports ? <span className="site-field-error">{errors.https_listen_ports}</span> : null}
+              {fieldError('https_listen_ports')}
             </div>
           </article>
         </div>
@@ -431,8 +443,9 @@ export default function BasicSiteTab({
         <div className="site-basic-origin-primary">
         <div className="site-basic-section-heading">
           <div><div className="site-basic-title-line"><h3>{t('edit.basic.sections.originList')}</h3><span>{t('edit.basic.counts.origins', { count: originPool.origins.length })}</span>
-            <Tooltip title={<>{tW('help')}<br />{tW(`method.${originPool.balance_method}`)}</>}><span className="site-form-row-tip" role="img" tabIndex={0} aria-label={tW('tipLabel')}><CircleHelp size={14} aria-hidden="true" /></span></Tooltip>
-          </div><p>{t('edit.basic.help.originList')}</p><p id="site-origin-weight-help" className="site-basic-weight-help">{tW('help')} {tW(`method.${originPool.balance_method}`)}</p></div>
+            {/* 权重与当前负载方式的说明只在帮助里，不再常驻一段。 */}
+            <HelpTip tip={`${tW('help')} ${tW(`method.${originPool.balance_method}`)}`} />
+          </div><p>{t('edit.basic.help.originList')}</p></div>
           <Button type="primary" aria-label={t('edit.actions.addOrigin')} disabled={originReadOnly} icon={<Plus size={15} aria-hidden="true" />} onClick={() => { setOriginDraft(emptyOrigin); setEditingOrigin(null); setOriginOpen(true) }}>
             {t('edit.basic.actions.addOriginShort')}
           </Button>
@@ -455,13 +468,18 @@ export default function BasicSiteTab({
         {originError ? <span className="site-field-error">{originError}</span> : null}
         </div>
         <div className="site-basic-backup-origins">
-          <label htmlFor="site-backup-origins" className="site-basic-title-line"><h3>{t('siteOriginForwarding:fields.backupOrigins')}</h3></label>
+          <div className="site-basic-title-line">
+            <h3><label htmlFor="site-backup-origins">{t('siteOriginForwarding:fields.backupOrigins')}</label></h3>
+            <HelpTip tip={`${t('siteOriginForwarding:failover.backupHelp')} ${tW('backup')}`} />
+          </div>
+          {/* 说明在 (?) 里；输入框的可访问描述用这段视觉隐藏的文字（被引用节点的 aria-label 不一定计入描述）。 */}
+          <span id="site-backup-origins-help" className="visually-hidden">{t('siteOriginForwarding:failover.backupHelp')} {tW('backup')}</span>
           <Input.TextArea id="site-backup-origins" aria-describedby="site-backup-origins-help" status={backupError ? 'error' : undefined}
             autoSize={{ minRows: 3, maxRows: 15 }} disabled={originReadOnly} value={backupText}
             placeholder={t('siteOriginForwarding:failover.backupPlaceholder')} onChange={(event) => changeBackups(event.target.value)} />
-          <p id="site-backup-origins-help" className="site-basic-modal-help">{t('siteOriginForwarding:failover.backupHelp')} {tW('backup')}</p>
           {backupError ? <span className="site-field-error" role="alert">{t(`siteOriginForwarding:failover.${backupError.key}`, { line: backupError.line })}</span> : null}
-        <FormRow label={t('siteOriginForwarding:fields.failbackMode')} labelId="site-failback-mode-label" tip={t('siteOriginForwarding:failover.failbackHelp')}>
+        <FormRow label={t('siteOriginForwarding:fields.failbackMode')} labelId="site-failback-mode-label"
+          help={t((originPool.failback_mode ?? 'auto') === 'manual' ? 'siteOriginForwarding:failover.failbackManualHelp' : 'siteOriginForwarding:failover.failbackAutoHelp')}>
           <Radio.Group aria-labelledby="site-failback-mode-label" disabled={originReadOnly} value={originPool.failback_mode ?? 'auto'}
             onChange={(event) => onOriginChange({ ...originPool, failback_mode: event.target.value as OriginFailbackMode })}
             options={[{ value: 'auto', label: t('siteOriginForwarding:failover.failbackAuto') }, { value: 'manual', label: t('siteOriginForwarding:failover.failbackManual') }]} />
@@ -473,7 +491,7 @@ export default function BasicSiteTab({
       <section className="site-basic-section site-basic-origin-rules">
         <div className="site-basic-title-line"><h3>{t('edit.basic.sections.originRules')}</h3><span>{t('edit.basic.help.originRules')}</span></div>
         {/* 负载方式卡片占满整行一排放下；条件源站与健康检查（原「源站可用性」单独一卡）并排 */}
-        <FormRow label={t('edit.basic.fields.balanceMethod')}>
+        <FormRow label={t('edit.basic.fields.balanceMethod')} tip={t(`edit.basic.balanceChoice.${originPool.balance_method}.detail`)}>
           <BalanceMethodChoices disabled={originReadOnly} value={originPool.balance_method} onChange={changeBalance} />
         </FormRow>
         <BalanceKeyFields pool={originPool} readOnly={originReadOnly} onChange={onOriginChange} />

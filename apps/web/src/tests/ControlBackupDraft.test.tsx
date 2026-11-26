@@ -70,7 +70,7 @@ describe('主控备份设置草稿不被后台刷新覆盖（A04）', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const { panel } = await openMaintenance()
     fireEvent.change(within(panel).getByDisplayValue('cdnca-backups'), { target: { value: 'draft-bucket' } })
-    fireEvent.change(within(panel).getAllByLabelText('Secret Key')[0], { target: { value: 'typed-secret' } })
+    fireEvent.change(within(panel).getAllByLabelText('访问密钥')[0], { target: { value: 'typed-secret' } })
     // 15s poll with a new status object.
     const reads = statusReads
     await act(async () => { await vi.advanceTimersByTimeAsync(16_000) })
@@ -81,7 +81,7 @@ describe('主控备份设置草稿不被后台刷新覆盖（A04）', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(100) })
     const current = (await screen.findByRole('heading', { name: '异地存储' })).closest('form') as HTMLElement
     expect(within(current).getByDisplayValue('draft-bucket')).toBeInTheDocument()
-    expect(within(current).getAllByLabelText('Secret Key')[0]).toHaveValue('typed-secret')
+    expect(within(current).getAllByLabelText('访问密钥')[0]).toHaveValue('typed-secret')
     // Later polls use the renewed token.
     await act(async () => { await vi.advanceTimersByTimeAsync(16_000) })
     const last = calls.filter((call) => call.url.endsWith('/v1/admin/control-backup')).at(-1)
@@ -123,3 +123,77 @@ describe('主控备份设置草稿不被后台刷新覆盖（A04）', () => {
     expect(calls.some((call) => call.url.endsWith('/settings'))).toBe(false)
   })
 })
+
+// 
+describe('存储目标与迁移表单的字段校验和首错聚焦', () => {
+  it('S3 存储桶留空：标在存储桶输入框并聚焦，不发保存请求；字段名为中文', async () => {
+    const { user, panel } = await openMaintenance()
+    for (const label of ['服务地址（HTTPS）', '区域', '存储桶', '访问密钥 ID', '访问密钥', '路径式访问（RustFS/MinIO 选开）']) {
+      expect(within(panel).getAllByLabelText(label).length).toBeGreaterThan(0)
+    }
+    expect(panel).not.toHaveTextContent(/Endpoint|Region|Bucket|Access Key|Secret Key|Path style/)
+    const bucket = within(panel).getByDisplayValue('cdnca-backups')
+    fireEvent.change(bucket, { target: { value: '' } })
+    await user.click(within(panel).getByRole('button', { name: '保存设置' }))
+    expect(await within(panel).findByText('请填写存储桶名称：3–63 个小写字母、数字、点或短横线')).toBeInTheDocument()
+    await waitFor(() => expect(bucket).toHaveFocus())
+    expect(calls.some((call) => call.url.endsWith('/settings'))).toBe(false)
+  })
+
+  it('S3 存储桶留空点测试连接：同样聚焦存储桶输入框，不发探测请求', async () => {
+    const { user, panel } = await openMaintenance()
+    const bucket = within(panel).getByDisplayValue('cdnca-backups')
+    fireEvent.change(bucket, { target: { value: '' } })
+    await user.click(within(panel).getByRole('button', { name: '测试连接' }))
+    expect(await within(panel).findByText('请填写存储桶名称：3–63 个小写字母、数字、点或短横线')).toBeInTheDocument()
+    await waitFor(() => expect(bucket).toHaveFocus())
+    expect(calls.some((call) => call.url.endsWith('/targets/probe'))).toBe(false)
+  })
+
+  it('服务端按 field 拒绝时把中文原因标到对应输入框，不弹「设置无效」、不显示英文原文', async () => {
+    const { user, panel } = await openMaintenance()
+    vi.mocked(globalThis.fetch).mockImplementation((input, init) => {
+      const url = String(input)
+      calls.push({ url, init })
+      if (url.endsWith('/v1/admin/control-backup/settings')) return Promise.resolve(json({ error: { code: 'control_backup_invalid_settings',
+        request_id: 'req-field', details: { target: 'offsite', field: 'region' } } }, 400))
+      return Promise.resolve(json(status()))
+    })
+    fireEvent.change(within(panel).getAllByLabelText('访问密钥 ID')[0], { target: { value: 'AKIA' } })
+    await user.click(within(panel).getByRole('button', { name: '保存设置' }))
+    expect(await within(panel).findByText('请填写区域，如 us-east-1（小写字母、数字、短横线）')).toBeInTheDocument()
+    await waitFor(() => expect(within(panel).getByDisplayValue('us-east-1')).toHaveFocus())
+    expect(screen.queryByText('设置无效')).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent(/needs an https endpoint|S3 target/)
+  })
+
+  it('新建 SFTP 目标：主机指纹等字段带必填标记，留空保存提示「请先获取并核对主机指纹」', async () => {
+    const { user, panel } = await openMaintenance()
+    await user.click(within(panel).getByRole('button', { name: '添加 SFTP' }))
+    const hostKey = within(panel).getByLabelText('主机指纹')
+    expect(hostKey.closest('.ant-form-item')!.querySelector('.ant-form-item-required')).not.toBeNull()
+    for (const label of ['主机', '端口', '用户名', '远端目录']) {
+      expect(within(panel).getAllByLabelText(label).at(-1)!.closest('.ant-form-item')!.querySelector('.ant-form-item-required'), label).not.toBeNull()
+    }
+    fireEvent.change(within(panel).getAllByLabelText('远端目录').at(-1)!, { target: { value: 'backups' } })
+    await user.click(within(panel).getByRole('button', { name: '保存设置' }))
+    expect(await within(panel).findByText('请先获取并核对主机指纹')).toBeInTheDocument()
+    expect(within(panel).getByText('请填写以 / 开头的绝对目录，如 /backups/cdnca')).toBeInTheDocument()
+    expect(within(panel).getByText('请填写主机名或 IP')).toBeInTheDocument()
+    expect(calls.some((call) => call.url.endsWith('/settings'))).toBe(false)
+  })
+
+  it('迁移表单空提交：地址未填时不报「确认内容不一致」，焦点落到新主控地址', async () => {
+    const { user } = await openMaintenance()
+    const migration = screen.getByRole('heading', { name: '迁移主控' }).closest('section') as HTMLElement
+    await user.click(within(migration).getByRole('button', { name: '开始迁移' }))
+    await waitFor(() => expect(within(migration).getByLabelText('新主控 IP 或域名')).toHaveFocus())
+    expect(within(migration).queryByText('确认内容不一致')).not.toBeInTheDocument()
+    fireEvent.change(within(migration).getByLabelText('新主控 IP 或域名'), { target: { value: '203.0.113.9' } })
+    fireEvent.change(within(migration).getByLabelText('输入新主控地址确认'), { target: { value: 'wrong' } })
+    await user.click(within(migration).getByRole('button', { name: '开始迁移' }))
+    expect(await within(migration).findByText('确认内容不一致')).toBeInTheDocument()
+    expect(calls.some((call) => call.url.includes('/migrations'))).toBe(false)
+  })
+})
+

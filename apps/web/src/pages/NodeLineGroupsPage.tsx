@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Input, Modal, Result, Select, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, InlineNotice, OutcomeUnknown, submitErrorFields } from '@cdnca/ui'
+import { Alert, Button, Grid, Input, Modal, Result, Select, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, InlineNotice, OutcomeUnknown, submitErrorFields, Table } from '@cdnca/ui'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
@@ -29,6 +29,7 @@ import {
 } from './node-scheduling/shared'
 import './NodeSchedulingPage.css'
 import './NodeLineGroupsPage.css'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 interface LineWriteAttempt {
   kind: 'create' | 'update'
@@ -176,7 +177,10 @@ function NodeLineGroupsContent({
   canManage: boolean
 }) {
   const { t, i18n } = useTranslation('nodeScheduling')
+  const namedRows = useNamedRowSelection()
   const navigate = useNavigate()
+  // 窄屏表格首屏只到组名列，「配置解析」从操作列移到组名下方。
+  const narrow = Grid.useBreakpoint().md === false
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = useFeedbackMessage()
   const feedback = useFeedback()
@@ -500,6 +504,12 @@ function NodeLineGroupsContent({
     writeMutation.mutate(attempt)
   }
 
+  // 同页有同名线路组时，名称后带编号区分。
+  const lineGroupLabel = (group: NodeLineGroup) => (groupsQuery.data?.items ?? [])
+    .some((other) => other.id !== group.id && other.name === group.name)
+    ? t('values.lineGroupNameWithID', { name: group.name, id: group.display_id })
+    : group.name
+
   const requestDelete = (targets: NodeLineGroup[]) => {
     if (!canManageCurrentScope || operationPending || activeOperationAttempt || targets.length === 0) return
     setDeleteError(null)
@@ -528,6 +538,12 @@ function NodeLineGroupsContent({
     await groupsQuery.refetch()
   }
 
+  const configureResolution = (group: NodeLineGroup, className?: string) => (
+    <Button type="link" className={className} onClick={() => navigate(`/node/line-group/line/${encodeURIComponent(group.id)}`)}>
+      {t('actions.configureResolution')}
+    </Button>
+  )
+
   const columns: TableColumnsType<NodeLineGroup> = [
     {
       title: t('columns.id'),
@@ -555,6 +571,7 @@ function NodeLineGroupsContent({
           {group.is_platform_default ? (
             <Tag color="blue" data-testid="line-group-platform-default">{t('notices.platformDefaultTag')}</Tag>
           ) : null}
+          {narrow && canManageCurrentScope ? configureResolution(group, 'node-line-group-resolution-entry') : null}
         </>
       ),
     },
@@ -635,9 +652,7 @@ function NodeLineGroupsContent({
         )
         return canManageCurrentScope ? (
         <div className="node-line-group-actions">
-          <Button type="link" onClick={() => navigate(`/node/line-group/line/${encodeURIComponent(group.id)}`)}>
-            {t('actions.configureResolution')}
-          </Button>
+          {narrow ? null : configureResolution(group)}
           {smartSchedule}
           <Button
             type="link"
@@ -658,7 +673,7 @@ function NodeLineGroupsContent({
           <Button
             type="link"
             disabled={operationPending || Boolean(activeOperationAttempt)}
-            aria-label={t('actions.deleteLineGroup')}
+            aria-label={t('actions.deleteLineGroup', { name: lineGroupLabel(group) })}
             onClick={() => requestDelete([group])}
           >
             {t('actions.delete')}
@@ -818,7 +833,7 @@ function NodeLineGroupsContent({
           pagination={false}
           scroll={{ x: '100%' }}
           tableLayout="fixed"
-          rowSelection={canManageCurrentScope ? { columnWidth: 56, selectedRowKeys: selectedKeys, onChange: setSelectedKeys } : undefined}
+          rowSelection={canManageCurrentScope ? namedRows<NodeLineGroup>({ columnWidth: 56, selectedRowKeys: selectedKeys, onChange: setSelectedKeys }, (group) => group.name, t('selectionScope')) : undefined}
           locale={{ emptyText: t(search ? 'empty.filtered' : 'empty.groups') }}
         />
       </div>
@@ -875,9 +890,9 @@ function NodeLineGroupsContent({
         ]}
         destroyOnHidden
       >
-        <p>{t('dialogs.deleteDescription', {
-          ids: deleteTargets.map((group) => group.display_id).join(','),
-        })}</p>
+        <p>{deleteTargets.length === 1
+          ? t('dialogs.deleteOne', { name: lineGroupLabel(deleteTargets[0]) })
+          : t('dialogs.deleteDescription', { ids: deleteTargets.map((group) => group.display_id).join(',') })}</p>
       </Modal>
 
       {smartGroup && scope ? (

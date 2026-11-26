@@ -5,6 +5,9 @@ import { ApiError, authApi } from '../api/auth'
 import { useSessionStore } from '../auth/session'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { useLocation } from 'react-router-dom'
+
+function LocationProbe() { return <span data-testid="location">{useLocation().pathname}</span> }
 import { ImpersonationStatusBanner } from './ImpersonationStatusBanner'
 
 const revoke = vi.hoisted(() => vi.fn())
@@ -55,7 +58,8 @@ describe('ImpersonationStatusBanner', () => {
         },
       },
     })
-    renderWithProviders(<ImpersonationStatusBanner />)
+    // 从租户插件深链退出，回到管理员服务概览。
+    renderWithProviders(<><ImpersonationStatusBanner /><LocationProbe /></>, ['/plugin-ui/io.example/main'])
 
     // P2-15: inside .app-main > * (margin 12px on mobile) width:100% made the
     // 390px page 402px wide; the block takes the remaining width by itself.
@@ -72,6 +76,7 @@ describe('ImpersonationStatusBanner', () => {
     expect(useSessionStore.getState().principal?.scope_kind).toBe('platform')
     expect(useSessionStore.getState().principal?.impersonation).toBeUndefined()
     expect(authApi.me).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin-home')
   })
 
   it('freezes an unknown revoke for exact retry and restores only after revoke and me are confirmed', async () => {

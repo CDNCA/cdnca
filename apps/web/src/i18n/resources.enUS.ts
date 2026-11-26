@@ -2,6 +2,7 @@
 import { enUSNodeScheduling } from '../pages/node-scheduling/messages'
 import { systemGlobalSettingsEn } from './systemGlobalSettings'
 import { coreEnUS } from './coreResources'
+import { addMissingCopy, communityCopyEnUS } from './communityCopy'
 
 type TranslationTree = { [key: string]: string | TranslationTree }
 
@@ -13,6 +14,8 @@ export const enUS = {
     overview: 'Overview',
     analytics: 'Analytics',
     realtime: 'Real-time monitoring',
+    nodeRealtime: 'Node real-time monitoring',
+    siteRealtime: 'Site real-time monitoring',
     dataAnalysis: 'Data analysis',
     rum: 'Real user monitoring',
     contentRewrite: 'Content rewrite',
@@ -91,6 +94,7 @@ export const enUS = {
     packageMonitorAlerts: 'Package alerts',
     buyPackages: 'Buy packages',
     accountCenter: 'Account center',
+    teamManagement: 'Team management',
     resellerConsole: 'Reseller',
     resellerPackages: 'Packages',
     resellerCustomers: 'My customers',
@@ -340,7 +344,6 @@ export const enUS = {
       searchType: 'Statistics dimension',
       serverPort: 'Server port',
       serverPortPlaceholder: 'Enter a port, such as 80 or 443',
-      attackRequest: 'Attack request',
       customRange: 'Custom time range',
       from: 'Start time',
       to: 'End time',
@@ -365,6 +368,7 @@ export const enUS = {
       retry: 'Retry',
       clear: 'Clear',
       viewLogs: 'View logs',
+      search: 'Search',
       showOverview: 'Show overview',
       hideOverview: 'Hide overview',
       previous: 'Previous',
@@ -433,7 +437,6 @@ export const enUS = {
       storageUnavailable: 'Analytics storage is unavailable. Try again later.',
       queryTimeout: 'The query timed out. Try a shorter time range.',
       unsupportedDimension: 'This ranking dimension is not supported in this version.',
-      filterUnsupported: 'This filter is not supported in this version.',
       invalidPort: 'The port must be an integer from 1 to 65535.',
       multipleDomainsUnsupported: 'Filtering multiple domains is not supported in this version.',
       requestFailed: 'Monitoring data could not be loaded. Try again later.',
@@ -443,7 +446,9 @@ export const enUS = {
     title: { access: 'Access logs', block: 'Block logs', blockEvents: 'Raw block events', coordination: 'Cross-node CC' },
     actions: { query: 'Query', reset: 'Reset', retry: 'Retry', previous: 'Previous', next: 'Next', details: 'Details' },
     filters: {
-      tenant: 'Tenant ID', site: 'Site ID', node: 'Node ID', clientIp: 'Client IP', status: 'Status code',
+      tenant: 'Tenant', tenantId: 'Tenant ID', tenantSearchPlaceholder: 'Search tenants by username, email or user ID', tenantSearchEmpty: 'No matching tenants',
+      siteName: 'Site', siteSearchPlaceholder: 'Search sites by domain', siteSearchEmpty: 'No matching sites',
+      site: 'Site ID', node: 'Node ID', clientIp: 'Client IP', status: 'Status code',
       country: 'Region code', carrier: 'Carrier', action: 'Action', actionAll: 'All', actionBlock: 'Block', actionChallenge: 'Challenge', actionLog: 'Observe', actionTemporaryBan: 'Auto block', method: 'Method', protocol: 'Protocol', cache: 'Cache status',
       from: 'Start time', to: 'End time',
     },
@@ -465,21 +470,25 @@ export const enUS = {
       microseconds: '{{value}} microseconds', unknown: 'Unknown', notToOrigin: 'Not sent to origin',
       eventType: { waf: 'Web application firewall', cc: 'CC protection', acl: 'Access control' },
       action: { block: 'Block', deny: 'Deny', log: 'Observe', challenge: 'Challenge', temporary_ban: 'Auto block' },
-      severity: { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' },
+      severity: { info: 'Info', low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' },
     },
     states: {
-      loading: 'Loading logs', empty: 'No logs match the current filters', selectTenant: 'Select a tenant to query logs.', tenantRequired: 'Platform queries require a tenant ID.',
+      loading: 'Loading logs', empty: 'No logs match the current filters', selectTenant: 'Select a tenant to query logs.', tenantRequired: 'Choose a tenant first.',
       invalidUuid: 'Enter a valid non-zero lowercase UUID.', invalidWindow: 'The end time must follow the start time.',
       rangeTooLong: 'The maximum time range is 31 days.', invalidAccessStatus: 'Status must be an integer from 100 to 599.',
       invalidStatus: 'Status must be 0 or an integer from 100 to 599.',
       permissionTitle: 'You cannot view logs', permissionDescription: 'This account cannot read logs for the selected scope.',
       invalidRequest: 'The filters or page cursor are invalid.', notFound: 'The log query endpoint was not found.',
+      invalidClientIp: 'Enter a valid IP address (IPv4 or IPv6).',
+      invalidBytes: 'Enter a whole number of bytes, 0 or more.', invalidBytesRange: 'The maximum cannot be below the minimum.',
+      scopeForbidden: 'You cannot view logs of the selected object. Change or clear this filter.',
       unsupported: 'This log capability is unavailable.', storageUnavailable: 'Log storage is unavailable. Try again later.',
       queryTimeout: 'The query timed out. Try a shorter time range.', requestFailed: 'Logs could not be loaded. Try again later.',
     },
     blockState: {
       tabs: { events: 'Raw block events', current: 'Current blocks', count: 'Block counts', history: 'Block history', coordination: 'Cross-node CC' },
       snapshot: 'State snapshot: {{time}}',
+      selectionScope: 'blocks',
       actions: {
         unlock: 'Unlock', unlockIp: 'Unlock IP', unlockSite: 'Unlock site', exportBlacklist: 'Export blacklist',
         refresh: 'Refresh', clear: 'Clear', viewLog: 'View logs',
@@ -515,7 +524,7 @@ export const enUS = {
         superseded: '{{n}} ignored an old release',
       },
       states: {
-        tenantRequired: 'Platform queries require a valid tenant ID.', invalidSite: 'Enter a valid non-zero lowercase site UUID.',
+        invalidSite: 'Enter a valid non-zero lowercase site UUID.',
         invalidFilter: 'Enter a valid non-zero lowercase filter UUID.',
         invalidRequest: 'The query or unlock request is invalid.', permissionDenied: 'This account cannot perform this action.',
         notFound: 'This block no longer exists.', conflict: 'The policy or edge revision changed. Refresh and try again.',
@@ -533,7 +542,7 @@ export const enUS = {
       unlock: {
         title: 'Confirm unlock', description: 'Remove {{cidr}} from the next ACL policy revision and activate it through an edge rollout.',
         siteDescription: 'Unlock every unlockable block currently held by site {{site}}.',
-        siteTitle: 'Unlock blacklist for a site',
+        siteTitle: 'Unlock blacklist for a site', site: 'Site', sitePlaceholder: 'Search sites by domain', siteEmpty: 'No matching sites',
         reason: 'The reason is recorded as a confirmed false positive and the action is audited.', confirm: 'Confirm unlock', cancel: 'Cancel',
       },
       coordination: {
@@ -551,7 +560,8 @@ export const enUS = {
         },
         values: { hits: '{{hits}} hits / {{nodes}} nodes', policyVersions: '{{current}} / {{lkg}}' },
         states: {
-          siteRequired: 'Enter a valid non-zero lowercase site UUID.',
+          tenantInvalid: 'The tenant in the link is invalid. Choose a tenant again.', siteInvalid: 'The site in the link is invalid. Choose a site again.',
+          siteNotInTenant: 'This site does not belong to the selected tenant. Choose another site.',
           invalidRequest: 'The cross-node CC query or release request is invalid.', permissionDenied: 'This account cannot perform this action.',
           conflict: 'The coordination generation or policy version changed. Refresh and try again.',
           unavailable: 'Cross-node CC coordination is unavailable; edge nodes keep local protection and the last known good policy.',
@@ -567,6 +577,7 @@ export const enUS = {
     },
   },
   siteGroups: {
+    selectionScope: 'site groups',
     subnav: {
       label: 'Site settings navigation', previous: 'Previous site settings page', next: 'Next site settings page',
       list: 'Site list', groups: 'Groups', defaults: 'Defaults', dnsApi: 'DNS API', dnsCheck: 'DNS resolution check',
@@ -582,7 +593,7 @@ export const enUS = {
     },
     actions: { create: 'Add group', rename: 'Edit', delete: 'Delete', save: 'Confirm', cancel: 'Cancel', refresh: 'Refresh', retry: 'Retry', retryWrite: 'Try again', retryRead: 'Reload', continueBatch: 'Delete the rest' },
     columns: { id: 'ID', user: 'User', name: 'Name', remark: 'Remark', revision: 'Revision', updatedAt: 'Updated', actions: 'Actions' },
-    messages: { saved: 'Site group saved', superseded: 'Saved. Someone changed this group again right after, so the page shows their newer version; your change did not overwrite it.' },
+    messages: { created: 'Site group created', saved: 'Site group saved', deleted: 'Site group deleted', superseded: 'Saved. Someone changed this group again right after, so the page shows their newer version; your change did not overwrite it.' },
     errors: {
       forbiddenTitle: 'You cannot view site groups', forbiddenDescription: 'Site read permission is required. Platform accounts also need user-directory permission.',
       scopeRequiredTitle: 'Select a tenant scope first', scopeRequiredDescription: 'A platform session must target a tenant scope before site groups can be read.',
@@ -602,6 +613,7 @@ export const enUS = {
   },
   sites: {
     title: 'Site list',
+    selectionScope: 'sites',
     actions: {
       add: 'Add site',
       batchModify: 'Batch edit',
@@ -670,7 +682,15 @@ export const enUS = {
       locked: 'Locked',
       trafficSuspended: 'Stopped: traffic exceeded',
       noPackage: 'No package bound; not served yet',
+      packageState: { no_package: 'Awaiting package', package_disabled: 'Package disabled', package_deleted: 'Package deleted', package_suspended: 'Subscription suspended', package_cancelled: 'Subscription terminated' },
       accessReady: 'Access ready',
+      headline: { accessBlocked: 'Access blocked', accessPending: 'Setup needed', originUnhealthy: 'Origin down' },
+      configSynced: 'Config synced',
+      siteSwitch: { enabled: 'Site enabled', disabled: 'Site disabled' },
+      originHealthy: 'Origin up',
+      originUnhealthy: 'Origin down',
+      originUnhealthyReason: 'Origin down: {{reason}}',
+      viewOriginSettings: 'Origin settings',
       accessGap: {
         line: 'Access not ready: no usable line',
         cname: 'Access not ready: CNAME not generated',
@@ -683,6 +703,8 @@ export const enUS = {
       },
       packageDisabled: 'Package disabled; not served',
       packageDeleted: 'Package deleted; not served',
+      packageSuspended: 'Subscription suspended; takes effect once resumed',
+      packageCancelled: 'The bound subscription was terminated; not served',
       trafficRecovered: 'Traffic restored',
       syncing: 'Syncing',
       syncPendingCountdown: 'Pending sync · refresh in {{seconds}}s',
@@ -725,6 +747,7 @@ export const enUS = {
     },
     search: {
       quickFieldLabel: 'Quick search field',
+      regionPlaceholder: 'Enter a region ID',
       quickContentLabel: 'Quick search value',
       domain: 'Domain',
       originIp: 'Origin IP',
@@ -742,13 +765,11 @@ export const enUS = {
       ownerPlaceholder: 'Search by ID, email, username, or phone number',
       basePackage: 'Base package',
       sitePackage: 'Site package',
-      packagePlaceholder: 'Enter a package ID',
+      packagePlaceholder: 'Enter a package name or ID',
       siteGroup: 'Site group',
       groupPlaceholder: 'Enter a group ID',
       region: 'Region',
-      regionPlaceholder: 'Enter a region ID',
       nodeGroup: 'Line group',
-      nodeGroupPlaceholder: 'Enter a line group ID',
       cnameDomain: 'CNAME domain',
       cnameDomainPlaceholder: 'Enter a CNAME domain',
       cnameHostname: 'CNAME hostname',
@@ -801,6 +822,7 @@ export const enUS = {
       currentReason: 'Current lock reason',
       outcomeUnknown: 'Operation outcome unknown',
       versionChanged: 'The site version has changed',
+      reasonInvalid: 'Enter a lock reason containing 1-500 characters',
       stateChanged: 'The site lock state has changed',
       retryDescription: 'The form is locked. Retrying reuses the original version, reason, and idempotency key.',
       closeForLatest: 'Close this dialog and choose an action again from the latest list state.',
@@ -841,6 +863,7 @@ export const enUS = {
       package_resource_quota_exceeded: 'The site exceeds its package quota. Release resources or add capacity before enabling.',
       package_feature_denied: 'The site uses a feature its package does not include. Add the matching add-on before enabling.',
       validation_error: 'Enter a lock reason containing 1-500 characters',
+      filterInvalid: 'The filter conditions are invalid. Check them and try again.',
       site_not_found: 'Site not found',
       retry_lock_corrupted: 'The pending operation record is corrupted. Site management remains read-only.',
       unknownCode: 'Operation failed ({{code}}). Try again later.',
@@ -885,6 +908,7 @@ export const enUS = {
       },
       feedback: {
         originRecoveryFailed: 'The pending origin request cannot be restored. Site settings remain read-only.',
+        permissionChanged: 'Your permissions have changed. You cannot make changes here now.',
         originOutcomeUnknown: 'The previous origin save outcome is unknown. Retry the same request.',
         originSaved: 'Origin settings saved. Deploying to the nodes.', basicSaved: 'Basic configuration saved. Deploying to the nodes.',
         siteLocked: 'The site was locked by an administrator and new configuration cannot be saved.',
@@ -921,6 +945,7 @@ export const enUS = {
           http_listen_ports: 'Invalid HTTP port: ports must be 1-65535',
           https_listen_ports: 'Invalid HTTPS port: enter ports from 1 to 65535 (blank means 443) that are not also HTTP ports',
           https_redirect_port: 'The redirect port must be one of the HTTPS ports',
+          http3_enabled: 'The current package does not include HTTP/3',
           origins: 'Invalid origin: enter 1-32 distinct valid IPs or domains (port optional)',
         },
         forbiddenTitle: 'You cannot view site details', loadFailed: 'Failed to load site details', empty: 'No site details',
@@ -1036,64 +1061,33 @@ export const enUS = {
         groupEmptyOwner: 'This user ({{name}}) has no site groups yet', groupEmptySelf: 'You have no site groups yet', groupCreate: 'Create a group',
       },
       locked: {
-        notice: 'These settings are not currently editable', unavailable: 'Unavailable', switch: 'Toggle', seconds: 'seconds',
-        columns: {
-          condition: 'Match condition', action: 'Filter action', mode: 'Match mode', remark: 'Remarks', status: 'Status',
-          operation: 'Actions', type: 'Type', content: 'Content', ttl: 'TTL', ignoreQuery: 'Ignore query', forceCache: 'Force cache',
-        },
-        origin: {
-          protocolSection: 'Origin protocol and port', protocol: 'Origin protocol', followProtocol: 'Follow request protocol',
-          followPortProtocol: 'Follow request port and protocol', domainSection: 'Origin host', domain: 'Origin host',
-          visitDomain: 'Request domain', visitDomainPort: 'Request domain:port', custom: 'Custom',
-          timeoutSection: 'Origin timeouts', timeout: 'Origin response timeout', connectTimeout: 'Connect timeout', auth: 'Origin authentication',
-        },
-        httpsCertificate: 'HTTPS certificate',
-        security: {
-          cc: 'CC protection', defaultProtection: 'Default protection', off: 'Off', loose: 'Loose', js: 'JS challenge',
-          fiveSecond: '5-second shield', click: 'Click challenge', slider: 'Slider challenge', captcha: 'CAPTCHA',
-          rotate: 'Rotate image', simpleClick: 'Simple click challenge', simpleSlider: 'Simple slider challenge', custom: 'Custom',
-          autoSwitch: 'Automatic switching', customRules: 'Custom rules', addRule: 'Add rule', enableAll: 'Enable all rules',
-          disableAll: 'Disable all rules', crawler: 'Search engine crawlers', notSet: 'Not set', allow: 'Allow', block: 'Block',
-          more: 'More settings', blacklistTime: 'Blacklist duration', whitelistTime: 'Whitelist duration', cookieDomain: 'Cookie domain',
-          blacklist: 'Blacklist', whitelist: 'Whitelist', blockProxy: 'Block transparent proxies', regionBlock: 'Region blocking',
-          abroadWith: 'Outside China including Hong Kong, Macao, and Taiwan', abroadWithout: 'Outside China excluding Hong Kong, Macao, and Taiwan',
-          chinaWith: 'China including Hong Kong, Macao, and Taiwan', chinaWithout: 'China excluding Hong Kong, Macao, and Taiwan',
-        },
-        cache: { addRule: 'Add rule', quick: 'Quick cache setup' },
-        access: {
-          aclSettings: 'ACL settings', aclSelect: 'ACL selection', aclHelp: 'Create an ACL rule in ACL management before applying it here.',
-          hotlink: 'Hotlink protection', cors: 'Cross-origin access', allow: 'Allow', deny: 'Deny',
-        },
-        advanced: {
-          upload: 'Upload size limit', sizeLimit: 'Size limit', unlimited: 'Unlimited', custom: 'Custom',
-          compression: 'Compression settings', gzip: 'Gzip compression', websocket: 'WebSocket configuration', searchOrigin: 'Search engine origin configuration',
-          errorPages: 'Error page configuration', addPage: 'Add page', redirects: 'URL redirect settings', addRedirect: 'Add redirect',
-          originHeaders: 'Origin request headers', addRequestHeader: 'Add request header', responseHeaders: 'CDN response headers', addResponseHeader: 'Add response header',
-          other: 'Other settings', originCertificate: 'Request certificate for origin', realtimeReturn: 'Return data in real time',
-          realtimeSend: 'Send data in real time', admin: 'Administrator settings', requestHeaders: 'Record request headers',
-          responseHeadersLog: 'Record response headers', requestBody: 'Record request body', requestBodyLimit: 'Request body size limit',
-          defaultSite: 'Default site', l2: 'L2 configuration', package: 'Package', off: 'Off',
-        },
+        advanced: { requestHeaders: 'Record request headers', responseHeadersLog: 'Record response headers', requestBody: 'Record request body' },
       },
     },
   },
   packages: {
     title: 'Base packages',
+    selectionScope: 'packages',
     tabs: { products: 'Base packages', groups: 'Package groups' },
     bill01: {
       sections: { commercialTerms: 'Commercial terms' },
       fields: {
-        siteLimit: 'Site limit (-1 for unlimited)', nodeLimit: 'Node limit (-1 for unlimited)', timezone: 'Billing time zone',
+        siteLimit: 'Site limit (-1 for unlimited)', timezone: 'Billing time zone',
         cycleKind: 'Traffic cycle', customCycleDays: 'Custom cycle days', factorNumerator: 'TCP traffic factor numerator',
         factorDenominator: 'TCP traffic factor denominator',
       },
       cycles: { daily: 'Daily', monthly: 'Monthly', custom_days: 'Custom days' },
     },
     actions: {
-      addProduct: 'Add package', addGroup: 'Add group', sync: 'Sync data', more: 'More actions', rowMore: 'More', manage: 'Manage', copyProduct: 'Copy package', copy: 'Copy', advancedFilters: 'Advanced filters', clearFilters: 'Clear filters', edit: 'Edit', save: 'Save', add: 'Add',
+      addProduct: 'Add package', addGroup: 'Add group', refresh: 'Refresh', more: 'More actions', rowMore: 'More', rowMoreFor: 'More actions for {{name}}', manage: 'Manage', copyProduct: 'Copy package', copy: 'Copy', advancedFilters: 'Advanced filters', clearFilters: 'Clear filters', edit: 'Edit', save: 'Save', add: 'Add',
       publish: 'Publish', withdraw: 'Withdraw', enable: 'Enable', disable: 'Disable', delete: 'Delete', cancel: 'Cancel', retry: 'Retry', retrySameRequest: 'Retry the same request',
-      publishDisabledHint: 'Enable the package first',
+      publishDisabledHint: 'Enable the package first', publishUnlicensedHint: 'Not licensed', viewEntitlement: 'View license',
     },
+    license: {
+      missing: 'This controller is not licensed for package management', unusable: 'The controller license has expired or is stopped',
+      unknown: 'Could not read the controller license state', retry: 'Read license again',
+    },
+    diagnostics: { title: 'Diagnostics', code: 'Error code: {{code}}', requestId: 'Request ID: {{id}}' },
     filters: {
       productSearchLabel: 'Search base packages', productSearchPlaceholder: 'Package name or description', productSearchAction: 'Search base packages',
       groupLabel: 'Filter by package group', allGroups: 'All package groups', statusLabel: 'Filter by package status', allStatuses: 'All statuses',
@@ -1103,19 +1097,21 @@ export const enUS = {
       id: 'ID', name: 'Name', package: 'Package', regionLines: 'Region / line', resourceLimits: 'Resource limits', capabilities: 'Capabilities', groups: 'Package groups', sort: 'Sort order', region: 'Region', nodeGroup: 'Line group',
       coreLimits: 'Traffic / bandwidth / connections', domainLimits: 'Domains / root domains', httpPorts: 'HTTP ports', streamPorts: 'Layer 4 ports',
       websocket: 'Websocket', http3: 'HTTP3', l2: 'L2 nodes', cc: 'CC protection', ddos: 'DDoS protection',
-      prices: 'Monthly / quarterly / yearly', enabled: 'Enabled', status: 'Status', version: 'Version', ports: 'HTTP / Layer 4 ports', actions: 'Actions', groupName: 'Group name',
+      prices: 'Monthly / quarterly / yearly', enabled: 'Enabled', publication: 'Publication', status: 'Status', version: 'Version', ports: 'HTTP / Layer 4 ports', actions: 'Actions', groupName: 'Group name',
       visible: 'Visible for sale', updatedAt: 'Updated at',
     },
     values: {
       unlimited: 'Unlimited', allowed: 'Allowed', denied: 'Denied', enabled: 'Enabled', disabled: 'Disabled', visible: 'Visible', hidden: 'Hidden',
       empty: '-', noProducts: 'No packages', noGroups: 'No package groups', total: '{{count}} total', listSeparator: ', ',
+      publication: { draft: 'Draft', published: 'Published', withdrawn: 'Withdrawn' }, noCapabilities: 'No features enabled',
       productMeta: 'ID: {{id}} / Sort: {{sort}}', regionValue: 'Region: {{value}}', lineValue: 'Line: {{value}}', backupLineValue: 'Backup: {{value}}',
       trafficLimit: 'Traffic: {{value}}', bandwidthLimit: 'Bandwidth: {{value}}', coreLimit: 'Traffic/bandwidth/connections: {{traffic}} / {{bandwidth}} / {{connections}}', domainLimit: 'Domains/root domains: {{domains}} / {{roots}}',
       portLimit: 'HTTP ports: {{http}} / L4: {{stream}}', ccValue: 'CC: {{value}}', ddosValue: 'DDoS: {{value}}',
       priceTriplet: '{{monthly}} / {{quarterly}} / {{yearly}}',
     },
+    deps: { title: 'A package needs', group: 'Package group', region: 'Region', lineGroup: 'Line group', cname: 'CNAME domain' },
     notices: {
-      addGroupFirst: 'Add at least one package group in Package groups first', groupUpdated: 'Package group updated', productUpdated: 'Base package updated', productCopied: 'Package copied. It stays disabled until you enable it.',
+      groupUpdated: 'Package group updated', productUpdated: 'Base package updated', productCopied: 'Package copied. It stays disabled until you enable it.',
       conflictRefreshed: 'Another operation modified the data. The list has been refreshed.',
     },
     cnameSync: {
@@ -1163,6 +1159,8 @@ export const enUS = {
       package_offer_state_already_published: 'The current version of this package is already published.',
       package_offer_state_not_published: 'The package is not published, so there is nothing to withdraw.',
       package_offer_state_stale: 'The published version has changed. Refresh, then withdraw.',
+      entitlement_feature_denied: 'This controller is not licensed for package management',
+      entitlement_state_denied: 'The controller license has expired or is stopped',
       forbiddenTitle: 'You cannot manage packages', productLoadFailed: 'Failed to load base packages', groupLoadFailed: 'Failed to load package groups',
       detailLoadFailed: 'Failed to load package details',
     },
@@ -1199,7 +1197,7 @@ export const enUS = {
       cnameModes: { perSite: 'Generate per site (recommended)', shared: 'Shared CNAME' },
       validation: {
         requiredField: 'Enter {{label}}', nameRequired: 'Enter a package name', groupsRequired: 'Select at least one package group',
-        regionRequired: 'Enter a region ID', nodeGroupRequired: 'Enter a line group ID', uuid: 'Enter a valid UUID',
+        regionRequired: 'Choose a region', nodeGroupRequired: 'Choose a primary line group', uuid: 'Enter a valid UUID',
         money: 'Enter a non-negative amount with no more than two decimal places', dateTime: 'Enter a valid date and time',
         descriptionMax: 'The description cannot exceed 1000 characters', cnameRequired: 'Select a CNAME domain',
         cnameNotConfigured: '{{domain}} is not one of the CNAME domains in the DNS configuration, so sites cannot get a CNAME. Select a configured domain or add it under Nodes → DNS configuration → CNAME domains first.',
@@ -1210,6 +1208,7 @@ export const enUS = {
   },
   jobs: {
     title: 'Background tasks',
+    selectionScope: 'tasks',
     actions: {
       query: 'Query', details: 'Details', retry: 'Retry', previous: 'Previous page', next: 'Next page',
 		cancel: 'Cancel task', cancelShort: 'Cancel', retryFailed: 'Retry failed task', retrySame: 'Retry same request', refresh: 'Refresh task', confirm: 'Confirm', close: 'Close',
@@ -1229,16 +1228,16 @@ export const enUS = {
       cancelled: 'Cancelled', lease_expired: 'Lease expired', pending: 'Pending', canceling: 'Cancelling', retrying: 'Retrying',
     },
     columns: {
-      id: 'ID', priority: 'Priority', name: 'Name', kind: 'Type', resource: 'Resource ID', dependency: 'Dependency', tenant: 'Tenant ID', createdAt: 'Created at',
+      id: 'ID', priority: 'Priority', kind: 'Type', resource: 'Resource ID', dependency: 'Dependency', tenant: 'Tenant ID', createdAt: 'Created at',
       startedAt: 'Started at', duration: 'Duration', progress: 'Progress', status: 'Status', failureCount: 'Failures', attempt: 'Attempts',
       failureCode: 'Failure code', actions: 'Actions',
     },
     duration: { seconds: '{{count}} sec', minutes: '{{count}} min', hours: '{{count}} hr' },
-    values: { noFact: 'No recorded fact', empty: 'No background tasks', endedAt: 'Ended {{value}}', notStarted: 'Not started', notRecorded: 'Not recorded' },
+    values: { placeholder: '—', empty: 'No background tasks', endedAt: 'Ended {{value}}', notStarted: 'Not started', notRecorded: 'Not recorded' },
     pagination: { label: 'Task pagination', page: 'Page {{page}}', totalUnknown: 'Total unavailable', pageSize: 'Page size', perPage: '{{count}} / page' },
     confirm: {
       cancelTitle: 'Confirm task cancellation', cancelDescription: 'No new execution steps will be dispatched after cancellation.',
-      retryTitle: 'Confirm task retry', retryDescription: 'The same task will be queued again.',
+      retryTitleNamed: 'Retry task "{{kind}}"?', retryConfirmNamed: 'Confirm retrying {{kind}}', retryDescription: 'The same task will be queued again.',
     },
     notices: {
       cancelSucceeded: 'Task cancellation requested', retrySucceeded: 'Task queued for retry',
@@ -1299,6 +1298,7 @@ export const enUS = {
   },
   users: {
     title: 'User list',
+    selectionScope: 'users',
     tabs: { users: 'Users', groups: 'User groups' },
     actions: {
       add: 'Add user', search: 'Search', confirm: 'Confirm', cancel: 'Cancel', close: 'Close', switch: 'Switch', edit: 'Edit', editUser: 'Edit user {{name}}', disable: 'Disable',
@@ -1329,9 +1329,11 @@ export const enUS = {
     },
     values: {
       placeholder: '—', empty: 'No data', total: '{{count}} total', notProvided: 'Unavailable',
-      emailMissing: 'Email not set', phoneMissing: 'Phone not set', qqMissing: 'QQ not set',
-      remarkMissing: 'Remark not set', userID: 'ID {{id}}', self: 'You',
-      balanceAmount: 'CNY {{amount}}', balanceLoading: 'Loading', balanceUnavailable: 'Balances could not be loaded. Please retry.',
+      emailMissing: 'Email not set',
+      phoneMissing: 'Phone not set',
+      qqMissing: 'QQ not set',
+      userID: 'ID {{id}}', self: 'You',
+      balanceAmount: 'CNY {{amount}}', balanceLoading: 'Loading', balanceReadFailed: 'Unavailable', balanceRetry: 'Failed, retry',
     },
     form: {
       addTitle: 'Add user', editTitle: 'Edit user', username: 'Username', initialPassword: 'Initial password', password: 'Password',
@@ -1343,8 +1345,6 @@ export const enUS = {
       loginAllowlist: 'Login allowlist',
       secondaryVerificationHelp: 'When enabled, the user must repeat verification with the identity document used for the first verification. Email and SMS notifications are sent automatically.',
       verificationStatusHelp: 'Read-only: shows complete once the user finishes secondary verification and it is approved. If the deadline passes with "Lock sites", all of the user\'s sites are disabled, locked and taken off the nodes at once; they are unlocked and restored automatically when the user completes the reverification (sites stopped or locked for other reasons are not touched).',
-      unsupportedTitle: 'These profile fields cannot be saved yet',
-      unsupportedDescription: 'The current user contract does not yet support username changes or creating a disabled user; password changes cannot be saved together with other profile changes. Clear those changes and retry. Supported fields are never discarded silently.',
       identityReadOnlyTitle: 'Identity verification result (read-only)',
       identityReadOnlyDescription: 'Users submit identity data themselves under Account → Identity verification; it shows as verified only after the verification review approves it. Names and document numbers are not edited or overwritten from user management. The switches below show the server result.',
       identityNotLoaded: 'The verification result for this user was not loaded. Close and refresh the list, then retry.',
@@ -1362,6 +1362,7 @@ export const enUS = {
       validation: {
         usernameRequired: 'Enter a username', usernameLength: 'The username must contain 3 to 128 characters',
         usernamePattern: 'Use lowercase letters, numbers, periods, hyphens, and underscores only', passwordRequired: 'Enter an initial password',
+        passwordSeparate: 'Save the new password on its own, without other profile changes',
         passwordLength: 'The password needs 8–1024 characters with at least two of upper case, lower case, digits and symbols', displayNameRequired: 'Enter a display name',
         deadlineFormat: 'Use the format 2026-01-01 12:00:00', deadlineRequired: 'A deadline is required when sites are locked on expiry',
         displayNameLength: 'The display name cannot exceed 128 characters', emailRequired: 'Enter an email address',
@@ -1403,7 +1404,7 @@ export const enUS = {
     },
     groups: {
       add: 'Add user group', addTitle: 'Add user group', editTitle: 'Edit user group', delete: 'Delete',
-      deleteTitle: 'Delete user group', deleteDescription: 'This action cannot be undone.', confirmDelete: 'Confirm delete',
+      deleteTitle: 'Delete user group {{name}}?', deleteNamed: 'Delete user group {{name}}', deleteDescription: 'This action cannot be undone.', confirmDelete: 'Confirm delete',
       name: 'Group name', nameRequired: 'Enter a group name', members: 'Members', searchLabel: 'Search user groups', searchPlaceholder: 'User group name',
       empty: 'No user groups', loadFailed: 'Failed to load user groups',
       uncertain: 'Retry the same request, or close and refresh the list to confirm the result.',
@@ -1476,10 +1477,6 @@ export const enUS = {
       permissionCount: 'Permissions: {{count}}', edit: 'Edit account profile', balance: 'Balance', identity: 'Identity',
       verified: 'Verified', unverified: 'Not verified', lastLogin: 'Last sign-in', loginIp: 'Sign-in IP',
     },
-    greeting: {
-      lateNight: 'It is late. Remember to rest.', morning: 'Good morning. A new day has begun.',
-      afternoon: 'Good afternoon. Have a productive day.', evening: 'Good evening. Take some time to unwind.',
-    },
     scopes: { tenant: 'Tenant' },
     roles: { tenantOwner: 'Tenant administrator', tenantViewer: 'Read-only user', unknown: 'Other role' },
     ranges: {
@@ -1489,7 +1486,7 @@ export const enUS = {
     sections: {
       resources: 'Resources and account', sites: 'Sites', certificates: 'Certificates', billing: 'Balance', subscriptions: 'Current packages',
       trafficPackages: 'Traffic packages', operations: 'Task status', notices: 'Announcements', network: 'Network overview',
-      monitoring: 'Monitoring trend', top: 'TOP10 data (last 30 minutes)', systemNotices: 'System announcements', packageTraffic: 'Package traffic', usage: 'Usage statistics',
+      monitoring: 'Monitoring trend', top: 'TOP10 data', systemNotices: 'System announcements', packageTraffic: 'Package traffic', usage: 'Usage statistics',
     },
     metrics: {
       bandwidth: 'Average bandwidth', peakBandwidth: 'Peak bandwidth', requests: 'Requests', totalTraffic: 'Total traffic', blockedIps: 'Blocked IPs', securityEvents: 'Security events',
@@ -1504,10 +1501,6 @@ export const enUS = {
     usage: { domains: 'Domains', forwards: 'Forwards', certificates: 'Certificates', packages: 'Packages purchased' },
     unavailable: {
       dependency_unavailable: 'A dependency is unavailable', dependency_timeout: 'A dependency timed out', authoritative_fact_missing: 'Authoritative data is not ready',
-    },
-    subscriptions: {
-      active: '{{count}} active packages', empty: 'No active packages',
-      columns: { name: 'Package', endsAt: 'Valid until', siteLimit: 'Site limit', domainLimit: 'Domain limit', nodeLimit: 'Node limit', trafficLimit: 'Traffic limit' },
     },
     notices: {
       unreadCount: '{{count}} unread announcements', read: 'Read', unread: 'Unread', empty: 'No announcements',
@@ -1566,7 +1559,7 @@ export const enUS = {
     form: {
       ownerUserId: 'Owner user ID', productId: 'Package product ID', targetProductId: 'Target package product ID', targetProduct: 'Target package', targetProductPlaceholder: 'Choose the target package', targetProductRequired: 'Choose the target package', targetsFailed: 'Could not load packages; close and retry', noTargets: { upgrade: 'No higher-priced package is available to upgrade to', downgrade: 'No lower-priced package is available to downgrade to' }, productRevision: 'Product revision', period: 'Billing period',
       validityMode: 'Validity mode', duration: 'Fixed period', endAt: 'Specific end time',
-      siteLimit: 'Site limit (-1 for unlimited)', nodeLimit: 'Node limit (-1 for unlimited)', timezone: 'Billing time zone', cycleKind: 'Traffic cycle',
+      siteLimit: 'Site limit (-1 for unlimited)', timezone: 'Billing time zone', cycleKind: 'Traffic cycle',
       customCycleDays: 'Custom cycle days', factorNumerator: 'TCP traffic factor numerator', factorDenominator: 'TCP traffic factor denominator',
       effectiveMode: 'Effective time', payment: 'Payment method', trafficSnapshotId: 'Traffic product snapshot ID',
     },
@@ -1582,10 +1575,10 @@ export const enUS = {
     orderStates: {
       created: 'Created', paid: 'Paid', fulfilled: 'Active', cancelled: 'Cancelled', refund_applied: 'Refunded', void_applied: 'Voided', failed: 'Failed',
     },
-    subscriptionStates: { active: 'Active', cancelled: 'Cancelled' },
+    subscriptionStates: { active: 'Active', suspended: 'Suspended', expired: 'Expired', cancelled: 'Cancelled' },
     columns: {
       packageName: 'Package', subscriptionId: 'Subscription ID', orderId: 'Order ID', productId: 'Product ID', productKind: 'Product type', operation: 'Operation',
-      period: 'Period', price: 'Period price', sites: 'Sites', domains: 'Domains', nodes: 'Nodes', traffic: 'Cycle traffic',
+      period: 'Period', price: 'Period price', sites: 'Sites', domains: 'Domains', traffic: 'Cycle traffic',
       originalAmount: 'Original amount', discountAmount: 'Discount', payableAmount: 'Amount paid', payment: 'Payment', status: 'Status',
       startedAt: 'Starts at', endsAt: 'Ends at', createdAt: 'Created at', revision: 'Revision', actions: 'Actions',
     },
@@ -1620,13 +1613,14 @@ export const enUS = {
     },
     columns: {
       id: 'ID', type: 'Type', note: 'Note', originalAmount: 'Original price', paidAmount: 'Amount paid',
-      details: 'Details', paymentMethod: 'Payment method', orderNumber: 'Order number', createdAt: 'Created at', paid: 'Paid',
+      details: 'Details', paymentMethod: 'Payment method', orderNumber: 'Order number', createdAt: 'Created at', paid: 'Status',
     },
     types: {
       purchase: 'Purchase', renewal: 'Renewal', recharge: 'Recharge', deduction: 'Deduction', upgrade: 'Upgrade',
       package_change: 'Package change', traffic_package: 'Traffic package', refund: 'Refund', income: 'Income',
     },
-    statuses: { paid: 'Paid', unpaid: 'Unpaid' },
+    statuses: { paid: 'Paid', unpaid: 'Unpaid', posted: 'Posted' },
+    ledger: { delta: 'Balance change', number: 'Ledger number' },
     sources: { manual: 'Manual record', manualHint: 'Recorded by an administrator; it does not mean the balance changed' },
     paymentMethods: {
       balance: 'Balance', alipay: 'Alipay', wechat: 'WeChat', transfer: 'Bank transfer', manual: 'Admin adjustment', migrate_import: 'Migration import', provider: 'Online payment',
@@ -1637,9 +1631,9 @@ export const enUS = {
   },
   accountMessages: {
     title: 'Message search',
-    filters: { status: 'Message status', all: 'All messages', category: 'Message category', announcements: 'Announcements', events: 'Event alerts', type: 'Event type', allTypes: 'All types', siteID: 'Site ID', packageID: 'User package ID', search: 'Search', sitePlaceholder: 'Domain or site ID', packagePlaceholder: 'Package name or ID', invalidKeyword: 'Up to 128 characters, no control characters' },
+    filters: { status: 'Message status', all: 'All messages', category: 'Message category', announcements: 'Announcements', events: 'Event alerts', type: 'Event type', allTypes: 'All types', site: 'Site', package: 'Package', search: 'Search', sitePlaceholder: 'Domain or site ID', packagePlaceholder: 'Package name or ID', invalidKeyword: 'Up to 128 characters, no control characters' },
     columns: { title: 'Title', createdAt: 'Created at', action: 'Action', type: 'Type', packageID: 'User package ID', siteID: 'Site ID' },
-    events: { noTitle: '(no title)', noContent: 'This event has no displayable body.', none: '—', hint: 'Event alerts have no read state; site and package IDs were recorded when the event happened and remain after the resource is deleted.' },
+    events: { noTitle: '(no title)', noContent: 'This event has no displayable body.', none: '—' },
     states: { read: 'Read', unread: 'Unread' },
     actions: { view: 'View', markRead: 'Mark as read', refresh: 'Refresh', retry: 'Retry', retrySameRequest: 'Retry the same request', closeAndRefresh: 'Close and refresh', close: 'Close' },
     errors: { forbiddenTitle: 'Messages are unavailable', permissionDenied: 'Your account cannot read in-app messages', invalidSession: 'Your session has expired. Sign in again.', requestFailed: 'Unable to load messages. Try again later.' },
@@ -1648,21 +1642,25 @@ export const enUS = {
   },
   announcements: {
     title: 'Announcement management',
+    selectionScope: 'announcements',
     editorConfirm: 'Confirm',
     popup: { acknowledge: 'I have read it, do not show again', later: 'Remind me later', acknowledgeFailed: 'Could not mark it as read; it will not pop up again this session but will on next sign-in' },
     global: {
       title: 'Global announcement management',
-      actions: { create: 'New global announcement', show: 'Show', hide: 'Hide', delete: 'Delete', deleteSelected: 'Delete selected' },
+      actions: { create: 'New global announcement', show: 'Show', hide: 'Hide', delete: 'Delete', deleteSelected: 'Delete selected', more: 'More', publishConfirm: 'Publish announcement' },
       columns: { recipients: 'Recipients' },
       form: {
         editTitle: 'Edit global announcement draft', createTitle: 'New global announcement', allTenants: 'All active users in every tenant',
         selectedTargets: 'Selected tenants, roles, or users', tenants: 'Whole tenants', tenantsHint: 'All active users of the selected tenants', searchTenants: 'Search by tenant name or number',
-        targetTenant: 'Pick within tenant', targetTenantHint: 'Choose one tenant, then pick its roles or users by name below', roles: 'Tenant roles', users: 'Tenant users', pickTenantFirst: 'Choose a tenant above first',
+        members: 'Selected members', targetTenant: 'Pick within tenant', searchMemberTenant: 'Choose the members\' tenant', roles: 'Tenant roles', users: 'Tenant users', targetTenantHint: 'Choose one tenant, then pick its roles or users by name below', pickTenantFirst: 'Choose a tenant above first',
       },
-      confirm: { deleteTitle: 'Confirm deletion', deleteDescription: 'Deleted announcements are archived and can be restored. Published messages and read history are retained. Withdrawing published messages is a separate action. Continue?', publishDescription: 'Publishing freezes recipients for each tenant. Continue?' },
+      confirm: { deleteTitle: 'Confirm deletion', deleteDescription: 'Deleted announcements are archived and can be restored. Published messages and read history are retained. Withdrawing published messages is a separate action. Continue?', publishDescription: 'Publishing freezes recipients for each tenant. Continue?',
+        linkHost: 'Link domain', bodyPreview: 'Content preview', scopeAll: 'Entire platform', scopeTenants: 'Tenants: {{names}}', scopeTenantCount: '{{count}} tenants',
+        scopeTenantsLoading: 'Loading tenants…', scopeMembers: 'Selected members: {{items}}', roleCount: '{{count}} roles', userCount: '{{count}} users', nameSeparator: ', ', partSeparator: '; ',
+      },
       notices: { deleted: 'Announcement deleted; restore it from the archived list', batchProgress: '{{completed}} / {{total}} completed', saved: 'Global announcement saved' },
       errors: { targetScope: 'The targeted user or role does not belong to the specified tenant' },
-      values: { empty: 'No global announcements' },
+      values: { empty: 'No global announcements', visibleAfterPublish: 'Shown after publishing', hiddenAfterPublish: 'Hidden after publishing' },
     },
     filters: { status: 'Announcement status', all: 'All statuses' },
     columns: { id: 'ID', title: 'Title', status: 'Status', version: 'Version/revision', changedAt: 'Changed at', jump: 'Jump', popup: 'Popup', style: 'Style', visible: 'Visible', sort: 'Order', createdAt: 'Added at', updatedAt: 'Updated at', action: 'Action' },
@@ -1678,10 +1676,8 @@ export const enUS = {
   accountSubscriptions: {
     title: 'Message subscriptions',
     subtitle: 'Choose how you are notified about important events. Changes are saved automatically.',
-    columns: { type: 'Notification', sms: 'SMS notification', email: 'Email notification', inbox: 'In-app message' },
+    columns: { type: 'Notification', sms: 'SMS notification', email: 'Email notification', inbox: 'In-app message', smsShort: 'SMS', emailShort: 'Email', inboxShort: 'In-app' },
     events: { announcementPublished: 'Announcement published' },
-    hints: { announcementPublished: 'Notifies you when the platform publishes an announcement.' },
-    stats: { items: 'Items', sms: 'SMS on', email: 'Email on' },
     loading: 'Loading message subscriptions',
     actions: { retrySame: 'Retry the same request', closeAndRefresh: 'Close and refresh' },
     uncertainty: { title: 'Save outcome unknown', description: 'The outcome is unknown. Retry only the exact same settings and revision.' },
@@ -1705,9 +1701,9 @@ export const enUS = {
       reasons: { config_incomplete: 'sender settings incomplete', settings_unreadable: 'system settings could not be read', channel_switched_off: 'channel switched off', worker_not_running: 'delivery queue not running' },
       lastRebuild: 'Settings last applied: {{time}}', lastRebuildError: 'Last settings apply failed: {{code}}',
     },
-    templates: { name: 'Name', id: 'Template ID', version: 'Version', channel: 'Channel', variables: 'Variables' },
+    templates: { jump: 'Go to templates', name: 'Name', id: 'Template ID', version: 'Version', channel: 'Channel', variables: 'Variables', search: 'Search name or template ID', channelFilter: 'Filter by channel', allChannels: 'All channels', total: '{{count}} templates', actions: 'Actions', viewLabel: 'View {{name}} version {{version}} ({{channel}})', detailTitle: '{{name}} (version {{version}})' },
     form: { title: 'New notification template version', channel: 'Notification channel', subject: 'Email subject', body: 'Email body', smsBody: 'SMS body', variablesPlaceholder: 'Separate variables with commas' },
-    actions: { save: 'Save', newTemplate: 'New template version', createTemplate: 'Create template version', cancel: 'Cancel', retrySame: 'Retry the same request', closeAndRefresh: 'Close and refresh' },
+    actions: { save: 'Save', newTemplate: 'New template version', view: 'View', newFromVersion: 'New from this version', createTemplate: 'Create template version', cancel: 'Cancel', retrySame: 'Retry the same request', closeAndRefresh: 'Close and refresh' },
     validation: { required: 'This field is required', templateId: 'Enter a valid template ID', version: 'Version must be a positive integer', subject: 'Email subject must not exceed 2048 UTF-8 bytes', body: 'Email body must not exceed 131072 UTF-8 bytes', smsBody: 'SMS body must not exceed 8192 UTF-8 bytes', variables: 'Variable names must start with a lowercase letter and be comma-separated' },
     uncertainty: { title: 'Save outcome unknown', description: 'The outcome is unknown. Retry only the exact same settings and revision.' },
     errors: {
@@ -1716,7 +1712,7 @@ export const enUS = {
       unsupported: 'This notification channel is unsupported', versionConflict: 'The notification revision changed. Refresh and retry.',
       templateVersionConflict: 'This template version already exists with different content. Use a new version.', validation: 'The template fields are invalid. Check them and retry.', rateLimited: 'Too many requests. Try again later.', writeFailed: 'Notification settings save failed',
     },
-    values: { unsupported: 'Unsupported', senderNotConfigured: 'Sender not configured', openSenderSettings: 'Open sender settings', emptyTemplates: 'No notification templates', unknownRequest: 'unknown' },
+    values: { unsupported: 'Unsupported', senderNotConfigured: 'Sender not configured', openSenderSettings: 'Open sender settings', emailSenderNotConfigured: 'Email sender not configured', smsSenderNotConfigured: 'SMS not configured', openEmailSettings: 'Open SMTP settings', openSmsSettings: 'Open SMS settings', emptyTemplates: 'No notification templates', noMatchingTemplates: 'No matching notification templates', unknownRequest: 'unknown' },
     deliveries: {
       title: 'Notification delivery logs', empty: 'No delivery records', page: 'Page {{page}}',
       actions: { open: 'View delivery logs', attempts: 'View delivery attempts', retry: 'Retry', previous: 'Previous page', next: 'Next page' },
@@ -1747,12 +1743,13 @@ export const enUS = {
       sectionTitle: 'Basic information', username: 'Username', displayName: 'Display name', email: 'Email', phone: 'Phone',
       // 2026-09-19 competitor /dashboard/account/user verbatim copy (status badges + descriptions + buttons).
       compatibility: {
-        qq: 'QQ', registration: 'Registration time', balance: 'Balance', loginSecurity: 'Security settings', unavailable: 'Not provided',
-        sessionsItem: 'Sign-in sessions', sessionsDescription: 'See the devices signed in to this account and sign out the others', sessionsOpen: 'View',
+        registration: 'Registration time', balance: 'Balance', loginSecurity: 'Security settings',
+        sessionsItem: 'Sign-in sessions', sessionsDescription: 'See the devices signed in to this account and sign out the others', sessionsOpen: 'View', actionFor: '{{item}}: {{action}}',
         realName: 'Real-name verification', realNameDescription: 'Complete real-name verification soon, otherwise some features may be affected.', verify: 'Verify now',
         phoneBinding: 'Phone binding', phoneDescription: 'A bound phone number is used to recover the account and receive notices', bind: 'Bind now',
         emailBinding: 'Email binding', emailDescription: 'Your security email is bound', emailUnboundDescription: 'A bound email is used to recover the account and receive notices', emailRebind: 'Change binding',
-        loginSecurityItem: 'Login security settings', loginSecurityDescription: 'Configure a login whitelist and enable login verification codes', setup: 'Set up now',
+        loginSecurityItem: 'Two-step verification', loginSecurityDescription: 'Sensitive actions ask for a code from your authenticator app', setup: 'Set up now',
+        mfaImpersonating: 'Two-step verification of this account cannot be viewed or set up while signed in on its behalf; the account owner sets it up after signing in.',
         statusUnverified: 'Unverified', statusUnbound: 'Not bound', statusBound: 'Bound', statusUnset: 'Not set', statusSet: 'Set',
         statusVerified: 'Verified', statusPending: 'Under review', statusRejected: 'Rejected',
         realNameVerifiedDescription: 'Your real-name verification is complete',
@@ -1851,7 +1848,7 @@ export const enUS = {
     columns: { owner: 'Owner', name: 'Name', kind: 'Kind', defaultAction: 'Default action', rules: 'Rules', status: 'Status', version: 'Version', updatedAt: 'Updated at', actions: 'Actions' },
     filters: { name: 'Search name', status: 'Filter status', owner: 'Search owner' },
     editor: {
-      createTitle: 'Add security policy', editTitle: 'Edit security policy', targetScope: 'Target tenant scope', owner: 'Owner',
+      createTitle: 'Add security policy', editTitle: 'Edit security policy', targetScope: 'The targeted user or role does not belong to the specified tenant', owner: 'Owner',
       basicInfo: 'Basics', ruleMore: 'More actions for rule {{index}}', conditionCell: '{{label}} (condition {{index}})',
       kind: 'Policy kind', name: 'Name', description: 'Description', defaultAction: 'Default action', enabled: 'Enabled', rules: 'Matching rules',
       ruleName: 'Rule name', priority: 'Priority', action: 'Action', flow: 'Flow', field: 'Field', operator: 'Operator',
@@ -1866,6 +1863,8 @@ export const enUS = {
       allowFirstHint: 'The new allow rule is placed before the library\'s other rules (rules run by ascending priority and a "stop" match ends the scan), so a later block rule cannot shadow it; the other rules keep their order and can be moved with the arrows.',
       matchAllClients: 'All clients', matchAllClientsHelp: 'When on, the rule applies to every request with no condition to fill (no need for 0.0.0.0/0); counting still follows the counting object above.',
       ccConditionHint: 'Client IP accepts a CIDR, an address, a dotted netmask (10.0.0.1/255.255.255.0) or a range (10.0.0.1-10.0.0.50); any value matches. Client IP and header / User-Agent / Referer conditions may be added more than once and must all hold (for example In IP / CIDR a network, Not in IP / CIDR a few addresses in it). Header conditions need nodes with CC v6.',
+      ruleSource: 'Rule source', ruleSources: { conditions: 'Conditions', reference: 'Matcher and filters' },
+      ccReference: { unavailable: 'This matcher or filter is disabled, deleted, or not of this rule group\'s user', unsupported: 'Nodes cannot run this matcher or filter as set' },
     },
     allowIntent: { loadFailed: 'The site\'s WAF library could not be read, so the allow rule editor is not open yet. Retry; no library is created and nothing is published.' },
     evaluate: {
@@ -1881,6 +1880,7 @@ export const enUS = {
       validation_error: 'The policy is invalid. Check the field and operator combinations.', permission_denied: 'Your account does not have security policy permission',
       version_conflict: 'The policy version changed. Refresh and try again.', idempotency_conflict: 'The request differs from the original idempotent request.',
       security_policy_name_conflict: 'A policy with this name and kind already exists', request_failed: 'Request failed. Try again later.',
+      cc_reference_in_use: 'Still used by rule group "{{names}}"; it cannot be deleted or disabled',
       security_policy_in_use: 'This policy is still active on sites and cannot be deleted',
       inUseSites: 'These sites still use this policy (click a domain to open its security publish panel):',
       inUseNextStep: 'On these sites, first "Switch to another library" or "Withdraw" it, then delete it once that is active.',
@@ -1999,7 +1999,7 @@ export const enUS = {
     },
   },
   billing: {
-    title: 'Manual balance adjustments',
+    title: 'Manual balance adjustments', reviewTitle: 'Adjustment approvals',
     actions: {
       search: 'Search', viewLedger: 'View ledger', adjust: 'Adjust balance', confirm: 'Confirm adjustment', cancel: 'Cancel',
       retry: 'Retry', retrySameRequest: 'Retry the same request', closeAndRefresh: 'Close and refresh',
@@ -2023,6 +2023,9 @@ export const enUS = {
         reasonRequired: 'Enter a reason', reasonMax: 'The reason cannot exceed 500 characters',
       },
     },
+    review: {
+      credit: 'Top-up', debit: 'Deduction', approveCredit: 'Approve top-up', approveDebit: 'Approve deduction', reject: 'Reject request', rejected: 'Request rejected',
+    },
     notices: { adjusted: 'The manual balance adjustment was recorded in the ledger', conflictRefreshed: 'The balance changed in another operation. The account list has been refreshed.' },
     uncertainty: {
       title: 'Adjustment outcome unknown',
@@ -2039,6 +2042,7 @@ export const enUS = {
     },
   },
   streams: {
+    selectionScope: { streams: 'forwarding rules', groups: 'forwarding groups', defaults: 'default settings' },
     detail: {
       title: 'Forwarding details', portTitle: 'Port {{port}}', back: 'Back to forwarding list', tabs: 'Forwarding configuration tabs', basic: 'Basic configuration', access: 'Access control',
       loading: 'Loading forwarding configuration', loadFailed: 'Could not load forwarding configuration. Refresh to try again.', notFound: 'Forwarding rule not found',
@@ -2084,21 +2088,30 @@ export const enUS = {
       forbiddenTitle: 'You cannot view group management',
       listFailed: 'Failed to load groups',
       writeFailed: 'The group operation failed',
-      deleteTitle: 'Delete group',
-      deleteDescription: 'Forwarding rules that reference this group lose their group after deletion. Confirm to continue.',
+      deleteTitle: 'Delete group {{name}}?',
+      deleteTitleMany: 'Delete {{count}} groups?',
+      deleteReferences: '{{count}} forwarding rule(s) reference this group and lose their group after deletion.',
+      deleteReferencesMany: '{{count}} forwarding rule(s) reference the selected groups and lose their group after deletion.',
+      deleteNoReferences: 'No forwarding rule references this group.',
+      deleteNoReferencesMany: 'No forwarding rule references the selected groups.',
+      deleteConfirmNamed: 'Confirm deleting group {{name}}',
+      deleteConfirmMany: 'Confirm deleting {{count}} groups',
       version_conflict: 'The group was modified by another operation. Refresh and try again',
+      edit: 'Edit', editNamed: 'Edit group {{name}}', editTitle: 'Edit group', updated: 'Group saved',
+      editConflict: 'The group was modified by another operation. The list was refreshed; edit it again',
     },
     defaults: {
       add: 'Add setting',
       delete: 'Delete',
       addTitle: 'Add setting',
-      description: 'Configure the listen protocol, load balancing method and Proxy Protocol applied automatically to new layer 4 forwarding rules.',
       user: 'User',
       settingName: 'Setting',
       settingValue: 'Value',
       scope: 'Scope',
-      scopeGlobal: 'Global',
-      scopeGroup: 'Forwarding group',
+      scopeGlobal: 'All new forwarding rules of this account',
+      scopeGroup: 'New forwarding rules in a chosen group',
+      scopeGlobalUser: 'All new forwarding rules of {{name}}',
+      scopeGroupUser: 'New forwarding rules of {{name}} in a chosen group',
       group: 'Forwarding group',
       groupRequired: 'Select a forwarding group',
       settingRequired: 'Select a setting and its value',
@@ -2117,8 +2130,14 @@ export const enUS = {
       forbiddenTitle: 'You cannot view default settings',
       listFailed: 'Failed to load default settings',
       writeFailed: 'The default-setting operation failed',
-      deleteTitle: 'Delete default setting',
-      deleteDescription: 'New forwarding rules no longer apply this setting automatically. Confirm to continue.',
+      deleteTitle: 'Delete default setting "{{name}}"?',
+      deleteTitleMany: 'Delete {{count}} default settings?',
+      deleteValue: 'Value: {{value}}',
+      deleteScope: 'Scope: {{scope}}',
+      deleteItem: '{{name}}: {{value}} ({{scope}})',
+      deleteConfirmNamed: 'Confirm deleting default setting {{name}}',
+      deleteConfirmMany: 'Confirm deleting {{count}} default settings',
+      deleteDescription: 'New forwarding rules no longer apply this setting automatically.',
     },
     actions: {
       add: 'Add forwarding rule',
@@ -2355,7 +2374,9 @@ export const enUS = {
       newConnectionBan: 'Ban when exceeded (seconds)',
       newConnectionBanHelp: '0 refuses only the excess connections; otherwise an IP over the rate is refused new connections to this forward for this long (per node).',
       sessionLog: 'Session log',
-      sessionLogHelp: 'Log each connection with its client IP, upstream, traffic, duration and end reason (refused connections included); see Layer 4 realtime monitoring > Access log, kept 30 days. Live connections then show the real client and start of TCP connections. Every node must run a version with session logs, otherwise publication is refused and the nodes are listed.',
+      sessionLogHelp: 'Log each connection; see Layer 4 realtime monitoring > Access log.',
+      sessionLogDetails: 'Each entry has the client IP, upstream, traffic, duration and end reason (refused connections included) and is kept 30 days. Live connections then show the real client and start of TCP connections. Every node needs a version with session logs; publication lists the nodes to upgrade.',
+      details: 'Details', detailsOf: '{{label}} details',
       newConnectionBanRange: 'Ban duration must be an integer from 0 to 86400 seconds',
       dnsPositiveMin: 'DNS minimum positive TTL (seconds)',
       dnsPositiveMinRequired: 'Enter the DNS minimum positive TTL',
@@ -2443,17 +2464,21 @@ export const enUS = {
       },
     },
     confirm: {
-      disableTitle: 'Disable forwarding',
-      enableTitle: 'Enable forwarding',
-      stateDescription: 'Saving creates a new publish intent whose delivery status must be confirmed separately.',
-      deleteTitle: 'Delete forwarding rule',
-      deleteDescription: 'Deleting releases the port and creates a stop intent.',
+      disableTitle: 'Disable {{name}}',
+      enableTitle: 'Enable {{name}}',
+      deleteTitle: 'Delete {{name}}',
+      modifyTitle: 'Edit {{name}}',
+      disableDescription: 'After disabling, the listening port on the nodes stops accepting new connections; established connections are not dropped right away. The port stays with this forwarding rule, so you can enable it again later.',
+      enableDescription: 'After enabling, the configuration is delivered to the nodes and the listening port starts accepting new connections.',
+      deleteDescription: 'Deletion cannot be undone. The listening port on the nodes stops accepting new connections; established connections are not dropped right away. The port is released and can be assigned to another forwarding rule.',
+      targets: 'Selected: {{list}}',
+      targetsMore: 'Selected: {{list}}, … ({{count}} in total)',
+      separator: ', ',
       batch: {
         enableTitle: 'Enable {{count}} selected forwarding rules',
         disableTitle: 'Disable {{count}} selected forwarding rules',
         deleteTitle: 'Delete {{count}} selected forwarding rules',
         modifyTitle: 'Batch edit {{count}} selected forwarding rules',
-        description: 'Each rule is submitted with its current revision and its own stable idempotency identity.',
       },
     },
     notices: {
@@ -2714,6 +2739,7 @@ export const enUS = {
       provider_credentials_rejected: 'The provider rejected these credentials',
       provider_verification_rate_limited: 'Verification was rate limited. Try again later.',
       provider_verification_unavailable: 'Provider verification is unavailable',
+      provider_proxy_unavailable: 'The provider could not be reached through the HTTP proxy; check the HTTP proxy under System settings › Other › Access and network',
       provider_verification_invalid_response: 'The provider returned an invalid verification response',
       provider_verification_timeout: 'Provider credential verification timed out',
     },
@@ -2732,6 +2758,7 @@ export const enUS = {
     },
     dnsApi: {
       title: 'DNS API',
+      selectionScope: 'DNS APIs',
       description: 'Configured DNS providers for DNS-01 certificate validation. Credentials are never echoed here.',
       actions: { create: 'Add DNS API', deleteSelected: 'Delete selected', delete: 'Delete', cancel: 'Cancel' },
       columns: { user: 'User', name: 'Name', type: 'Type', remark: 'Remark', actions: 'Actions' },
@@ -2802,7 +2829,7 @@ export const enUS = {
     },
     issuers: { lets_encrypt: "Let's Encrypt", zerossl: 'ZeroSSL', google_trust: 'Google Trust Services' },
     batch: {
-      single: 'Single', tab: 'Batch request', type: 'Certificate type', typeHint: 'Choose the certificate source. Automatic requests need domain validation afterwards.',
+      single: 'Single', tab: 'Batch request', type: 'Certificate type',
       uploadType: 'Upload my own', uploadTypeHint: 'Paste or upload an existing PEM certificate and private key.',
       zerosslUnconfigured: 'Unavailable until the platform configures EAB.', zerosslUnconfiguredAdmin: 'ZeroSSL needs EAB credentials: add them or an account email under Global config → Default config → Certificate.', zerosslConfigure: 'Configure',
       issuerHints: { zerossl: 'Recommended for automatic issuance and renewal.', lets_encrypt: 'Free certificates for regular automatic requests.', google_trust: 'For automatic issuance and renewal.' },
@@ -2858,7 +2885,6 @@ export const enUS = {
       http01Hint: 'The domains must already resolve to this platform (CNAME to the site line group). The certificate authority is asked to validate only after every node serves the validation file.',
       autoRenew: 'Auto-renew',
       acceptedTitle: 'Certificate request submitted',
-      acceptedDescription: 'The request was accepted and is pending issuance. Check the list for subsequent status updates.',
       wildcardSwitched: 'Wildcard certificates can only use DNS validation; switched to DNS validation',
       dnsWarningTitle: 'These domains do not resolve to this platform yet: {{domains}}',
       dnsWarningDescription: 'The request was submitted, but HTTP validation fails until DNS is fixed. Point their CNAME to the site access address first.',
@@ -2916,6 +2942,7 @@ export const enUS = {
   },
   cacheOperations: {
     title: 'Purge and prewarm',
+    selectionScope: 'operations',
     actions: {
       query: 'Search',
       refresh: 'Refresh',
@@ -3248,6 +3275,7 @@ export const enUS = {
   },
   nodes: {
     title: 'Node list',
+    selectionScope: { nodes: 'nodes', regions: 'regions' },
     heading: 'Node management',
     tabs: { list: 'Node list', pending: 'Pending initialization', syncFailed: 'Sync failed (disabled)', regions: 'Regions', ssh: 'SSH' },
     actions: {
@@ -3423,3 +3451,5 @@ export const enUS = {
   },
   nodeScheduling: enUSNodeScheduling,
 } satisfies Record<string, TranslationTree>
+
+addMissingCopy(enUS, communityCopyEnUS)

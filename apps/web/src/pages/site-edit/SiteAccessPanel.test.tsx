@@ -114,8 +114,10 @@ describe('SiteAccessPanel', () => {
     const put = vi.spyOn(siteAccessApi, 'put').mockImplementation(async (_token, _site, version, settings) => ({ ...state({ version: version + 1 }), settings }))
     renderPanel()
     const user = userEvent.setup()
-    expect(await screen.findByText(/改写响应头的规则对回源响应和缓存命中的响应都执行/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /添加响应规则/ }))
+    // the cache semantics show once a rule exists
+    await user.click(await screen.findByRole('button', { name: /添加响应规则/ }))
+    expect(screen.getByText(/改写响应头的规则对回源响应和缓存命中的响应都执行/)).toBeInTheDocument()
+    expect(screen.queryByText(/GoEdge/)).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: '状态码 1' }), '200-299')
     await user.click(screen.getByRole('button', { name: /添加条件 1/ }))
     await user.type(screen.getByRole('textbox', { name: '响应头名称 1.1' }), 'X-Powered-By')

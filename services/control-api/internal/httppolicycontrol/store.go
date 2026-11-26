@@ -443,7 +443,8 @@ func (store *Store) List(ctx context.Context, actor Actor, filter ListFilter) (L
 		if err != nil {
 			return err
 		}
-		return nil
+		result.SystemMaxUploadBytes, err = SystemMaxUploadBytes(ctx, tx)
+		return err
 	})
 	if err != nil {
 		return ListResult{}, normalizeStoreError(err)

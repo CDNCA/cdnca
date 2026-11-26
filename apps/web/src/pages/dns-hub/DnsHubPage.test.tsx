@@ -25,7 +25,7 @@ const domainB: DNSHubDomain = { provider_id: cfID, provider_name: '海外 CF', p
 const siteRecord: DNSHubRecord = { record_ref: 'r-www', name: 'www', fqdn: 'www.shop.example', type: 'CNAME', value: 'abc.cdnca.com', ttl: 600, line: '默认', weight: 0, managed: { kind: 'site_cname', site_id: '55555555-5555-4555-8555-555555555555', site_domain: 'shop.example' } }
 const plainRecord: DNSHubRecord = { record_ref: 'r-mail', name: 'mail', fqdn: 'mail.shop.example', type: 'A', value: '192.0.2.10', ttl: 600, line: '电信', weight: 0, managed: null }
 const account = (id: string, name: string, type: string, lines: string[]): DNSHubAccount => ({
-  provider_id: id, name, provider_type: type, status: 'verified', last_listed_at: null, list_error: '', domain_count: 1,
+  provider_id: id, name, provider_type: type, status: 'verified', last_listed_at: '2026-10-29T01:00:00Z', list_error: '', domain_count: 1,
   supported_lines: lines, supports_weight: false, record_types: ['A', 'AAAA', 'CNAME', 'TXT'],
 })
 const accounts = [account(aliyunID, '主账号', 'aliyun', ['默认', '电信', '联通', '移动', '境外']), account(cfID, '海外 CF', 'cloudflare', ['默认'])]
@@ -172,6 +172,8 @@ describe('DnsHubPage (ADR 0020 §3.4)', () => {
     expect(screen.queryByRole('button', { name: '添加记录' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^修改/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'shop.example' })).not.toBeInTheDocument()
+    // The refresh would be refused without dns.manage / dns.records.manage: not offered.
+    expect(screen.queryByRole('button', { name: '刷新域名清单' })).not.toBeInTheDocument()
   })
 
   it('runs a batch TTL change on the selected domains and shows per-domain results', async () => {
@@ -204,5 +206,93 @@ describe('DnsHubPage (ADR 0020 §3.4)', () => {
     expect(await within(dialog).findByText('成功 1，失败 1，待确认 0，跳过 0')).toBeInTheDocument()
     expect(within(dialog).getByText('改动 1 条')).toBeInTheDocument()
     expect(within(dialog).getByText(/DNS 账号凭据无效/)).toBeInTheDocument()
+  })
+})
+
+describe('DnsHubPage first domain list', () => {
+  const unlisted: DNSHubAccount = { ...account(cfID, '海外 CF', 'cloudflare', ['默认']), last_listed_at: null, domain_count: 0 }
+  const listed = (extra: Partial<DNSHubAccount> = {}): DNSHubAccount => ({ ...unlisted, last_listed_at: '2026-11-24T01:00:00Z', ...extra })
+  const cfDomain: DNSHubDomain = { ...domainB, list_error: '', last_listed_at: '2026-11-24T01:00:00Z' }
+  const refreshed = { results: [{ provider_id: cfID, state: 'refreshed' as const, domain_count: 1, error: '', retry_after_seconds: 0 }] }
+
+  beforeEach(() => {
+    vi.mocked(dnsApi.list).mockResolvedValue({ items: [provider(cfID, '海外 CF', 'cloudflare')] })
+    authenticate(principal({ permissions: ['dns.read', 'dns.manage'] }))
+  })
+
+  it('refreshes a verified account that was never listed and keeps loading until the list arrives', async () => {
+    let finish: (value: typeof refreshed) => void = () => undefined
+    const refresh = vi.spyOn(dnsHubApi, 'refresh').mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    vi.mocked(dnsHubApi.domains).mockResolvedValueOnce({ accounts: [unlisted], items: [], next_cursor: '' })
+      .mockResolvedValue({ accounts: [listed({ domain_count: 1 })], items: [cfDomain], next_cursor: '' })
+    renderPage()
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith('hub-token', cfID))
+    expect(screen.queryByText('没有域名')).not.toBeInTheDocument()
+    finish(refreshed)
+    expect(await screen.findByText('blog.example')).toBeInTheDocument()
+    expect(screen.queryByText('没有域名')).not.toBeInTheDocument()
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the empty state only after a successful refresh that found no domain', async () => {
+    const refresh = vi.spyOn(dnsHubApi, 'refresh').mockResolvedValue({ results: [{ ...refreshed.results[0], domain_count: 0 }] })
+    vi.mocked(dnsHubApi.domains).mockResolvedValueOnce({ accounts: [unlisted], items: [], next_cursor: '' })
+      .mockResolvedValue({ accounts: [listed()], items: [], next_cursor: '' })
+    renderPage()
+    expect(await screen.findByText('没有域名')).toBeInTheDocument()
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not refresh the same account again while the list is reloaded', async () => {
+    const user = userEvent.setup()
+    // 账号未被拉取（如 DNS 商不支持列域名而跳过），列表反复重载也只自动刷新一次
+    const refresh = vi.spyOn(dnsHubApi, 'refresh').mockResolvedValue({ results: [{ ...refreshed.results[0], state: 'skipped', domain_count: 0 }] })
+    vi.mocked(dnsHubApi.domains).mockResolvedValue({ accounts: [unlisted], items: [], next_cursor: '' })
+    renderPage()
+    expect(await screen.findByText('没有域名')).toBeInTheDocument()
+    const accounts = screen.getByRole('navigation', { name: 'DNS 账号' })
+    await user.click(within(accounts).getByRole('button', { name: /海外 CF/ }))
+    await waitFor(() => expect(dnsHubApi.domains).toHaveBeenLastCalledWith('hub-token', expect.objectContaining({ provider_id: cfID })))
+    await user.click(within(accounts).getByRole('button', { name: '全部账号' }))
+    await waitFor(() => expect(vi.mocked(dnsHubApi.domains).mock.calls.length).toBeGreaterThanOrEqual(3))
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the cached domains and retries in place when the refresh fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(dnsApi.list).mockResolvedValue({ items: [provider(aliyunID, '主账号', 'aliyun'), provider(cfID, '海外 CF', 'cloudflare')] })
+    const refresh = vi.spyOn(dnsHubApi, 'refresh').mockRejectedValueOnce(new ApiError('offline', 0, 'network_error'))
+      .mockResolvedValue(refreshed)
+    vi.mocked(dnsHubApi.domains).mockResolvedValue({ accounts: [accounts[0], unlisted], items: [domainA], next_cursor: '' })
+    renderPage()
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('网络连接失败，请重试')).toBeInTheDocument()
+    expect(screen.getByText('shop.example')).toBeInTheDocument()
+    expect(refresh).toHaveBeenCalledTimes(1)
+    await user.click(within(alert).getByRole('button'))
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
+    expect(refresh).toHaveBeenLastCalledWith('hub-token', undefined)
+    await waitFor(() => expect(screen.queryByText('网络连接失败，请重试')).not.toBeInTheDocument())
+    expect(screen.getByText('shop.example')).toBeInTheDocument()
+  })
+
+  it('shows the provider failure with a retry instead of the empty state', async () => {
+    vi.spyOn(dnsHubApi, 'refresh').mockResolvedValue({ results: [{ ...refreshed.results[0], state: 'failed', domain_count: 0, error: 'credentials_rejected' }] })
+    vi.mocked(dnsHubApi.domains).mockResolvedValueOnce({ accounts: [unlisted], items: [], next_cursor: '' })
+      .mockResolvedValue({ accounts: [listed({ list_error: 'credentials_rejected' })], items: [], next_cursor: '' })
+    renderPage()
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/上次刷新失败：DNS 账号凭据无效/)).toBeInTheDocument()
+    expect(within(alert).getByRole('button')).toBeInTheDocument()
+    expect(screen.queryByText('没有域名')).not.toBeInTheDocument()
+  })
+
+  it('does not refresh automatically without a DNS write permission', async () => {
+    authenticate(principal({ permissions: ['dns.read'] }))
+    const refresh = vi.spyOn(dnsHubApi, 'refresh')
+    vi.mocked(dnsHubApi.domains).mockResolvedValue({ accounts: [unlisted], items: [], next_cursor: '' })
+    renderPage()
+    expect(await screen.findByText('没有域名')).toBeInTheDocument()
+    expect(refresh).not.toHaveBeenCalled()
   })
 })

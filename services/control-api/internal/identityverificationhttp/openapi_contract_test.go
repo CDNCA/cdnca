@@ -28,6 +28,8 @@ func TestIdentityVerificationOpenAPIExactlyMatchesHandlerMatrix(t *testing.T) {
 	want := []identityVerificationOpenAPIOperation{
 		{"get", apiPrefix + "/status", "getMyIdentityVerificationStatus",
 			[]string{"200", "400", "401", "403", "405", "408", "503", "504"}},
+		{"get", apiPrefix + "/methods", "getMyIdentityVerificationMethods",
+			[]string{"200", "400", "401", "403", "405", "408", "503", "504"}},
 		{"post", apiPrefix + "/cases", "createMyIdentityVerificationDraft",
 			[]string{"201", "200", "400", "401", "403", "405", "409", "422", "408", "503", "504"}},
 		{"get", apiPrefix + "/cases/{case_id}", "getMyIdentityVerificationCase",
@@ -64,7 +66,8 @@ func TestIdentityVerificationOpenAPIExactlyMatchesHandlerMatrix(t *testing.T) {
 		path = strings.ReplaceAll(path, "{session_id}", sessionID)
 		path = strings.ReplaceAll(path, "{upload_id}", uploadID)
 		path = strings.ReplaceAll(path, "{provider}", "trusted-kyc")
-		if strings.Contains(path, "/provider-") {
+		// /methods is served by the provider handler (it reads the configured provider).
+		if strings.Contains(path, "/provider-") || path == apiPrefix+"/methods" {
 			route, matched := resolveProviderRoute(path)
 			if !matched || strings.ToLower(route.method) != operation.method {
 				t.Fatalf("provider handler route %s %s = %#v matched=%t", operation.method, path, route, matched)
@@ -146,8 +149,8 @@ func TestIdentityVerificationOpenAPIUsesOnlyControlSessionSecurity(t *testing.T)
 	if strings.Count(source[:paths], "\nsecurity:\n  - bearerAuth: []\n") != 1 {
 		t.Fatal("global bearerAuth is missing or duplicated")
 	}
-	if got := strings.Count(source[paths:components], "\n      security: [{bearerAuth: []}]\n"); got != 14 {
-		t.Fatalf("operation-level bearerAuth declarations = %d, want 14", got)
+	if got := strings.Count(source[paths:components], "\n      security: [{bearerAuth: []}]\n"); got != 15 {
+		t.Fatalf("operation-level bearerAuth declarations = %d, want 15", got)
 	}
 	for _, required := range []string{
 		"type: http", "scheme: bearer", "bearerFormat: control-api-session",
@@ -197,6 +200,7 @@ func TestIdentityVerificationCanonicalOpenAPISecurity(t *testing.T) {
 
 	operations := map[string]string{
 		apiPrefix + "/status":                            "get",
+		apiPrefix + "/methods":                           "get",
 		apiPrefix + "/cases":                             "post",
 		apiPrefix + "/cases/{case_id}":                   "get",
 		apiPrefix + "/cases/{case_id}/submit":            "post",

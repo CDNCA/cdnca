@@ -33,7 +33,31 @@ func TestReconcileNodeConfigMovesOnlyProvenIdentityTuple(t *testing.T) {
 	currentDigest := configArtifactDigest087(t, pool, current.ID)
 	previousDigest := configArtifactDigest087(t, pool, previous.ID)
 
-	t.Run("previous proven tuple becomes current atomically", func(t *testing.T) {
+	// an operator may name only the source
+	// deployment's own version; the previous one, or any other, is refused
+	// and the node state is left as it was.
+	for name, observed := range map[string]uuid.UUID{"previous version": previous.ID, "unproven version": unknown.ID} {
+		t.Run("operator naming the "+name+" is refused", func(t *testing.T) {
+			nodeID := uuid.New()
+			seedEdgeNode(t, pool, scopeID, userID, nodeID)
+			seedNodeConfigState(t, pool, nodeID, scopeID, &current.ID, &previous.ID)
+			seedConfigIdentityState087(t, pool, nodeID, currentDigest, previousDigest)
+			sourceID := seedIdentityRollbackFailure087(t, pool, scopeID, nodeID, current.ID)
+			markReconciliationRequired087(t, pool, nodeID, sourceID)
+			request := ReconcileNodeConfigRequest{
+				RequestID: uuid.New(), NodeID: nodeID, ConfigurationScopeID: scopeID,
+				SourceDeploymentID: sourceID, SourceDeploymentAttempt: 1,
+				ObservedConfigVersionID: &observed, Resolution: ReconciliationOperatorConfirmed,
+				Evidence: "operator confirmed runtime UUID only",
+			}
+			if _, err := store.ReconcileNodeConfig(context.Background(), request); !errors.Is(err, ErrReconciliationObservedNotSource) {
+				t.Fatalf("reconciliation error = %v, want ErrReconciliationObservedNotSource", err)
+			}
+			assertReconciledIdentity087(t, pool, nodeID, current.ID, currentDigest, previous.ID, previousDigest)
+		})
+	}
+
+	t.Run("source version keeps the proven identity tuple", func(t *testing.T) {
 		nodeID := uuid.New()
 		seedEdgeNode(t, pool, scopeID, userID, nodeID)
 		seedNodeConfigState(t, pool, nodeID, scopeID, &current.ID, &previous.ID)
@@ -43,18 +67,18 @@ func TestReconcileNodeConfigMovesOnlyProvenIdentityTuple(t *testing.T) {
 		request := ReconcileNodeConfigRequest{
 			RequestID: uuid.New(), NodeID: nodeID, ConfigurationScopeID: scopeID,
 			SourceDeploymentID: sourceID, SourceDeploymentAttempt: 1,
-			ObservedConfigVersionID: &previous.ID, Resolution: ReconciliationAgentObserved,
-			Evidence: "signed active identity observation",
+			ObservedConfigVersionID: &current.ID, Resolution: ReconciliationOperatorConfirmed,
+			Evidence: "operator verified the node still serves the source release",
 		}
 		first, err := store.ReconcileNodeConfig(context.Background(), request)
 		if err != nil || first.Replayed {
-			t.Fatalf("first proven tuple reconciliation = (%+v, %v)", first, err)
+			t.Fatalf("first source version reconciliation = (%+v, %v)", first, err)
 		}
 		replay, err := store.ReconcileNodeConfig(context.Background(), request)
 		if err != nil || !replay.Replayed || replay.Reconciliation.ID != first.Reconciliation.ID {
-			t.Fatalf("replayed proven tuple reconciliation = (%+v, %v), first=%+v", replay, err, first)
+			t.Fatalf("replayed source version reconciliation = (%+v, %v), first=%+v", replay, err, first)
 		}
-		assertReconciledIdentity087(t, pool, nodeID, previous.ID, previousDigest, current.ID, currentDigest)
+		assertReconciledIdentity087(t, pool, nodeID, current.ID, currentDigest, previous.ID, previousDigest)
 	})
 
 	t.Run("post-lock request recheck returns same request replay", func(t *testing.T) {
@@ -67,35 +91,6 @@ func TestReconcileNodeConfigMovesOnlyProvenIdentityTuple(t *testing.T) {
 			currentDigest, previousDigest, true)
 	})
 
-	t.Run("unproven observed UUID clears current identity", func(t *testing.T) {
-		nodeID := uuid.New()
-		seedEdgeNode(t, pool, scopeID, userID, nodeID)
-		seedNodeConfigState(t, pool, nodeID, scopeID, &current.ID, &previous.ID)
-		seedConfigIdentityState087(t, pool, nodeID, currentDigest, previousDigest)
-		sourceID := seedIdentityRollbackFailure087(t, pool, scopeID, nodeID, current.ID)
-		markReconciliationRequired087(t, pool, nodeID, sourceID)
-		request := ReconcileNodeConfigRequest{
-			RequestID: uuid.New(), NodeID: nodeID, ConfigurationScopeID: scopeID,
-			SourceDeploymentID: sourceID, SourceDeploymentAttempt: 1,
-			ObservedConfigVersionID: &unknown.ID, Resolution: ReconciliationOperatorConfirmed,
-			Evidence: "operator confirmed runtime UUID only",
-		}
-		if _, err := store.ReconcileNodeConfig(context.Background(), request); err != nil {
-			t.Fatal(err)
-		}
-		var currentID, previousID uuid.UUID
-		var currentSchema *int32
-		var currentDigestAfter []byte
-		if err := pool.QueryRow(t.Context(), `SELECT current_config_version_id,previous_config_version_id,
-			current_config_identity_schema,current_config_artifact_sha256 FROM node_config_state WHERE node_id=$1`, nodeID).Scan(
-			&currentID, &previousID, &currentSchema, &currentDigestAfter); err != nil {
-			t.Fatal(err)
-		}
-		if currentID != unknown.ID || previousID != current.ID || currentSchema != nil || currentDigestAfter != nil {
-			t.Fatalf("unproven reconciliation = current:%s previous:%s schema:%v digest:%x", currentID, previousID, currentSchema, currentDigestAfter)
-		}
-	})
-
 	t.Run("transaction failure leaves no reconciliation fact or partial tuple movement", func(t *testing.T) {
 		nodeID := uuid.New()
 		seedEdgeNode(t, pool, scopeID, userID, nodeID)
@@ -106,8 +101,8 @@ func TestReconcileNodeConfigMovesOnlyProvenIdentityTuple(t *testing.T) {
 		request := ReconcileNodeConfigRequest{
 			RequestID: uuid.New(), NodeID: nodeID, ConfigurationScopeID: scopeID,
 			SourceDeploymentID: sourceID, SourceDeploymentAttempt: 1,
-			ObservedConfigVersionID: &previous.ID, Resolution: ReconciliationAgentObserved,
-			Evidence: "signed active identity observation after retry",
+			ObservedConfigVersionID: &current.ID, Resolution: ReconciliationOperatorConfirmed,
+			Evidence: "operator verified the node still serves the source release after retry",
 		}
 		if _, err := pool.Exec(t.Context(), `CREATE FUNCTION fail_active_identity_reconcile_087()
 			RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected reconciliation failure'; END $$;
@@ -147,7 +142,7 @@ func TestReconcileNodeConfigMovesOnlyProvenIdentityTuple(t *testing.T) {
 		if err != nil || result.Replayed {
 			t.Fatalf("reconciliation retry = (%+v, %v)", result, err)
 		}
-		assertReconciledIdentity087(t, pool, nodeID, previous.ID, previousDigest, current.ID, currentDigest)
+		assertReconciledIdentity087(t, pool, nodeID, current.ID, currentDigest, previous.ID, previousDigest)
 	})
 }
 
@@ -374,6 +369,12 @@ func seedIdentityRollbackFailure087(t *testing.T, pool *pgxpool.Pool, scopeID, n
 		command_bytes,command_sha256,deadline_at,created_at,updated_at
 	) VALUES($1,$2,$3,1,$4,'apply','rollback_failed',$5,$6,$7,$8,$9,$9)`,
 		deploymentID, rolloutID, nodeID, configID, uuid.New(), commandBytes, commandDigest[:], deadline, integrationClock); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO node_deployment_artifacts(
+		deployment_id,deployment_attempt,config_version_id,artifact_id,ordinal
+	) SELECT $1,1,$2,id,ordinal FROM configuration_artifacts
+	  WHERE config_version_id=$2 AND kind='configuration'`, deploymentID, configID); err != nil {
 		t.Fatal(err)
 	}
 	return deploymentID

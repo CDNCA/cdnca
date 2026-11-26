@@ -19,7 +19,9 @@ type fakeUsageSource struct {
 	windows [][2]time.Time
 }
 
-func (f *fakeUsageSource) UsageTargets(context.Context) ([]marketsupply.UsageTarget, error) { return f.targets, nil }
+func (f *fakeUsageSource) UsageTargets(context.Context) ([]marketsupply.UsageTarget, error) {
+	return f.targets, nil
+}
 func (f *fakeUsageSource) TrafficBuckets(_ context.Context, _, _ uuid.UUID, start, end time.Time) ([]usage.Item, error) {
 	f.windows = append(f.windows, [2]time.Time{start, end})
 	return []usage.Item{{BucketStart: start.Unix(), BytesOut: 100, Requests: 2}}, nil

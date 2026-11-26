@@ -31,9 +31,7 @@ type NamesiloProviderVerifier struct {
 }
 
 func NewNamesiloProviderVerifier() *NamesiloProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newNamesiloProviderVerifier("", &http.Client{Transport: transport}, namesiloVerifyTimeout)
+	return newNamesiloProviderVerifier("", providerAPIClient(), namesiloVerifyTimeout)
 }
 
 func newNamesiloProviderVerifier(testEndpoint string, client *http.Client, timeout time.Duration) *NamesiloProviderVerifier {

@@ -13,7 +13,8 @@ const uuidPattern = /^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-[0-9a
 export async function issueLoginCaptcha(signal?: AbortSignal): Promise<LoginCaptchaChallenge> {
   let response: Response
   try {
-    response = await fetch(`${apiRoot}/v1/auth/login-captchas`, { method: 'POST', credentials: 'omit', cache: 'no-store', signal })
+    // The CAPTCHA is bound to this browser by an HttpOnly cookie, sent back with the sign-in (credentials: 'include').
+    response = await fetch(`${apiRoot}/v1/auth/login-captchas`, { method: 'POST', credentials: 'include', cache: 'no-store', signal })
   } catch {
     throw networkApiError()
   }

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Drawer, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography,
+import { Alert, Button, Checkbox, Drawer, Form, Input, Modal, Select, Space, Tag, Tooltip, Typography,
   type TableColumnsType } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, PageSection } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, PageSection, Table } from '@cdnca/ui'
 import { Play, Power, PowerOff, RefreshCw, ShieldAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 

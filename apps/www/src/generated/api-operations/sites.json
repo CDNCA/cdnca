@@ -319,8 +319,13 @@
       },
       {
        "name": "package_unavailable_reason",
-       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
-       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+       "type": "string: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null | null: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted, unsuspended package are published): no_package (none bound), package_disabled, package_deleted, package_suspended (the subscription is suspended; the site is published again once it is resumed), package_cancelled (the subscription is cancelled, e.g. its billing service was terminated; it does not come back, even when it was suspended before). Null while the package is valid."
+      },
+      {
+       "name": "package_suspension",
+       "type": "object | null",
+       "description": "Who suspended the site's subscription and why; set only while package_unavailable_reason is package_suspended, null otherwise."
       }
      ]
     },
@@ -355,8 +360,8 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (bulk website protocol settings) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
-   "description_zh": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (网站协议批量设置) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
+   "description": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until the DNS provider confirms the write and reading it back returns the exact record (same name, type and value); whether upstream authoritative and public recursive resolvers already serve it is not part of completion, check it with the DNS check. set_protocols (bulk website protocol settings) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Turning http3_enabled on fails per item with package_feature_denied for a site whose HTTP/3 was off and whose current package entitlement sets limits.http3 false; turning it off is never refused. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
+   "description_zh": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity. 完成条件是服务商确认写入并精确回读（同名、同类型、同值），此前 site.cname_state 保持 pending；上游权威与公共递归是否已生效请用 DNS 解析检查查看。 set_protocols (网站协议批量设置) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Turning http3_enabled on fails per item with package_feature_denied for a site whose HTTP/3 was off and whose current package entitlement sets limits.http3 false; turning it off is never refused. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
    "params": [
     {
      "name": "Idempotency-Key",
@@ -681,8 +686,13 @@
       },
       {
        "name": "package_unavailable_reason",
-       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
-       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+       "type": "string: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null | null: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted, unsuspended package are published): no_package (none bound), package_disabled, package_deleted, package_suspended (the subscription is suspended; the site is published again once it is resumed), package_cancelled (the subscription is cancelled, e.g. its billing service was terminated; it does not come back, even when it was suspended before). Null while the package is valid."
+      },
+      {
+       "name": "package_suspension",
+       "type": "object | null",
+       "description": "Who suspended the site's subscription and why; set only while package_unavailable_reason is package_suspended, null otherwise."
       }
      ]
     },
@@ -833,8 +843,13 @@
       },
       {
        "name": "package_unavailable_reason",
-       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
-       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+       "type": "string: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null | null: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted, unsuspended package are published): no_package (none bound), package_disabled, package_deleted, package_suspended (the subscription is suspended; the site is published again once it is resumed), package_cancelled (the subscription is cancelled, e.g. its billing service was terminated; it does not come back, even when it was suspended before). Null while the package is valid."
+      },
+      {
+       "name": "package_suspension",
+       "type": "object | null",
+       "description": "Who suspended the site's subscription and why; set only while package_unavailable_reason is package_suspended, null otherwise."
       }
      ]
     },
@@ -1480,8 +1495,13 @@
       },
       {
        "name": "package_unavailable_reason",
-       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
-       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+       "type": "string: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null | null: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted, unsuspended package are published): no_package (none bound), package_disabled, package_deleted, package_suspended (the subscription is suspended; the site is published again once it is resumed), package_cancelled (the subscription is cancelled, e.g. its billing service was terminated; it does not come back, even when it was suspended before). Null while the package is valid."
+      },
+      {
+       "name": "package_suspension",
+       "type": "object | null",
+       "description": "Who suspended the site's subscription and why; set only while package_unavailable_reason is package_suspended, null otherwise."
       }
      ]
     },
@@ -1939,7 +1959,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires sites.manage. Publishes the site's current settings again without a change: an automatic scope queues the caller's site.update at a new source revision; a manual scope redelivers its last publication now (system channel, node_sync). 409 publish_in_flight while the site's publication is still running; 409 site_disabled for a disabled site. Returns the site's access_readiness after the request was queued.",
+   "description": "Requires sites.manage. Publishes the site's current settings again without a change: an automatic scope queues the caller's site.update at a new source revision; a manual scope redelivers its last publication now (system channel, node_sync). 409 publish_in_flight while the site's publication is still running; 409 site_disabled for a disabled site; 409 package_subscription_suspended while the site's package subscription is suspended (its sites are left out of every publication and go out again once it is resumed); 409 package_subscription_inactive when it is cancelled (left out until the site is bound to another package). Returns the site's access_readiness after the request was queued.",
    "params": [
     {
      "name": "id",
@@ -2452,8 +2472,13 @@
       },
       {
        "name": "package_unavailable_reason",
-       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
-       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+       "type": "string: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null | null: no_package / package_disabled / package_deleted / package_suspended / package_cancelled / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted, unsuspended package are published): no_package (none bound), package_disabled, package_deleted, package_suspended (the subscription is suspended; the site is published again once it is resumed), package_cancelled (the subscription is cancelled, e.g. its billing service was terminated; it does not come back, even when it was suspended before). Null while the package is valid."
+      },
+      {
+       "name": "package_suspension",
+       "type": "object | null",
+       "description": "Who suspended the site's subscription and why; set only while package_unavailable_reason is package_suspended, null otherwise."
       }
      ]
     },
@@ -2991,10 +3016,11 @@
    "method": "POST",
    "path": "/v1/sites/{site_id}/dns-reconcile/dry-run",
    "summary": "Build a deterministic repair plan without provider side effects",
-   "summary_zh": "生成确定性的修复计划，不调用服务商",
+   "summary_zh": "生成确定性的修复计划，不写服务商记录",
    "auth": [
     "bearer"
    ],
+   "description": "Without provider, the zone is resolved on the server: the site's own verified DNS account and the longest domain of its domain list that is the name or a parent of it (refresh the list with POST /v1/dns/hub/domains/refresh). The response carries the provider snapshot the plan was built on; apply sends it back unchanged. A name that is not a domain of the site is 403; no hosted domain covering it is 404 dns_reconcile_zone_not_found.",
    "permissions": [
     "dns.read"
    ],
@@ -3066,8 +3092,7 @@
      },
      {
       "name": "provider",
-      "type": "ProviderSnapshot",
-      "required": true
+      "type": "ProviderSnapshot"
      }
     ]
    },
@@ -3168,6 +3193,11 @@
        "name": "error_code",
        "type": "string",
        "required": true
+      },
+      {
+       "name": "provider",
+       "type": "ProviderSnapshot",
+       "required": true
       }
      ]
     },
@@ -3182,6 +3212,10 @@
     {
      "status": "403",
      "description": "Live IAM permission or DNS reconciliation entitlement denied."
+    },
+    {
+     "status": "404",
+     "description": "No hosted domain of the site's DNS account covers the name (dns_reconcile_zone_not_found)."
     },
     {
      "status": "405",

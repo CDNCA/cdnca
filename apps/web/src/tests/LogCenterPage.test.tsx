@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../api/auth'
@@ -7,6 +8,7 @@ import { auditLogQuery, auditLogsApi, type AuditLogItem } from '../api/auditLogs
 import { systemCleanupSettingsApi, type PlatformSystemCleanupDocument } from '../api/systemCleanupSettings'
 import { useSessionStore } from '../auth/session'
 import LogCenterPage from '../pages/LogCenterPage'
+import { clearFilterUrlMemory } from '../pages/filterUrl'
 import SystemGlobalSettingsPage from '../pages/SystemGlobalSettingsPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
@@ -20,6 +22,14 @@ const item: AuditLogItem = {
   changes: [{ field: 'cc_enabled', label: 'CC 防护', before: '关闭', after: '开启' }], fields: [],
 }
 
+// 列表内容列只留动作/对象/差异：操作人、时间、来源 IP 已有独立列。
+const itemBody = '修改网站 example.com 的防火墙策略：CC 防护从「关闭」改为「开启」'
+
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-testid="log-center-location">{`${location.pathname}${location.search}`}</output>
+}
+
 function signIn(kind: 'platform' | 'tenant') {
   const actor = principal(kind === 'platform'
     ? { scope_kind: 'platform', tenant_id: null, roles: ['platform_owner'], permissions: ['platform.admin', 'system_configuration.read', 'system_configuration.manage'] }
@@ -27,7 +37,7 @@ function signIn(kind: 'platform' | 'tenant') {
   useSessionStore.getState().setSession(authResponse(actor), actor)
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => { vi.restoreAllMocks(); clearFilterUrlMemory() })
 
 describe('LogCenterPage', () => {
   // TEL-UX-EXPORT-OWNER：导出迟到时已换账号，旧文件不下载、也不提示"已导出"。
@@ -55,7 +65,7 @@ describe('LogCenterPage', () => {
     signIn('tenant')
     const list = vi.spyOn(auditLogsApi, 'list').mockResolvedValue({ items: [item] })
     renderWithProviders(<LogCenterPage />)
-    expect(await screen.findByText(item.summary)).toBeInTheDocument()
+    expect(await screen.findByText(itemBody)).toBeInTheDocument()
     expect(list.mock.calls[0][1]).toMatchObject({ category: 'all', limit: 50 })
     expect(screen.queryByRole('textbox', { name: '租户范围 ID' })).not.toBeInTheDocument()
 
@@ -127,6 +137,79 @@ describe('LogCenterPage', () => {
     vi.useRealTimers()
   })
 
+  it('shows one actor line when the tenant has the same name, two when they differ, and keeps time and IP out of the content', async () => {
+    signIn('platform')
+    vi.spyOn(auditLogsApi, 'list').mockResolvedValue({ items: [
+      { ...item, actor_username: 'alice', tenant_name: 'alice', actor: '用户 alice', summary: `用户 alice 于 ${item.time} 从 ${item.source_ip} 修改网站 same.example 的配置`, resource: 'same.example' },
+      { ...item, id: '01920000-0000-7000-8000-000000000003', actor_username: 'bob', tenant_name: 'Tenant Beta', actor: '用户 bob',
+        summary: `用户 bob 于 ${item.time} 从 ${item.source_ip} 修改网站 other.example 的配置`, resource: 'other.example' },
+    ] })
+    renderWithProviders(<LogCenterPage />)
+    const same = (await screen.findByText('修改网站 same.example 的配置')).closest('tr')!
+    expect(within(same).getAllByText('alice')).toHaveLength(1)
+    const other = screen.getByText('修改网站 other.example 的配置').closest('tr')!
+    expect(within(other).getByText('bob')).toBeInTheDocument()
+    expect(within(other).getByText('Tenant Beta')).toBeInTheDocument()
+    for (const row of [same, other]) {
+      const content = row.querySelector('.log-center-summary')!
+      expect(content).not.toHaveTextContent(item.time)
+      expect(content).not.toHaveTextContent(item.source_ip)
+      expect(content).not.toHaveTextContent('用户')
+    }
+    // 常驻概念说明已删；完整原句仍在详情。
+    expect(screen.queryByText(/所有改变配置和数据的操作都会记录在这里/)).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(within(same).getByRole('button', { name: '查看' }))
+    expect(await screen.findByTestId('log-center-summary')).toHaveTextContent(`用户 alice 于 ${item.time} 从 ${item.source_ip} 修改网站 same.example 的配置`)
+  })
+
+  // （7 补充）：已生效的页签与时间范围写进 URL，刷新/直接链接读回，分页重置。
+  it('keeps the applied tab and time range across a reload and direct links', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 23, 21, 30) })
+    try {
+      signIn('platform')
+      const list = vi.spyOn(auditLogsApi, 'list').mockResolvedValue({ items: [], next_cursor: 'c2' })
+      const user = userEvent.setup()
+      const first = renderWithProviders(<><LogCenterPage /><LocationProbe /></>, ['/sys/log-center'])
+      await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ category: 'all', since: undefined }))
+      await user.click(screen.getByRole('tab', { name: '操作' }))
+      await user.click(within(await screen.findByRole('group', { name: '时间' })).getByText('今天'))
+      await user.click(screen.getByRole('button', { name: '查询' }))
+      const today = { since: new Date(2026, 10, 23).toISOString(), until: new Date(2026, 10, 24).toISOString() }
+      await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ category: undefined, excludeCategory: 'auth', ...today }))
+      await user.click(screen.getByRole('button', { name: '下一页' }))
+      await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ cursor: 'c2' }))
+      await waitFor(() => expect(screen.getByTestId('log-center-location').textContent).toContain('range=today'))
+      const reloaded = screen.getByTestId('log-center-location').textContent!
+      expect(new URLSearchParams(reloaded.split('?')[1]).get('tab')).toBe('operation')
+      expect(reloaded).not.toContain('cursor')
+      first.unmount()
+
+      let calls = list.mock.calls.length
+      const second = renderWithProviders(<LogCenterPage />, [reloaded])
+      await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(calls))
+      expect(list.mock.calls[calls]![1]).toMatchObject({ excludeCategory: 'auth', cursor: undefined, ...today })
+      expect(screen.getByRole('tab', { name: '操作' })).toHaveAttribute('aria-selected', 'true')
+      second.unmount()
+
+      const custom = { since: '2026-11-23T13:30:00.000Z', until: '2026-11-23T15:25:00.000Z' }
+      calls = list.mock.calls.length
+      const third = renderWithProviders(<LogCenterPage />, [`/sys/log-center?tab=auth&since=${custom.since}&until=${custom.until}`])
+      await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(calls))
+      expect(list.mock.calls[calls]![1]).toMatchObject({ category: 'auth', ...custom })
+      expect(within(screen.getByRole('group', { name: '时间' })).getByRole('radio', { name: '自定义' })).toBeChecked()
+      third.unmount()
+
+      calls = list.mock.calls.length
+      renderWithProviders(<LogCenterPage />, ['/sys/log-center?tab=bogus&range=nope&since=bad&until=2026-11-23T15:25:00.000Z'])
+      await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(calls))
+      expect(list.mock.calls[calls]![1]).toMatchObject({ category: 'all', since: undefined, until: undefined })
+      expect(screen.getByRole('tab', { name: '全部' })).toHaveAttribute('aria-selected', 'true')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('refuses users without log permission', async () => {
     const actor = principal({ permissions: [] })
     useSessionStore.getState().setSession(authResponse(actor), actor)
@@ -166,16 +249,16 @@ describe('LogCenterPage', () => {
     })
     const user = userEvent.setup()
     renderWithProviders(<LogCenterPage />)
-    expect(await screen.findByText(item.summary)).toBeInTheDocument()
+    expect(await screen.findByText(itemBody)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '下一页' }))
     await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ cursor: 'c2' }))
-    expect(screen.getByText(item.summary)).toBeInTheDocument()
+    expect(screen.getByText(itemBody)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled()
     release()
     expect(await screen.findByText('第二页')).toBeInTheDocument()
     const calls = list.mock.calls.length
     await user.click(screen.getByRole('button', { name: '上一页' }))
-    expect(await screen.findByText(item.summary)).toBeInTheDocument()
+    expect(await screen.findByText(itemBody)).toBeInTheDocument()
     expect(list).toHaveBeenCalledTimes(calls)
   })
 })
@@ -218,4 +301,17 @@ describe('per-category retention in the cleanup settings', () => {
     expect(put.mock.calls[0][2].audit_retention_days).toMatchObject({ auth: 30, finance: 1095 })
     expect(put.mock.calls[0][2]).not.toHaveProperty('login_records_days')
   })
+
+  it('puts the filters and table inside the active tab panel', async () => {
+    signIn('tenant')
+    vi.spyOn(auditLogsApi, 'list').mockResolvedValue({ items: [item] })
+    renderWithProviders(<LogCenterPage />)
+    expect(await screen.findByText(itemBody)).toBeInTheDocument()
+    const activeTab = screen.getByRole('tab', { selected: true })
+    const panel = document.getElementById(activeTab.getAttribute('aria-controls') ?? '')
+    expect(panel).not.toBeNull()
+    expect(within(panel as HTMLElement).getByText(itemBody)).toBeInTheDocument()
+    expect(within(panel as HTMLElement).getByRole('region', { name: '筛选' })).toBeInTheDocument()
+  })
+
 })

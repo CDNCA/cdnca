@@ -52,10 +52,15 @@ type siteObjectRelease struct {
 	// release's websites: they receive (and serve) every website, as
 	// before. Sorted.
 	siteSelectionUnsupported []uuid.UUID
+	// serving: the serving nodes its key documents withhold by, recorded
+	// (migration 702) for the releases built on it.
+	serving releaseServing
 }
 
 // buildSiteObjectRelease stores bundle's new objects and builds the root and
 // one key envelope per recipient, bound to fresh deployment and event IDs.
+// servingFrom: the releases a stop overlay's content comes from (its serving
+// nodes), nil for a release of the current rows.
 func (s *Service) buildSiteObjectRelease(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -63,6 +68,7 @@ func (s *Service) buildSiteObjectRelease(
 	bundle edgeconfig.Bundle,
 	recipients []configurationArtifactRecipientBinding,
 	capabilities []*agentv1.Capability,
+	servingFrom []uuid.UUID,
 	now time.Time,
 ) (*siteObjectRelease, error) {
 	if err := releaseRequiresDynamicRouting(capabilities); err != nil {
@@ -102,30 +108,6 @@ func (s *Service) buildSiteObjectRelease(
 	if err := validateRulePackTargets(ctx, tx, nodeIDs, packs); err != nil {
 		return nil, err
 	}
-	trafficStopped, err := loadTrafficStoppedStreams(ctx, tx, scopeID)
-	if err != nil {
-		return nil, err
-	}
-	streamNodes, err := streamServingNodes(ctx, tx, scopeID, source.Streams)
-	if err != nil {
-		return nil, err
-	}
-	siteIDs := make([]string, len(source.Sites))
-	for index, site := range source.Sites {
-		siteIDs[index] = site.Runtime.ID
-	}
-	siteNodes, err := siteServingNodes(ctx, tx, scopeID, siteIDs)
-	if err != nil {
-		return nil, err
-	}
-	regionCodes, err := loadNodeRegionCodes(ctx, tx, nodeIDs)
-	if err != nil {
-		return nil, err
-	}
-	nodeStorage, err := loadNodeStorage(ctx, tx, nodeIDs)
-	if err != nil {
-		return nil, err
-	}
 	stored, err := storeSiteObjects(ctx, tx, scopeID, contentKey, publication.Objects, now)
 	if err != nil {
 		return nil, err
@@ -141,9 +123,68 @@ func (s *Service) buildSiteObjectRelease(
 	if release.root, err = s.signSiteObjectRoot(ctx, configID, publication.RootBytes, siteobject.RootMediaTypeV2); err != nil {
 		return nil, err
 	}
+	siteIDs := make([]string, len(source.Sites))
+	for index, site := range source.Sites {
+		siteIDs[index] = site.Runtime.ID
+	}
+	if err := s.sealSiteObjectKeys(ctx, tx, release, contentKey, siteIDs, source.Streams, recipients, advertised,
+		servingFrom, releaseStops{}); err != nil {
+		return nil, err
+	}
+	return release, nil
+}
+
+// sealSiteObjectKeys builds release's key envelope per recipient (the root is
+// release.root, signed): each node's key document names what of the root it
+// withholds or stops and carries its node facts, read now. A node publication
+// and a node settings redelivery (node_settings_redelivery.go) share it. The
+// websites and forwards a node withholds follow the serving nodes of the
+// servingFrom releases (a stop overlay's or a redelivery's sources), else
+// the current rows (releaseServingNodes), recorded as release.serving; stops
+// are withheld on every node.
+func (s *Service) sealSiteObjectKeys(
+	ctx context.Context,
+	tx pgx.Tx,
+	release *siteObjectRelease,
+	contentKey []byte,
+	siteIDs []string,
+	streams *edgeconfig.StreamRuntime,
+	recipients []configurationArtifactRecipientBinding,
+	advertised map[uuid.UUID][]*agentv1.Capability,
+	servingFrom []uuid.UUID,
+	stops releaseStops,
+) error {
+	scopeID, configID := release.scopeID, release.configID
+	rootSHA256 := hex.EncodeToString(release.rootSHA256[:])
+	trafficStopped, err := loadTrafficStoppedStreams(ctx, tx, scopeID)
+	if err != nil {
+		return err
+	}
+	if release.serving, err = releaseServingNodes(ctx, tx, scopeID, siteIDs, streams, servingFrom); err != nil {
+		return err
+	}
+	siteNodes, streamNodes := withStops(release.serving.sites, stops.sites), withStops(release.serving.streams, stops.streams)
+	nodeIDs := make([]uuid.UUID, len(recipients))
+	for index, recipient := range recipients {
+		nodeIDs[index] = recipient.NodeID
+	}
+	// Read before the node facts below: the node takes them from the
+	// release whose key document has the latest (KeyDocument.NodeFactsAt).
+	nodeFactsAt, err := loadNodeFactsAt(ctx, tx)
+	if err != nil {
+		return err
+	}
+	regionCodes, err := loadNodeRegionCodes(ctx, tx, nodeIDs)
+	if err != nil {
+		return err
+	}
+	nodeStorage, err := loadNodeStorage(ctx, tx, nodeIDs)
+	if err != nil {
+		return err
+	}
 	producer, err := newConfigurationArtifactProducer(s.signer, rand.Reader)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	release.bindings = make([]edgedeployment.NodeArtifactBinding, len(recipients))
 	release.artifacts = make([]edgedeployment.ArtifactInput, 0, len(recipients)+1)
@@ -160,28 +201,29 @@ func (s *Service) buildSiteObjectRelease(
 		}
 		plaintext, err := siteobject.Encode(siteobject.KeyDocument{
 			Schema: siteobject.KeySchema, ConfigurationScopeID: scopeID.String(), ConfigVersionID: configID.String(),
-			RootSHA256: publication.RootSHA256, KeyEpoch: siteObjectKeyEpoch, ContentKey: contentKey,
+			RootSHA256: rootSHA256, KeyEpoch: siteObjectKeyEpoch, ContentKey: contentKey,
 			TrafficStopStreams: trafficStopFor(advertised[recipient.NodeID], trafficStopped),
-			L4WithheldStreams:  withheldStreamsFor(advertised[recipient.NodeID], recipient.NodeID, source.Streams, streamNodes),
+			L4WithheldStreams:  withheldStreamsFor(advertised[recipient.NodeID], recipient.NodeID, streams, streamNodes),
 			WithheldSites:      siteobject.NewSiteBitmap(siteIDs, withheldSet(withheldSites)),
 			NodeRegion:         nodeRegionFor(advertised[recipient.NodeID], regionCodes[recipient.NodeID]),
 			NodeStorage: func() *siteobject.NodeStorage {
 				storage, set := nodeStorage[recipient.NodeID]
 				return nodeStorageFor(advertised[recipient.NodeID], storage, set)
 			}(),
+			NodeFactsAt: nodeFactsAtFor(advertised[recipient.NodeID], nodeFactsAt),
 		})
 		if err != nil {
-			return nil, ErrInvalidInput
+			return ErrInvalidInput
 		}
 		envelope, buildErr := producer.Build(ctx, binding, recipient.PublicKey, plaintext, siteobject.KeyMediaType)
 		clear(plaintext)
 		if buildErr != nil {
-			return nil, buildErr
+			return buildErr
 		}
 		if err := keyEnvelopeFits(recipient.NodeID, advertised[recipient.NodeID], envelope.SizeBytes); err != nil {
 			var refusal *TargetCapabilityError
 			if !errors.As(err, &refusal) {
-				return nil, err
+				return err
 			}
 			// An older Agent the envelope does not fit is left out of this
 			// release (publishRoundTx) instead of refusing every node.
@@ -192,9 +234,9 @@ func (s *Service) buildSiteObjectRelease(
 		release.artifacts = append(release.artifacts, envelope)
 	}
 	if len(oversized) > 0 {
-		return nil, &KeyEnvelopeOversizedError{Nodes: oversized}
+		return &KeyEnvelopeOversizedError{Nodes: oversized}
 	}
-	return release, nil
+	return nil
 }
 
 // artifactSetDigest identifies the release's artifact set: the root digest
@@ -215,7 +257,7 @@ func (release *siteObjectRelease) persist(ctx context.Context, tx pgx.Tx, now ti
 		release.rootSHA256[:], release.members, now); err != nil {
 		return fmt.Errorf("%w: persist site object publication", ErrPersistence)
 	}
-	return nil
+	return persistReleaseServing(ctx, tx, release.scopeID, release.configID, release.serving, now)
 }
 
 func (s *Service) signSiteObjectRoot(ctx context.Context, configID uuid.UUID, root []byte, mediaType string) (edgedeployment.ArtifactInput, error) {

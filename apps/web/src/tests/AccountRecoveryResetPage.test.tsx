@@ -76,6 +76,41 @@ describe('AccountRecoveryResetPage', () => {
     window.history.replaceState({}, '', '/')
   })
 
+  it('shows a missing-fragment link as a persistent in-card state instead of a dialog', async () => {
+    const user = userEvent.setup()
+    const view = renderWithProviders(
+      <><AccountRecoveryResetPage /><LocationProbe /></>,
+      ['/reset-password'],
+    )
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('重置链接无效或不完整，请重新申请')
+    expect(screen.getAllByRole('heading', { level: 1 }).map((heading) => heading.textContent))
+      .toEqual(['重置链接无效'])
+    expect(document.title).toBe('重置链接无效')
+    expect(screen.queryByLabelText('新密码')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '使用已有账户登录' })).toHaveAttribute('href', '/login')
+    const footer = view.container.querySelector('footer')!
+    for (const text of ['官网', '社区', '联系我们']) expect(footer).not.toHaveTextContent(text)
+    for (const anchor of footer.querySelectorAll('a')) expect(anchor).toHaveAttribute('href')
+
+    await user.click(screen.getByRole('link', { name: '重新申请重置链接' }))
+    await waitFor(() => expect(screen.getByTestId('recovery-location')).toHaveTextContent(
+      /^\/forgot-password$/,
+    ))
+  })
+
+  it('titles a valid link as setting a new password, not the brand', () => {
+    renderWithProviders(<AccountRecoveryResetPage />, [resetRoute])
+
+    expect(screen.getAllByRole('heading', { level: 1 }).map((heading) => heading.textContent))
+      .toEqual(['设置新密码'])
+    expect(document.title).toBe('重置密码')
+    expect(screen.getByLabelText('新密码')).toBeInTheDocument()
+    expect(screen.getByLabelText('确认新密码')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('reads valid material from the fragment and clears it before interaction', async () => {
     localStorage.clear()
     sessionStorage.clear()
@@ -166,6 +201,11 @@ describe('AccountRecoveryResetPage', () => {
     await user.click(screen.getByRole('button', { name: '重置密码' }))
 
     expect(await screen.findByText(localizedMessage)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const linkStatus = screen.getByRole('alert')
+    expect(linkStatus).toHaveTextContent(localizedMessage)
+    await waitFor(() => expect(linkStatus).toHaveFocus())
+    expect(screen.getByRole('heading', { level: 1, name: '重置链接无效' })).toBeInTheDocument()
     expect(screen.queryByText('重置链接无效或不完整，请重新申请')).not.toBeInTheDocument()
     expect(screen.queryByText(/raw recovery authority detail|request-recovery-terminal/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('新密码')).not.toBeInTheDocument()

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Button, Form, Input } from 'antd'
+import { Alert, Button, Form, Input } from 'antd'
 import { LockKeyhole } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -58,6 +58,7 @@ export function AccountRecoveryResetPage() {
   const [retryAt, setRetryAt] = useState<number | null>(null)
   const [terminalError, setTerminalError] = useState<AccountRecoveryApiError | null>(null)
   const attempt = useRef<RecoveryAttempt<AccountRecoveryConfirmation> | null>(null)
+  const linkStatus = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
     if (location.search !== '' || location.hash !== '') {
@@ -74,6 +75,12 @@ export function AccountRecoveryResetPage() {
       void navigate({ pathname: location.pathname, search: '', hash: '' }, { replace: true })
     }
   }, [location.hash, location.pathname, location.search, navigate])
+
+  // A link the service just rejected replaces the form under the user's focus:
+  // move focus to the persistent status so it is announced and not lost.
+  useEffect(() => {
+    if (terminalError !== null) linkStatus.current?.focus()
+  }, [terminalError])
 
   useEffect(() => {
     if (retryAt === null) return
@@ -134,16 +141,26 @@ export function AccountRecoveryResetPage() {
   }
 
   return (
-    <AccountRecoveryLayout title={t('recovery.resetPageTitle')}>
-      <div className="recovery-tab">{t('recovery.confirmTab')}</div>
-
+    <AccountRecoveryLayout
+      title={link ? t('recovery.resetPageTitle') : t('recovery.invalidLinkTitle')}
+      heading={link ? t('recovery.confirmTab') : t('recovery.invalidLinkTitle')}
+    >
       {mutation.error && terminalError === null ? (
         <FeedbackWhen title={localizedApiError(mutation.error)} />
       ) : null}
 
       {!link ? (
+        // Missing, malformed, expired or consumed links are a terminal page
+        // state, not a dismissable dialog: keep the reason and the way out visible.
         <div className="recovery-result">
-          <FeedbackWhen title={terminalError ? localizedApiError(terminalError) : t('recovery.invalidLink')} />
+          <div ref={linkStatus} className="recovery-status" role="alert" tabIndex={-1}>
+            <Alert
+              type="error"
+              showIcon
+              role="none"
+              message={terminalError ? localizedApiError(terminalError) : t('recovery.invalidLink')}
+            />
+          </div>
           <Link className="recovery-primary-link" to="/forgot-password">
             {t('recovery.requestNewLink')}
           </Link>

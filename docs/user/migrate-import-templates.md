@@ -19,9 +19,11 @@
 
 上传 `cdnca.migrate/v1` 包（可只含部分段），结构即 `internal/migrateimport/bundle/model.go` 的 `Bundle`：`format`、`source{system,instance}`、`users`、`packages`、`user_packages`、`sites`、`certs`、`dns`、`balances`、`orders`。金额一律为分（`*_minor`）。证书私钥、DNS 凭据、密码哈希在入库前密封，任务结束后清除。
 
+导入页的「来源标识」（即 `source.instance`）用来识别同一来源，重复导入靠它去重：只能用英文字母、数字和 `. - : [ ]`，以字母或数字开头，最长 253 个字符，字母按小写保存，例如 `old-cdn-01`。不符合规则时页面不发起读取；包内 `source.instance` 不合规时预演报告给出阻断性发现，不能确认导入。以前任务用过的不合规标识保持原样，新导入须换用合规标识。导入页可「下载 JSON 样例」或「填入 JSON 示例」，样例是一个可直接预演的最小包（`apps/web/src/pages/migrate-imports/sample-bundle.json`）。通用 JSON 包不连接任何来源，请求不带内网开关。
+
 ## 3. 通用 CSV（每段一个文件）
 
-模板可在导入页下载（`GET /v1/admin/migrate-import-templates/{section}.csv`）。表头大小写不敏感，常见别名自动识别（如 `用户名`/`login` → `username`，`余额`/`money` → 元自动换算为分）；未识别的列在页面手工对列。
+CSV 走接口上传：`POST /v1/admin/migrate-imports` 的 `csv` 字段（每项 `section`、`content`、可选 `columns` 对列），模板用管理员会话 `GET /v1/admin/migrate-import-templates/{section}.csv` 获取；导入页只接受 JSON 包。表头大小写不敏感，常见别名自动识别（如 `用户名`/`login` → `username`，`余额`/`money` → 元自动换算为分）；未识别的列用 `columns` 指定。
 
 | 段 | 列 |
 |---|---|
@@ -75,6 +77,7 @@ ATC 无余额、订单、套餐概念，不导。
 
 - dry-run 先给报告：将创建 / 合并 / 改名 / 跳过 / 冲突 / 不支持，以及流量包、四层转发"只列出"。确认时重算，与所看报告不一致须重新确认。
 - 幂等：同一来源（系统 + 实例）的每条数据导入后永久记映射，重复导入不会再建。
+- 用户状态：`users[].enabled` 为 `false`（CSV `enabled` 列为 0/停用等）的用户直接按停用状态创建，不能登录，也不发迁移通知；为 `true` 或未提供时按启用创建；合并到已有用户时不改变其状态。预演报告会给出将按停用创建的人数。
 - 余额只迁最终余额，生成待审入账单；平台管理员一次二次验证整批审批（可自审，审计标"自审"）。
 - 历史订单进只读归档，不入账、不可改删。
 - 源哈希（方案 B）：MD5/bcrypt 首次登录校验通过即转为 argon2id；默认保留 90 天，可在导入页设 7–180 天。MD5 为弱算法，建议缩短期限；运营页可一键清除全部源哈希。

@@ -34,6 +34,8 @@ info:
 servers:
   - url: https://license.example.invalid
 tags:
+  - name: Plugin Backends
+    description: Official plugin backends fetch the signed list of control-plane installation keys they may trust.
   - name: Operator Identity
     description: Independent operator login, invitation, recovery, TOTP MFA and revocable short sessions.
   - name: Operator Customers
@@ -1914,6 +1916,40 @@ paths:
               schema: {type: string, const: 'GET, OPTIONS'}
             Access-Control-Max-Age:
               schema: {type: string, const: '600'}
+  /v1/plugin-backends/{plugin_id}/trusted-installations:
+    get:
+      tags: [Plugin Backends]
+      operationId: getPluginBackendTrustedInstallations
+      summary: Fetch the control-plane installation keys an official plugin backend may trust
+      description: |
+        Called by an official plugin backend (migration 178) to verify control-plane proxy signatures
+        (X-Cdnca-Plugin-Key-Id). Lists every installation whose authorization for the plugin is enabled,
+        whose installation is active, that still holds a usable lease (commercial: current lease not revoked
+        and not past grace_until, so an expired license stays listed through the lease grace; community: active
+        customer) and that holds a usage right: a free listed entry (commercial installations), a live bound purchase, an
+        ended bound purchase whose fallback version covers the installed version, or the listing's feature
+        code on the license. Revoking, uninstalling, pausing or moving a purchase drops the installation from
+        the next fetch. The signature covers the exact `document` bytes framed as
+        len(domain) || domain || len(document) || document (4-byte big-endian lengths, domain
+        `cdnca-plugin-backend-trusted-installations/v1`) and verifies with a key from
+        GET /public/v1/signing-keyset pinned by the backend. Documents are valid for 10 minutes.
+        Any credential failure is 401 without detail; a plugin that is not an official listing is 403.
+      security:
+        - PluginBackendBearer: []
+      parameters:
+        - name: plugin_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 3, maxLength: 128}
+      responses:
+        '200':
+          description: Signed trusted installations
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignedPluginBackendTrustedInstallations'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /operator/v1/signing-keys:
     get:
       tags: [Operator Keys]
@@ -6791,6 +6827,14 @@ paths:
         '503': {$ref: '#/components/responses/RulePackKeysUnavailable'}
 components:
   securitySchemes:
+    PluginBackendBearer:
+      type: http
+      scheme: bearer
+      description: |
+        Official plugin backend credential (`cdnca_pbk_…`) issued by `license-service plugin-backend-credential
+        issue -plugin ID -label TEXT -operator NAME`; only its SHA-256 is stored. Several may be active; rotate by
+        issuing a new one, deploying it and revoking the old one (`revoke -id UUID -operator NAME`, irreversible).
+        Issue and revoke are audited (plugin.backend_credential.issue / .revoke) without the token.
     BillingProviderSignature:
       type: apiKey
       in: header
@@ -7349,6 +7393,35 @@ components:
       description: Private bounded freshness with last-known-good outage allowance.
       schema: {type: string, const: 'private, max-age=60, stale-if-error=86400'}
   schemas:
+    SignedPluginBackendTrustedInstallations:
+      type: object
+      additionalProperties: false
+      required: [document, algorithm, key_id, signature]
+      properties:
+        document: {$ref: '#/components/schemas/PluginBackendTrustedInstallationsDocument'}
+        algorithm: {type: string, const: Ed25519}
+        key_id: {type: string, description: Platform signing key id (GET /public/v1/signing-keyset).}
+        signature: {type: string, description: Unpadded base64url Ed25519 signature.}
+    PluginBackendTrustedInstallationsDocument:
+      type: object
+      additionalProperties: false
+      required: [schema, plugin_id, items, issued_at, expires_at]
+      properties:
+        schema: {type: string, const: cdnca.plugin-backend-trusted-installations/v1}
+        plugin_id: {type: string}
+        items:
+          type: array
+          maxItems: 20000
+          items:
+            type: object
+            additionalProperties: false
+            required: [key_id, public_key, installation_id]
+            properties:
+              key_id: {type: string, pattern: '^[0-9a-f]{16}$', description: First 8 bytes of SHA-256 of the public key, hex.}
+              public_key: {type: string, description: Unpadded base64url Ed25519 installation public key.}
+              installation_id: {type: string, format: uuid}
+        issued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
     WAFCustomRuleReportRequest:
       type: object
       additionalProperties: false
@@ -9230,9 +9303,10 @@ components:
       description: |
         Why a version cannot be granted, chosen, or pinned. schema_downgrade: target schema is older than the
         current schema and outside the current release's rollback range. schema_unknown / current_version_unregistered:
-        no recorded schema facts, treated as not reversible. downgrade_not_supported: customer choices are forward only.
+        no recorded schema facts, treated as not reversible. current_schema_unconfirmed: the installed build (hence
+        its schema head) is not identified, treated as not reversible. downgrade_not_supported: customer choices are forward only.
         Other values mirror upgrade-candidate reasons.
-      enum: [schema_downgrade, schema_unknown, current_version_unregistered, downgrade_not_supported, same_version,
+      enum: [schema_downgrade, schema_unknown, current_version_unregistered, current_schema_unconfirmed, downgrade_not_supported, same_version,
         target_locked, above_channel_target, target_unset, license_inactive, customer_inactive, channel_inactive,
         target_not_allowed, artifact_unavailable, artifact_unverified, protocol_incompatible, version_not_allowed,
         signing_key_unavailable]
@@ -9245,6 +9319,13 @@ components:
         component: {$ref: '#/components/schemas/ReleaseComponent'}
         current_version: {type: string, minLength: 5, maxLength: 128}
         protocol_version: {type: integer, minimum: 1}
+        current_artifact_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: |
+            Optional (current masters). Runner-verified SHA-256 of the
+            installed signed release; it identifies the exact build of current_version, whose schema head
+            becomes current_schema_head. Older masters omit it.
     UpgradeOption:
       type: object
       additionalProperties: false
@@ -9269,7 +9350,17 @@ components:
         installation_id: {type: string, format: uuid}
         component: {type: string}
         current_version: {type: string}
-        current_schema_head: {type: [integer, 'null']}
+        current_schema_head:
+          type: [integer, 'null']
+          description: |
+            Schema head of the installed build matched by current_artifact_sha256 (a published build of
+            current_version, superseded builds included). Null when unconfirmed: no digest reported, no
+            matching build, or the build records no head. Never the highest head among builds of the version.
+            Rollback options are then refused with current_schema_unconfirmed.
+        current_schema_head_reason:
+          type: string
+          enum: [current_artifact_unregistered, current_artifact_schema_unknown]
+          description: Why current_schema_head is null. Present only when the request carried current_artifact_sha256.
         target_mode: {type: string, enum: [follow_channel, pinned]}
         items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/UpgradeOption'}}
     InstallationPinOptions:

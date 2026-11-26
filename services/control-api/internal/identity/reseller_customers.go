@@ -60,6 +60,7 @@ func (s *Service) CreateResellerCustomer(ctx context.Context, actor Actor, input
 	if !validResellerActor(actor) || !validWriteMetadata(input.IdempotencyKey, input.RequestID) {
 		return ManagedUser{}, ErrInvalidUserInput
 	}
+	input.Status = "" // reseller customers always open active
 	if err := usernameField(input.Username); err != nil {
 		return ManagedUser{}, err
 	}

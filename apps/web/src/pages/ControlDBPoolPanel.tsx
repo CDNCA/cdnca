@@ -1,7 +1,7 @@
 // 主控数据库连接池：应答本页的主控进程当前值、最近 1 小时、常驻连接与告警状态。
 // 数值来自 control-api internal/poolmon（内存，每 10 秒采样）；告警走通知中心 control.db_pool.saturated / recovered。
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Descriptions, List, Tag, Typography } from 'antd'
+import { Alert, Button, Collapse, Descriptions, List, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../api/auth'
@@ -41,9 +41,6 @@ function Current({ s }: { s: DBPoolSample }) {
   const { t } = useTranslation('controlDBPool')
   return <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 4 }} colon={false} items={[
     { key: 'in_use', label: t('inUse'), children: `${s.in_use} / ${s.max_conns}` },
-    { key: 'idle', label: t('idle'), children: s.idle },
-    { key: 'constructing', label: t('constructing'), children: s.constructing },
-    { key: 'resident', label: t('residentConns'), children: s.resident_conns },
     { key: 'share', label: t('requestShare'),
       children: t('requestShareValue', { free: Math.max(s.max_conns - s.in_use, 0), capacity: s.request_capacity }) },
     { key: 'queued', label: t('queued'), children: s.queued },
@@ -68,9 +65,18 @@ function LastHour({ series }: { series: DBPoolSample[] }) {
   </div>
 }
 
-function Residents({ data }: { data: DBPoolStatus }) {
+// Resident connections, the thresholds and how sampling/notification works:
+// diagnostics only, folded under 诊断详情 so the card shows the pool state.
+function Diagnostics({ data }: { data: DBPoolStatus }) {
   const { t, i18n } = useTranslation('controlDBPool')
-  return <>
+  const s = data.current
+  return <Collapse ghost className="control-db-pool-diagnostics" style={{ marginTop: 8 }} items={[{ key: 'diagnostics', label: t('diagnostics'), children: <>
+    <Typography.Paragraph type="secondary">{t('description', { interval: data.interval_seconds })}</Typography.Paragraph>
+    {s && <Descriptions size="small" column={{ xs: 1, sm: 3 }} colon={false} items={[
+      { key: 'idle', label: t('idle'), children: s.idle },
+      { key: 'constructing', label: t('constructing'), children: s.constructing },
+      { key: 'resident', label: t('residentConns'), children: s.resident_conns },
+    ]} />}
     <Typography.Text strong style={{ display: 'block', marginTop: 12 }}>{t('residents')}</Typography.Text>
     <List size="small" dataSource={data.residents} locale={{ emptyText: t('residentsEmpty') }} renderItem={(r) => <List.Item>
       <span>{t(`residentName.${r.name}`, { defaultValue: r.name })}</span>
@@ -79,18 +85,22 @@ function Residents({ data }: { data: DBPoolStatus }) {
         <Typography.Text type="secondary">{t('residentSince', { time: formatDateTime(r.since, i18n.resolvedLanguage) })}</Typography.Text>
       </span>
     </List.Item>} />
-  </>
+    <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>{t('rule', {
+      enter: data.thresholds.enter_cycles, recover: data.thresholds.recover_cycles, margin: data.thresholds.saturation_margin,
+      slow: data.thresholds.slow_acquire_ms, dedup: data.thresholds.dedup_minutes })}
+      {data.last_notified_at ? ` ${t('lastNotified', { time: formatDateTime(data.last_notified_at, i18n.resolvedLanguage) })}` : ''}
+    </Typography.Paragraph>
+  </> }]} />
 }
 
 export default function ControlDBPoolPanel({ accessToken }: { accessToken: string }) {
-  const { t, i18n } = useTranslation('controlDBPool')
+  const { t } = useTranslation('controlDBPool')
   const pool = useQuery({ queryKey: ['system', 'db-pool'], queryFn: () => controlDBPoolApi.get(accessToken), refetchInterval: POLL_MS, retry: false })
   const data = pool.data
   const status = pool.error instanceof ApiError ? pool.error.status : 0
   return <section className="maintenance-card control-db-pool" aria-labelledby="control-db-pool-title">
     <div className="maintenance-section-heading"><div>
       <h2 id="control-db-pool-title">{t('title')}{data && <Tag style={{ marginLeft: 8 }}>{t('instance', { name: data.instance })}</Tag>}</h2>
-      <p>{t('description', { interval: data?.interval_seconds ?? 10 })}</p>
     </div></div>
     {pool.isPending ? null
       : status === 404 ? <Typography.Text type="secondary">{t('missing')}</Typography.Text>
@@ -106,12 +116,7 @@ export default function ControlDBPoolPanel({ accessToken }: { accessToken: strin
                   : <Typography.Text type="secondary">{t('noSample', { interval: data.interval_seconds })}</Typography.Text>}
               </div>
               <LastHour series={data.series} />
-              <Residents data={data} />
-              <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>{t('rule', {
-                enter: data.thresholds.enter_cycles, recover: data.thresholds.recover_cycles, margin: data.thresholds.saturation_margin,
-                slow: data.thresholds.slow_acquire_ms, dedup: data.thresholds.dedup_minutes })}
-                {data.last_notified_at ? ` ${t('lastNotified', { time: formatDateTime(data.last_notified_at, i18n.resolvedLanguage) })}` : ''}
-              </Typography.Paragraph>
+              <Diagnostics data={data} />
             </>}
   </section>
 }

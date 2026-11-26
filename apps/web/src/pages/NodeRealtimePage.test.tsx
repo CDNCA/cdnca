@@ -15,6 +15,7 @@ import { authResponse, nodeManagementSettingsFixture, principal } from '../test/
 import nodeRealtimeCSS from './NodeRealtimePage.css?raw'
 import NodeRealtimePage from './NodeRealtimePage'
 import nodeRealtimeSource from './NodeRealtimePage.tsx?raw'
+import { tabPanelOf } from '../test/tabs'
 
 const chartMocks = vi.hoisted(() => ({ setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn() }))
 vi.mock('../components/echartsRuntime')
@@ -280,8 +281,8 @@ describe('NodeRealtimePage', () => {
     expect(nodeRealtimeCSS).toMatch(/\.node-realtime-control-label\s*\{[\s\S]*?flex:\s*0 0 60px;/)
     expect(nodeRealtimeCSS).toMatch(/\.node-realtime-refresh\s*\{[\s\S]*?width:\s*78px;/)
     expect(mobileCSS).toMatch(/\.node-realtime-page\s*\{[\s\S]*?padding:\s*18px 20px 20px;/)
-    expect(mobileCSS).toMatch(/\.node-realtime-tabs \.ant-tabs-nav-operations\s*\{[\s\S]*?display:\s*none !important;/)
-    expect(mobileCSS).toMatch(/\.node-realtime-tabs \.ant-tabs-nav-list\s*\{[\s\S]*?min-width:\s*100%;[\s\S]*?transform:\s*none !important;/)
+    // 窄屏不再强关 rc-tabs 的平移与「更多」。
+    expect(mobileCSS).not.toMatch(/\.node-realtime-tabs \.ant-tabs-nav-(?:operations|list|wrap)\s*\{/)
     expect(nodeRealtimeCSS).toMatch(/\.node-realtime-table-scroll \.ant-table-placeholder \.ant-table-cell\s*\{[\s\S]*?height:\s*48px;/)
   })
 
@@ -321,6 +322,28 @@ describe('NodeRealtimePage', () => {
     expect(screen.getByRole('region', { name: '节点流量' })).toBeInTheDocument()
     expect(screen.getByText('总流量：未上报')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader')).not.toBeInTheDocument()
+  })
+
+  // 筛选与表格/图表在选中页签 aria-controls 指向的面板里，切换后跟着走。
+  it('renders each view’s controls and result inside the panel its tab controls', async () => {
+    authenticate()
+    vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [] })
+    const user = userEvent.setup()
+
+    renderPage()
+    expect(await screen.findByText('暂无数据')).toBeInTheDocument()
+    const ranking = tabPanelOf('资源排行')
+    expect(within(ranking).getByRole('table')).toBeInTheDocument()
+    expect(within(ranking).getByRole('radio', { name: '带宽' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '监控指标' }))
+    expect(within(tabPanelOf('监控指标')).getByRole('region', { name: '节点监控指标' })).toBeInTheDocument()
+    expect(within(tabPanelOf('监控指标')).getByRole('combobox', { name: '节点' })).toBeInTheDocument()
+    expect(tabPanelOf('资源排行')).toBeEmptyDOMElement()
+
+    await user.click(screen.getByRole('tab', { name: '节点流量' }))
+    expect(within(tabPanelOf('节点流量')).getByRole('region', { name: '节点流量' })).toBeInTheDocument()
+    expect(tabPanelOf('监控指标')).toBeEmptyDOMElement()
   })
 
   it('loads real metric history for the selected node and renders the monitoring chart state', async () => {

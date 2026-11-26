@@ -118,7 +118,12 @@ func (s *Store) ListRollouts(ctx context.Context, actor Actor,
 			}
 			response.Data = append(response.Data, rolloutSummary(plan, installationID, createdAt, updatedAt))
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		rows.Close()
+		response.Preparations, err = listOpenPreparationsTx(ctx, tx, actor.ScopeID, request.NodeID)
+		return err
 	})
 	if err != nil {
 		return ListRolloutsResponse{}, fmt.Errorf("list control upgrade rollouts: %w", err)

@@ -92,7 +92,9 @@ test('control usage, prompts and Gateway port notes are English with --lang en a
   assert.doesNotMatch(ports(['--lang', 'en']), /\p{Script=Han}/u)
   assert.match(ports(['--lang', 'zh']), /节点通道（网关）端口：注册 21443，通道 21444/)
   const prompt = spawnSync('bash', ['-c', [library, ...['fail', 'warn', 'valid_host', 'valid_port', 'control_domain_is_ip', 'prompt_public_endpoints'].map((name) => block(control, name)),
-    '[() { if [[ "$1" == "-t" ]]; then return 0; fi; builtin [ "$@"; }', 'install_lang_init --lang en', 'MASTER_HOST= MASTER_PORT= GATEWAY_HOST= CONTROL_DOMAIN= PUBLIC_CERT_FILE=', 'prompt_public_endpoints'].join('\n')],
+    '[() { if [[ "$1" == "-t" ]]; then return 0; fi; builtin [ "$@"; }',
+    // default_gateway_host 会联网查出口 IP；测试只看提示文案，替身直接回落到管理端地址。
+    'default_gateway_host() { printf "%s" "$MASTER_HOST"; }', 'install_lang_init --lang en', 'MASTER_HOST= MASTER_PORT= GATEWAY_HOST= CONTROL_DOMAIN= PUBLIC_CERT_FILE=', 'prompt_public_endpoints'].join('\n')],
   { encoding: 'utf8', input: 'cdnca.com\n\n', env: { PATH: process.env.PATH } })
   assert.equal(prompt.status, 0, prompt.stderr)
   assert.match(prompt.stderr, /Public domain or IP of the management console: Management HTTPS port \[443\]: /)

@@ -4,7 +4,7 @@ import { CdncaProvider } from '@cdnca/ui'
 import { MemoryRouter } from 'react-router-dom'
 
 import { AppRoutes } from '../App'
-import { buildEnableGatewayAccessCommand, buildGatewayInstallCommand, type Gateway } from '../api/gateways'
+import { buildEnableGatewayAccessCommand, buildGatewayInstallCommand, parseEntrypoints, parseTrustedProxies, type Gateway, type LocalGateway } from '../api/gateways'
 import { useSessionStore } from '../auth/session'
 import GatewayManagementPage from '../pages/GatewayManagementPage'
 import { getBreadcrumbLabels, isImplementedPath } from '../routes/navigation'
@@ -35,27 +35,19 @@ const savedETag = `"sha256-${'b'.repeat(64)}"`
 
 type Call = { method: string; path: string; body: unknown; ifMatch: string | null }
 
-// The page only reads node_health.total; the other sections are unavailable.
-function dashboard(nodes: number) {
-  const off = { available: false, reason: 'dependency_unavailable' }
-  return {
-    dashboard_version: 2,
-    meta: { range: 'seven_days', timezone: 'Asia/Shanghai', from: '2026-10-18T16:00:00Z', to: '2026-10-25T16:00:00Z',
-      generated_at: '2026-10-25T02:00:00Z', snapshot_at: '2026-10-25T02:00:00Z', window_complete: false },
-    accounts: off, subscriptions: off, billing: off, resources: off, operations: off, entitlement: off,
-    node_health: { available: true, value: { total: nodes, online_fresh: nodes, stale_or_offline: 0, presence_missing: 0, freshness_cutoff_seconds: 45 } },
-    analytics_health: off, account_security: off, network: off, analytics: off,
-  }
+function localGateway(overrides: Partial<LocalGateway> = {}): LocalGateway {
+  return { address: 'control.example.com:9444', server_name: 'control.example.com', status: 'online', instance_id: '6cfad302-0e27-44c0-b37f-3b4f5ad4c08b',
+    version: '1.0.35', ready_at: '2026-11-24T00:00:00Z', last_seen_at: '2026-11-24T00:05:00Z', certificate_expires_at: '2027-02-22T00:00:00Z',
+    nodes_online: 3, ...overrides }
 }
 
-function mockApi(items: Gateway[], open = true, nodes?: number) {
+function mockApi(items: Gateway[], open = true, local?: LocalGateway) {
   const calls: Call[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const path = String(input).replace(/^.*?(\/v1\/)/, '$1')
     const method = init?.method ?? 'GET'
     calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : null, ifMatch: new Headers(init?.headers).get('If-Match') })
-    if (path.startsWith('/v1/admin/dashboard?') && nodes !== undefined) return json(dashboard(nodes))
-    if (path === '/v1/admin/gateways' && method === 'GET') return json({ items, installation_id: 'x', standalone_access_open: open })
+    if (path === '/v1/admin/gateways' && method === 'GET') return json({ items, local, installation_id: 'x', standalone_access_open: open })
     if (path === '/v1/admin/gateways' && method === 'POST') {
       return json({ gateway: gateway({ name: 'gw-sg-1', host: 'gw2.example.com' }), binding_token: token, token_expires_at: '2026-10-22T02:00:00Z' }, 201)
     }
@@ -188,10 +180,9 @@ describe('Gateway management', () => {
 
   it('closed access: no warning popup, a fixed local-Gateway note with the enable command, no "Add Gateway"', async () => {
     authenticate(['system.gateway.manage'])
-    const calls = mockApi([], false, 3)
+    const calls = mockApi([], false, localGateway())
     renderWithProviders(<GatewayManagementPage />)
     expect(await screen.findByText(/本主控当前使用主控自带的本机网关/)).toBeInTheDocument()
-    expect(await screen.findByText(/现有 3 台节点都连在本机网关上/)).toBeInTheDocument()
     expect(screen.getByText(/独立网关是可选的/)).toBeInTheDocument()
     expect(screen.getByText(/还没有开启独立网关接入/)).toBeInTheDocument()
     const command = screen.getByLabelText('开启独立网关接入的命令') as HTMLTextAreaElement
@@ -209,22 +200,46 @@ describe('Gateway management', () => {
 
   it('open access: the note stays without the enable command and "Add Gateway" is shown', async () => {
     authenticate(['system.gateway.manage'])
-    mockApi([], true, 7)
+    mockApi([], true, localGateway())
     renderWithProviders(<GatewayManagementPage />)
-    expect(await screen.findByText(/现有 7 台节点都连在本机网关上/)).toBeInTheDocument()
+    expect(await screen.findByText(/本主控当前使用主控自带的本机网关/)).toBeInTheDocument()
     expect(screen.getByText(/独立网关是可选的/)).toBeInTheDocument()
     expect(screen.queryByLabelText('开启独立网关接入的命令')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '添加网关' })).toBeEnabled()
     expect(document.body.textContent).not.toMatch(/ADR/)
   })
 
-  it('leaves the node count out when the dashboard is unavailable', async () => {
+  // the local Gateway's own facts and its nodes; standalone rows count theirs.
+  it('shows the local Gateway as last reported and the nodes of each Gateway', async () => {
     authenticate(['system.gateway.manage'])
-    mockApi([], false)
+    const calls = mockApi([gateway({ nodes_online: 2 })], true, localGateway())
     renderWithProviders(<GatewayManagementPage />)
-    expect(await screen.findByText(/本主控当前使用主控自带的本机网关/)).toBeInTheDocument()
-    await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input).includes('/v1/admin/dashboard'))).toBe(true))
-    expect(screen.queryByText(/台节点都连在本机网关上/)).not.toBeInTheDocument()
+    const facts = (await screen.findByText('本机网关')).closest('.ant-descriptions') as HTMLElement
+    expect(within(facts).getByText('在线')).toBeInTheDocument()
+    expect(within(facts).getByText('control.example.com:9444')).toBeInTheDocument()
+    expect(within(facts).getByText('1.0.35')).toBeInTheDocument()
+    expect(within(facts).getByText('3')).toBeInTheDocument()
+    expect(within(facts).getByRole('link', { name: '查看节点' })).toHaveAttribute('href', '/node/list')
+    expect(within(document.querySelector('.ant-table') as HTMLElement).getByText('2')).toBeInTheDocument()
+    expect(calls.some((call) => call.path.startsWith('/v1/admin/dashboard'))).toBe(false)
+  })
+
+  // retest: under the console basename the link must not repeat /dashboard.
+  it('links the local Gateway nodes to the node list under the console basename', async () => {
+    authenticate(['system.gateway.manage'])
+    mockApi([], true, localGateway())
+    renderWithProviders(<GatewayManagementPage />, ['/dashboard/sys/gateways'], '/dashboard')
+    const facts = (await screen.findByText('本机网关')).closest('.ant-descriptions') as HTMLElement
+    expect(within(facts).getByRole('link', { name: '查看节点' })).toHaveAttribute('href', '/dashboard/node/list')
+  })
+
+  it('says what the local Gateway has not reported', async () => {
+    authenticate(['system.gateway.manage'])
+    mockApi([], false, localGateway({ status: 'not_reported', version: '', last_seen_at: null, certificate_expires_at: null, ready_at: null, nodes_online: 0 }))
+    renderWithProviders(<GatewayManagementPage />)
+    const facts = (await screen.findByText('本机网关')).closest('.ant-descriptions') as HTMLElement
+    expect(within(facts).getAllByText('未上报')).toHaveLength(4)
+    expect(within(facts).getByText('0')).toBeInTheDocument()
   })
 
   it('shows the error of a refused operation', async () => {
@@ -271,10 +286,31 @@ describe('Gateway management', () => {
     const proxies = await screen.findByLabelText('可信 CDN 回源 IP 段')
     await waitFor(() => expect((proxies as HTMLTextAreaElement).value).toBe('173.245.48.0/20=CF-Connecting-IP'))
     expect(screen.getByText(/只预置了 Cloudflare/)).toBeInTheDocument()
+    // the example in the hint is accepted as written.
+    const example = /例如 (\S+ \S+ \S+ \S+)。/.exec(screen.getByText(/套 CDN 时/).textContent ?? '')?.[1] ?? ''
+    expect(parseEntrypoints(example)).toHaveLength(1)
+    // nothing changed, nothing to publish.
+    expect(screen.getByRole('button', { name: '保存并下发' })).toBeDisabled()
+    fireEvent.change(proxies, { target: { value: '173.245.48.0/20=CF-Connecting-IP\n' } })
+    expect(screen.getByRole('button', { name: '保存并下发' })).toBeDisabled()
+    // the prefix is bounded by the address family, the bad line is named.
+    expect(parseTrustedProxies('10.0.0.0/32\n2001:db8::/128\n0.0.0.0/0')).toHaveLength(3)
+    expect(parseTrustedProxies('10.0.0.0/33')).toBeNull()
+    expect(parseTrustedProxies('2001:db8::/129')).toBeNull()
+    fireEvent.change(proxies, { target: { value: '173.245.48.0/20=CF-Connecting-IP\n\n2001:db8::/129' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存并下发' }))
+    expect(await screen.findByText(/第 3 行可信回源段格式不对/)).toBeInTheDocument()
+    expect(proxies).toHaveAttribute('aria-invalid', 'true')
+    expect(proxies).toHaveFocus()
+    expect(screen.queryByRole('dialog', { name: '确认保存并下发？' })).not.toBeInTheDocument()
+    fireEvent.change(proxies, { target: { value: '173.245.48.0/20=CF-Connecting-IP' } })
     const entrypoints = screen.getByLabelText('额外节点入口')
     fireEvent.change(entrypoints, { target: { value: 'cdn.example.com:443 gw.example.com grpc cdn.example.com' } })
     fireEvent.click(screen.getByRole('button', { name: '保存并下发' }))
-    expect(await screen.findByText(/节点入口格式不对/)).toBeInTheDocument()
+    expect(await screen.findByText(/第 1 行节点入口格式不对/)).toBeInTheDocument()
+    expect(entrypoints).toHaveAttribute('aria-invalid', 'true')
+    expect(entrypoints.getAttribute('aria-describedby')).toContain('gateway-entrypoints-error')
+    expect(entrypoints).toHaveFocus()
     expect(calls.some((call) => call.method === 'PUT')).toBe(false)
     fireEvent.change(proxies, { target: { value: '173.245.48.0/20=CF-Connecting-IP\n10.0.0.0/8' } })
     fireEvent.change(entrypoints, { target: { value: 'cdn.example.com:443 gw.example.com ws cdn.example.com' } })

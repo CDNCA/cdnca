@@ -63,10 +63,14 @@ type ProxyRequest struct {
 	SiteID *uuid.UUID      `json:"site_id,omitempty"`
 }
 
-// ProxyResponse is what the host relays back to the page.
+// ProxyResponse is what the host relays back to the page. RequestID is the
+// control plane's id of this call, the one signed into the plugin's context
+// (Context.RequestID) and recorded with the outcome here, so a page can show
+// the same id in its diagnostics.
 type ProxyResponse struct {
-	Status int             `json:"status"`
-	Body   json.RawMessage `json:"body"`
+	Status    int             `json:"status"`
+	Body      json.RawMessage `json:"body"`
+	RequestID string          `json:"request_id,omitempty"`
 }
 
 // Context is the signed context the plugin backend receives (non-sensitive:
@@ -192,6 +196,12 @@ func forward(ctx context.Context, client Forwarder, signer Signer, apiBase strin
 	outbound.Header.Set("X-Cdnca-Plugin-Context", contextHeader)
 	outbound.Header.Set("X-Cdnca-Plugin-Signature", base64.RawURLEncoding.EncodeToString(signature))
 	outbound.Header.Set("X-Cdnca-Plugin-Key-Id", signer.KeyID())
+	// The same request id as the signed context, readable without verifying it, so a plugin can log it on a
+	// refused call and the page's diagnostics, the control plane's record and the plugin's log line up
+	//. Correlation only: access decisions use the verified context.
+	if callContext.RequestID != "" {
+		outbound.Header.Set("X-Request-ID", callContext.RequestID)
+	}
 	outbound.Header.Set("Accept", "application/json")
 	if len(body) > 0 {
 		outbound.Header.Set("Content-Type", "application/json")

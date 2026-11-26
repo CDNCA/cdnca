@@ -203,6 +203,19 @@ describe('pluginInstallationsApi', () => {
     await expect(pluginInstallationsApi.list('token', scopeID)).rejects.toMatchObject({ code: 'invalid_response' })
   })
 
+  // 本机已提交的暂停应答 200 + license_sync；只认 pending / synced。
+  it('parses a committed pause whose license sync is still pending', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => response({
+      installation: { ...installation(), status: 'disabled', revision: 5, license_sync: 'pending' } }))
+    const paused = await pluginInstallationsApi.disable('token', scopeID, authorizationID, 4, 'plugin-install-disable-1')
+    expect(paused.installation.status).toBe('disabled')
+    expect(paused.installation.license_sync).toBe('pending')
+    fetchSpy.mockResolvedValueOnce(response({ items: [{ ...installation(), license_sync: 'synced' }] }))
+    expect((await pluginInstallationsApi.list('token', scopeID)).items[0]?.license_sync).toBe('synced')
+    fetchSpy.mockResolvedValueOnce(response({ items: [{ ...installation(), license_sync: 'unknown' }] }))
+    await expect(pluginInstallationsApi.list('token', scopeID)).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
   it('sends exact upgrade and uninstall requests with stable CAS and idempotency headers', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => response({ installation: installation() }))
     const approval = {

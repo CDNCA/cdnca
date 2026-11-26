@@ -217,6 +217,20 @@ type PlatformTarget struct {
 	// Items are the job's result lines (one CNAME owner or provider record
 	// each, see dnsmaintenance); at least one.
 	Items []string
+	// CleanupRecords are the full provider records behind cleanup items,
+	// stored with the job (dns_cleanup_plan_records, migration 686).
+	CleanupRecords []PlatformCleanupRecord
+}
+
+// PlatformCleanupRecord is the provider record a 清除CDN无关解析 item deletes:
+// canonical owner, type, full value and provider record ID.
+type PlatformCleanupRecord struct {
+	ItemID   string
+	ZoneID   uuid.UUID
+	Name     string
+	Type     string
+	Value    string
+	RecordID string
 }
 
 // StartPlatformOperation starts 记录修复 / 清除CDN无关解析 from the platform
@@ -252,11 +266,29 @@ func (s *Service) StartPlatformOperation(ctx context.Context, actorUserID, platf
 			return nil, false, ErrUnavailable
 		}
 		key := sha256.Sum256([]byte(request.IdempotencyKey + "/" + target.ScopeID.String()))
-		result, err := s.jobs.Create(ctx, jobstate.CreateInput{
+		input := jobstate.CreateInput{
 			TenantID: target.TenantID, Kind: kind, Subject: operationSubject(request.Kind),
 			IdempotencyKey: "dns-platform-" + hex.EncodeToString(key[:24]), Payload: payload,
 			Items:       items,
 			MaxAttempts: 1, RequestID: request.RequestID, TraceID: request.TraceID,
+		}
+		// The cleanup records go in with the items, so a worker never claims a
+		// job whose records are missing; a replay keeps the first job's records.
+		var result jobstate.CreateResult
+		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+			var err error
+			result, err = jobstate.CreateTx(ctx, tx, input, s.now().UTC().Truncate(time.Microsecond))
+			if err != nil || result.Replayed || len(target.CleanupRecords) == 0 {
+				return err
+			}
+			rows := make([][]any, len(target.CleanupRecords))
+			for index, record := range target.CleanupRecords {
+				rows[index] = []any{target.TenantID, result.Job.ID, record.ItemID, record.ZoneID, record.RecordID,
+					record.Name, record.Type, record.Value}
+			}
+			_, err = tx.CopyFrom(ctx, pgx.Identifier{"dns_cleanup_plan_records"}, []string{"tenant_id", "job_id",
+				"item_id", "zone_id", "provider_record_id", "owner_name", "record_type", "record_value"}, pgx.CopyFromRows(rows))
+			return err
 		})
 		if errors.Is(err, jobstate.ErrIdempotencyConflict) {
 			return nil, false, ErrIdempotencyConflict

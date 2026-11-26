@@ -33,9 +33,7 @@ type NamecheapProviderVerifier struct {
 }
 
 func NewNamecheapProviderVerifier() *NamecheapProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newNamecheapProviderVerifier("", &http.Client{Transport: transport}, namecheapVerifyTimeout)
+	return newNamecheapProviderVerifier("", providerAPIClient(), namecheapVerifyTimeout)
 }
 
 func newNamecheapProviderVerifier(testEndpoint string, client *http.Client, timeout time.Duration) *NamecheapProviderVerifier {

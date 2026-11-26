@@ -27,6 +27,8 @@ const visibleConditionalExpressionPattern =
 const translationKeyPattern = /^(?:[a-z][A-Za-z0-9_]*\.)+[A-Za-z0-9_]+$/
 
 const allowedVisibleLiterals = new Set([
+  // 安装锁定的封禁记录字段名，与接口和技术支持口径一致，不翻译。
+  'ban_id',
   // Shell log prefix of the node install command, not UI copy.
   '[cdnca-edge]',
   'DNS API',

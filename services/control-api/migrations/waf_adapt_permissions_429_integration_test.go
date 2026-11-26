@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/google/uuid"
 	controlmigrations "github.com/cdnca/cdnca/services/control-api/migrations"
+	"github.com/google/uuid"
 )
 
 // TestWAFAdaptPermissions429: up grants waf_adapt.read to the existing and

@@ -284,7 +284,11 @@ const (
 	// the control plane (KeyDocument.node_storage) and reports what it runs in
 	// NodeTelemetryV1.storage. Cache directory and limit apply on reload, the
 	// log directory on the next Agent start. Control writes the field and
-	// allows editing only for an Agent that declares it.
+	// allows editing only for an Agent that declares it. v2: the node also
+	// takes KeyDocument.node_facts_at and keeps its region and storage from
+	// the release with the latest (a refused newer publication of one scope
+	// cannot bring back an older value); control writes the field only for
+	// an Agent that declares v2.
 	CapabilityName_CAPABILITY_NAME_NODE_STORAGE CapabilityName = 71
 	// WAF_JA4_NEGATION v1 (number assigned by the main
 	// session): bound WAF rules may require the request's JA4 fingerprint to
@@ -5485,8 +5489,16 @@ type DeploymentCommand struct {
 	// configuration_scope_id binds scoped configuration formats such as the
 	// site-runtime v2 bundle. Legacy v1 commands may omit it.
 	ConfigurationScopeId *string `protobuf:"bytes,12,opt,name=configuration_scope_id,json=configurationScopeId,proto3,oneof" json:"configuration_scope_id,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// released_config_version_ids (apply only):
+	// config versions of this scope that an operator reconciliation on this
+	// node confirmed as served (the source version of a rollback_failed apply,
+	// confirmed directly or by a supplemental confirmation). The Gateway's
+	// telemetry authorization carries them, so the Agent stops holding the
+	// telemetry records of these versions. Canonical UUIDs, at most 64, sorted;
+	// empty when there are none. Older Agents ignore it.
+	ReleasedConfigVersionIds []string `protobuf:"bytes,13,rep,name=released_config_version_ids,json=releasedConfigVersionIds,proto3" json:"released_config_version_ids,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *DeploymentCommand) Reset() {
@@ -5601,6 +5613,13 @@ func (x *DeploymentCommand) GetConfigurationScopeId() string {
 		return *x.ConfigurationScopeId
 	}
 	return ""
+}
+
+func (x *DeploymentCommand) GetReleasedConfigVersionIds() []string {
+	if x != nil {
+		return x.ReleasedConfigVersionIds
+	}
+	return nil
 }
 
 // CheckResult is a safe health or precheck result; output must be sanitized.
@@ -15220,7 +15239,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x11HealthCheckPolicy\x12Y\n" +
 	"\x1bactivation_timeout_duration\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x19activationTimeoutDuration\x12Y\n" +
 	"\x1bobservation_window_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x19observationWindowDuration\x12D\n" +
-	"\x1erequired_consecutive_successes\x18\x03 \x01(\rR\x1crequiredConsecutiveSuccesses\"\xc0\x05\n" +
+	"\x1erequired_consecutive_successes\x18\x03 \x01(\rR\x1crequiredConsecutiveSuccesses\"\xff\x05\n" +
 	"\x11DeploymentCommand\x12.\n" +
 	"\x05event\x18\x01 \x01(\v2\x18.common.v1.EventMetadataR\x05event\x12#\n" +
 	"\rdeployment_id\x18\x02 \x01(\tR\fdeploymentId\x12\x18\n" +
@@ -15235,7 +15254,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\fhealth_check\x18\n" +
 	" \x01(\v2\x1b.agent.v1.HealthCheckPolicyR\vhealthCheck\x12?\n" +
 	"\rdeadline_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\fdeadlineTime\x129\n" +
-	"\x16configuration_scope_id\x18\f \x01(\tH\x01R\x14configurationScopeId\x88\x01\x01B\x1d\n" +
+	"\x16configuration_scope_id\x18\f \x01(\tH\x01R\x14configurationScopeId\x88\x01\x01\x12=\n" +
+	"\x1breleased_config_version_ids\x18\r \x03(\tR\x18releasedConfigVersionIdsB\x1d\n" +
 	"\x1b_previous_config_version_idB\x19\n" +
 	"\x17_configuration_scope_id\"\x9f\x01\n" +
 	"\vCheckResult\x12\x12\n" +

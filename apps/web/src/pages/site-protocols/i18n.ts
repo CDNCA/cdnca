@@ -24,6 +24,7 @@ const zhCN = {
     site_not_found: "网站不存在或无权访问",
     site_locked: "网站已被管理员锁定",
     version_conflict: "网站刚被其他操作修改，请重新提交",
+    package_feature_denied: "当前套餐不含 HTTP/3",
     unknown: "保存失败",
   },
 };
@@ -52,6 +53,7 @@ const enUS = {
     site_not_found: "The website does not exist or is not accessible",
     site_locked: "The website is locked by an administrator",
     version_conflict: "The website was just changed by another operation. Submit again.",
+    package_feature_denied: "The current package does not include HTTP/3",
     unknown: "Save failed",
   },
 };

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
+	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
 )
 
 type Repository interface {
@@ -95,7 +96,10 @@ func (worker *Worker) RunOnce(ctx context.Context) (bool, error) {
 // fix, or "" for one to retry. A refused node or a line group without nodes
 // is republished by its own trigger once that changes, so the request ends
 // with a reason the publication page shows instead of retrying until its
-// deadline as an unknown outcome.
+// deadline as an unknown outcome. Only an outcome nobody decided (a lost
+// connection, a lock conflict, a persistence error) is retried, backing off
+// (retryBackoff), under the same request ID: a publication that did commit
+// is replayed by its idempotency key instead of published again.
 func permanentFailure(err error) string {
 	var capability *edgepublish.TargetCapabilityError
 	var challenge *edgepublish.ChallengePolicyUnavailableError
@@ -115,9 +119,37 @@ func permanentFailure(err error) string {
 		return FailureNodeScopeConflict
 	case errors.As(err, &invalid):
 		return FailureSiteConfigInvalid
+	case errors.Is(err, packageaddon.ErrSubscriptionInactive):
+		return FailurePackageSubscriptionInactive
+	case errors.Is(err, packageaddon.ErrQuotaExceeded):
+		return FailurePackageQuotaExceeded
+	case errors.Is(err, packageaddon.ErrFeatureDenied):
+		return FailurePackageFeatureDenied
+	case errors.Is(err, edgepublish.ErrModuleNotEntitled):
+		return FailureModuleNotEntitled
+	case errors.Is(err, edgepublish.ErrSiteL2Unavailable):
+		return FailureSiteL2Unavailable
+	case errors.As(err, new(*edgepublish.CRSOutOfProfileError)):
+		return FailureRulePackOutOfProfile
 	default:
 		return ""
 	}
+}
+
+// maxRetryBackoff caps the doubling delay between the attempts of an unknown
+// outcome; the request's deadline bounds the attempts.
+const maxRetryBackoff = 5 * time.Minute
+
+// retryBackoff is the delay before attempt+1 of a request whose attempt-th
+// outcome is unknown: base, doubled per attempt, at most maxRetryBackoff (or
+// base when configured above it).
+func retryBackoff(base time.Duration, attempt int) time.Duration {
+	limit := max(base, maxRetryBackoff)
+	delay := base
+	for step := 1; step < attempt && delay < limit; step++ {
+		delay *= 2
+	}
+	return min(delay, limit)
 }
 
 func nilDependency(value any) bool {

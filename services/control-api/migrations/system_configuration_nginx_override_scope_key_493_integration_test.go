@@ -38,7 +38,7 @@ func TestSystemConfigurationNginxOverrideScopeKey493(t *testing.T) {
 		}
 		return ok
 	}
-	if !valid(`[]`) || valid(`[` + region + `]`) {
+	if !valid(`[]`) || valid(`[`+region+`]`) {
 		t.Fatal("before 493: an empty override list must pass and any override fail (the defect this fixes)")
 	}
 	for _, step := range []string{"up", "down", "up"} {

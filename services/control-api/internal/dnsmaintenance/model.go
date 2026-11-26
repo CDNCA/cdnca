@@ -11,9 +11,11 @@ package dnsmaintenance
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsproviderremote"
 	"github.com/google/uuid"
 )
 
@@ -43,10 +45,19 @@ const (
 	CodeNoServingEndpoint   = "dns_no_serving_endpoint"
 	CodeAllocationMissing   = "dns_allocation_missing"
 	CodeProviderUnavailable = "dns_provider_unavailable"
-	CodeReconcileFailed     = "dns_reconcile_failed"
-	CodeReconcileTimeout    = "dns_reconcile_timeout"
-	CodeRecordChanged       = "dns_record_changed"
-	CodeDeleteFailed        = "dns_record_delete_failed"
+	// CodeProxyUnavailable: the platform http代理 (系统设置 › 其它配置) could
+	// not be used, so the provider was not reached.
+	CodeProxyUnavailable = "dns_proxy_unavailable"
+	CodeReconcileFailed  = "dns_reconcile_failed"
+	CodeReconcileTimeout = "dns_reconcile_timeout"
+	CodeRecordChanged    = "dns_record_changed"
+	CodeDeleteFailed     = "dns_record_delete_failed"
+	// CodeCleanupPlanStale: a 清除CDN无关解析 item planned before migration 686
+	// has no stored full record, so it is skipped; plan the cleanup again.
+	CodeCleanupPlanStale = "dns_cleanup_plan_stale"
+	// CodeNotConfigured: the platform has no DNS provider (断开 DNS 服务商
+	// while the job was queued).
+	CodeNotConfigured = "dns_not_configured"
 )
 
 // RepairItem formats the item of one CNAME owner: "修复记录 <owner> A <v,..>
@@ -72,7 +83,10 @@ func RepairOwner(item string) (string, bool) {
 	return strings.ToLower(owner), owner != ""
 }
 
-// CleanupRecord identifies one provider record a cleanup deletes.
+// CleanupRecord identifies one provider record a cleanup deletes: its
+// canonical owner (lower case, trailing dot), type, full value and provider
+// record ID. It is stored with the plan (dns_cleanup_plan_records, migration
+// 696) because the item text may truncate the value.
 type CleanupRecord struct {
 	ZoneID   uuid.UUID
 	Name     string
@@ -93,21 +107,25 @@ func CleanupItem(record CleanupRecord) string {
 	return head + suffix
 }
 
-// ParseCleanupItem returns the record a cleanup item deletes.
-func ParseCleanupItem(item string) (CleanupRecord, bool) {
-	rest, ok := strings.CutPrefix(item, cleanupPrefix)
-	index := strings.LastIndex(rest, " #")
-	if !ok || index < 0 {
-		return CleanupRecord{}, false
+// sameRecord reports whether the provider record read back now is the planned
+// one: same record ID, owner, type and full value. Owners and CNAME targets
+// compare without case and trailing dot, addresses by their parsed form.
+func sameRecord(planned CleanupRecord, found dnsproviderremote.ZoneRecord) bool {
+	recordType := recordTypeName(found.Type)
+	return found.ID == planned.RecordID && canonicalOwner(found.Name) == canonicalOwner(planned.Name) &&
+		recordType == strings.ToUpper(strings.TrimSpace(planned.Type)) &&
+		canonicalValue(recordType, found.Value) == canonicalValue(recordType, planned.Value)
+}
+
+func canonicalValue(recordType, value string) string {
+	value = strings.TrimSpace(value)
+	if recordType == "CNAME" {
+		return canonicalOwner(value)
 	}
-	zone, recordID, ok := strings.Cut(rest[index+2:], "/")
-	zoneID, err := uuid.Parse(zone)
-	fields := strings.Fields(rest[:index])
-	if !ok || err != nil || recordID == "" || len(fields) < 3 {
-		return CleanupRecord{}, false
+	if address, err := netip.ParseAddr(value); err == nil {
+		return address.String()
 	}
-	return CleanupRecord{ZoneID: zoneID, Name: strings.ToLower(fields[0]) + ".", Type: fields[1],
-		Value: strings.Join(fields[2:], " "), RecordID: recordID}, true
+	return value
 }
 
 func truncate(line string) string {

@@ -16,6 +16,15 @@ import (
 // 已发布到节点 = 发布中); 重新发布 waits for it.
 var ErrPublishInFlight = errors.New("site publication is in flight")
 
+// ErrPackageSuspended: the site's package subscription is suspended; every
+// publication leaves the site out until it is unsuspended (migration 555), so
+// 重新发布 refuses instead of reporting a publication that never carries it.
+var ErrPackageSuspended = errors.New("site package subscription is suspended")
+
+// ErrPackageCancelled: the site's package subscription is cancelled; every
+// publication leaves the site out (user) until it is bound to another.
+var ErrPackageCancelled = errors.New("site package subscription is cancelled")
+
 const siteRepublishAction = "site.republish"
 
 // Republish is 接入状态 > 已发布到节点 > 重新发布 (): it
@@ -57,11 +66,17 @@ func (s *Store) republish(ctx context.Context, actor Actor, siteID uuid.UUID, re
 		if err := lockEdgeConfigurationScope(ctx, tx, scopeID); err != nil {
 			return err
 		}
-		var enabled bool
+		var enabled, suspended, cancelled bool
 		var state string
-		err = tx.QueryRow(ctx, `SELECT site.enabled, outcome.state FROM sites site
+		err = tx.QueryRow(ctx, `SELECT site.enabled, outcome.state, EXISTS(SELECT 1 FROM package_subscriptions subscription
+			  WHERE subscription.tenant_scope_id=site.scope_id AND subscription.id=site.package_subscription_id
+			    AND subscription.suspended_at IS NOT NULL),
+			  EXISTS(SELECT 1 FROM package_subscriptions subscription
+			  WHERE subscription.tenant_scope_id=site.scope_id AND subscription.id=site.package_subscription_id
+			    AND subscription.lifecycle_status<>'active')
+			FROM sites site
 			CROSS JOIN LATERAL site_publication_outcome_618(site.scope_id, site.id) outcome
-			WHERE site.id=$1 AND site.scope_id=$2 AND site.deleted_at IS NULL`, siteID, scopeID).Scan(&enabled, &state)
+			WHERE site.id=$1 AND site.scope_id=$2 AND site.deleted_at IS NULL`, siteID, scopeID).Scan(&enabled, &state, &suspended, &cancelled)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -70,6 +85,12 @@ func (s *Store) republish(ctx context.Context, actor Actor, siteID uuid.UUID, re
 		}
 		if !enabled {
 			return ErrLockStateConflict
+		}
+		if cancelled {
+			return ErrPackageCancelled
+		}
+		if suspended {
+			return ErrPackageSuspended
 		}
 		if state == "pending" {
 			return ErrPublishInFlight

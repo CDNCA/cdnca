@@ -10,8 +10,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -454,11 +456,58 @@ func (fixture createFlowFixture) start(t *testing.T, created RolloutDetail, labe
 
 func (fixture createFlowFixture) create(t *testing.T, ctx context.Context, request CreateRolloutRequest) RolloutDetail {
 	t.Helper()
-	result, err := fixture.service.CreateRollout(ctx, fixture.actor, request)
+	result, err := createAndPrepareRollout(t, ctx, fixture.service, fixture.actor, request)
 	if err != nil || result.Replayed || result.Detail.State != PlanQueued {
 		t.Fatalf("create = (%+v, %v)", result.Detail.RolloutSummary, err)
 	}
 	return result.Detail
+}
+
+// createAndPrepareRollout enqueues the create, runs the background preparation
+// to its end and returns the plan (Replayed when the create was), or the
+// preparation's failure.
+func createAndPrepareRollout(t *testing.T, ctx context.Context, service *Service, actor Actor,
+	request CreateRolloutRequest) (RolloutWriteResult, error) {
+	t.Helper()
+	enqueued, err := service.CreateRollout(ctx, actor, request)
+	if err != nil {
+		return RolloutWriteResult{}, err
+	}
+	preparation := prepareUntilSettled(t, service, actor, enqueued.Preparation.ID)
+	if preparation.State != PreparationReady {
+		return RolloutWriteResult{}, fmt.Errorf("preparation %s: %s", preparation.State, preparation.FailureCode)
+	}
+	detail, err := service.GetRollout(t.Context(), actor, preparation.PlanID)
+	return RolloutWriteResult{Detail: detail, Replayed: enqueued.Replayed}, err
+}
+
+// prepareUntilSettled runs due preparations until none is left and returns the given one.
+func prepareUntilSettled(t *testing.T, service *Service, actor Actor, intentID string) RolloutPreparation {
+	t.Helper()
+	for {
+		claimed, err := service.PrepareRolloutsOnce(t.Context(), "test-worker")
+		if err != nil {
+			t.Fatalf("prepare once: %v", err)
+		}
+		if !claimed {
+			break
+		}
+	}
+	return readTestPreparation(t, service, actor, intentID)
+}
+
+func readTestPreparation(t *testing.T, service *Service, actor Actor, intentID string) RolloutPreparation {
+	t.Helper()
+	tx, err := service.store.pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	preparation, err := readPreparationTx(t.Context(), tx, "intent_id=$1 AND actor_scope_id=$2", intentID, actor.ScopeID)
+	if err != nil {
+		t.Fatalf("read preparation %s: %v", intentID, err)
+	}
+	return preparation
 }
 
 func TestCreateRolloutFlowPostgres(t *testing.T) {
@@ -490,8 +539,9 @@ func TestCreateRolloutFlowPostgres(t *testing.T) {
 				t.Fatalf("grant intents after create = %v", states)
 			}
 			replay, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
-			if err != nil || !replay.Replayed || replay.Detail.ID != created.ID {
-				t.Fatalf("same request replay = (%v, %v)", replay.Replayed, err)
+			if err != nil || !replay.Replayed || replay.Preparation.PlanID != created.ID ||
+				replay.Preparation.State != PreparationReady {
+				t.Fatalf("same request replay = (%+v, %v)", replay, err)
 			}
 			fixture.start(t, created, "flow")
 			if fixture.license.count("upgrade-grants:issue") != 1 ||
@@ -625,8 +675,8 @@ func TestCreateRolloutWhileEntitlementRowIsLockedPostgres(t *testing.T) {
 }
 
 // A node identity change in flight (certificate renewal, re-enrollment) is a real conflict on
-// that node: it is reported as retryable 503, never as a bare database error, and the same
-// request then resumes from the acquired intent without asking the License service again.
+// that node: the preparation is requeued, never failed on the first conflict, and the next run
+// resumes from the acquired intent without asking the License service again.
 func TestCreateRolloutNodeIdentityConflictIsRetryablePostgres(t *testing.T) {
 	fixture := newCreateFlowFixture(t, "1.0.24", "1.0.27", 0, 127, 90)
 	var release func()
@@ -637,63 +687,209 @@ func TestCreateRolloutNodeIdentityConflictIsRetryablePostgres(t *testing.T) {
 		}
 	}
 	request := fixture.request("node-conflict")
-	_, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
-	if !errors.Is(err, ErrResourceUnavailable) {
-		t.Fatalf("create under node identity lock = %v, want ErrResourceUnavailable", err)
+	enqueued, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preparation := prepareUntilSettled(t, fixture.service, fixture.actor, enqueued.Preparation.ID)
+	if preparation.State != PreparationPreparing || preparation.FailureCode != "" {
+		t.Fatalf("preparation under node identity lock = %+v, want requeued", preparation)
 	}
 	if states := fixture.intents(t); states["acquired"] != 1 || len(states) != 1 {
 		t.Fatalf("grant intents after conflict = %v", states)
 	}
 	release()
-	created := fixture.create(t, t.Context(), request)
+	if _, err := fixture.pool.Exec(t.Context(), `UPDATE control_upgrade_create_preparations
+		SET available_at=clock_timestamp() WHERE intent_id=$1`, preparation.ID); err != nil {
+		t.Fatal(err)
+	}
+	if preparation = prepareUntilSettled(t, fixture.service, fixture.actor, preparation.ID); preparation.State != PreparationReady {
+		t.Fatalf("preparation after retry = %+v", preparation)
+	}
 	if states := fixture.intents(t); states["consumed"] != 1 || len(states) != 1 {
 		t.Fatalf("grant intents after retry = %v", states)
 	}
 	if fixture.license.count("upgrade-grants:issue") != 1 || fixture.license.count("upgrade-plan-artifact-bundles:issue") != 1 {
 		t.Fatalf("retry asked the License service again: %v", fixture.license.calls)
 	}
+	created, err := fixture.service.GetRollout(t.Context(), fixture.actor, preparation.PlanID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	fixture.start(t, created, "node-conflict")
 }
 
-// A failure before the License grants are stored leaves the intent reserved; it is the
-// resume point of the same request, which then completes on the same intent.
-func TestCreateRolloutReservedIntentResumesPostgres(t *testing.T) {
+// A License failure fails the preparation with a stable code; the same request returns that
+// failure without another License call, and a new request for the same node creates the plan.
+func TestCreateRolloutLicenseFailureIsStableAndRetriedByNewRequestPostgres(t *testing.T) {
 	fixture := newCreateFlowFixture(t, "1.0.27", "1.0.27", 124, 127, 0)
 	fixture.license.unavailable = 1
 	request := fixture.request("license-down")
-	if _, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request); !errors.Is(err, ErrLicenseUnavailable) {
-		t.Fatalf("create with License down = %v", err)
+	enqueued, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if states := fixture.intents(t); states["reserved"] != 1 || len(states) != 1 {
-		t.Fatalf("grant intents after License failure = %v", states)
+	failed := prepareUntilSettled(t, fixture.service, fixture.actor, enqueued.Preparation.ID)
+	if failed.State != PreparationFailed || failed.FailureCode != PreparationFailureLicenseUnavailable {
+		t.Fatalf("preparation with License down = %+v", failed)
 	}
-	created := fixture.create(t, t.Context(), request)
-	if states := fixture.intents(t); states["consumed"] != 1 || len(states) != 1 {
+	calls := fixture.license.count("upgrade-grants:issue")
+	replay, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
+	if err != nil || !replay.Replayed || replay.Preparation.ID != failed.ID || replay.Preparation.State != PreparationFailed {
+		t.Fatalf("same request after failure = (%+v, %v)", replay, err)
+	}
+	if prepareUntilSettled(t, fixture.service, fixture.actor, failed.ID).State != PreparationFailed ||
+		fixture.license.count("upgrade-grants:issue") != calls {
+		t.Fatalf("a failed preparation ran again: %v", fixture.license.calls)
+	}
+	created := fixture.create(t, t.Context(), fixture.request("license-down-retry"))
+	if states := fixture.intents(t); states["consumed"] != 1 || states["reserved"] != 1 || len(states) != 2 {
 		t.Fatalf("grant intents after retry = %v", states)
 	}
 	fixture.start(t, created, "license-down")
 }
 
-// The browser giving up (production: 8 seconds) must not abandon a create half way: the
-// server finishes it and the console's "retry the same request" gets the stored result.
-func TestCreateRolloutSurvivesClientDisconnectPostgres(t *testing.T) {
+// The console's create asks for start_when_ready: once the plan is made the worker starts it as the
+// console's start after its create did, once (a resumed preparation replays the same start).
+func TestCreateRolloutStartsWhenReadyPostgres(t *testing.T) {
 	fixture := newCreateFlowFixture(t, "1.0.24", "1.0.27", 0, 127, 90)
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	fixture.license.onIssue = func(*http.Request) { cancel() }
-	request := fixture.request("disconnect")
-	result, err := fixture.service.CreateRollout(ctx, fixture.actor, request)
-	if err != nil || result.Detail.State != PlanQueued {
-		t.Fatalf("create after client disconnect = (%+v, %v)", result.Detail.RolloutSummary, err)
+	request := fixture.request("auto-start")
+	request.StartWhenReady = true
+	enqueued, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
+	if err != nil || !enqueued.Preparation.StartWhenReady {
+		t.Fatalf("create = (%+v, %v)", enqueued, err)
 	}
-	fixture.license.onIssue = nil
+	ready := prepareUntilSettled(t, fixture.service, fixture.actor, enqueued.Preparation.ID)
+	if ready.State != PreparationReady || ready.StartFailureCode != "" {
+		t.Fatalf("preparation = %+v", ready)
+	}
+	started, err := fixture.service.GetRollout(t.Context(), fixture.actor, ready.PlanID)
+	if err != nil || started.State != PlanCanary {
+		t.Fatalf("plan after preparation = (%+v, %v)", started.RolloutSummary, err)
+	}
+	// A preparation resumed after its start replays that start.
+	claim := createPreparationClaim{IntentID: ready.ID, Actor: fixture.actor}
+	if err := fixture.service.startPreparedRollout(t.Context(), claim, RolloutDetail{RolloutSummary: RolloutSummary{
+		ID: ready.PlanID, Revision: 1}}); err != nil {
+		t.Fatalf("replayed start: %v", err)
+	}
+	var commands int
+	if err := fixture.pool.QueryRow(t.Context(), `SELECT count(*) FROM control_upgrade_node_commands
+		WHERE plan_id=$1 AND action='upgrade'`, ready.PlanID).Scan(&commands); err != nil || commands != 1 {
+		t.Fatalf("forward commands = (%d, %v)", commands, err)
+	}
+	if fixture.license.count("upgrade-command-grants:issue") != 1 {
+		t.Fatalf("License calls = %v", fixture.license.calls)
+	}
+	listed, err := fixture.service.ListRollouts(t.Context(), fixture.actor, ListRolloutsRequest{Page: 1, PageSize: 10})
+	if err != nil || len(listed.Preparations) != 0 {
+		t.Fatalf("list after start = (%+v, %v)", listed.Preparations, err)
+	}
+}
+
+// With the approval center holding rollout starts the worker does not start the plan: it stays
+// queued, the ready preparation says approval_required and is listed, and the console's start
+// (through approval) starts it.
+func TestCreateRolloutStartHeldByApprovalCenterPostgres(t *testing.T) {
+	fixture := newCreateFlowFixture(t, "1.0.24", "1.0.27", 0, 127, 90)
+	if _, err := fixture.pool.Exec(t.Context(), `INSERT INTO approval_center_settings(singleton,revision,enabled,rules,updated_at)
+		VALUES(true,1,true,ARRAY['control.upgrade'],now())
+		ON CONFLICT (singleton) DO UPDATE SET enabled=true,rules=ARRAY['control.upgrade'],
+			revision=approval_center_settings.revision+1,updated_at=now()`); err != nil {
+		t.Fatal(err)
+	}
+	request := fixture.request("held-start")
+	request.StartWhenReady = true
+	enqueued, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready := prepareUntilSettled(t, fixture.service, fixture.actor, enqueued.Preparation.ID)
+	if ready.State != PreparationReady || ready.StartFailureCode != PreparationStartApprovalRequired {
+		t.Fatalf("preparation = %+v", ready)
+	}
+	created, err := fixture.service.GetRollout(t.Context(), fixture.actor, ready.PlanID)
+	if err != nil || created.State != PlanQueued {
+		t.Fatalf("plan = (%+v, %v)", created.RolloutSummary, err)
+	}
+	listed, err := fixture.service.ListRollouts(t.Context(), fixture.actor, ListRolloutsRequest{Page: 1, PageSize: 10})
+	if err != nil || len(listed.Preparations) != 1 || listed.Preparations[0].StartFailureCode != PreparationStartApprovalRequired {
+		t.Fatalf("list = (%+v, %v)", listed.Preparations, err)
+	}
+	if fixture.license.count("upgrade-command-grants:issue") != 0 {
+		t.Fatalf("a held start asked License for a command grant: %v", fixture.license.calls)
+	}
+	fixture.start(t, created, "held-start")
+}
+
+// the create returns before any License call or artifact
+// download; the same key returns the same preparation; the plan cannot be started until it is
+// ready; a preparation whose worker stopped mid-way is resumed once its claim expires.
+func TestCreateRolloutReturnsBeforePreparationPostgres(t *testing.T) {
+	fixture := newCreateFlowFixture(t, "1.0.24", "1.0.27", 0, 127, 90)
+	request := fixture.request("async")
+	enqueued, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
+	if err != nil || enqueued.Replayed || enqueued.Preparation.State != PreparationPreparing ||
+		enqueued.Preparation.Phase != PreparationQueued ||
+		!reflect.DeepEqual(enqueued.Preparation.NodeIDs, []string{fixture.nodeID}) {
+		t.Fatalf("create = (%+v, %v)", enqueued, err)
+	}
+	if fixture.license.count("upgrade-grants:issue") != 0 {
+		t.Fatalf("create called License: %v", fixture.license.calls)
+	}
 	replay, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
-	if err != nil || !replay.Replayed || replay.Detail.ID != result.Detail.ID {
-		t.Fatalf("same request after disconnect = (%v, %v)", replay.Replayed, err)
+	if err != nil || !replay.Replayed || replay.Preparation.ID != enqueued.Preparation.ID ||
+		replay.Preparation.PlanID != enqueued.Preparation.PlanID {
+		t.Fatalf("same request = (%+v, %v)", replay, err)
 	}
-	if states := fixture.intents(t); states["consumed"] != 1 || len(states) != 1 {
-		t.Fatalf("grant intents = %v", states)
+	listed, err := fixture.service.ListRollouts(t.Context(), fixture.actor, ListRolloutsRequest{Page: 1, PageSize: 10})
+	if err != nil || len(listed.Data) != 0 || len(listed.Preparations) != 1 ||
+		listed.Preparations[0].ID != enqueued.Preparation.ID {
+		t.Fatalf("list while preparing = (%+v, %v)", listed, err)
 	}
+	_, err = fixture.service.ApplyRolloutAction(t.Context(), fixture.actor, RolloutActionRequest{
+		RolloutActionBody: RolloutActionBody{ExpectedRevision: 1, Reason: "operator_upgrade"},
+		PlanID:            enqueued.Preparation.PlanID, Operation: string(PlanStart),
+		IdempotencyKey: "control-upgrade-start-early", RequestID: "control-upgrade-start-request-early"})
+	if !errors.Is(err, ErrRolloutPreparing) {
+		t.Fatalf("start while preparing = %v, want ErrRolloutPreparing", err)
+	}
+
+	// A worker that claimed it and stopped: nobody else takes it while the claim holds.
+	claim, found, err := fixture.service.store.claimCreatePreparation(t.Context(), "stopped-worker")
+	if err != nil || !found || claim.IntentID != enqueued.Preparation.ID {
+		t.Fatalf("claim = (%+v, %v, %v)", claim, found, err)
+	}
+	if claimed, err := fixture.service.PrepareRolloutsOnce(t.Context(), "test-worker"); claimed || err != nil {
+		t.Fatalf("prepare while claimed = (%v, %v)", claimed, err)
+	}
+	if _, err := fixture.pool.Exec(t.Context(), `UPDATE control_upgrade_create_preparations
+		SET claim_expires_at=clock_timestamp()-interval '1 second' WHERE intent_id=$1`, claim.IntentID); err != nil {
+		t.Fatal(err)
+	}
+	ready := prepareUntilSettled(t, fixture.service, fixture.actor, enqueued.Preparation.ID)
+	if ready.State != PreparationReady || ready.Phase != PreparationDone {
+		t.Fatalf("resumed preparation = %+v", ready)
+	}
+	if err := fixture.service.store.completeCreatePreparation(t.Context(), claim, "", ""); !errors.Is(err, errCreatePreparationClaimLost) {
+		t.Fatalf("stale claim settled = %v", err)
+	}
+	created, err := fixture.service.GetRollout(t.Context(), fixture.actor, ready.PlanID)
+	if err != nil || created.State != PlanQueued {
+		t.Fatalf("plan = (%+v, %v)", created.RolloutSummary, err)
+	}
+	again, err := fixture.service.CreateRollout(t.Context(), fixture.actor, request)
+	if err != nil || !again.Replayed || again.Preparation.ID != ready.ID || again.Preparation.State != PreparationReady {
+		t.Fatalf("same request after ready = (%+v, %v)", again, err)
+	}
+	listed, err = fixture.service.ListRollouts(t.Context(), fixture.actor, ListRolloutsRequest{Page: 1, PageSize: 10})
+	if err != nil || len(listed.Data) != 1 || len(listed.Preparations) != 0 {
+		t.Fatalf("list after ready = (%+v, %v)", listed, err)
+	}
+	if fixture.license.count("upgrade-grants:issue") != 1 || fixture.license.count("upgrade-plan-artifact-bundles:issue") != 1 {
+		t.Fatalf("License calls = %v", fixture.license.calls)
+	}
+	fixture.start(t, created, "async")
 }
 
 // Start (and every other rollout action) is detached from the client the same way: the command

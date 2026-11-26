@@ -74,7 +74,8 @@ func (sender *NotificationContactSender) Enqueue(
 	})
 	if err != nil || len(enqueued.Deliveries) != 1 || enqueued.Deliveries[0].Channel != request.Channel ||
 		enqueued.Deliveries[0].OutboxID == uuid.Nil {
-		return ContactReceipt{}, ErrContactUnavailable
+		// a serialization failure is kept: Create runs the transaction again
+		return ContactReceipt{}, retryable(err, ErrContactUnavailable)
 	}
 	payload, err := json.Marshal(contactClaimPayload{Destination: request.Destination, OTP: request.OTP})
 	if err != nil {
@@ -93,7 +94,7 @@ func (sender *NotificationContactSender) Enqueue(
 		reference, request.ScopeID, request.ChallengeID, enqueued.Deliveries[0].OutboxID, request.Channel,
 		request.DestinationDigest[:], sealed.KeyID, sealed.Nonce, sealed.Ciphertext, sha256Digest(aad), request.ExpiresAt)
 	if err != nil {
-		return ContactReceipt{}, ErrContactUnavailable
+		return ContactReceipt{}, retryable(err, ErrContactUnavailable)
 	}
 	return ContactReceipt{AnonymousDispatchReference: reference, OutboxID: enqueued.Deliveries[0].OutboxID}, nil
 }

@@ -1270,14 +1270,20 @@ local function add_vary(name)
 end
 
 local function apply_cors_headers(site)
+    if not site.cors then
+        return
+    end
+    -- with an exact origin list the
+    -- response differs by Origin, so every response (no Origin, an origin not
+    -- allowed, an allowed one) carries Vary: Origin and caches keep them apart.
+    if site.cors.allowed_origins[1] ~= "*" then
+        add_vary("Origin")
+    end
     local origin = ngx.ctx.cdnca_http_cors_origin
-    if not origin or not site.cors then
+    if not origin then
         return
     end
     ngx.header["Access-Control-Allow-Origin"] = origin
-    if origin ~= "*" then
-        add_vary("Origin")
-    end
     if site.cors.allow_credentials then
         ngx.header["Access-Control-Allow-Credentials"] = "true"
     end
@@ -1356,6 +1362,28 @@ function _M.access_object(ref, read, site_id)
         return plain_reject(503, "HTTP policy unavailable")
     end
     return enforce(site, ref.revision)
+end
+
+-- resume_object(ref, read, site_id): the dynamic routing counterpart of
+-- resume. An internal pass after ngx.exec (a cache variant, origin follow,
+-- an unbuffered location) lost ngx.ctx; the client pass already ran the
+-- access checks, rewrites and request headers, so only the state
+-- header_filter reads comes back (the object is in the worker cache).
+function _M.resume_object(ref, read, site_id)
+    if ngx.ctx.cdnca_http_policy_site then
+        return
+    end
+    local site, site_error = object_site(type(ref) == "table" and ref.sha256 or nil, read, site_id)
+    if not site or not integer(ref.revision, 1, MAX_POLICY_VERSION) then
+        ngx.log(ngx.ERR, "HTTP policy object rejected on resume reason=", tostring(site_error or "revision"))
+        return plain_reject(503, "HTTP policy unavailable")
+    end
+    ngx.ctx.cdnca_http_policy_site = site
+    ngx.ctx.cdnca_http_policy_version = ref.revision
+    local origin = ngx.var.http_origin
+    if site.cors and origin then
+        ngx.ctx.cdnca_http_cors_origin = origin_allowed(site.cors, origin)
+    end
 end
 
 enforce = function(site, version)

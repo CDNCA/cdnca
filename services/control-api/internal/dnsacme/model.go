@@ -32,6 +32,9 @@ var (
 	ErrProviderVerificationUnavailable     = errors.New("dns provider verification is unavailable")
 	ErrProviderVerificationInvalidResponse = errors.New("dns provider returned an invalid verification response")
 	ErrProviderVerificationTimeout         = errors.New("dns provider verification timed out")
+	// ErrProviderProxyUnavailable: the platform http代理 (系统设置 › 其它配置)
+	// could not be used, so the provider was not reached.
+	ErrProviderProxyUnavailable = errors.New("dns api http proxy is unavailable")
 	// ErrPlatformManagedProvider: the account is the platform DNS copy
 	// (dns_providers.managed_by='platform', migration 569). It only serves
 	// the CNAME records the platform allocated; a tenant cannot add zones,

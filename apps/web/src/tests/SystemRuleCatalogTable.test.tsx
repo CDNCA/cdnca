@@ -179,6 +179,19 @@ describe('SystemRuleCatalogSection', () => {
   })
 
   // 顺带：管理员「仅对以下用户显示」按名称搜索选用户，已选显示名称，提交仍为作用域 ID。
+  // a rule hidden from users reads as disabled in its status cell; no standing enforcement sentence.
+  it('says in the status cell that a CC rule hidden from users is disabled', async () => {
+    const hidden = rule({ system_key: 'cc_rule:4', legacy_id: '4', name: '临时白名单', visibility: { visible: false, show_to_scope_ids: [], revision: 1 } })
+    vi.spyOn(securitySystemRulesApi, 'list').mockImplementation((_token, kind) => Promise.resolve(kind === 'cc_rule_group' ? [group, hidden] : []))
+    renderWithProviders(<SystemRuleCatalogSection accessToken="t" kind="cc_rule_group" cacheKey="f:6" isAdmin canManage />, opened)
+    const hiddenRow = (await screen.findByText('临时白名单')).closest('tr')!
+    expect(within(hiddenRow).getByText('已禁用（对用户隐藏）')).toBeInTheDocument()
+    expect(within(hiddenRow).getByRole('switch', { name: '对用户显示 临时白名单' })).not.toBeChecked()
+    const shownRow = screen.getByText('JS验证').closest('tr')!
+    expect(within(shownRow).getByText('正常')).toBeInTheDocument()
+    expect(screen.queryByText(/节点按“效果说明”执行/)).not.toBeInTheDocument()
+  })
+
   it('lets admins pick show-to users by name while still submitting scope IDs', async () => {
     const known = '11111111-1111-4111-8111-111111111111'
     const picked = '22222222-2222-4222-8222-222222222222'

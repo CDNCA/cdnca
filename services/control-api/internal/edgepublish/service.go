@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/cdnca/cdnca/libs/edgeconfig/crawlerdefaults"
+	"log/slog"
 	"net/netip"
 	"reflect"
 	"regexp"
@@ -64,6 +65,9 @@ type normalizedPublishRequest struct {
 	// capabilityHoldByCaller: the caller records the nodes left out
 	// (publishExcludingIncapableTx), so publishRoundTx does not.
 	capabilityHoldByCaller bool
+	// nodeSettings redelivers its base with fresh key documents instead of
+	// compiling the scope's rows (node_settings_redelivery.go).
+	nodeSettings *nodeSettingsRedelivery
 }
 
 type normalizedRollbackRequest struct {
@@ -391,7 +395,7 @@ func (s *Service) PublishAutomatic(
 		return PublishResult{}, ErrPermissionDenied
 	}
 	var result PublishResult
-	var committedRejection error
+	var committedRejection, contentRefusal error
 	var attempted PublishRequest
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		prepared, err := s.coordinator.PrepareAutomaticPublication(ctx, tx, reference)
@@ -429,6 +433,22 @@ func (s *Service) PublishAutomatic(
 		} else {
 			result, err = s.publishAuthorizedTx(ctx, tx, normalized, prepared.DatabaseNow)
 		}
+		if refusal, refused := NodeSettingsContentRefusal(err); refused && (prepared.NodeSettingsOnly || prepared.NodeSettingsPending) {
+			// The trigger changed node settings only, or the request superseded
+			// one that did: they still reach the nodes, with the release in
+			// effect there (node settings redelivery). RecordAutomaticPublication
+			// ends a request with content of its own as refused.
+			settings, published, settingsErr := s.publishNodeSettingsTx(ctx, tx, normalized, refusal, prepared.DatabaseNow)
+			switch {
+			case settingsErr == nil && len(published) > 0:
+				contentRefusal, result, err = err, settings, nil
+			case settingsErr != nil && !nodeSettingsRedeliveryRefused(settingsErr):
+				err = settingsErr // an outcome nobody decided (retried), or a lease denial
+			case settingsErr != nil:
+				slog.Warn("node settings redelivery refused; the content refusal stands",
+					"scope_id", normalized.ConfigurationScopeID, "refusal", refusal, "error", settingsErr)
+			}
+		}
 		if errors.Is(err, ErrEntitlementDenied) {
 			committedRejection = err
 			return nil
@@ -448,6 +468,9 @@ func (s *Service) PublishAutomatic(
 	if committedRejection != nil {
 		return PublishResult{}, committedRejection
 	}
+	// The content stays refused: audited as when nothing went out.
+	s.recordSiteConfigInvalid(ctx, attempted, contentRefusal)
+	s.recordModuleDenial(ctx, attempted, contentRefusal)
 	return result, nil
 }
 
@@ -649,8 +672,12 @@ func (s *Service) publishRoundTx(
 		existing.result.Replayed = true
 		return existing.result, nil
 	}
-	if err := checkPackageRuntime(ctx, tx, request.ConfigurationScopeID, now, nil); err != nil {
-		return PublishResult{}, err
+	// A node settings redelivery carries content published before: the
+	// package quotas of the current rows do not apply to it.
+	if request.nodeSettings == nil {
+		if err := checkPackageRuntime(ctx, tx, request.ConfigurationScopeID, now, nil); err != nil {
+			return PublishResult{}, err
+		}
 	}
 	if request.allowExpiredReplay {
 		now = s.config.Clock().UTC().Truncate(time.Microsecond)
@@ -661,6 +688,22 @@ func (s *Service) publishRoundTx(
 	if exists, err := publicationExistsForRequestID(ctx, tx, request.ConfigurationScopeID, request.RequestUUID); err != nil {
 		return PublishResult{}, err
 	} else if exists {
+		// The request's node settings redelivery committed (under its own key,
+		// nodeSettingsIdempotencyKey) and its outcome was lost: a retry finds
+		// it, whether the content is still refused or no longer, instead of
+		// refusing the request ID until the deadline. The revision is taken:
+		// the content goes out with the scope's next one.
+		if request.nodeSettings == nil {
+			settings, found, err := loadPublication(ctx, tx, request.ConfigurationScopeID,
+				nodeSettingsIdempotencyKey(request.IdempotencyKey))
+			if err != nil {
+				return PublishResult{}, err
+			}
+			if found && settings.result.NodeSettingsRefusal != "" {
+				settings.result.Replayed = true
+				return settings.result, nil
+			}
+		}
 		return PublishResult{}, ErrIdempotencyConflict
 	}
 	if sourceRevision != request.ExpectedSourceRevision {
@@ -731,7 +774,23 @@ func (s *Service) publishRoundTx(
 	}
 	// v2Inputs is the source kept as the stop overlay's base.
 	var v2Inputs *siteRuntimeV2Inputs
-	{
+	if request.nodeSettings != nil {
+		recipients, err := lockConfigurationArtifactRecipients(
+			ctx, tx, request.ConfigurationScopeID, target.NodeIDs, now,
+		)
+		if err != nil {
+			return PublishResult{}, err
+		}
+		if snapshotBytes, snapshotDigest, capabilities, siteObjects, err = s.buildNodeSettingsRelease(ctx, tx,
+			request.ConfigurationScopeID, configID, sourceRevision, request.nodeSettings.base, recipients, now); err != nil {
+			return PublishResult{}, err
+		}
+		nodeArtifactBindings, artifacts = siteObjects.bindings, siteObjects.artifacts
+		if artifactDigest, err = siteObjects.artifactSetDigest(); err != nil {
+			return PublishResult{}, err
+		}
+		rolloutMaxAttempts = 1
+	} else {
 		var bundle edgeconfig.Bundle
 		if request.overlay != nil {
 			snapshotBytes, snapshotDigest, bundle, _, capabilities, telemetrySubscriptions, v2Inputs, err =
@@ -751,8 +810,12 @@ func (s *Service) publishRoundTx(
 		if err != nil {
 			return PublishResult{}, err
 		}
+		var servingFrom []uuid.UUID
+		if request.overlay != nil {
+			servingFrom = request.overlay.servingSources()
+		}
 		if siteObjects, err = s.buildSiteObjectRelease(ctx, tx, request.ConfigurationScopeID, configID, bundle,
-			recipients, capabilities, now); err != nil {
+			recipients, capabilities, servingFrom, now); err != nil {
 			return PublishResult{}, err
 		}
 		nodeArtifactBindings, artifacts = siteObjects.bindings, siteObjects.artifacts
@@ -774,9 +837,12 @@ func (s *Service) publishRoundTx(
 		return PublishResult{}, err
 	}
 	// The new release uses only granted modules: the scope is no longer
-	// pending republication for a revoked one (migration 364).
-	if err := clearModuleHoldsTx(ctx, tx, request.ConfigurationScopeID); err != nil {
-		return PublishResult{}, err
+	// pending republication for a revoked one (migration 364). A node
+	// settings redelivery is not the scope's new release.
+	if request.nodeSettings == nil {
+		if err := clearModuleHoldsTx(ctx, tx, request.ConfigurationScopeID); err != nil {
+			return PublishResult{}, err
+		}
 	}
 	// A JS challenge loads its policy file at master start; nodes the
 	// challenge rollout has not reached would fail the reload.
@@ -821,7 +887,11 @@ func (s *Service) publishRoundTx(
 	if err := persistTelemetrySiteBindings(ctx, tx, configID, telemetrySubscriptions); err != nil {
 		return PublishResult{}, err
 	}
-	if err := persistCompileInputs(ctx, tx, request.ConfigurationScopeID, configID, sourceRevision,
+	if request.nodeSettings != nil {
+		if err := copyNodeSettingsFactsTx(ctx, tx, request.nodeSettings.base, configID, sourceRevision, now); err != nil {
+			return PublishResult{}, err
+		}
+	} else if err := persistCompileInputs(ctx, tx, request.ConfigurationScopeID, configID, sourceRevision,
 		request.overlay != nil, v2Inputs, capabilities, now); err != nil {
 		return PublishResult{}, err
 	}
@@ -853,6 +923,9 @@ func (s *Service) publishRoundTx(
 		TargetKind: targetKind(request), TargetSnapshot: cloneTargetReference(request.TargetSnapshot),
 		TargetSnapshotSHA256: targetDigest, NodeCount: len(target.NodeIDs), CreatedAt: now,
 	}
+	if request.nodeSettings != nil {
+		result.NodeSettingsRefusal = request.nodeSettings.refusal
+	}
 	if siteObjects != nil && len(siteObjects.siteSelectionUnsupported) > 0 {
 		result.SiteSelectionUnsupportedNodeIDs = slices.Clone(siteObjects.siteSelectionUnsupported)
 		slices.SortFunc(result.SiteSelectionUnsupportedNodeIDs, func(left, right uuid.UUID) int {
@@ -882,6 +955,13 @@ func (s *Service) publishRoundTx(
 	}
 	if v2Inputs != nil && len(v2Inputs.L2Skipped) > 0 {
 		payload["l2_skipped_sites"] = siteL2SkippedPayload(v2Inputs.L2Skipped)
+	}
+	if request.nodeSettings != nil {
+		// "节点设置更新": the base's content again, only the key documents are new.
+		payload["publication_kind"] = PublicationKindNodeSettings
+		payload["node_settings_base_config_version_id"] = request.nodeSettings.base.configID.String()
+		payload["node_settings_base_source_revision"] = request.nodeSettings.base.sourceRevision
+		payload["content_refusal"] = request.nodeSettings.refusal
 	}
 	if len(result.SiteSelectionUnsupportedNodeIDs) > 0 {
 		// "该节点不支持按节点屏蔽站点": these nodes keep every website.
@@ -1191,8 +1271,7 @@ func loadPackageSubscriptionFacts(
 		JOIN package_subscriptions package_subscription
 		  ON package_subscription.tenant_scope_id=site.scope_id AND package_subscription.id=site.package_subscription_id
 		WHERE site.scope_id=$1 AND site.deleted_at IS NULL AND site.enabled
-		  AND package_subscription.admin_enabled=true AND package_subscription.deleted_at IS NULL
-		  AND package_subscription.suspended_at IS NULL
+		  AND `+packageInEffectSQL("package_subscription")+`
 		  AND (site.status NOT IN ('package_expired','traffic_exceeded') OR site.id=ANY($2::uuid[]))
 		  AND site.package_subscription_id IS NOT NULL
 		ORDER BY site.id`, scopeID, statusRecoverySiteIDs)
@@ -1257,8 +1336,7 @@ func persistPackageMonitorMetricAuthority(
 		JOIN package_subscriptions package_subscription
 		  ON package_subscription.tenant_scope_id=site.scope_id AND package_subscription.id=site.package_subscription_id
 		WHERE site.scope_id=$1 AND site.deleted_at IS NULL AND site.enabled
-		  AND package_subscription.admin_enabled=true AND package_subscription.deleted_at IS NULL
-		  AND package_subscription.suspended_at IS NULL
+		  AND `+packageInEffectSQL("package_subscription")+`
 		  AND site.status NOT IN ('package_expired','traffic_exceeded')
 		  AND site.package_subscription_id IS NOT NULL
 		  AND EXISTS (SELECT 1 FROM site_origins origin WHERE origin.site_id=site.id AND origin.enabled)

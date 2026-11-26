@@ -208,6 +208,27 @@ func (repository *PostgresRepository) HasReceipt(ctx context.Context, actor Acto
 	return found, nil
 }
 
+// Receipt returns this scope's persisted receipt of the authorization under the idempotency key (ReceiptReader).
+func (repository *PostgresRepository) Receipt(ctx context.Context, actor Actor, authorizationID uuid.UUID,
+	idempotencyKey string) (Receipt, bool, error) {
+	if ctx == nil || repository == nil || repository.pool == nil || authorizationID == uuid.Nil ||
+		!idempotencyPattern.MatchString(idempotencyKey) {
+		return Receipt{}, false, ErrInvalidInput
+	}
+	// Read-write only because Replay locks the row (FOR UPDATE); nothing is written and the transaction rolls back.
+	tx, err := repository.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return Receipt{}, false, postgresError(ctx, err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := authorizePluginInstallationActor(ctx, tx, actor, PermissionManage); err != nil {
+		return Receipt{}, false, err
+	}
+	transaction := &postgresTransaction{tx: tx, tenantID: actor.TenantID, authorizationID: authorizationID,
+		actor: actor, auditor: repository.auditor, ctx: ctx}
+	return transaction.Replay(idempotencyKey)
+}
+
 func (repository *PostgresRepository) Apply(ctx context.Context, actor Actor, command Command,
 	verifier CandidateVerifier) (MutationResult, error) {
 	if ctx == nil || repository == nil || repository.pool == nil || command.TenantID != actor.TenantID {
@@ -397,6 +418,164 @@ func (transaction *postgresTransaction) Save(value Installation, receipt Receipt
 			"entrypoint_type": value.EntrypointType,
 			"plugin_id":       value.PluginID, "version": value.Version, "status": value.Status},
 	})
+}
+
+// licenseReportReceiptColumns are the receipt columns scanned by scanLicenseReportReceipts, as "receipt".
+const licenseReportReceiptColumns = `receipt.id,receipt.tenant_scope_id,receipt.authorization_id,
+		receipt.action,receipt.idempotency_key,receipt.request_id,receipt.request_digest,receipt.from_revision,
+		receipt.to_revision,receipt.result,receipt.reason,receipt.stable_reason_code,receipt.attempted_verification_id,
+		receipt.attempted_version,receipt.response_snapshot,receipt.occurred_at`
+
+// UnreportedReceipts implements LicenseReportLedger (migration 684). It runs as the control plane itself (the
+// background replay has no session): it reads committed receipts and changes nothing.
+func (repository *PostgresRepository) UnreportedReceipts(ctx context.Context, installationID, authorizationID uuid.UUID,
+	limit int) ([]Receipt, error) {
+	if ctx == nil || repository == nil || repository.pool == nil || limit < 1 || limit > 1000 {
+		return nil, ErrInvalidInput
+	}
+	rows, err := repository.pool.Query(ctx, `SELECT `+licenseReportReceiptColumns+`
+		FROM plugin_installation_receipts receipt
+		JOIN plugin_installation_heads head ON head.tenant_scope_id=receipt.tenant_scope_id AND
+			head.authorization_id=receipt.authorization_id
+		WHERE NOT EXISTS (SELECT 1 FROM plugin_installation_license_reports report WHERE report.receipt_id=receipt.id)
+			AND ($1::uuid IS NULL OR head.installation_id=$1) AND ($2::uuid IS NULL OR receipt.authorization_id=$2)
+		ORDER BY receipt.authorization_id,receipt.to_revision LIMIT $3`,
+		nullableUUID(installationID), nullableUUID(authorizationID), limit)
+	if err != nil {
+		return nil, postgresError(ctx, err)
+	}
+	return scanLicenseReportReceipts(ctx, rows)
+}
+
+// PendingAuthorizations implements LicenseReportLedger: one EXISTS per requested authorization, so a page is
+// marked from its own receipts whatever the backlog of other authorizations.
+func (repository *PostgresRepository) PendingAuthorizations(ctx context.Context, installationID uuid.UUID,
+	authorizationIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	if ctx == nil || repository == nil || repository.pool == nil || len(authorizationIDs) > 1000 {
+		return nil, ErrInvalidInput
+	}
+	pending := make(map[uuid.UUID]bool, len(authorizationIDs))
+	if len(authorizationIDs) == 0 {
+		return pending, nil
+	}
+	rows, err := repository.pool.Query(ctx, `SELECT requested.id FROM unnest($2::uuid[]) AS requested(id)
+		WHERE EXISTS (SELECT 1 FROM plugin_installation_receipts receipt
+			JOIN plugin_installation_heads head ON head.tenant_scope_id=receipt.tenant_scope_id AND
+				head.authorization_id=receipt.authorization_id
+			WHERE receipt.authorization_id=requested.id AND ($1::uuid IS NULL OR head.installation_id=$1) AND
+				NOT EXISTS (SELECT 1 FROM plugin_installation_license_reports report WHERE report.receipt_id=receipt.id))`,
+		nullableUUID(installationID), authorizationIDs)
+	if err != nil {
+		return nil, postgresError(ctx, err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, postgresError(ctx, err)
+	}
+	for _, id := range ids {
+		pending[id] = true
+	}
+	return pending, nil
+}
+
+// DueReports implements LicenseReportLedger: only the oldest unacknowledged
+// receipt of each authorization, skipping those backing off; never attempted first, then the least recently
+// attempted, so an authorization that keeps failing cannot hold the window.
+func (repository *PostgresRepository) DueReports(ctx context.Context, installationID uuid.UUID, limit int) ([]Receipt, error) {
+	if ctx == nil || repository == nil || repository.pool == nil || limit < 1 || limit > 1000 {
+		return nil, ErrInvalidInput
+	}
+	rows, err := repository.pool.Query(ctx, `SELECT `+licenseReportReceiptColumns+` FROM (
+			SELECT DISTINCT ON (receipt.authorization_id) receipt.*
+			FROM plugin_installation_receipts receipt
+			JOIN plugin_installation_heads head ON head.tenant_scope_id=receipt.tenant_scope_id AND
+				head.authorization_id=receipt.authorization_id
+			WHERE NOT EXISTS (SELECT 1 FROM plugin_installation_license_reports report WHERE report.receipt_id=receipt.id)
+				AND ($1::uuid IS NULL OR head.installation_id=$1)
+			ORDER BY receipt.authorization_id,receipt.to_revision) receipt
+		LEFT JOIN plugin_installation_license_report_attempts attempt ON attempt.receipt_id=receipt.id
+		WHERE attempt.receipt_id IS NULL OR attempt.next_attempt_at<=$2
+		ORDER BY attempt.last_attempted_at NULLS FIRST,receipt.authorization_id LIMIT $3`,
+		nullableUUID(installationID), repository.now().UTC(), limit)
+	if err != nil {
+		return nil, postgresError(ctx, err)
+	}
+	return scanLicenseReportReceipts(ctx, rows)
+}
+
+// RecordReportFailure implements LicenseReportLedger: the wait doubles per failure of the receipt (from base<<1,
+// at most base<<5) and never exceeds maxWait.
+func (repository *PostgresRepository) RecordReportFailure(ctx context.Context, receiptID uuid.UUID,
+	base, maxWait time.Duration) (int, time.Duration, error) {
+	if ctx == nil || repository == nil || repository.pool == nil || receiptID == uuid.Nil || base <= 0 || maxWait < base {
+		return 0, 0, ErrInvalidInput
+	}
+	now := repository.now().UTC()
+	var failures int
+	var next time.Time
+	err := repository.pool.QueryRow(ctx, `INSERT INTO plugin_installation_license_report_attempts AS attempt(
+			receipt_id,failures,last_attempted_at,next_attempt_at)
+		VALUES($1,1,$2::timestamptz,$2::timestamptz+LEAST($4::bigint,$3::bigint*2)*interval '1 microsecond')
+		ON CONFLICT (receipt_id) DO UPDATE SET failures=attempt.failures+1,last_attempted_at=$2::timestamptz,
+			next_attempt_at=$2::timestamptz+LEAST($4::bigint,$3::bigint*(1::bigint<<LEAST(attempt.failures+1,5)))*interval '1 microsecond'
+		RETURNING failures,next_attempt_at`, receiptID, now, base.Microseconds(), maxWait.Microseconds()).
+		Scan(&failures, &next)
+	if err != nil {
+		return 0, 0, postgresError(ctx, err)
+	}
+	return failures, next.Sub(now), nil
+}
+
+func scanLicenseReportReceipts(ctx context.Context, rows pgx.Rows) ([]Receipt, error) {
+	receipts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Receipt, error) {
+		var receipt Receipt
+		var digest, snapshot []byte
+		var reason, stableReason, attemptedVersion *string
+		var attemptedVerificationID *uuid.UUID
+		if err := row.Scan(&receipt.ID, &receipt.TenantID, &receipt.AuthorizationID, &receipt.Action,
+			&receipt.IdempotencyKey, &receipt.RequestID, &digest, &receipt.FromRevision, &receipt.ToRevision,
+			&receipt.Result, &reason, &stableReason, &attemptedVerificationID, &attemptedVersion, &snapshot,
+			&receipt.OccurredAt); err != nil {
+			return Receipt{}, err
+		}
+		if len(digest) != 32 || strictJSON(snapshot, &receipt.Snapshot) != nil || !validStoredInstallation(receipt.Snapshot) {
+			return Receipt{}, ErrStorageUnavailable
+		}
+		copy(receipt.RequestDigest[:], digest)
+		if reason != nil {
+			receipt.Reason = *reason
+		}
+		if stableReason != nil {
+			receipt.StableReasonCode = *stableReason
+		}
+		if attemptedVerificationID != nil {
+			receipt.AttemptedVerificationID = *attemptedVerificationID
+		}
+		if attemptedVersion != nil {
+			receipt.AttemptedVersion = *attemptedVersion
+		}
+		return receipt, nil
+	})
+	if errors.Is(err, ErrStorageUnavailable) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, postgresError(ctx, err)
+	}
+	return receipts, nil
+}
+
+// MarkReported implements LicenseReportLedger: the license service signed for the receipt.
+func (repository *PostgresRepository) MarkReported(ctx context.Context, receiptID uuid.UUID, lifecycleRevision uint64) error {
+	if ctx == nil || repository == nil || repository.pool == nil || receiptID == uuid.Nil || lifecycleRevision == 0 {
+		return ErrInvalidInput
+	}
+	if _, err := repository.pool.Exec(ctx, `INSERT INTO plugin_installation_license_reports(receipt_id,lifecycle_revision,
+		reported_at) VALUES($1,$2,$3) ON CONFLICT (receipt_id) DO NOTHING`, receiptID, lifecycleRevision,
+		repository.now().UTC()); err != nil {
+		return postgresError(ctx, err)
+	}
+	return nil
 }
 
 func authorizePluginInstallationActor(ctx context.Context, tx pgx.Tx, actor Actor, permission string) error {

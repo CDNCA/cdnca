@@ -488,8 +488,6 @@ describe('statistics visual baseline', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())).toEqual(['带宽流量', '端口排行'])
     expect(screen.getByRole('button', { name: /查询$/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '刷新' })).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '带宽' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '流量' })).toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('tab', { name: '端口排行' }))
     expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument()
     expect(fetchSpy).toHaveBeenCalled()

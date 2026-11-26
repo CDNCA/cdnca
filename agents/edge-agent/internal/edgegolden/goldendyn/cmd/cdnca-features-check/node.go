@@ -16,8 +16,8 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/siteindex"
 	"github.com/cdnca/cdnca/libs/edgeconfig"
 	"github.com/cdnca/cdnca/libs/edgeconfig/edgecache"
-	"github.com/cdnca/cdnca/libs/edgeconfig/edgeskeleton"
 	"github.com/cdnca/cdnca/libs/edgeconfig/edgesite"
+	"github.com/cdnca/cdnca/libs/edgeconfig/edgeskeleton"
 )
 
 func siteID(number int) string { return fmt.Sprintf("0f3a0000-0000-4000-8000-%012d", 100+number) }

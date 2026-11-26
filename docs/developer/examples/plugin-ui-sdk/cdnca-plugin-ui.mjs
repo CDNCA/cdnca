@@ -13,9 +13,24 @@
 // origin): no cookies or storage of the control plane, and no
 // credentials of the user. Everything goes through one private MessagePort
 // the host hands over after "cdnca.hello"; the host answers only these
-// three methods (anything else: error "message_not_allowed").
+// methods (anything else: error "message_not_allowed"). identity.* take no
+// parameters: the host decides the permissions (manifest ∩ the user's) and
+// your backend receives the credential at PUT {api_base_url}/plugin-identity
+// (signed context with delivery "plugin_identity"); a cancelled dialog is
+// error "identity_cancelled".
+//
+// requestTimeoutMs bounds the network time of a call, not the time the user
+// spends reading the host's confirmation: while the dialog of an
+// identity.authorize / identity.revoke is open the host sends
+// { type: "cdnca.waiting", request_id, waiting: true } (and waiting: false
+// once the user answered), and the call's timer stops until then. The message
+// carries no "id", so an older SDK ignores it; an older host never sends it
+// and the timer runs as before.
 
 export const PROTOCOL = 'cdnca.plugin-ui/v1'
+
+// The calls during which the host may wait for the user (its confirmation dialog).
+const PAUSABLE = new Set(['identity.authorize', 'identity.revoke'])
 
 export class PluginUIError extends Error {
   constructor(code) {
@@ -67,7 +82,17 @@ function createHost(port, nonce, requestTimeoutMs) {
   let sequence = 0
   port.onmessage = (event) => {
     const data = event.data
-    if (!data || data.protocol !== PROTOCOL || data.nonce !== nonce || !pending.has(data.id)) return
+    if (!data || data.protocol !== PROTOCOL || data.nonce !== nonce) return
+    if (data.type === 'cdnca.waiting') {
+      // The host waits for the user's answer in its own dialog: that is not network time. The timer stops and
+      // starts again in full once the user answered (the write that follows is network time).
+      const entry = pending.get(data.request_id)
+      if (!entry || !PAUSABLE.has(entry.method) || typeof data.waiting !== 'boolean') return
+      clearTimeout(entry.timer)
+      entry.timer = data.waiting ? undefined : setTimeout(entry.expire, requestTimeoutMs)
+      return
+    }
+    if (!pending.has(data.id)) return
     const { resolve, reject, timer } = pending.get(data.id)
     pending.delete(data.id)
     clearTimeout(timer)
@@ -78,11 +103,11 @@ function createHost(port, nonce, requestTimeoutMs) {
   function call(method, params) {
     const id = `r${++sequence}`
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const expire = () => {
         pending.delete(id)
         reject(new PluginUIError('request_timeout'))
-      }, requestTimeoutMs)
-      pending.set(id, { resolve, reject, timer })
+      }
+      pending.set(id, { method, resolve, reject, expire, timer: setTimeout(expire, requestTimeoutMs) })
       port.postMessage({ protocol: PROTOCOL, nonce, id, method, ...(params === undefined ? {} : { params }) })
     })
   }

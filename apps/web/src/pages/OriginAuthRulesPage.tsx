@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Checkbox, Descriptions, Drawer, Form, Input, InputNumber, Modal, Popconfirm,
-  Result, Select, Space, Table, Tag, Tooltip, Typography,
+  Result, Select, Space, Tag, Tooltip, Typography,
 } from 'antd'
-import { IdOrNameInput, useFeedbackMessage, useLiveApply } from '@cdnca/ui'
+import { IdOrNameInput, useFeedbackMessage, useLiveApply, Table } from '@cdnca/ui'
 import type { TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, Eye, Pencil, Plus, RefreshCw, RotateCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'

@@ -26,9 +26,7 @@ type DNSLAProviderVerifier struct {
 }
 
 func NewDNSLAProviderVerifier() *DNSLAProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newDNSLAProviderVerifier("", &http.Client{Transport: transport}, dnslaVerifyTimeout)
+	return newDNSLAProviderVerifier("", providerAPIClient(), dnslaVerifyTimeout)
 }
 
 func newDNSLAProviderVerifier(testEndpoint string, client *http.Client, timeout time.Duration) *DNSLAProviderVerifier {

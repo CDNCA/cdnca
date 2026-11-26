@@ -37,6 +37,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/cachecontrolhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/ccreference"
 	"github.com/cdnca/cdnca/services/control-api/internal/certdefaults"
+	"github.com/cdnca/cdnca/services/control-api/internal/clientip"
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocationhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/controlupgrade"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsacme"
@@ -63,6 +64,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/originfailover"
 	"github.com/cdnca/cdnca/services/control-api/internal/packagecatalog"
 	"github.com/cdnca/cdnca/services/control-api/internal/platformpolicy"
+	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/cdnca/cdnca/services/control-api/internal/regioncatalog"
 	"github.com/cdnca/cdnca/services/control-api/internal/regioncataloghttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/rulepackcontrol"
@@ -223,6 +225,8 @@ type Server struct {
 	entitlementRefreshHandler            http.Handler
 	apiKeyUsageRecorder                  APIKeyUsageRecorder
 	apiKeySourceIP                       *accountrecoverycontext.SourceIPResolver
+	sourceIPHeader                       *clientip.Setting
+	controlOriginAuth                    controlOriginAuthObserver
 	adminInbox                           *admininbox.Store
 	initializationErr                    error
 	cookieSecure                         bool
@@ -286,6 +290,9 @@ type Config struct {
 	APIKeyPepper                      []byte
 	APIKeyPepperKeyring               apikeycredential.PepperKeyring
 	APIKeyTrustedProxyCIDRs           []string
+	ControlOriginAuthConf             string            // origin-auth.conf (CDN-ORIGIN-AUTH-HINT); empty: defaultControlOriginAuthConf
+	ControlNginxConf                  string            // the console nginx.conf (CDN-ORIGIN-AUTH-HINT); empty: defaultControlNginxConf
+	SourceIPHeader                    *clientip.Setting // the live 源IP请求头; nil: direct
 	APIKeyMaxProxyHops                int
 	APIKeyUsageRecorder               APIKeyUsageRecorder
 	AdminDashboardHandler             http.Handler
@@ -498,6 +505,16 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 		cookieDomain:                  config.CookieDomain,
 		logger:                        logger,
 	}
+	server.controlOriginAuth.confPath = config.ControlOriginAuthConf
+	if server.controlOriginAuth.confPath == "" {
+		server.controlOriginAuth.confPath = defaultControlOriginAuthConf
+	}
+	server.controlOriginAuth.hostPortsPath = defaultControlHostPortsFile
+	server.controlOriginAuth.nginxPath = config.ControlNginxConf
+	if server.controlOriginAuth.nginxPath == "" {
+		server.controlOriginAuth.nginxPath = defaultControlNginxConf
+	}
+	server.sourceIPHeader = config.SourceIPHeader
 	server.wafSubscriptions = wafsubscription.NewService(pool, config.Now, logger)
 	server.rulePacks = rulepackcontrol.NewService(pool, config.Now)
 	server.ruleMountsPublished = config.RuleMountsPublished
@@ -858,6 +875,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/account/inbox/{message_id}/read", s.handleAdminInboxRead)
 	mux.HandleFunc("POST /v1/account/inbox/read-all", s.handleAdminInboxReadAll)
 	mux.HandleFunc("PUT /v1/admin/admin-access-policy", s.handleUpdateAdminAccessPolicy)
+	mux.HandleFunc("GET /v1/admin/control-origin-auth", s.handleControlOriginAuthStatus)
 	mux.HandleFunc("POST /v1/auth/refresh", s.handleRefresh)
 	mux.HandleFunc("POST /v1/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /v1/auth/me", passwordChangeExempt(s.handleMe))
@@ -1002,6 +1020,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/dns/settings/operations/{operation_id}", s.handleGetDNSOperation)
 	mux.HandleFunc("GET /v1/dns/platform-config", s.handleGetPlatformDNSConfig)
 	mux.HandleFunc("PUT /v1/dns/platform-config", s.handleSavePlatformDNSConfig)
+	mux.HandleFunc("DELETE /v1/dns/platform-config", s.handleDisconnectPlatformDNSConfig)
 	mux.HandleFunc("POST /v1/dns/platform-config/{kind}", s.handleStartPlatformDNSOperation)
 	mux.HandleFunc("POST /v1/dns/platform-config/connection-test", s.handleTestPlatformDNSConnection)
 	mux.HandleFunc("GET /v1/dns/platform-zones", s.handleListPlatformDNSZones)
@@ -1385,6 +1404,7 @@ func (s *Server) Handler() http.Handler {
 		}},
 		{handler: s.identityVerificationHandler, patterns: []string{
 			"/v1/identity-verification/status",
+			"/v1/identity-verification/methods",
 			"/v1/identity-verification/cases",
 			"/v1/identity-verification/cases/{case_id}",
 			"/v1/identity-verification/cases/{case_id}/submit",
@@ -1795,6 +1815,7 @@ func (s *Server) Handler() http.Handler {
 		}
 	}
 	mux.HandleFunc("GET /v1/auth/registration-config", s.handleRegistrationConfig)
+	mux.HandleFunc("GET /v1/auth/registration-terms", s.handleRegistrationTerms)
 	// The mux sets r.Pattern on the request it receives, so the refusal log
 	// wraps the mux itself to read the route template.
 	logged := s.withRefusalLog(mux)
@@ -1806,7 +1827,7 @@ func (s *Server) Handler() http.Handler {
 		s.approvalCenterRoutes(mux, func() http.Handler { return full })
 		gated = s.withApprovalCenter(logged)
 	}
-	handler := s.withRequestID(s.withAPIKeyClientIP(s.withPluginIdentity(s.withInstallationLock(gated))))
+	handler := s.withRequestID(s.withControlOriginAuthObserver(s.withAPIKeyClientIP(s.withPluginIdentity(s.withInstallationLock(gated)))))
 	if s.controlPlaneUpgradeGate != nil {
 		handler = s.controlPlaneUpgradeGate(handler)
 	}
@@ -2640,6 +2661,13 @@ type apiError struct {
 	Details any `json:"details,omitempty"`
 }
 
+// entitlementFeatureDeniedDetails names the feature code an
+// entitlement_feature_denied refusal needs (e.g. packages.manage for a package
+// publish), so the console can say which license feature is missing.
+type entitlementFeatureDeniedDetails struct {
+	RequiredFeature string `json:"required_feature"`
+}
+
 // securityPolicyInUseDetails (D3): up to five sites still running the
 // policy a delete was refused for.
 type securityPolicyInUseDetails struct {
@@ -2664,6 +2692,12 @@ type streamPortConflictDetails struct {
 
 func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	if status, code, ok := packageRuntimeError(err); ok {
+		if details := packageQuotaDetails(err); details != nil {
+			s.logClientError(r, status, code)
+			writeJSONStatus(w, status, errorEnvelope{Error: apiError{Code: code, Message: http.StatusText(status),
+				RequestID: requestID(r.Context()), Details: details}})
+			return
+		}
 		s.writeAPIError(w, r, status, code, http.StatusText(status))
 		return
 	}
@@ -2672,6 +2706,15 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	if located, ok := fielderr.As(err); ok {
 		s.writeFieldError(w, r, located.Field, located.Reason)
+		return
+	}
+	var featureDenied *entitlementguard.FeatureDeniedError
+	if errors.As(err, &featureDenied) && featureDenied.Feature != "" {
+		s.logClientError(r, http.StatusForbidden, "entitlement_feature_denied")
+		writeJSONStatus(w, http.StatusForbidden, errorEnvelope{Error: apiError{
+			Code: "entitlement_feature_denied", Message: "the local entitlement lease does not grant this feature",
+			RequestID: requestID(r.Context()), Details: entitlementFeatureDeniedDetails{RequiredFeature: featureDenied.Feature},
+		}})
 		return
 	}
 	switch {
@@ -2989,6 +3032,8 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		s.writeAPIError(w, r, http.StatusTooManyRequests, "provider_verification_rate_limited", "DNS provider verification was rate limited")
 	case errors.Is(err, dnsacme.ErrProviderVerificationUnavailable):
 		s.writeAPIError(w, r, http.StatusServiceUnavailable, "provider_verification_unavailable", "DNS provider verification is unavailable")
+	case errors.Is(err, dnsacme.ErrProviderProxyUnavailable):
+		s.writeAPIError(w, r, http.StatusServiceUnavailable, "provider_proxy_unavailable", "the DNS API HTTP proxy could not be used")
 	case errors.Is(err, dnsacme.ErrProviderVerificationInvalidResponse):
 		s.writeAPIError(w, r, http.StatusBadGateway, "provider_verification_invalid_response", "DNS provider returned an invalid verification response")
 	case errors.Is(err, dnsacme.ErrProviderVerificationTimeout):
@@ -3053,6 +3098,7 @@ func (s *Server) logClientError(r *http.Request, status int, code string) {
 		"request_id", requestID(r.Context()),
 		"status", status,
 		"code", code,
+		"reason", truncateRunes(refusalreason.Recorded(r.Context()), refusalReasonLimit),
 		"method", r.Method,
 		"route", route,
 	)
@@ -3128,12 +3174,14 @@ func passwordChangeExempt(next http.HandlerFunc) http.HandlerFunc {
 // WithClientSourceIP records the trusted client address (same resolver as
 // the API key and audit paths) on every request, including handlers mounted
 // outside Handler(), so session checks such as the platform administration
-// allowlist see the real client address.
+// allowlist see the real client address. The 源IP请求头 visitor address
+// (withVisitorIP) comes first, for every resolver further in.
 func (s *Server) WithClientSourceIP(next http.Handler) http.Handler {
 	if s == nil || s.apiKeySourceIP == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = s.withVisitorIP(r)
 		if audit.SourceIPFrom(r.Context()) == "" {
 			if address, err := s.apiKeySourceIP.ResolveSourceIP(r); err == nil {
 				r = r.WithContext(audit.WithSourceIP(r.Context(), address))

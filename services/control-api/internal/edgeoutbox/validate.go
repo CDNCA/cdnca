@@ -63,6 +63,14 @@ func validateClaim(command claimedCommand, maxPayloadBytes int) (string, failure
 	if decoded.PreviousConfigVersionId != nil && !canonicalUUID(decoded.GetPreviousConfigVersionId()) {
 		return "", integrityFailure("deployment_command_identity_mismatch")
 	}
+	if len(decoded.ReleasedConfigVersionIds) > 64 {
+		return "", integrityFailure("deployment_command_identity_mismatch")
+	}
+	for _, released := range decoded.ReleasedConfigVersionIds {
+		if !canonicalUUID(released) {
+			return "", integrityFailure("deployment_command_identity_mismatch")
+		}
+	}
 	return command.commandEventID.String(), failure{}
 }
 

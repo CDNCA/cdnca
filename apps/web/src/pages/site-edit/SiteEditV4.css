@@ -144,45 +144,23 @@
   margin-top: 16px;
 }
 
-/* 负载方式: the seven cards share one row
-   (up to 200px each, down to 96px, where the short line wraps), wrapping only when even that does not
-   fit; title + one short line, the full explanation stays in the tooltip.
-   The row control drops the 640px form cap so the cards can use the width. */
-.site-edit-v4 .site-form-row-control:has(> [role='radiogroup'] > .is-balance) {
-  max-width: none;
+/* 负载方式: one compact select; the dropdown shows each
+   method's one-line use case under its name. */
+.site-edit-v4 .site-balance-select {
+  width: 220px;
+  max-width: 100%;
 }
 
-.site-edit-v4 .site-form-row-control > [role='radiogroup']:has(> .is-balance) {
-  width: 100%;
-  max-width: 1448px;
-}
-
-.site-edit-v4 .site-origin-choice-grid.is-balance {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(96px, 100%), 1fr));
-  gap: 8px;
-}
-
-.site-edit-v4 .site-balance-choice {
+.site-balance-option {
   display: flex;
-  min-width: 0;
+  flex-direction: column;
+  line-height: 18px;
 }
 
-.site-edit-v4 .site-origin-choice-grid.is-balance .site-origin-choice.ant-radio-wrapper {
-  width: 100%;
-  min-height: 60px;
-  margin-inline-end: 0;
-  padding: 10px 12px;
-}
-
-
-.site-balance-tip {
-  max-width: 340px;
-}
-
-.site-balance-tip p {
-  margin: 4px 0 0;
-  line-height: 20px;
+.site-balance-option small {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  white-space: normal;
 }
 
 .site-edit-v4 .site-origin-choice.ant-radio-wrapper {

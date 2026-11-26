@@ -3,6 +3,7 @@ package securityactivation
 import (
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"time"
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
@@ -10,10 +11,13 @@ import (
 )
 
 var (
-	ErrInvalidInput           = errors.New("invalid security activation input")
-	ErrPermissionDenied       = errors.New("security activation permission denied")
-	ErrNotFound               = errors.New("security activation not found")
-	ErrConflict               = errors.New("security activation conflict")
+	ErrInvalidInput     = errors.New("invalid security activation input")
+	ErrPermissionDenied = errors.New("security activation permission denied")
+	ErrNotFound         = errors.New("security activation not found")
+	ErrConflict         = errors.New("security activation conflict")
+	// ErrTargetBusy is ErrConflict because another candidate of the scope holds the node target (migration 287):
+	// it frees once that rollout settles, so a background start retries soon instead of backing off.
+	ErrTargetBusy             = fmt.Errorf("%w: publication target busy", ErrConflict)
 	ErrSiteLocked             = errors.New("security activation site is locked")
 	ErrIdempotencyConflict    = errors.New("security activation idempotency conflict")
 	ErrNotHealthy             = errors.New("security activation is not healthy")
@@ -126,12 +130,32 @@ type StatusResult struct {
 	// FailureReasons (P11): the nodes' failure texts when the latest
 	// candidate failed (empty otherwise).
 	FailureReasons []FailureReason `json:"failure_reasons,omitempty"`
+	// PromotionFailure: the latest candidate failed at promotion (healthy on
+	// its nodes, superseded by another publication of the scope) and whether
+	// the worker claims the version again (rebind.go).
+	PromotionFailure *PromotionFailure `json:"promotion_failure,omitempty"`
 	// LatestDetach: the latest candidate withdraws the kind (sec-rebind).
 	LatestDetach bool `json:"latest_detach"`
 	// Rollback (sec-rebind): whether the panel can roll the latest
 	// candidate back, to what, or why not.
 	Rollback *RollbackAvailability `json:"rollback,omitempty"`
 }
+
+// PromotionFailure: Failures
+// counts the failed promotions of the claimed library version; Retrying is
+// whether that version (or a newer saved one) will be published again by
+// the worker, false once MaxReclaims reclaims were spent or the library is
+// gone.
+type PromotionFailure struct {
+	Reason      string `json:"reason"`
+	Failures    int    `json:"failures"`
+	MaxReclaims int    `json:"max_reclaims"`
+	Retrying    bool   `json:"retrying"`
+}
+
+// PromotionFailureSuperseded: another publication of the site's scope
+// reached the nodes before the candidate was promoted.
+const PromotionFailureSuperseded = "superseded"
 
 // Rollback reasons (RollbackAvailability.Reason).
 const (
@@ -278,6 +302,10 @@ type StartInput struct {
 	// resumeWaitID: the capability wait this start resumes (worker only); not
 	// part of the request digest.
 	resumeWaitID uuid.UUID
+	// reclaim: the worker claims the binding's last claimed version again
+	// after its candidate failed at promotion (rebind.go, migration 695).
+	// Part of the request digest only when set.
+	reclaim bool
 }
 
 type StartResult struct {

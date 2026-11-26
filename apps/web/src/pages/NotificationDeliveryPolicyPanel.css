@@ -53,7 +53,9 @@
 .notification-delivery-policy .ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-expand-icon .anticon { font-size: 18px; }
 .notification-delivery-policy .ant-collapse-content-box { padding: 0 16px; }
 .notification-policy-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.notification-policy-title { margin-right: auto; color: var(--cdnca-color-title); font-weight: 600; }
+.notification-delivery-policy .ant-collapse-header-text { min-width: 0; }
+/* Unnamed events show the raw event_type, one unbreakable word that would push the page wider than a phone screen. */
+.notification-policy-title { min-width: 0; margin-right: auto; color: var(--cdnca-color-title); font-weight: 600; overflow-wrap: anywhere; }
 .notification-policy-status {
   padding: 0 8px;
   border: 1px solid var(--cdnca-color-border);
@@ -73,9 +75,18 @@
 .notification-policy-row .ant-input-number-group-wrapper .ant-input-number { width: 100%; }
 .notification-delivery-policy .ant-alert { margin-bottom: 12px; }
 .notification-policy-saved { pointer-events: none; }
-.notification-policy-template-note { margin: 12px 0; overflow-wrap: anywhere; }
+.notification-policy-channel-off { color: var(--cdnca-color-neutral58, #8c96a8); }
+.notification-policy-channel-off .ant-tag { margin-inline-start: 4px; }
 .notification-policy-footer { margin-top: 16px; }
 .notification-delivery-policy-loading { padding: 12px 0; }
+
+/* 事件按 账户/网站安全/节点/计费套餐/证书/市场/插件 分组，组本身不加卡片边框。 */
+.notification-delivery-policy .notification-policy-groups > .ant-collapse-item { margin-bottom: 4px; border: 0; background: transparent; }
+.notification-delivery-policy .notification-policy-groups > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box { padding: 4px 0 0; }
+.notification-policy-group-title { font-weight: 600; }
+.notification-policy-group-count { margin-left: 8px; color: var(--cdnca-color-text-secondary); font-weight: 400; }
+.notification-policy-filter-name { width: 200px; }
+.notification-policy-code { display: block; padding-top: 12px; font-size: 12px; overflow-wrap: anywhere; }
 
 @media (max-width: 575px) {
   .notification-policy-window { gap: 8px; padding: 0; }

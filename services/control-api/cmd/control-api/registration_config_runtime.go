@@ -12,12 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// builtInRegistrationTermsVersion is the terms version the built-in pages send
-// (the console's accountRegistrationTermsVersion).
-const builtInRegistrationTermsVersion = "terms-2026-08"
-
-// Reason codes of GET /v1/auth/registration-config for administrators:
-// why sign-up verification is not ready, each one a
+// Reason codes of GET /v1/auth/registration-config for administrators
+// (registration-ready): why sign-up verification is not ready, each one a
 // setting the operator can change.
 const (
 	registrationReasonDisabled             = "registration_disabled"
@@ -41,8 +37,11 @@ type registrationConfigSource struct {
 	// verified: the Turnstile registration runtime is mounted (not merely
 	// requested by ACCOUNT_REGISTRATION_ENABLED: a runtime that failed to
 	// open falls back to the built-in flow).
-	verified     bool
-	builtIn      *accountregistration.BuiltInService
+	verified bool
+	builtIn  *accountregistration.BuiltInService
+	// termsVersion: ACCOUNT_REGISTRATION_TERMS_VERSION of the Turnstile flow
+	// (a deployment that pins the version); empty, the version is derived
+	// from the terms on the settings page.
 	termsVersion string
 	// envSiteKey (ACCOUNT_REGISTRATION_TURNSTILE_SITE_KEY) wins over the page
 	// value; envSecret: ACCOUNT_REGISTRATION_TURNSTILE_SECRET supplies the
@@ -58,6 +57,56 @@ type registrationConfigSource struct {
 	templates     map[notification.Channel]notification.TemplateRef
 	notifications registrationNotificationView
 	recovery      accountRecoveryRuntimeConfig
+	// recoveryReady reports whether the account recovery runtime can take a
+	// request now (the page offers the form only then); nil: ready.
+	recoveryReady func() bool
+	// terms decides terms_required, as both sign-up entries do.
+	terms registrationTerms
+}
+
+type registrationTermsSite interface {
+	RegistrationTermsReadable(context.Context) (bool, error)
+}
+
+// registrationTerms decides whether sign-up asks to accept
+// terms: only while a visitor has some to read: the terms published on the
+// settings page (site: a website's own terms page; nil here, the community
+// edition has no themed website). The same answer is
+// registration-config terms_required and what both sign-up entries (built-in
+// and the Turnstile flow) follow. A deployment pinning
+// ACCOUNT_REGISTRATION_TERMS_VERSION still needs such a page for visitors.
+type registrationTerms struct {
+	settings systemusersettings.PublicSettingsReader
+	site     registrationTermsSite
+}
+
+func newRegistrationTerms(pool *pgxpool.Pool, settings systemusersettings.PublicSettingsReader) registrationTerms {
+	// No themed website in the community edition: only the terms published
+	// on the settings page count.
+	_ = pool
+	return registrationTerms{settings: settings}
+}
+
+func (terms registrationTerms) requiredFor(ctx context.Context, policy systemusersettings.PublicSettings) (bool, error) {
+	if policy.TermsPublished {
+		return true, nil
+	}
+	if terms.site == nil {
+		return false, nil
+	}
+	return terms.site.RegistrationTermsReadable(ctx)
+}
+
+// Required is what the sign-up entries follow (RequireTermsWhen, TermsRequired).
+func (terms registrationTerms) Required(ctx context.Context) (bool, error) {
+	if terms.settings == nil {
+		return true, nil
+	}
+	policy, err := terms.settings.GetPublic(ctx, uuid.Nil)
+	if err != nil {
+		return false, err
+	}
+	return terms.requiredFor(ctx, policy)
 }
 
 // registrationCodeChannels reports which channels can carry a code now.
@@ -92,8 +141,8 @@ func newRegistrationConfigSource(
 	recovery accountRecoveryRuntimeConfig,
 ) *registrationConfigSource {
 	source := &registrationConfigSource{pool: pool, settings: settings, builtIn: builtIn, recovery: recovery,
-		termsVersion: builtInRegistrationTermsVersion, channels: channels, templates: builtInRegistrationTemplates,
-		notifications: notifications}
+		channels: channels, templates: builtInRegistrationTemplates,
+		notifications: notifications, terms: newRegistrationTerms(pool, settings)}
 	if verified && registration.Enabled {
 		source.verified = true
 		source.termsVersion = registration.TermsVersion
@@ -127,12 +176,12 @@ func (source *registrationConfigSource) RegistrationConfig(ctx context.Context) 
 }
 
 func (source *registrationConfigSource) state(ctx context.Context) (registrationState, error) {
-	config := httpapi.RegistrationConfig{Mode: "closed", HumanCheck: "builtin_captcha", TermsVersion: source.termsVersion,
-		Recovery: httpapi.RecoveryConfig{Channels: []string{}}}
 	policy, err := source.settings.GetPublic(ctx, uuid.Nil)
 	if err != nil {
 		return registrationState{}, err
 	}
+	config := httpapi.RegistrationConfig{Mode: "closed", HumanCheck: "builtin_captcha", TermsVersion: source.currentTermsVersion(policy),
+		QQRequired: policy.QQRequired, TermsPublished: policy.TermsPublished, UsernameRequired: policy.UsernameRequired, Recovery: httpapi.RecoveryConfig{Channels: []string{}}}
 	var switches notification.ChannelSwitches
 	if err := source.pool.QueryRow(ctx, `SELECT sms_enabled,email_enabled FROM notification_channel_settings WHERE singleton`).
 		Scan(&switches.SMS, &switches.Email); err != nil {
@@ -205,9 +254,36 @@ func (source *registrationConfigSource) state(ctx context.Context) (registration
 			}
 		}
 		config.Recovery.Enabled = len(config.Recovery.Channels) > 0
+		if config.Recovery.Enabled && source.recoveryReady != nil && !source.recoveryReady() {
+			config.Recovery.Enabled, config.Recovery.Channels = false, []string{}
+		}
+	}
+	if config.TermsRequired, err = source.terms.requiredFor(ctx, policy); err != nil {
+		return registrationState{}, err
 	}
 	state.config = config
 	return state, nil
+}
+
+// currentTermsVersion is the terms version a sign-up must accept: the
+// deployment's pinned one, else the one of the terms on the settings page.
+func (source *registrationConfigSource) currentTermsVersion(policy systemusersettings.PublicSettings) string {
+	if source.termsVersion != "" {
+		return source.termsVersion
+	}
+	return policy.TermsVersion
+}
+
+// RegistrationTerms is httpapi.RegistrationTermsSource.
+func (source *registrationConfigSource) RegistrationTerms(ctx context.Context) (httpapi.RegistrationTerms, error) {
+	policy, err := source.settings.GetPublic(ctx, uuid.Nil)
+	if err != nil {
+		return httpapi.RegistrationTerms{}, err
+	}
+	if !policy.TermsPublished {
+		return httpapi.RegistrationTerms{}, httpapi.ErrRegistrationTermsNotConfigured
+	}
+	return httpapi.RegistrationTerms{Title: policy.TermsTitle, Body: policy.TermsBody, Version: source.currentTermsVersion(policy)}, nil
 }
 
 // turnstileReady reports the Turnstile site key in use and whether the flow
@@ -330,4 +406,7 @@ func registrationReasons(state registrationState, verified, notificationsRequest
 	return reasons
 }
 
-var _ httpapi.RegistrationDiagnostics = (*registrationConfigSource)(nil)
+var (
+	_ httpapi.RegistrationDiagnostics = (*registrationConfigSource)(nil)
+	_ httpapi.RegistrationTermsSource = (*registrationConfigSource)(nil)
+)

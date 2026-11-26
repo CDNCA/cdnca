@@ -30,8 +30,11 @@ const (
 	CodeHTTP01NodeUnsupported ErrorCode = "acme_http01_node_unsupported"
 	// CodeHTTP01NoServingNode: the domain is not a live site of the scope or
 	// its line groups have no serving node.
-	CodeHTTP01NoServingNode        ErrorCode = "acme_http01_no_serving_node"
-	CodeChallengePublishFailed     ErrorCode = "acme_challenge_publish_failed"
+	CodeHTTP01NoServingNode    ErrorCode = "acme_http01_no_serving_node"
+	CodeChallengePublishFailed ErrorCode = "acme_challenge_publish_failed"
+	// CodeDNSProxyUnavailable: the DNS-01 record could not be written because
+	// the platform http代理 (DNS API requests) could not be used.
+	CodeDNSProxyUnavailable        ErrorCode = "acme_dns_proxy_unavailable"
 	CodeChallengePropagationFailed ErrorCode = "acme_challenge_propagation_failed"
 	CodeAuthorizationInvalid       ErrorCode = "acme_authorization_invalid"
 	CodeChallengeCleanupFailed     ErrorCode = "acme_challenge_cleanup_failed"

@@ -15,7 +15,7 @@
 .jobs-page .jobs-filter-group {
   display: grid;
   flex: 0 0 auto;
-  grid-template-columns: repeat(4, minmax(0, 190px));
+  grid-template-columns: repeat(4, minmax(0, 190px)) auto;
   gap: 8px;
 }
 
@@ -73,7 +73,7 @@
   white-space: nowrap;
 }
 
-.jobs-page .jobs-task-name-cell,
+.jobs-page .jobs-task-id-cell,
 .jobs-page .jobs-dependency-cell .ant-btn {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -120,9 +120,25 @@
   margin-right: 2px;
 }
 
-.jobs-page .jobs-task-name-cell {
-  display: block;
-  font-weight: 500;
+/* Phones: total, then previous/current/next, then the page size, each on its own line; the jump-to page numbers stay on wider screens. */
+@media (max-width: 575px) {
+  .jobs-page .jobs-pagination {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .jobs-page .jobs-total {
+    flex: 1 0 100%;
+  }
+
+  .jobs-page .jobs-page-number:not(.is-current),
+  .jobs-page .jobs-page-number > span[aria-hidden="true"] {
+    display: none;
+  }
+
+  .jobs-page .jobs-pagination .ant-select {
+    flex: 1 0 100%;
+  }
 }
 
 .jobs-page .jobs-muted,

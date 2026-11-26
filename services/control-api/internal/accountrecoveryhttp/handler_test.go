@@ -107,7 +107,7 @@ func TestConfirmationUsesSignedScopeAndIgnoresTrustedScopeAndAuth(t *testing.T) 
 	service := &fakeRecoveryService{resetResult: accountrecovery.ResetResult{
 		CompletedAt: handlerTestNow, Replayed: true,
 	}}
-	trusted := testTrustedContext()
+	trusted := testPlatformTrustedContext()
 	handler := testHandler(t, service, trusted, Config{})
 	request := jsonRequest(t, confirmationPath, confirmationJSON(token, recoveryContext), "confirm-request")
 	request.Header.Set("Authorization", "Bearer ignored")
@@ -124,6 +124,44 @@ func TestConfirmationUsesSignedScopeAndIgnoresTrustedScopeAndAuth(t *testing.T) 
 		t.Fatalf("reset input scope/token = %+v", service.resetInput)
 	}
 	assertSecurityHeaders(t, response, trusted.RequestID)
+}
+
+func TestTenantHostConfirmsOnlyItsOwnTenantLinks(t *testing.T) {
+	trusted := testTrustedContext()
+	token := testToken(0x45)
+	expiresAt := handlerTestNow.Add(time.Minute)
+	tests := []struct {
+		name              string
+		tenantID, scopeID uuid.UUID
+		status            int
+	}{
+		{name: "own tenant", tenantID: trusted.TenantID, scopeID: trusted.ScopeID, status: http.StatusNoContent},
+		{name: "other tenant", tenantID: uuid.New(), scopeID: uuid.New(), status: http.StatusBadRequest},
+		{name: "own tenant other scope", tenantID: trusted.TenantID, scopeID: uuid.New(), status: http.StatusBadRequest},
+		{name: "platform link", tenantID: uuid.Nil, scopeID: uuid.New(), status: http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := &fakeRecoveryService{resetResult: accountrecovery.ResetResult{CompletedAt: handlerTestNow}}
+			handler := testHandler(t, service, trusted, Config{})
+			recoveryContext := testRecoveryContext(t, handlerTestKey, test.tenantID, test.scopeID, token, expiresAt)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, jsonRequest(t, confirmationPath,
+				confirmationJSON(token, recoveryContext), "tenant-host-"+strings.ReplaceAll(test.name, " ", "-")))
+			if response.Code != test.status {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			if test.status == http.StatusNoContent {
+				if service.resetCalls != 1 {
+					t.Fatalf("own tenant reset calls = %d", service.resetCalls)
+				}
+				return
+			}
+			if responseCode(t, response) != "account_recovery_invalid_token" || service.resetCalls != 0 {
+				t.Fatalf("foreign link body=%s reset calls=%d", response.Body.String(), service.resetCalls)
+			}
+		})
+	}
 }
 
 func TestHandlerRejectsStrictInputBeforeCallingService(t *testing.T) {
@@ -212,7 +250,7 @@ func TestHandlerMapsStableErrorsWithoutLeakingCauses(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			service := &fakeRecoveryService{resetErr: test.err}
-			handler := testHandler(t, service, testTrustedContext(), Config{})
+			handler := testHandler(t, service, testPlatformTrustedContext(), Config{})
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, jsonRequest(t, confirmationPath,
 				confirmationJSON(token, recoveryContext), "map-"+strings.ReplaceAll(test.name, " ", "-")))
@@ -325,6 +363,13 @@ func testTrustedContext() TrustedContext {
 		TenantID: uuid.New(), ScopeID: uuid.New(), RequestID: "recovery-request-id",
 		TraceID: "0123456789abcdef0123456789abcdef", SourceIP: "198.51.100.10",
 	}
+}
+
+// testPlatformTrustedContext is the platform host: no tenant.
+func testPlatformTrustedContext() TrustedContext {
+	trusted := testTrustedContext()
+	trusted.TenantID = uuid.Nil
+	return trusted
 }
 
 func jsonRequest(t *testing.T, path, body, key string) *http.Request {

@@ -264,6 +264,13 @@
   margin-bottom: 26px;
 }
 
+/* Form.Item hidden keeps a value in the form store (protocol, ports, upstream mode, target scope): never a visible,
+   focusable box, also below 767px where .stream-modal .ant-form-item is display: block
+   (the higher specificity wins at every width). */
+.stream-modal .ant-form-item.ant-form-item-hidden {
+  display: none;
+}
+
 .stream-modal .ant-form-item-label > label {
   height: 32px;
   color: var(--cdnca-color-text);
@@ -538,15 +545,6 @@
 
 .stream-defaults-toolbar .stream-toolbar-actions {
   margin-left: auto;
-}
-
-.stream-panel-description {
-  flex: 1 1 320px;
-  min-width: 0;
-  margin: 0;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 14px;
-  line-height: 21px;
 }
 
 /* stream-be：源站列表、ACL 规则、批量添加结果、同步状态 */

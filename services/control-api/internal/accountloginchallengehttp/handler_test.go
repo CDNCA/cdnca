@@ -42,8 +42,8 @@ func TestHandlerPublishesConfiguredLoginMethods(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeLoginService{methods: accountloginchallenge.Methods{
-		RegistrationEnabled: true,
-		EmailEnabled:        true, SMSEnabled: false, EmailAntiAbuseMode: "none", SMSAntiAbuseMode: "native",
+		RegistrationEnabled: true, RegistrationMode: "builtin",
+		EmailEnabled: true, SMSEnabled: false, EmailAntiAbuseMode: "none", SMSAntiAbuseMode: "native",
 	}}
 	handler := newTestHandler(t, fake)
 	response := httptest.NewRecorder()
@@ -58,7 +58,7 @@ func TestHandlerPublishesConfiguredLoginMethods(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Data["registration_enabled"] != true ||
+	if payload.Data["registration_enabled"] != true || payload.Data["registration_mode"] != "builtin" ||
 		payload.Data["email_enabled"] != true || payload.Data["sms_enabled"] != false ||
 		payload.Data["email_anti_abuse_mode"] != "none" || payload.Data["sms_anti_abuse_mode"] != "native" ||
 		payload.Data["captcha_provider"] != "" || payload.Data["captcha_app_id"] != "" {

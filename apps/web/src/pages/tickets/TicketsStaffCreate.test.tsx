@@ -65,8 +65,8 @@ describe('fix-ticket2 staff create and ticket notifications', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.startsWith('/v1/admin/users?') &&
       path.includes('display_id=1024'))).toBe(true))
     fireEvent.click(await screen.findByText('jason（1024） · jason@example.com'))
-    fireEvent.change(within(drawer).getByLabelText('标题'), { target: { value: '本月账单调整' } })
-    fireEvent.change(within(drawer).getByLabelText('首条内容'), { target: { value: '您好，本月账单有一笔调整。' } })
+    fireEvent.change(within(drawer).getByRole('textbox', { name: '标题' }), { target: { value: '本月账单调整' } })
+    fireEvent.change(within(drawer).getByRole('textbox', { name: '首条内容' }), { target: { value: '您好，本月账单有一笔调整。' } })
     fireEvent.click(within(drawer).getByRole('button', { name: '提交' }))
     await waitFor(() => expect(fetchMock.mock.calls.some(([path, i]) => path === '/v1/admin/tickets' && i?.method === 'POST')).toBe(true))
     const [, init] = fetchMock.mock.calls.find(([path, i]) => path === '/v1/admin/tickets' && i?.method === 'POST')!

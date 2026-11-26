@@ -26,6 +26,26 @@ const protectedTokenPattern = /({{[^}]+}}|<[^>]+>)/g
 const translationKeyPattern = /^(?:[a-z][A-Za-z0-9_]*\.)+[A-Za-z0-9_]+$/
 
 const allowedVisibleLiterals = new Set([
+  // 加载器修好后审计首次真跑出的误报——经函数传入的翻译键名、技术名词/协议名、示例地址，
+  // 以及网站默认错误页预置正文（是发给访客的页面内容，不是控制台界面文案）
+  'ban_id',
+  'verbUpdate',
+  'verbDelete',
+  'cancelPausedMessage',
+  'cancelQueuedMessage',
+  '[cdnca-edge]',
+  'Proxy Protocol',
+  'spiffe://control.example/workload/kyc|kyc-issuer',
+  'https://api.dnspup.com',
+  'control.example.com',
+  '请求无法完成，请稍后重试。',
+  'Error',
+  '出错了',
+  '我们正在处理，请稍后再试。',
+  'HTTP/2',
+  'HTTP/3',
+  'X-Powered-By',
+  'ops@example.com',
   'cdnca',
   'DNS API',
   'UUID',

@@ -10,8 +10,10 @@ BROAD='entitlementroot|trust[-_]?anchor|VerifyPins|anchorEntitlementTrust|anchor
 STRICT='entitlementroot|VerifyPins|anchorEntitlementTrust|anchorUpgradeTrust|CDNCA_GARBLE|\bgarble\b|licredund|entitlement-trust-anchor|ENTITLEMENT_TRUST_ANCHOR_FILE|CONTROL_UPGRADE_TRUST_ANCHOR_FILE|commercial_trust_anchor|commercial_anchor|commercial-trust-anchor|embedded = "cdnca-offline-root/'
 # 内部开发痕迹：只查相对基线新增的行（迁移 SQL 等 golden 文件里基线就有，不拦）。
 INTERNAL='USER-DECISIONS|主会话|主调度|集成头|(^|[^a-z])main session|GoEdge parity'
-# 真实客户域名：整仓扫（迁移 SQL 被校验和钉住，除外）。
-CUSTOMER='ikvm\.asia'
+# 真实客户与自有测试宿主域名：整仓扫（迁移 SQL 被校验和钉住，除外）。词表在仓库外（不随仓库公开），缺失即失败。
+PRIVATE=${CE_GATE_PRIVATE_PATTERNS:-$HOME/.cache/cdnca-pw/ce-gate/private-patterns.txt}
+[ -s "$PRIVATE" ] || { echo "commercial-leak-check: 缺仓库外词表 $PRIVATE" >&2; exit 1; }
+CUSTOMER=$(grep -vE '^[[:space:]]*(#|$)' "$PRIVATE" | paste -sd'|' -)
 EXCLUDE=(-- . ':!CE-PROGRESS.md' ':!tools/ce-gate')
 fail=0
 strict=$(git grep -niE "$STRICT" "${EXCLUDE[@]}" | grep -viE 'garbled' || true)

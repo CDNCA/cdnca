@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Descriptions, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Switch, Table, Tag,
+  Alert, Button, Card, Descriptions, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Switch, Tag,
   Tooltip, Typography, type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, useFeedback, PageSection } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, PageSection, Table } from '@cdnca/ui'
 import { Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'

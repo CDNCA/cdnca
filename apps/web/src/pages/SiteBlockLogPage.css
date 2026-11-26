@@ -148,3 +148,8 @@
 .analytics-log-page.site-block-log-page .block-log-view .ant-table-content {
   overflow-x: auto;
 }
+
+/* 解锁指定网站：按域名选网站的下拉占满弹窗宽度。 */
+.block-log-unlock-site-select {
+  width: 100%;
+}

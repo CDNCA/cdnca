@@ -134,13 +134,13 @@ describe('AccountUserPage', () => {
     expect(page?.querySelectorAll('.account-user-check')).toHaveLength(5)
     // 手机/邮箱绑定与登录安全（MFA）可用；没有实名认证权限时实名未开放，不显示「立即认证」。
     expect(page?.querySelectorAll('.account-user-check > .ant-btn')).toHaveLength(4)
-    expect(within(page as HTMLElement).getByRole('button', { name: '查看' })).toBeEnabled()
+    expect(within(page as HTMLElement).getByRole('button', { name: '登录会话：查看' })).toBeEnabled()
     expect(page?.querySelectorAll('.account-user-check')[4]).toHaveTextContent('登录会话')
     expect(page?.querySelectorAll('.account-user-check > .ant-btn:disabled')).toHaveLength(0)
-    expect(within(page as HTMLElement).getByRole('button', { name: '立即绑定' })).toBeEnabled()
-    expect(within(page as HTMLElement).getByRole('button', { name: '更换绑定' })).toBeEnabled()
-    expect(within(page as HTMLElement).getByRole('button', { name: '立即设置' })).toBeEnabled()
-    expect(within(page as HTMLElement).queryByRole('button', { name: '立即认证' })).toBeNull()
+    expect(within(page as HTMLElement).getByRole('button', { name: '手机绑定：立即绑定' })).toBeEnabled()
+    expect(within(page as HTMLElement).getByRole('button', { name: '邮箱绑定：更换绑定' })).toBeEnabled()
+    expect(within(page as HTMLElement).getByRole('button', { name: '两步验证：立即设置' })).toBeEnabled()
+    expect(within(page as HTMLElement).queryByRole('button', { name: '实名认证：立即认证' })).toBeNull()
     // 徽章按真实资料与 MFA 状态推导。
     const rows = [...(page as HTMLElement).querySelectorAll('.account-user-check')]
     expect(rows[1]).toHaveTextContent('未绑定')
@@ -163,11 +163,11 @@ describe('AccountUserPage', () => {
     const title = await screen.findByRole('heading', { name: '个人资料' })
     const page = title.closest('.account-user-page') as HTMLElement
 
-    const toggle = within(page).getByRole('button', { name: '立即绑定' })
+    const toggle = within(page).getByRole('button', { name: '手机绑定：立即绑定' })
     fireEvent.click(toggle)
     expect(page.querySelector('.account-user-bind-form')).not.toBeNull()
 
-    fireEvent.click(within(page).getByRole('button', { name: '立即绑定' }))
+    fireEvent.click(within(page).getByRole('button', { name: '手机绑定：立即绑定' }))
     expect(page.querySelector('.account-user-bind-form')).toBeNull()
 
     fireEvent.click(toggle)
@@ -248,7 +248,7 @@ describe('AccountUserPage', () => {
 
       expect(await screen.findByText('jason')).toBeInTheDocument()
       expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-      for (const name of ['立即绑定', '更换绑定']) {
+      for (const name of ['手机绑定：立即绑定', '邮箱绑定：更换绑定']) {
         if (canUpdate) expect(screen.getByRole('button', { name })).toBeEnabled()
         else expect(screen.getByRole('button', { name })).toBeDisabled()
       }
@@ -491,7 +491,7 @@ describe('AccountUserPage', () => {
       } else {
         const page = (await screen.findByRole('heading', { name: '个人资料' })).closest('.account-user-page') as HTMLElement
         if (operation === 'PATCH') {
-          await user.click(within(page).getByRole('button', { name: '更换绑定' }))
+          await user.click(within(page).getByRole('button', { name: '邮箱绑定：更换绑定' }))
           const bindForm = within(page.querySelector('.account-user-bind-form') as HTMLElement)
           await user.type(bindForm.getByLabelText('邮箱绑定'), 'delayed-a@example.com')
           await user.type(bindForm.getByLabelText('当前密码'), 'tenant-a-profile-password')
@@ -558,7 +558,7 @@ describe('AccountUserPage', () => {
       expect(screen.getByRole('heading', { name: '个人资料' })).toBeInTheDocument()
       expect(screen.getByText('stable-tenant-b')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: '修改密码' })).toBeEnabled()
-      expect(screen.getByRole('button', { name: '更换绑定' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: '邮箱绑定：更换绑定' })).toBeEnabled()
       expect(screen.queryByText(/late-tenant-a|private late tenant A/)).not.toBeInTheDocument()
       expect(screen.queryByText('个人资料已保存')).not.toBeInTheDocument()
       expect(screen.queryByText('密码修改成功，请重新登录')).not.toBeInTheDocument()
@@ -574,7 +574,7 @@ describe('AccountUserPage', () => {
     renderWithProviders(<AccountUserPage />, ['/account/user'])
     const page = (await screen.findByRole('heading', { name: '个人资料' })).closest('.account-user-page') as HTMLElement
 
-    await user.click(within(page).getByRole('button', { name: '更换绑定' }))
+    await user.click(within(page).getByRole('button', { name: '邮箱绑定：更换绑定' }))
     let bindForm = within(page.querySelector('.account-user-bind-form') as HTMLElement)
     await user.type(bindForm.getByLabelText('邮箱绑定'), 'invalid-email')
     await user.click(bindForm.getByRole('button', { name: '确定' }))
@@ -583,7 +583,7 @@ describe('AccountUserPage', () => {
     await user.click(bindForm.getByRole('button', { name: '确定' }))
     expect(await bindForm.findByText('邮箱格式不正确')).toBeInTheDocument()
 
-    await user.click(within(page).getByRole('button', { name: '立即绑定' }))
+    await user.click(within(page).getByRole('button', { name: '手机绑定：立即绑定' }))
     bindForm = within(page.querySelector('.account-user-bind-form') as HTMLElement)
     await user.type(bindForm.getByLabelText('手机绑定'), 'invalid-phone')
     await user.type(bindForm.getByLabelText('当前密码'), 'current-password')
@@ -601,7 +601,7 @@ describe('AccountUserPage', () => {
     const { queryClient } = renderPageWithQueryClient()
     const page = (await screen.findByRole('heading', { name: '个人资料' })).closest('.account-user-page') as HTMLElement
 
-    await user.click(within(page).getByRole('button', { name: '更换绑定' }))
+    await user.click(within(page).getByRole('button', { name: '邮箱绑定：更换绑定' }))
     const bindForm = within(page.querySelector('.account-user-bind-form') as HTMLElement)
     const secret = 'profile-current-password'
     await user.type(bindForm.getByLabelText('邮箱绑定'), 'new@example.com')
@@ -633,7 +633,7 @@ describe('AccountUserPage', () => {
     const { queryClient } = renderPageWithQueryClient()
     const page = (await screen.findByRole('heading', { name: '个人资料' })).closest('.account-user-page') as HTMLElement
 
-    await user.click(within(page).getByRole('button', { name: '立即绑定' }))
+    await user.click(within(page).getByRole('button', { name: '手机绑定：立即绑定' }))
     const bindForm = within(page.querySelector('.account-user-bind-form') as HTMLElement)
     const secret = 'wrong-profile-password'
     await user.type(bindForm.getByLabelText('手机绑定'), '+8613900000000')
@@ -659,7 +659,7 @@ describe('AccountUserPage', () => {
     renderPageWithQueryClient()
     const page = (await screen.findByRole('heading', { name: '个人资料' })).closest('.account-user-page') as HTMLElement
 
-    await user.click(within(page).getByRole('button', { name: '立即绑定' }))
+    await user.click(within(page).getByRole('button', { name: '手机绑定：立即绑定' }))
     const bindForm = within(page.querySelector('.account-user-bind-form') as HTMLElement)
     await user.type(bindForm.getByLabelText('手机绑定'), '+8613900000000')
     await user.type(bindForm.getByLabelText('当前密码'), 'profile-password')
@@ -718,6 +718,19 @@ describe('AccountUserPage', () => {
     })
   })
 
+  // 
+  it('shows no QQ placeholder and focuses the first refused password field', async () => {
+    setAccountSession({ permissions: ['identity.self.read', 'identity.password.change'] })
+    vi.spyOn(usersApi, 'profile').mockResolvedValue(profile)
+    const user = userEvent.setup()
+    renderWithProviders(<AccountUserPage />, ['/account/user'])
+    expect(await screen.findByText('jason')).toBeInTheDocument()
+    expect(screen.queryByText('QQ')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '修改密码' }))
+    await user.click(await screen.findByRole('button', { name: '确定' }))
+    await waitFor(() => expect(screen.getByLabelText('当前密码')).toHaveFocus())
+  })
+
   it('derives the login security badge from the real MFA status and expands the MFA panel', async () => {
     await changeLocale('zh-CN')
     authenticate()
@@ -732,8 +745,8 @@ describe('AccountUserPage', () => {
 
     await waitFor(() => expect(rows[3]).toHaveTextContent('已设置'))
     expect(rows[1]).toHaveTextContent('已绑定')
-    expect(within(page).getAllByRole('button', { name: '更换绑定' })).toHaveLength(2)
-    const setup = within(page).getByRole('button', { name: '立即设置' })
+    expect(within(page).getAllByRole('button', { name: /：更换绑定$/ })).toHaveLength(2)
+    const setup = within(page).getByRole('button', { name: '两步验证：立即设置' })
     expect(setup).toHaveAttribute('aria-expanded', 'false')
     await user.click(setup)
     expect(setup).toHaveAttribute('aria-expanded', 'true')
@@ -742,6 +755,29 @@ describe('AccountUserPage', () => {
     await user.click(setup)
     expect(page.querySelector('.account-user-mfa-form')).toBeNull()
     await waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThanOrEqual(2))
+  })
+
+  // 代登录读本人 MFA 是敏感动作，服务端 401 拒绝；
+  // 前端不发请求，展开区给出中文原因而不是空白。
+  it('explains in the expanded row that two-step verification is unavailable while impersonating', async () => {
+    await changeLocale('zh-CN')
+    const { actor } = authenticate()
+    useSessionStore.setState({ principal: { ...actor, impersonation: {
+      grant_id: '77777777-7777-4777-8777-777777777777', actor_user_id: '88888888-8888-4888-8888-888888888888',
+      actor_display_name: 'admin', subject_user_id: actor.user_id, subject_display_name: 'Jason',
+      tenant_id: actor.tenant_id!, expires_at: '2999-01-01T00:00:00Z',
+    } } })
+    vi.spyOn(usersApi, 'profile').mockResolvedValue(profile)
+    const getStatus = vi.spyOn(mfaApi, 'getStatus')
+    const user = userEvent.setup()
+    renderWithProviders(<AccountUserPage />, ['/account/user'])
+    const page = (await screen.findByRole('heading', { name: '个人资料' })).closest('.account-user-page') as HTMLElement
+    const setup = within(page).getByRole('button', { name: '两步验证：立即设置' })
+    await user.click(setup)
+    expect(setup).toHaveAttribute('aria-expanded', 'true')
+    const panel = page.querySelector('.account-user-mfa-form') as HTMLElement
+    expect(within(panel).getByRole('status')).toHaveTextContent('代登录期间不能查看或设置该账号的两步验证，请由账号本人登录后设置。')
+    expect(getStatus).not.toHaveBeenCalled()
   })
 
   it('opens the tenant identity verification page from the real-name row when permitted', async () => {
@@ -761,7 +797,7 @@ describe('AccountUserPage', () => {
       ['/account/user'],
     )
 
-    await user.click(await screen.findByRole('button', { name: '立即认证' }))
+    await user.click(await screen.findByRole('button', { name: '实名认证：立即认证' }))
     expect(await screen.findByText('verification-route')).toBeInTheDocument()
   })
 
@@ -789,7 +825,7 @@ describe('AccountUserPage', () => {
 
     expect(await within(realName).findByText(badge)).toHaveClass('account-user-status', tone)
     expect(realName).toHaveTextContent(description)
-    expect(within(realName).queryByRole('button', { name: '立即认证' }) !== null).toBe(verifyVisible)
+    expect(within(realName).queryByRole('button', { name: '实名认证：立即认证' }) !== null).toBe(verifyVisible)
     expect(getStatus).toHaveBeenCalledWith('memory-only-access-token', expect.any(AbortSignal))
   })
 
@@ -814,7 +850,7 @@ describe('AccountUserPage', () => {
     expect(realName.querySelector('.account-user-status')).toBeNull()
     expect(realName).toHaveTextContent('实名认证未开放')
     expect(realName).not.toHaveTextContent('请尽快完成实名认证')
-    expect(within(realName).queryByRole('button', { name: '立即认证' })).toBeNull()
+    expect(within(realName).queryByRole('button', { name: '实名认证：立即认证' })).toBeNull()
     expect(getStatus).not.toHaveBeenCalled()
   })
 
@@ -836,7 +872,7 @@ describe('AccountUserPage', () => {
     await waitFor(() => expect(realName).toHaveTextContent('实名认证未开放'))
     expect(realName).not.toHaveTextContent('请尽快完成实名认证')
     expect(realName.querySelector('.account-user-status')).toBeNull()
-    expect(within(realName).queryByRole('button', { name: '立即认证' })).toBeNull()
+    expect(within(realName).queryByRole('button', { name: '实名认证：立即认证' })).toBeNull()
   })
 
   it('hides the real-name badge when the status read fails instead of guessing', async () => {
@@ -855,7 +891,7 @@ describe('AccountUserPage', () => {
 
     await waitFor(() => expect(getStatus).toHaveBeenCalledOnce())
     expect(realName.querySelector('.account-user-status')).toBeNull()
-    expect(within(realName).getByRole('button', { name: '立即认证' })).toBeEnabled()
+    expect(within(realName).getByRole('button', { name: '实名认证：立即认证' })).toBeEnabled()
   })
 
   it('renders profile permission denial', async () => {

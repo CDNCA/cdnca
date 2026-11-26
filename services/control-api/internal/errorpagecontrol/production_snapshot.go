@@ -341,12 +341,11 @@ func loadThemeDefaultPages(ctx context.Context, tx pgx.Tx, packageSHA256 string)
 		// The publication names a package the database no longer explains.
 		return nil, ErrConflict
 	}
-	if hasBlockPages(pages) {
-		return pages, nil
-	}
-	// A package stored before migration 471 has no block pages (edge_route
-	// 403/429, sec-followup P13): render them from the package itself, so a
-	// node block page keeps the pinned theme's brand.
+	// The block pages (edge_route 403/429, sec-followup P13) are rendered from
+	// the pinned package itself at publication, never read from the stored
+	// rows (theme_error_pages never change): a package stored before migration
+	// 471 has none, and one stored before
+	// has them in two languages. The node block page keeps the theme's brand.
 	var raw []byte
 	if err := tx.QueryRow(ctx, `SELECT package_body FROM theme_packages WHERE package_sha256=$1`, digest).Scan(&raw); err != nil {
 		return nil, err
@@ -374,17 +373,9 @@ func BuiltinBlockSnapshot() (ProductionSnapshotDocument, error) {
 		Sites: []ProductionSnapshotSite{}}, nil
 }
 
-func hasBlockPages(pages []ThemeDefaultPage) bool {
-	for _, page := range pages {
-		if page.Category == CategoryEdgeRoute {
-			return true
-		}
-	}
-	return false
-}
-
-// completeBlockPages adds the edge_route pages raw (a theme package) renders
-// to pages; a package that no longer renders adds the built-in theme's.
+// completeBlockPages puts the edge_route pages raw (a theme package) renders
+// in place of any stored ones in pages; a package that no longer renders
+// gives the built-in theme's.
 func completeBlockPages(pages []ThemeDefaultPage, raw []byte) []ThemeDefaultPage {
 	rendered := themepack.DefaultRendered()
 	if raw != nil {
@@ -392,7 +383,7 @@ func completeBlockPages(pages []ThemeDefaultPage, raw []byte) []ThemeDefaultPage
 			rendered = own
 		}
 	}
-	result := slices.Clone(pages)
+	result := slices.DeleteFunc(slices.Clone(pages), func(page ThemeDefaultPage) bool { return page.Category == CategoryEdgeRoute })
 	for _, page := range rendered.ErrorPages {
 		if page.Category == CategoryEdgeRoute {
 			result = append(result, ThemeDefaultPage{Category: page.Category, Status: page.Status, Body: bytes.Clone(page.Body)})
@@ -476,7 +467,7 @@ func replacesThemePage(slot SnapshotSlot) bool {
 }
 
 // nodeSlotPages materializes the pinned slots that reach nodes as node pages
-// (errpage-3). A tenant on its own theme (PA-26) keeps the slots too: they
+// (errpage-3). A tenant on its own theme  keeps the slots too: they
 // are the platform's own responses, not theme pages.
 func (compiler *ProductionSnapshotCompiler) nodeSlotPages(ctx context.Context, source productionSnapshotSource,
 	cache map[string]ProductionSnapshotResource) ([]ProductionSnapshotSlot, error) {

@@ -119,6 +119,8 @@ const zhCN = {
     },
     reason: '原因：{{text}}', until: '预计 {{time}} 自动解除', permanent: '未设解除时间', readonly: '可以登录、查看数据、修改自己的密码与两步验证，其他修改暂不可用。',
     check: '重新检查', checking: '检查中', unlocked: '授权已恢复', stillLocked: '仍处于锁定状态', checkFailed: '重新检查失败（{{code}}），锁定状态未改变，请稍后再试', requestId: '请求号 {{id}}',
+    // narrow screens fold the description of the pinned banner.
+    details: '详情', hideDetails: '收起', expandDetails: '展开锁定详情', collapseDetails: '收起锁定详情',
     actions: {
       installation_banned: '处理办法：由授权方（运营）解除封禁；请联系授权方了解原因并处理，到期自动解除或解除后点「重新检查」立即恢复。',
       lease_revoked: '处理办法：授权已到期、暂停或被吊销，由授权方（运营）处理；请续费或联系授权方重新签发，签发后点「重新检查」立即续租恢复。',
@@ -256,6 +258,7 @@ const enUS: typeof zhCN = {
     },
     reason: 'Reason: {{text}}', until: 'Lifts automatically at {{time}}', permanent: 'No lift time set', readonly: 'You can sign in, view data and change your own password and two-step verification; other changes are unavailable.',
     check: 'Check again', checking: 'Checking', unlocked: 'License restored', stillLocked: 'Still locked', checkFailed: 'Check failed ({{code}}); the lock is unchanged, try again later', requestId: 'request {{id}}',
+    details: 'Details', hideDetails: 'Hide', expandDetails: 'Details of the lock', collapseDetails: 'Hide the lock details',
     actions: {
       installation_banned: 'What to do: the license provider (operator) lifts the ban; contact them about the reason. It lifts at its end time, or select "Check again" after it is lifted to recover now.',
       lease_revoked: 'What to do: the license expired, was suspended or revoked, and the license provider (operator) handles it; renew or ask them to reissue, then select "Check again" to renew now.',

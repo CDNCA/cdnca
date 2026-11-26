@@ -242,7 +242,7 @@ describe('NodeListPage internationalization', () => {
     renderWithProviders(<NodeListPage />)
     await screen.findByText('Edge Shanghai')
 
-    await user.click(screen.getByRole('checkbox', { name: 'Edge Shanghai' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Select Edge Shanghai' }))
     await openBatchAction(user)
     const dialog = await screen.findByRole('dialog', { name: 'Change status for 1 nodes' })
     await user.click(within(dialog).getByRole('button', { name: 'Confirm change' }))

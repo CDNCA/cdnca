@@ -112,7 +112,7 @@ func TestCreateRolloutCompletedReplaySkipsMutableCohortAndLicense(t *testing.T) 
 		},
 	}
 
-	got, err := service.CreateRollout(t.Context(), actor, request)
+	got, err := service.completeCreateRollout(t.Context(), actor, request, nil)
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("completed replay = (%#v, %v), want %#v", got, err, want)
 	}
@@ -141,7 +141,7 @@ func TestCreateRolloutPrepareDenialPrecedesReplayAndCohort(t *testing.T) {
 		},
 	}
 
-	if _, err := service.CreateRollout(t.Context(), actor, request); !errors.Is(err, ErrPermissionDenied) {
+	if _, err := service.completeCreateRollout(t.Context(), actor, request, nil); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatalf("permission-denied prepare error = %v", err)
 	}
 	if prepareCalls != 1 || licenseCalls != 0 {
@@ -182,11 +182,19 @@ func TestCreateRolloutNoncompletedIntentsStillLoadCohort(t *testing.T) {
 				},
 			}
 
-			if _, err := service.CreateRollout(t.Context(), actor, request); !errors.Is(err, test.wantError) {
+			var phases []PreparationPhase
+			_, err := service.completeCreateRollout(t.Context(), actor, request, func(phase PreparationPhase) {
+				phases = append(phases, phase)
+			})
+			if !errors.Is(err, test.wantError) {
 				t.Fatalf("%s error = %v, want %v", test.name, err, test.wantError)
 			}
 			if loadCalls != 1 || licenseCalls != test.wantLicense {
 				t.Fatalf("%s calls = cohort %d, license %d", test.name, loadCalls, licenseCalls)
+			}
+			// A failed issue reports the issuing phase and never the download.
+			if !reflect.DeepEqual(phases, []PreparationPhase{PreparationIssuing}) {
+				t.Fatalf("%s phases = %v", test.name, phases)
 			}
 		})
 	}

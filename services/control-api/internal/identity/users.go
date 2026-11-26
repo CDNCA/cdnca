@@ -166,6 +166,10 @@ type CreateUserInput struct {
 	RequestID      string
 	Remark         *string
 	QQ             *string
+	// Status is the account status the user is created with: "" (active) or
+	// disabled, written in the same insert so a disabled account never has a
+	// moment where it can sign in (migration import keeps the source state).
+	Status string
 }
 
 type UpdateUserInput struct {
@@ -400,6 +404,12 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, input CreateUserI
 	if !validUserRole(input.Role) {
 		return ManagedUser{}, invalidUserField("role", fielderr.Invalid)
 	}
+	if input.Status == UserStatusActive {
+		input.Status = ""
+	}
+	if input.Status != "" && input.Status != UserStatusDisabled {
+		return ManagedUser{}, invalidUserField("status", fielderr.Invalid)
+	}
 	if err := normalizeUserMetadata(input.Remark, input.QQ); err != nil {
 		return ManagedUser{}, err
 	}
@@ -420,7 +430,8 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, input CreateUserI
 		GroupID  *uuid.UUID `json:"group_id,omitempty"`
 		Remark   *string    `json:"remark,omitempty"`
 		QQ       *string    `json:"qq,omitempty"`
-	}{input.Username, input.Fields, input.Role, input.GroupID, input.Remark, input.QQ})
+		Status   string     `json:"status,omitempty"`
+	}{input.Username, input.Fields, input.Role, input.GroupID, input.Remark, input.QQ, input.Status})
 	if err != nil {
 		return ManagedUser{}, err
 	}

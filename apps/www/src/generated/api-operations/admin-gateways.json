@@ -11,7 +11,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "The co-located Gateway of an all-mode installation is not listed. standalone_access_open is false until the control plane opens ControlInternal/Redis/NATS to Gateways; binding is refused until then.",
+   "description": "items lists the standalone Gateways; local is the co-located Gateway as it last called ControlInternal in this control-api process, with the connected nodes not on a standalone Gateway. standalone_access_open is false until the control plane opens ControlInternal/Redis/NATS to Gateways; binding is refused until then.",
    "responses": [
     {
      "status": "200",
@@ -20,6 +20,11 @@
       {
        "name": "items",
        "type": "array<AgentGateway>",
+       "required": true
+      },
+      {
+       "name": "local",
+       "type": "LocalAgentGateway",
        "required": true
       },
       {

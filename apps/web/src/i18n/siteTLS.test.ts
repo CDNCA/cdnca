@@ -47,6 +47,8 @@ describe('site TLS translations', () => {
       'http2.label',
       'http3.help',
       'http3.label',
+      'http3.managePackage',
+      'http3.packageExcluded',
       'preferServerCiphers.help',
       'preferServerCiphers.label',
       'preferServerCiphers.off',

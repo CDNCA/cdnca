@@ -189,7 +189,9 @@ func TestServiceAllowsMinuteAlignedRankWindow(t *testing.T) {
 	}
 }
 
-func TestServiceBindsRankOnlyFiltersAndRejectsThemForSummary(t *testing.T) {
+// the summary narrows by the ranking's domain
+// set and listen port; the trend still rejects them.
+func TestServiceBindsRankFiltersForRankAndSummaryButNotTrend(t *testing.T) {
 	t.Parallel()
 	store := &recordingQueryStore{rank: RankPage{SnapshotAt: time.Date(2099, 1, 1, 2, 0, 0, 0, time.UTC)}}
 	service, err := NewService(store)
@@ -206,12 +208,20 @@ func TestServiceBindsRankOnlyFiltersAndRejectsThemForSummary(t *testing.T) {
 	if store.filter.Domain != request.Domain || store.filter.ListenPort != 443 || store.dimension != RankByReferer {
 		t.Fatalf("rank filter = %#v dimension = %q", store.filter, store.dimension)
 	}
+	rankFilter := store.filter
+	store.filter = Filter{}
+	if _, err := service.Summary(context.Background(), actor, request); err != nil {
+		t.Fatalf("summary error = %v", err)
+	}
+	if store.filter != rankFilter {
+		t.Fatalf("summary filter = %#v, rank filter = %#v", store.filter, rankFilter)
+	}
 	store.queryCalled = false
-	if _, err := service.Summary(context.Background(), actor, request); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("summary rank-filter error = %v", err)
+	if _, err := service.Trend(context.Background(), actor, request); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("trend rank-filter error = %v", err)
 	}
 	if store.queryCalled {
-		t.Fatal("summary store was called with rank-only filters")
+		t.Fatal("trend store was called with rank-only filters")
 	}
 }
 

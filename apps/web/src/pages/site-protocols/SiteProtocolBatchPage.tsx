@@ -4,7 +4,6 @@ import {
   Button,
   Select,
   Space,
-  Table,
   Tag,
   Typography,
   Input,
@@ -22,7 +21,7 @@ import { useSessionStore } from "../../auth/session";
 import { DataState } from "../../components/DataState";
 import "./i18n";
 import { FeedbackWhen } from "@cdnca/ui";
-import { PageSection } from '@cdnca/ui'
+import { PageSection, Table } from '@cdnca/ui'
 
 // 网站协议批量设置：直接批量写所选网站自己的
 // http2_enabled / http3_enabled / tls_prefer_server_ciphers，经

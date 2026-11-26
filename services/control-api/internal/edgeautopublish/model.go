@@ -103,6 +103,20 @@ const (
 	// publishes again (73 retried one every 5 seconds as
 	// publish_outcome_unknown).
 	FailureSiteConfigInvalid = "site_config_invalid"
+	// The refusals below are decided by the scope's own facts, as the manual
+	// publication's 409/403/422 of the same codes (edgepublishhttp
+	// classifyError); retrying cannot change them (a system republication
+	// refused package_subscription_inactive was retried every 5 seconds as
+	// publish_outcome_unknown). The change that clears one (a package renewal,
+	// unsuspension or change, a site edit or rebinding, a module grant)
+	// republishes the scope's latest revision.
+	FailurePackageSubscriptionInactive = "package_subscription_inactive"
+	FailurePackageQuotaExceeded        = "package_resource_quota_exceeded"
+	FailurePackageFeatureDenied        = "package_feature_denied"
+	FailureModuleNotEntitled           = "entitlement_feature_denied"
+	FailureSiteL2Unavailable           = "site_l2_unavailable"
+	FailureRulePackOutOfProfile        = "rule_pack_out_of_profile"
+	FailureSDKShieldPortShared         = "sdk_shield_port_shared"
 )
 
 var (

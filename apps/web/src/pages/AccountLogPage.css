@@ -141,3 +141,10 @@
 .account-log-error {
   margin-bottom: 12px;
 }
+
+/* 离线时查询按钮旁的等待网络状态。 */
+.account-log-waiting {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}

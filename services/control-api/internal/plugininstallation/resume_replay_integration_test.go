@@ -14,7 +14,7 @@ import (
 )
 
 // fix-plugverify B-补1（DEV-PLUG-01/F5）真实 PG：主动暂停 → 恢复本地成功，首次上报成功或结果未知，
-// 同 key 同请求重试回放唯一回执、身份代际只增一次，并再投一次上报。
+// 同 key 同请求重试回放唯一回执、身份代际只增一次；上报未达的那次补投一次，已签收的不再补投。
 func TestResumeExactRetryReplaysPersistedReceipt(t *testing.T) {
 	for _, failReport := range []bool{false, true} {
 		name := "report_succeeded"
@@ -57,6 +57,12 @@ func TestResumeExactRetryReplaysPersistedReceipt(t *testing.T) {
 			if err != nil {
 				t.Fatalf("pause: %v", err)
 			}
+			// The install and the pause reached the license service (migration 684 ledger).
+			for _, receipt := range []Receipt{installed.Receipt, paused.Receipt} {
+				if err := repository.MarkReported(t.Context(), receipt.ID, receipt.ToRevision); err != nil {
+					t.Fatal(err)
+				}
+			}
 			remote := installationView(paused.Installation)
 			remote.AuthorizationStatus, remote.PausedBy = StatusDisabled, PausedByInstallation
 			resolver := &flakyResumeResolver{resumeResolver: resumeResolver{remote: []InstallationView{remote}}, failReport: failReport}
@@ -66,8 +72,10 @@ func TestResumeExactRetryReplaysPersistedReceipt(t *testing.T) {
 			}
 			request := resumeRequest(actor, remote)
 			first, firstErr := domain.Mutate(t.Context(), actor, request)
-			if failReport != errors.Is(firstErr, ErrResultUnknown) || !failReport && (firstErr != nil || first.Installation.Status != StatusEnabled) {
-				t.Fatalf("first status=%s err=%v", first.Installation.Status, firstErr)
+			// 本机已提交即成功，上报未达只标 license_sync=pending。
+			wantSync := map[bool]string{false: LicenseSyncSynced, true: LicenseSyncPending}[failReport]
+			if firstErr != nil || first.Installation.Status != StatusEnabled || first.LicenseSync != wantSync {
+				t.Fatalf("first status=%s sync=%s err=%v", first.Installation.Status, first.LicenseSync, firstErr)
 			}
 			if !failReport {
 				resolver.remote[0].AuthorizationStatus, resolver.remote[0].PausedBy = StatusEnabled, ""
@@ -87,8 +95,10 @@ func TestResumeExactRetryReplaysPersistedReceipt(t *testing.T) {
 				request.AuthorizationID).Scan(&generation); err != nil {
 				t.Fatal(err)
 			}
-			if receipts != 1 || generation != paused.Installation.IdentityGeneration+1 || len(resolver.reported) != 2 ||
-				resolver.reported[0].ID != resolver.reported[1].ID {
+			// 授权端已签收的回执不再补投；未达的那次由重试原样补上（同一回执）。
+			wantReports := map[bool]int{false: 1, true: 2}[failReport]
+			if receipts != 1 || generation != paused.Installation.IdentityGeneration+1 || len(resolver.reported) != wantReports ||
+				resolver.reported[0].ID != resolver.reported[len(resolver.reported)-1].ID || second.LicenseSync != LicenseSyncSynced {
 				t.Fatalf("receipts=%d generation=%d (paused %d) reports=%d", receipts, generation,
 					paused.Installation.IdentityGeneration, len(resolver.reported))
 			}

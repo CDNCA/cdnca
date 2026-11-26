@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Button,
+  Collapse,
   Descriptions,
-  Empty,
   Form,
   Input,
   Popconfirm,
@@ -12,7 +12,6 @@ import {
   Select,
   Space,
   Spin,
-  Table,
   Tag,
   Typography,
   type TableColumnsType,
@@ -27,6 +26,7 @@ import {
   identityVerificationApi,
   type IdentityVerificationCase,
   type IdentityVerificationCreateInput,
+  type IdentityVerificationKind,
   type IdentityVerificationMaterialKind,
   type IdentityVerificationProviderContentType,
   type IdentityVerificationProviderSession,
@@ -39,11 +39,12 @@ import { localizedUnknownApiError } from '../i18n/apiError'
 import { formatBytes, formatDateTime } from '../i18n/formatters'
 import '../i18n/accountIdentityVerification'
 import './AccountIdentityVerificationPage.css'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 
 type Owner = readonly ['tenant', string, string, string, number]
 type CreateValues = IdentityVerificationCreateInput
 type ProviderValues = { kind: IdentityVerificationCase['kind']; provider: string }
+type StartValues = { kind: IdentityVerificationKind }
 type SanitizedProviderSession = Omit<IdentityVerificationProviderSession, 'evidence_token'>
 type WriteAttempt =
   | { kind: 'create'; input: IdentityVerificationCreateInput; metadata: IdentityVerificationWriteMetadata }
@@ -81,8 +82,9 @@ type UploadAttempt =
 
 const caseIDPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const evidencePattern = /^[A-Za-z0-9][A-Za-z0-9._~-]{31,511}$/
-const providerPattern = /^[a-z][a-z0-9._-]{0,63}$/
 const queryRoot = 'identity-verification-case'
+const statusRoot = 'identity-verification-status'
+const methodsRoot = 'identity-verification-methods'
 const uploadContentTypes = new Set<IdentityVerificationProviderContentType>([
   'image/jpeg', 'image/png', 'application/pdf', 'video/mp4',
 ])
@@ -167,7 +169,7 @@ async function sha256File(file: File): Promise<string> {
 function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
   const { t, i18n } = useTranslation('accountIdentityVerification')
   const [createForm] = Form.useForm<CreateValues>()
-  const [providerForm] = Form.useForm<ProviderValues>()
+  const [providerForm] = Form.useForm<StartValues>()
   const queryClient = useQueryClient()
   const ownerKey = JSON.stringify(owner)
   const [caseIDInput, setCaseIDInput] = useState('')
@@ -224,6 +226,38 @@ function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
     },
   })
 
+  // 默认展示本人当前状态与最近一次案件，发起认证用服务端已配置的认证服务，
+  // 不让用户填案件 ID、证据令牌或服务标识（前两者只在「高级」里）。
+  const ownerRead = async <T,>(read: (token: string) => Promise<T>) => {
+    const accessToken = currentAccess(ownerKey)
+    if (!accessToken) throw new ApiError('Session owner changed', 403, 'identity_verification_permission_denied')
+    const result = await read(accessToken)
+    if (!currentAccess(ownerKey)) throw new ApiError('Session owner changed', 403, 'identity_verification_permission_denied')
+    return result
+  }
+  const statusQuery = useQuery({
+    queryKey: [statusRoot, ownerKey],
+    queryFn: ({ signal }) => ownerRead((token) => identityVerificationApi.getStatus(token, signal)),
+  })
+  const methodsQuery = useQuery({
+    queryKey: [methodsRoot, ownerKey],
+    queryFn: ({ signal }) => ownerRead((token) => identityVerificationApi.getMethods(token, signal)),
+  })
+  const latestCaseID = statusQuery.data?.latest_case?.id
+  const autoSelected = useRef(false)
+  useEffect(() => {
+    if (!latestCaseID || autoSelected.current) return
+    autoSelected.current = true
+    setActiveCaseID((current) => current || latestCaseID)
+  }, [latestCaseID])
+  // A 404 (no provider workflow mounted) or not_configured both mean the platform has not opened the service.
+  const methodsOff = methodsQuery.data?.configured === false || (methodsQuery.error instanceof ApiError &&
+    (methodsQuery.error.status === 404 || methodsQuery.error.code === 'identity_verification_not_configured'))
+  const startKinds = (methodsQuery.data?.configured ? methodsQuery.data.kinds : []).filter((kind) =>
+    kind === 'enterprise' || kind === (statusQuery.data?.status === 'verified' ? 'personal_reverification' : 'personal_initial'))
+  const [caseIDBlurred, setCaseIDBlurred] = useState(false)
+  const caseIDInvalid = caseIDBlurred && Boolean(caseIDInput) && !caseIDPattern.test(caseIDInput)
+
   const currentCase = query.data ?? (latestCase?.id === activeCaseID ? latestCase : undefined)
   const uncertain = Boolean(attempt && writeError && outcomeUnknown(writeError))
   const writesLocked = writePending || uncertain
@@ -258,6 +292,7 @@ function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
         throw new ApiError('Invalid identity verification response', 502, 'invalid_response')
       }
       queryClient.setQueryData([queryRoot, ownerKey, result.id], result)
+      void queryClient.invalidateQueries({ queryKey: [statusRoot, ownerKey] })
       setLatestCase(result)
       setCaseIDInput(result.id)
       setActiveCaseID(result.id)
@@ -321,10 +356,11 @@ function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
     }
   }
 
-  const startProvider = (values: ProviderValues) => {
-    if (providerPending) return
+  const startProvider = (values: StartValues) => {
+    const provider = methodsQuery.data?.configured ? methodsQuery.data.provider_display_name : ''
+    if (providerPending || !provider) return
     const nextAttempt: ProviderAttempt = {
-      input: { kind: values.kind, provider: values.provider.trim() },
+      input: { kind: values.kind, provider },
       metadata: createIdentityVerificationWriteMetadata('provider-session'),
     }
     providerEvidenceRef.current = null
@@ -524,110 +560,54 @@ function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
   return (
     <section className="identity-page account-identity-verification-page" aria-labelledby="account-identity-verification-title">
       <h1 id="account-identity-verification-title" className="visually-hidden">{t('title')}</h1>
-      <Alert className="identity-alert identity-introduction" type="info" showIcon message={t('introduction')} />
-
-      <Typography.Title className="identity-section-title" level={2}>{t('lookup.title')}</Typography.Title>
-      <div className="identity-toolbar identity-lookup-toolbar">
-        <Input
-          aria-label={t('lookup.caseId')}
-          value={caseIDInput}
-          placeholder={t('lookup.placeholder')}
-          maxLength={36}
-          disabled={writesLocked}
-          onChange={(event) => setCaseIDInput(event.target.value.trim().toLowerCase())}
-          status={caseIDInput && !caseIDPattern.test(caseIDInput) ? 'error' : undefined}
-        />
-        <Button
-          type="primary"
-          icon={<Search size={15} aria-hidden="true" />}
-          disabled={!caseIDPattern.test(caseIDInput) || writesLocked}
-          onClick={() => {
-            setWriteError(null)
-            setLatestCase(null)
-            setActiveCaseID(caseIDInput)
-          }}
-        >
-          {t('actions.lookup')}
-        </Button>
-        <Button
-          icon={<RefreshCw size={15} aria-hidden="true" />}
-          disabled={!activeCaseID || writesLocked}
-          loading={query.isFetching}
-          onClick={() => void query.refetch()}
-        >
-          {t('actions.refresh')}
-        </Button>
+      <Typography.Title className="identity-section-title" level={2}>{t('status.title')}</Typography.Title>
+      <div className="identity-toolbar identity-status-summary" aria-busy={statusQuery.isPending}>
+        {statusQuery.isPending ? <Spin size="small" /> : statusQuery.isError ? (
+          <FeedbackWhen title={t('status.loadFailed')} detail={errorMessage(statusQuery.error, t)}
+            action={<Button size="small" onClick={() => void statusQuery.refetch()}>{t('actions.retry')}</Button>} />
+        ) : statusQuery.data ? <>
+          <Tag color={statusQuery.data.status === 'verified' ? 'success' : statusQuery.data.status === 'rejected' ? 'error'
+            : statusQuery.data.status === 'pending' ? 'blue' : undefined}>{t(`selfStatus.${statusQuery.data.status}`)}</Tag>
+          {statusQuery.data.latest_case ? <span>{t('status.latest', {
+            kind: t(`kinds.${statusQuery.data.latest_case.kind}`), state: t(`states.${statusQuery.data.latest_case.status}`),
+            time: formatDateTime(statusQuery.data.latest_case.state_changed_at, locale),
+          })}</span> : null}
+        </> : null}
       </div>
 
-      <Typography.Title className="identity-section-title" level={2}>{t('create.title')}</Typography.Title>
-      <Form<CreateValues>
-        className="identity-form identity-create-form"
-        form={createForm}
-        layout="inline"
-        initialValues={{ kind: 'personal_initial' }}
-        disabled={writesLocked}
-        onFinish={createDraft}
-      >
-        <Form.Item name="kind" label={t('create.kind')} rules={[{ required: true }]}>
-          <Select
-            style={{ minWidth: 190 }}
-            options={(['personal_initial', 'personal_reverification', 'enterprise'] as const)
-              .map((value) => ({ value, label: t(`kinds.${value}`) }))}
-          />
-        </Form.Item>
-        <Form.Item
-          name="evidence_token"
-          label={t('create.evidenceToken')}
-          rules={[
-            { required: true, message: t('validation.evidenceRequired') },
-            { pattern: evidencePattern, message: t('validation.evidenceFormat') },
-          ]}
+      <Typography.Title className="identity-section-title" level={2}>{t('start.title')}</Typography.Title>
+      {methodsOff ? (
+        <Typography.Paragraph className="identity-start-unavailable">{t('start.notConfigured')}</Typography.Paragraph>
+      ) : methodsQuery.isError ? (
+        <FeedbackWhen title={t('start.loadFailed')} detail={errorMessage(methodsQuery.error, t)}
+          action={<Button size="small" onClick={() => void methodsQuery.refetch()}>{t('actions.retry')}</Button>} />
+      ) : methodsQuery.isPending ? <Spin size="small" /> : startKinds.length === 0 ? (
+        <Typography.Paragraph className="identity-start-unavailable">{t('start.notConfigured')}</Typography.Paragraph>
+      ) : (
+        // 两张表单各有稳定 name，字段 id 不撞；校验失败聚焦首错。
+        <Form<StartValues>
+          className="identity-form identity-provider-form"
+          name="identity-start"
+          form={providerForm}
+          layout="inline"
+          initialValues={{ kind: startKinds[0] }}
+          disabled={providerPending || uploadPending}
+          scrollToFirstError={{ focus: true }}
+          onFinish={startProvider}
         >
-          <Input.Password
-            autoComplete="off"
-            maxLength={512}
-            placeholder={t('create.evidencePlaceholder')}
-          />
-        </Form.Item>
-        <Form.Item>
-          <Button type="primary" htmlType="submit" icon={<ShieldCheck size={15} aria-hidden="true" />} loading={writePending}>
-            {t('actions.create')}
-          </Button>
-        </Form.Item>
-      </Form>
-
-      <Typography.Title className="identity-section-title" level={2}>{t('provider.title')}</Typography.Title>
-      <Form<ProviderValues>
-        className="identity-form identity-provider-form"
-        form={providerForm}
-        layout="inline"
-        initialValues={{ kind: 'personal_initial', provider: '' }}
-        disabled={providerPending || uploadPending}
-        onFinish={startProvider}
-      >
-        <Form.Item name="kind" label={t('provider.kind')} rules={[{ required: true }]}>
-          <Select
-            style={{ minWidth: 190 }}
-            options={(['personal_initial', 'personal_reverification', 'enterprise'] as const)
-              .map((value) => ({ value, label: t(`kinds.${value}`) }))}
-          />
-        </Form.Item>
-        <Form.Item
-          name="provider"
-          label={t('provider.provider')}
-          rules={[
-            { required: true, message: t('validation.providerRequired') },
-            { pattern: providerPattern, message: t('validation.providerFormat') },
-          ]}
-        >
-          <Input autoComplete="off" maxLength={64} />
-        </Form.Item>
-        <Form.Item>
-          <Button type="primary" htmlType="submit" loading={providerPending}>
-            {t('provider.start')}
-          </Button>
-        </Form.Item>
-      </Form>
+          <Form.Item name="kind" label={t('start.kind')} rules={[{ required: true, message: t('validation.kindRequired') }]}>
+            <Select
+              style={{ minWidth: 190 }}
+              options={startKinds.map((value) => ({ value, label: t(value === 'enterprise' ? 'start.enterprise' : 'start.personal') }))}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={providerPending}>
+              {t('start.submit')}
+            </Button>
+          </Form.Item>
+        </Form>
+      )}
 
       {providerAttempt && providerError && outcomeUnknown(providerError) ? (
         <OutcomeUnknown title={t('provider.pending')} action={<Space>
@@ -725,7 +705,7 @@ function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
       <div aria-label={t('details.title')} aria-busy={query.isPending && Boolean(activeCaseID)}>
         {query.isPending && activeCaseID && !currentCase ? <Spin /> : query.isError ? (
           <FeedbackWhen title={t('errors.loadFailed')} detail={errorMessage(query.error, t)} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} />
-        ) : !currentCase ? <Empty description={t('empty.description')} /> : (
+        ) : !currentCase ? null : (
           <>
             <Descriptions size="small" bordered column={{ xs: 1, sm: 2, lg: 3 }}>
               <Descriptions.Item label={t('details.id')}>{currentCase.id}</Descriptions.Item>
@@ -778,6 +758,92 @@ function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
           </>
         )}
       </div>
+
+      <Collapse className="identity-advanced" ghost items={[{
+        key: 'advanced',
+        label: t('advanced.title'),
+        forceRender: true,
+        children: <>
+          <Typography.Title className="identity-section-title" level={3}>{t('lookup.title')}</Typography.Title>
+          <div className="identity-toolbar identity-lookup-toolbar">
+            <Input
+              id="identity-case-id"
+              aria-label={t('lookup.caseId')}
+              value={caseIDInput}
+              placeholder={t('lookup.placeholder')}
+              maxLength={36}
+              disabled={writesLocked}
+              onChange={(event) => { setCaseIDBlurred(false); setCaseIDInput(event.target.value.trim().toLowerCase()) }}
+              onBlur={() => setCaseIDBlurred(true)}
+              onPressEnter={() => setCaseIDBlurred(true)}
+              status={caseIDInvalid ? 'error' : undefined}
+              aria-invalid={caseIDInvalid || undefined}
+              aria-describedby={caseIDInvalid ? 'identity-case-id-error' : undefined}
+            />
+            <Button
+              type="primary"
+              icon={<Search size={15} aria-hidden="true" />}
+              disabled={!caseIDPattern.test(caseIDInput) || writesLocked}
+              onClick={() => {
+                setWriteError(null)
+                setLatestCase(null)
+                setActiveCaseID(caseIDInput)
+              }}
+            >
+              {t('actions.lookup')}
+            </Button>
+            <Button
+              icon={<RefreshCw size={15} aria-hidden="true" />}
+              disabled={!activeCaseID || writesLocked}
+              loading={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              {t('actions.refresh')}
+            </Button>
+          </div>
+          {/* 格式错误给可读文字并关联输入；空白不报错。 */}
+          {caseIDInvalid ? <div id="identity-case-id-error" className="identity-field-error" role="alert">{t('validation.caseIdFormat')}</div> : null}
+
+          <Typography.Title className="identity-section-title" level={3}>{t('create.title')}</Typography.Title>
+          <Form<CreateValues>
+            className="identity-form identity-create-form"
+            name="identity-create"
+            form={createForm}
+            layout="inline"
+            initialValues={{ kind: 'personal_initial' }}
+            disabled={writesLocked}
+            scrollToFirstError={{ focus: true }}
+            onFinish={createDraft}
+          >
+            <Form.Item name="kind" label={t('create.kind')} rules={[{ required: true }]}>
+              <Select
+                style={{ minWidth: 190 }}
+                options={(['personal_initial', 'personal_reverification', 'enterprise'] as const)
+                  .map((value) => ({ value, label: t(`kinds.${value}`) }))}
+              />
+            </Form.Item>
+            <Form.Item
+              name="evidence_token"
+              label={t('create.evidenceToken')}
+              rules={[
+                { required: true, message: t('validation.evidenceRequired') },
+                { pattern: evidencePattern, message: t('validation.evidenceFormat') },
+              ]}
+            >
+              <Input.Password
+                autoComplete="off"
+                maxLength={512}
+                placeholder={t('create.evidencePlaceholder')}
+              />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" icon={<ShieldCheck size={15} aria-hidden="true" />} loading={writePending}>
+                {t('actions.create')}
+              </Button>
+            </Form.Item>
+          </Form>
+        </>,
+      }]} />
     </section>
   )
 }
@@ -799,7 +865,7 @@ export default function AccountIdentityVerificationPage() {
     const previous = previousOwnerKey.current
     if (previous && previous !== ownerKey) {
       queryClient.removeQueries({
-        predicate: (query) => query.queryKey[0] === queryRoot && query.queryKey[1] === previous,
+        predicate: (query) => [queryRoot, statusRoot, methodsRoot].includes(String(query.queryKey[0])) && query.queryKey[1] === previous,
       })
     }
     previousOwnerKey.current = ownerKey

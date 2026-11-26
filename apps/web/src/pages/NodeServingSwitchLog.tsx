@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, Button, ConfigProvider, Input, Pagination, Select, Space, Table, Typography, type TableColumnsType } from 'antd'
-import { FeedbackWhen, IdOrNameInput, useLiveApply } from '@cdnca/ui'
+import { Alert, Button, ConfigProvider, Input, Select, Space, Typography, type TableColumnsType } from 'antd'
+import { FeedbackWhen, IdOrNameInput, useLiveApply, Pagination, Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../api/auth'

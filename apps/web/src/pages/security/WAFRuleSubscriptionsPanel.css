@@ -1,0 +1,38 @@
+/* WAF 规则库订阅抽屉：表格按内容宽度在自身容器内横滚，长名称、地址和错误原因限宽。 */
+.waf-subscriptions-table .ant-table-thead > tr > th,
+.waf-subscriptions-table .ant-table-tbody > tr > td {
+  white-space: nowrap;
+}
+
+.waf-subscription-name {
+  display: inline-block;
+  min-width: 120px;
+  max-width: 220px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.waf-subscription-url {
+  display: inline-block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.waf-subscription-error {
+  display: block;
+  max-width: 240px;
+  margin-top: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.waf-subscription-format {
+  margin-top: 4px;
+}
+
+.waf-subscription-format summary {
+  width: fit-content;
+  cursor: pointer;
+}

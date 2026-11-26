@@ -21,13 +21,13 @@ export default function SiteCacheTabs({
   extra?: ReactNode
 }) {
   const { t } = useTranslation('cacheOperations')
+  // 两项是切路由的普通链接（没有页签面板），按导航与 aria-current 表达当前页。
   const tabs = (
-    <nav className="site-cache-tabs" aria-label={t('tabs.label')} role="tablist">
+    <nav className="site-cache-tabs" aria-label={t('tabs.label')}>
       <Link
         className={`site-cache-tab${active === 'purge' ? ' is-active' : ''}`}
         to="/site/cache-clean"
-        role="tab"
-        aria-selected={active === 'purge'}
+        aria-current={active === 'purge' ? 'page' : undefined}
       >
         {t('tabs.purge')}
       </Link>
@@ -35,8 +35,7 @@ export default function SiteCacheTabs({
         <Link
           className={`site-cache-tab${active === 'history' ? ' is-active' : ''}`}
           to={historyHref}
-          role="tab"
-          aria-selected={active === 'history'}
+          aria-current={active === 'history' ? 'page' : undefined}
         >
           {t('tabs.history')}
         </Link>

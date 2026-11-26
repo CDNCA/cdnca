@@ -526,6 +526,28 @@ describe('SitePublicationsPage', () => {
     expect(notice).toHaveTextContent('关闭 HTTPS 却仍带 HTTPS 端口')
   })
 
+  // a node settings redelivery is marked in the
+  // list with why the content was not published; a kind without its refusal
+  // (or the reverse) is a malformed response.
+  it('marks a node settings update with the content refusal', async () => {
+    setTenant()
+    const redelivery = { ...tenantPublication, kind: 'node_settings', content_refusal: 'package_resource_quota_exceeded' }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(publicationPage(false, { items: [redelivery] })))
+    const { unmount } = renderWithProviders(<SitePublicationsPage />, ['/site/publications'])
+    const tag = await screen.findByTestId('publication-node-settings')
+    expect(tag).toHaveTextContent('节点设置更新')
+    await userEvent.hover(tag)
+    expect(await screen.findByText(/内容未发布的原因：设置已保存，本次未发布：超出套餐额度/)).toBeInTheDocument()
+    unmount()
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(json(publicationPage(false, {
+      items: [{ ...tenantPublication, kind: 'node_settings' }],
+    })))
+    renderWithProviders(<SitePublicationsPage />, ['/site/publications'])
+    await waitFor(() => expect(screen.queryByText(publicationID)).not.toBeInTheDocument())
+    expect(screen.queryByTestId('publication-node-settings')).not.toBeInTheDocument()
+  })
+
   it('requires a canonical explicit tenant target before platform reads', async () => {
     setPlatform(['edge_publications.read'])
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(publicationPage(true)))
@@ -741,7 +763,7 @@ describe('SitePublicationsPage', () => {
 
     await user.click(screen.getByRole('tab', { name: '部署进度' }))
 	expect(screen.queryByRole('button', { name: '继续' })).not.toBeInTheDocument()
-    await user.click(await screen.findByRole('button', { name: '查看部署' }))
+    await user.click(await screen.findByRole('button', { name: '节点部署' }))
     const deployments = await screen.findByRole('dialog')
     expect(within(deployments).getByText('节点部署')).toBeInTheDocument()
     expect(within(deployments).getByText('ACTIVATION_FAILED')).toBeInTheDocument()
@@ -806,7 +828,7 @@ describe('SitePublicationsPage', () => {
 
     await user.click(await screen.findByRole('tab', { name: '部署进度' }))
     expect(await screen.findByText('成功 1 / 2，失败 0，已忽略旧发布 1')).toBeInTheDocument()
-    await user.click(await screen.findByRole('button', { name: '查看部署' }))
+    await user.click(await screen.findByRole('button', { name: '节点部署' }))
     const deployments = await screen.findByRole('dialog')
     expect(within(deployments).getByText('已忽略旧发布')).toBeInTheDocument()
     expect(within(deployments).getByText('节点已在更新版本')).toBeInTheDocument()
@@ -838,7 +860,7 @@ describe('SitePublicationsPage', () => {
 
     await user.click(await screen.findByRole('tab', { name: '部署进度' }))
     expect(await screen.findByText('成功 1 / 2，失败 0，冻结中待补发 1')).toBeInTheDocument()
-    await user.click(await screen.findByRole('button', { name: '查看部署' }))
+    await user.click(await screen.findByRole('button', { name: '节点部署' }))
     const deployments = await screen.findByRole('dialog')
     expect(within(deployments).getByText('冻结中待补发')).toBeInTheDocument()
     expect(within(deployments).queryByText('失败')).not.toBeInTheDocument()
@@ -865,7 +887,7 @@ describe('SitePublicationsPage', () => {
     renderWithProviders(<SitePublicationsPage />)
 
     await user.click(await screen.findByRole('tab', { name: '部署进度' }))
-    await user.click(await screen.findByRole('button', { name: '查看部署' }))
+    await user.click(await screen.findByRole('button', { name: '节点部署' }))
     const deployments = await screen.findByRole('dialog')
     expect(within(deployments).getByText('ERROR_CODE_FAILED_PRECONDITION')).toBeInTheDocument()
     expect(within(deployments).getByLabelText(`节点报告的失败原因：${cause}`)).toHaveTextContent(cause)

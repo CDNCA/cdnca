@@ -222,14 +222,15 @@ func parseQuery(values url.Values) (observabilitylog.Query, error) {
 	allowed := map[string]bool{"target_scope_id": true, "kind": true, "result": true, "action": true, "source_ip": true,
 		"from": true, "to": true, "limit": true, "cursor": true, "audit_boundary": true,
 		"after_audit_boundary": true, "actor_user_id": true, "actor_user_display_id": true, "action_verb": true, "resource_type": true,
-		"resource_id": true, "change": true, "category": true}
+		"resource_id": true, "change": true, "category": true, "hide_session_refresh": true}
 	for key := range values {
 		if !allowed[key] {
 			return observabilitylog.Query{}, observabilitylog.ErrInvalidInput
 		}
 	}
 	for _, key := range []string{"target_scope_id", "action", "action_verb", "category", "resource_type", "resource_id", "change",
-		"source_ip", "from", "to", "limit", "cursor", "audit_boundary", "after_audit_boundary", "actor_user_id", "actor_user_display_id"} {
+		"source_ip", "from", "to", "limit", "cursor", "audit_boundary", "after_audit_boundary", "actor_user_id", "actor_user_display_id",
+		"hide_session_refresh"} {
 		if len(values[key]) > 1 {
 			return observabilitylog.Query{}, observabilitylog.ErrInvalidInput
 		}
@@ -292,6 +293,13 @@ func parseQuery(values url.Values) (observabilitylog.Query, error) {
 	query.Action, query.ActionVerb, query.Category = values.Get("action"), values.Get("action_verb"), values.Get("category")
 	query.ResourceType, query.ResourceID, query.Change = values.Get("resource_type"), values.Get("resource_id"), values.Get("change")
 	query.SourceIP, query.Cursor = values.Get("source_ip"), values.Get("cursor")
+	// 操作日志默认视图不列成功的会话续期（auth.refresh），只接受 true。
+	if raw, ok := values["hide_session_refresh"]; ok {
+		if raw[0] != "true" {
+			return query, observabilitylog.ErrInvalidInput
+		}
+		query.HideSessionRefresh = true
+	}
 	var err error
 	if raw := values.Get("from"); raw != "" {
 		query.From, err = timeValue(raw)

@@ -116,7 +116,7 @@ func (handler *TerminalHandler) withActor(route func(http.ResponseWriter, *http.
 			token = values[0][7:]
 		}
 		actor, status, code := sshActor(request.Context(), handler.authenticate, token, response.Header().Get("X-Request-ID"),
-			request.RemoteAddr)
+			sourceAddress(request))
 		if status != 0 {
 			writeError(response, status, code)
 			return
@@ -270,7 +270,7 @@ func (handler *TerminalHandler) terminal(response http.ResponseWriter, request *
 	open.AccessToken = ""
 	ctx, cancel := context.WithCancel(request.Context())
 	defer cancel()
-	actor, status, code := sshActor(ctx, handler.authenticate, token, requestID, request.RemoteAddr)
+	actor, status, code := sshActor(ctx, handler.authenticate, token, requestID, sourceAddress(request))
 	if status != 0 {
 		fail(code)
 		return
@@ -338,7 +338,7 @@ func (handler *TerminalHandler) terminal(response http.ResponseWriter, request *
 				case now.Sub(lastCheck) >= terminalSessionRecheck:
 					lastCheck = now
 					// The console session may have been signed out or lost the permission.
-					if _, status, _ := sshActor(ctx, handler.authenticate, token, requestID, request.RemoteAddr); status != 0 {
+					if _, status, _ := sshActor(ctx, handler.authenticate, token, requestID, sourceAddress(request)); status != 0 {
 						setReason("session_revoked")
 					} else {
 						continue

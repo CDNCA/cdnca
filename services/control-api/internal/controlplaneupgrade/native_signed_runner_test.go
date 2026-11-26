@@ -189,9 +189,18 @@ func TestNativeSignedRunnerWithoutGit(t *testing.T) {
 		if err := legacy.runner.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if rejected, err := newNativeStandaloneRunner(config, legacy.runner.runner.trust, legacy.runner.runner.store, now, uint32(os.Getuid()), legacy.commands, legacy.commands.inspect); err == nil {
-			_ = rejected.Close()
-			t.Fatal("v1 baseline accepted solely because artifact keys exist")
+		// The runner stays up on an unverifiable baseline but never trusts it.
+		rejected, err := newNativeStandaloneRunner(config, legacy.runner.runner.trust, legacy.runner.runner.store, now, uint32(os.Getuid()), legacy.commands, legacy.commands.inspect)
+		if err != nil {
+			t.Fatal(err)
+		}
+		legacy.runner = rejected
+		if status, err := rejected.Probe(t.Context()); !errors.Is(err, ErrTargetMismatch) || status.Ready ||
+			status.Reason != NativeReasonCurrentReleaseUnverified {
+			t.Fatalf("v1 baseline accepted solely because artifact keys exist: %+v %v", status, err)
+		}
+		if _, err := rejected.Run(t.Context(), legacy.bundle); !errors.Is(err, ErrTargetMismatch) || legacy.commands.restarts != 0 {
+			t.Fatalf("v1 baseline executed solely because artifact keys exist: %v", err)
 		}
 	})
 	t.Run("resume activation checkpoint", func(t *testing.T) {

@@ -33,6 +33,10 @@ function mockAPI(state: { config: Record<string, unknown>; saveError?: string; c
       state.config = { ...state.config, ...body, secret_saved: true, version: Number(state.config.version) + 1 }
       return json(state.config)
     }
+    if (url.pathname === '/v1/dns/platform-config' && method === 'DELETE') {
+      state.config = { ...emptyConfig, ttl: state.config.ttl, version: Number(state.config.version) + 1 }
+      return json(state.config)
+    }
     if (url.pathname === '/v1/dns/platform-config') return json(state.config)
     if (url.pathname === '/v1/dns/platform-config/connection-test') {
       if (state.connectionError) return json({ error: { code: state.connectionError, message: 'rejected' } }, 422)
@@ -60,6 +64,45 @@ describe('节点管理 DNS配置 tab', () => {
     renderWithProviders(<NodeDnsPage />, ['/node/dns'])
     expect(await screen.findByText(/未读取/)).toBeInTheDocument()
     expect(screen.queryByText('没有错误')).not.toBeInTheDocument()
+    expect(screen.queryByText('暂无错误')).not.toBeInTheDocument()
+  })
+
+  // 首装未保存服务商：主状态是“未配置 DNS 服务商”，不出现任何“没有错误”类表述。
+  it('shows no DNS provider configured instead of an error status on a fresh install', async () => {
+    authenticate()
+    mockAPI({ config: emptyConfig })
+    renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    expect(await screen.findByText('未配置 DNS 服务商')).toHaveAttribute('role', 'status')
+    expect(screen.queryByText(/没有错误|暂无错误/)).not.toBeInTheDocument()
+    // 未配置时没有“断开”。
+    expect(screen.queryByRole('button', { name: /断开 DNS 服务商/ })).not.toBeInTheDocument()
+  })
+
+  it('disconnects the saved provider after confirming its name and returns the form to unconfigured', async () => {
+    authenticate()
+    const state: { config: Record<string, unknown> } = { config: savedConfig }
+    const fetchMock = mockAPI(state)
+    const user = userEvent.setup()
+    renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    expect(await screen.findByDisplayValue('269638')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /断开 DNS 服务商/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('确定断开 DNS 服务商 DNSPod (dnspod.cn) 吗？')
+    // 取消不发请求。
+    await user.click(within(dialog).getByRole('button', { name: /取\s*消/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(calls(fetchMock, '/v1/dns/platform-config', 'DELETE')).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: /断开 DNS 服务商/ }))
+    const again = await screen.findByRole('dialog')
+    await user.click(within(again).getByRole('button', { name: /断开 DNS 服务商/ }))
+    expect(await screen.findByText('未配置 DNS 服务商')).toHaveAttribute('role', 'status')
+    const [request] = calls(fetchMock, '/v1/dns/platform-config', 'DELETE')
+    expect(new Headers(request[1]!.headers).get('If-Match')).toBe('"2"')
+    expect(new Headers(request[1]!.headers).get('Idempotency-Key')).toMatch(/^dns-config-disconnect-/)
+    expect(screen.queryByDisplayValue('269638')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('AccessKey Secret')).toHaveAttribute('placeholder', '请输入AccessKey Secret')
+    expect(screen.queryByRole('button', { name: /断开 DNS 服务商/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /记录修复/ })).toBeDisabled()
   })
 
   it('shows the competitor tabs, fields and buttons with DNSPod labels', async () => {
@@ -75,7 +118,8 @@ describe('节点管理 DNS配置 tab', () => {
     expect(screen.getByLabelText('TTL')).toHaveValue('600')
     expect(screen.getByText('秒')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: '开启IP权重' })).not.toBeChecked()
-    expect(screen.getByRole('status')).toHaveTextContent('没有错误')
+    expect(screen.getByRole('status')).toHaveTextContent('暂无错误')
+    expect(screen.queryByText('没有错误')).not.toBeInTheDocument()
     const buttons = screen.getAllByRole('button').map((button) => button.textContent)
     expect(buttons).toEqual(expect.arrayContaining(['保存配置', '记录修复', '清除CDN无关解析']))
   })
@@ -129,8 +173,15 @@ describe('节点管理 DNS配置 tab', () => {
     mockAPI({ config: emptyConfig })
     const user = userEvent.setup()
     renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    // The full line list starts folded behind a one-line summary.
+    expect(await screen.findByText('支持运营商与地理位置分线路')).toBeInTheDocument()
+    expect(screen.queryByText('支持分线路：默认、电信、联通、移动、境外；大区：亚洲（东亚、东南亚、南亚、西亚、中亚）、欧洲（北欧、西欧、南欧、东欧）、北美洲（北美、中美洲、加勒比）、南美洲、非洲（北非、西非、东非、中非、南部非洲）、大洋洲（澳新、美拉尼西亚、密克罗尼西亚、波利尼西亚）')).not.toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: '查看支持范围' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
     // Macro-area lines follow dnsproviderremote.SupportedLines (area_lines.go).
     expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外；大区：亚洲（东亚、东南亚、南亚、西亚、中亚）、欧洲（北欧、西欧、南欧、东欧）、北美洲（北美、中美洲、加勒比）、南美洲、非洲（北非、西非、东非、中非、南部非洲）、大洋洲（澳新、美拉尼西亚、密克罗尼西亚、波利尼西亚）')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '收起' })).toHaveAttribute('aria-expanded', 'true')
     const pick = async (label: string) => {
       await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
       await user.click(screen.getByText(label, { selector: '.ant-select-item-option-content' }))
@@ -190,17 +241,24 @@ describe('节点管理 DNS配置 tab', () => {
     await user.clear(ttl)
     await user.type(ttl, '0')
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
+    // 本地校验写在字段下并聚焦该字段，没有遮罩弹窗，可以直接改。
     expect(await screen.findByText('TTL 须为 1-86400 的整数')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(ttl).toHaveFocus())
     await user.clear(ttl)
     await user.type(ttl, '900')
     await user.clear(screen.getByLabelText('ID'))
     await user.type(screen.getByLabelText('ID'), '1000')
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
     expect(await screen.findByText('修改密钥或切换DNS提供商时请重新输入Token')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Token')).toHaveFocus())
+    // 改 TTL 不会清掉别的输入；提示随下一次编辑消失。
     expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(0)
     await user.type(screen.getByLabelText('Token'), 'bad')
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
     expect(await screen.findByText('DNS提供商拒绝了该密钥')).toBeInTheDocument()
+    expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(1)
   })
 
   // DNS维护原 P2-1（审测卡 10）：维护动作只用已保存配置；有草稿时先“保存后执行 / 放弃后执行 / 取消”，
@@ -230,6 +288,31 @@ describe('节点管理 DNS配置 tab', () => {
     await user.click(await screen.findByRole('button', { name: '保存后执行' }))
     await waitFor(() => expect(calls(fetchMock, '/v1/dns/platform-config/repair', 'POST')).toHaveLength(1))
     expect(JSON.parse(String(calls(fetchMock, '/v1/dns/platform-config', 'PUT')[1][1]!.body))).toMatchObject({ ttl: 900 })
+  })
+
+  // 补充：「保存后执行」遇本地校验错误时不写不维护，弹窗关闭后焦点交给出错字段，
+  // 错误说明与输入经 aria-invalid / aria-describedby 关联，改值后解除。
+  it('focuses the invalid field after save-then-run closes the dialog and runs nothing', async () => {
+    authenticate()
+    const fetchMock = mockAPI({ config: savedConfig })
+    const user = userEvent.setup()
+    renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    await screen.findByDisplayValue('269638')
+    const ttl = screen.getByLabelText('TTL')
+    await user.clear(ttl)
+    await user.type(ttl, '0')
+    await user.click(screen.getByRole('button', { name: /记录修复/ }))
+    await user.click(await screen.findByRole('button', { name: '保存后执行' }))
+    const reason = await screen.findByText('TTL 须为 1-86400 的整数')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(ttl).toHaveFocus())
+    expect(ttl).toHaveAttribute('aria-invalid', 'true')
+    expect(ttl).toHaveAttribute('aria-describedby', reason.closest('[id]')!.id)
+    expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(0)
+    expect(calls(fetchMock, '/v1/dns/platform-config/repair', 'POST')).toHaveLength(0)
+    await user.type(ttl, '0')
+    expect(ttl).not.toHaveAttribute('aria-invalid')
+    expect(ttl).not.toHaveAttribute('aria-describedby')
   })
 
   it('discards the draft before repairing with the saved configuration', async () => {
@@ -316,6 +399,18 @@ describe('节点管理 DNS配置 tab', () => {
     const status = await screen.findByText(/记录修复失败：全部记录失败/)
     expect(status).toHaveTextContent('域名 1qsl2olo.868yun.com：线路分组没有可用节点，请检查该网站所用线路分组是否有在线节点')
     expect(status).not.toHaveTextContent('dns_no_serving_endpoint')
+  })
+
+  // a cleanup item planned before the full record
+  // was stored is skipped and asks for a new cleanup.
+  it('explains a skipped cleanup item planned by an older version', async () => {
+    authenticate()
+    mockAPI({ config: { ...savedConfig, last_error: { source: 'dns_cleanup', code: 'all_items_failed',
+      message: '删除记录 old.cdn.example.com A 198.51.100.7 #zone/rec-1 (dns_cleanup_plan_stale)', at } } })
+    renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    const status = await screen.findByText(/清除CDN无关解析失败：全部记录失败/)
+    expect(status).toHaveTextContent('记录 old.cdn.example.com：清除计划由旧版本生成，已跳过，请重新点“清除CDN无关解析”生成新的清除计划')
+    expect(status).not.toHaveTextContent('dns_cleanup_plan_stale')
   })
 
   it('tests the connection with the saved or entered keys without saving', async () => {
@@ -417,6 +512,8 @@ describe('节点管理 DNS配置 tab', () => {
     renderWithProviders(<NodeDnsPage />, ['/node/dns'])
     await user.click(await screen.findByRole('combobox', { name: 'DNS提供商' }))
     await user.click(screen.getByText('京东云 (jdcloud.com)', { selector: '.ant-select-item-option-content' }))
+    expect(await screen.findByText('支持运营商与境外分线路')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '查看支持范围' }))
     expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外')).toBeInTheDocument()
     expect(screen.getByText(/免费版 TTL 最低 120 秒/)).toBeInTheDocument()
     await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
@@ -428,7 +525,9 @@ describe('节点管理 DNS配置 tab', () => {
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
     expect(await screen.findByText('请输入 Namecheap 白名单里的主控出口 IPv4')).toBeInTheDocument()
     expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(0)
-    await user.click(screen.getByRole('button', { name: '知道了' }))
+    // 本地校验写在字段下并聚焦该字段，无弹窗。
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('SOURCEIP（来源 IP）')).toHaveFocus())
     await user.type(screen.getByLabelText('SOURCEIP（来源 IP）'), '192.0.2.44')
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
     await waitFor(() => expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(1))
@@ -458,8 +557,9 @@ describe('节点管理 DNS配置 tab', () => {
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
     expect(await screen.findByText('TTL 须为 300-86400 的整数')).toBeInTheDocument()
     expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(0)
-    // TTL 报错走反馈弹窗，进场动画结束才抢焦点；负载高时会落在下面改 TTL 之后把按键吞掉，先等它拿到焦点。
-    await waitFor(() => expect(document.activeElement?.closest('.cdnca-feedback')).not.toBeNull())
+    // TTL 报错写在字段下并聚焦 TTL，无弹窗。
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('TTL')).toHaveFocus())
     await user.clear(screen.getByLabelText('TTL'))
     await user.type(screen.getByLabelText('TTL'), '300')
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
@@ -488,7 +588,9 @@ describe('节点管理 DNS配置 DNSPod国际版 / GoDaddy / Namesilo', () => {
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
     expect(await screen.findByText('TTL 须为 3600-86400 的整数')).toBeInTheDocument()
     expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(0)
-    await waitFor(() => expect(document.activeElement?.closest('.cdnca-feedback')).not.toBeNull())
+    // TTL 报错写在字段下并聚焦 TTL，无弹窗。
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('TTL')).toHaveFocus())
     await user.clear(screen.getByLabelText('TTL'))
     await user.type(screen.getByLabelText('TTL'), '3600')
     await user.click(screen.getByRole('button', { name: /保存配置/ }))
@@ -550,7 +652,7 @@ describe('节点管理 DNS配置 third-party DNS plugins (PA-22)', () => {
 
   it('saves the DNS.COM plan with the keys and shows 套餐不支持 line errors', async () => {
     authenticate()
-    const state = { config: { ...emptyConfig, last_error: { source: 'cname_line', code: 'dns_line_not_in_plan', message: 'overseas', at } } as Record<string, unknown> }
+    const state = { config: { ...emptyConfig, provider_type: 'dns_com', secret_saved: true, last_error: { source: 'cname_line', code: 'dns_line_not_in_plan', message: 'overseas', at } } as Record<string, unknown> }
     const fetchMock = mockAPI(state)
     const user = userEvent.setup()
     renderWithProviders(<NodeDnsPage />, ['/node/dns'])
@@ -672,17 +774,19 @@ describe('节点管理 CNAME域名 (NET-05/NET-06)', () => {
     await screen.findByText('a.example.com')
     await user.click(screen.getByRole('button', { name: /新增域名/ }))
     let dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByLabelText('域名'), 'bad')
+    await user.type(within(dialog).getByLabelText('CNAME 域名'), 'bad')
     await user.click(within(dialog).getByRole('button', { name: /确\s*定/ }))
     expect(within(dialog).getByText('请输入正确的域名')).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('域名')).toHaveAttribute('aria-invalid', 'true')
-    await user.clear(within(dialog).getByLabelText('域名'))
+    expect(within(dialog).getByLabelText('CNAME 域名')).toHaveAttribute('aria-invalid', 'true')
+    await user.clear(within(dialog).getByLabelText('CNAME 域名'))
     expect(within(dialog).queryByText('请输入正确的域名')).not.toBeInTheDocument()
-    await user.type(within(dialog).getByLabelText('域名'), 'cdn.other.com')
+    await user.type(within(dialog).getByLabelText('CNAME 域名'), 'cdn.other.com')
     await user.click(within(dialog).getByRole('button', { name: /确\s*定/ }))
     dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByText('该域名不在所选 DNS 账号下')).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('域名')).toHaveAttribute('aria-invalid', 'true')
+    expect(within(dialog).getByLabelText('CNAME 域名')).toHaveAttribute('aria-invalid', 'true')
+    // 未托管错误与字段关联。
+    expect(within(dialog).getByLabelText('CNAME 域名')).toHaveAccessibleDescription('该域名不在所选 DNS 账号下')
   })
 
   // C11: deleting the only row of the last page goes back to the page before.

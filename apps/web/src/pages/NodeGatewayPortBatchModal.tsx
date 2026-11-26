@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Alert, Form, Input, InputNumber, Modal, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Form, Input, InputNumber, Modal, Space, Tag, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../api/auth'

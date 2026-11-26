@@ -407,6 +407,11 @@ type Site struct {
 	HTTP2Enabled           bool  `json:"http2_enabled"`
 	HTTP3Enabled           bool  `json:"http3_enabled"`
 	TLSPreferServerCiphers *bool `json:"tls_prefer_server_ciphers"`
+	// HTTP3PackageDenied: the current
+	// entitlement of the site's subscription sets limits.http3 false, so the
+	// publication drops HTTP/3 whatever HTTP3Enabled (the user's choice,
+	// kept for a later package change) says. False for an unbound site.
+	HTTP3PackageDenied bool `json:"http3_package_denied,omitempty"`
 
 	// CacheSharedAcrossDomains: every domain of the site reads one cache
 	// (keyed by the primary domain); false keys each object by the request
@@ -437,7 +442,9 @@ type Site struct {
 	OperationalStatus        OperationalStatus `json:"status_state"`
 	StatusRecovery           *StatusRecovery   `json:"status_recovery"`
 	// SyncStatus is derived (site_sync_status_503, PJ-C02): synced / pending /
-	// failed from the site's latest automatic publication.
+	// failed from the site's latest automatic publication. Not carried by the
+	// latest publication (or none yet) is pending while the site belongs in it,
+	// synced only when it is not meant to be served (migration 692).
 	SyncStatus          string    `json:"sync_status"`
 	Lock                LockState `json:"lock"`
 	IsDefault           bool      `json:"is_default"`
@@ -461,18 +468,35 @@ type Site struct {
 	// PackageUnavailableReason: why the site is not served for lack of a
 	// valid package; nil while its package is valid.
 	PackageUnavailableReason *string `json:"package_unavailable_reason"`
+	// PackageSuspension: who suspended the subscription and why, set only
+	// while PackageUnavailableReason is package_suspended (migration 698).
+	PackageSuspension *PackageSuspension `json:"package_suspension"`
+}
+
+// PackageSuspension: source billing_bridge (the billing host through
+// service.suspend) or admin (a platform administrator); reason is the text
+// given with the suspension.
+type PackageSuspension struct {
+	Source string `json:"source"`
+	Reason string `json:"reason"`
 }
 
 // Reasons a site is not served for lack of a valid package (
-// only sites on an enabled, undeleted package are published).
+// only sites on an enabled, undeleted, unsuspended package are published).
+// package_suspended: the subscription is suspended (ADR 0019 §5, migration
+// 555); the site and its settings are kept and go out again on unsuspend.
+// package_cancelled: the subscription is cancelled (e.g. its billing service
+// was terminated); it does not come back, even when it was suspended before.
 const (
 	PackageUnavailableNoPackage = "no_package"
 	PackageUnavailableDisabled  = "package_disabled"
 	PackageUnavailableDeleted   = "package_deleted"
+	PackageUnavailableSuspended = "package_suspended"
+	PackageUnavailableCancelled = "package_cancelled"
 )
 
 // packageUnavailableReason maps the site's subscription and its validity
-// (valid / disabled / deleted, nil when the row is gone) to the reason.
+// (valid / disabled / suspended / cancelled / deleted, nil when the row is gone) to the reason.
 func packageUnavailableReason(subscriptionID *uuid.UUID, state *string) *string {
 	reason := ""
 	switch {
@@ -484,6 +508,10 @@ func packageUnavailableReason(subscriptionID *uuid.UUID, state *string) *string 
 		reason = PackageUnavailableDeleted
 	case *state == "disabled":
 		reason = PackageUnavailableDisabled
+	case *state == "cancelled":
+		reason = PackageUnavailableCancelled
+	case *state == "suspended":
+		reason = PackageUnavailableSuspended
 	default:
 		return nil
 	}
@@ -680,6 +708,25 @@ type UpdateOriginRequest struct {
 	Pool             OriginPool
 	IdempotencyKey   string
 	RequestID        string
+	// primaryOrigins (UpdatePrimaryOrigins) replaces Pool: a first write builds it from the stored pool under
+	// the site lock; a replay never reads the pool. ExpectedRevision is then checked against the pool's own
+	// version (originPoolChangedSince). primaryScheme (http, https; "" keeps the stored one) is set first.
+	primaryOrigins []string
+	primaryScheme  string
+}
+
+// UpdatePrimaryOriginsRequest replaces only the primary origins ("host[:port]" lines, WithPrimaryOrigins) of a
+// site read at ExpectedRevision: the billing bridge's 客户区改源站. The write is refused (ErrRevisionConflict)
+// when the origin pool changed after that revision; other site writes since (a CNAME projection) are not a
+// conflict. Scheme (OriginSchemeHTTP / OriginSchemeHTTPS, "" keeps the stored one) is the 回源协议
+// (withOriginScheme).
+type UpdatePrimaryOriginsRequest struct {
+	ID               uuid.UUID
+	ExpectedRevision int64
+	Scheme           string
+	Origins          []string
+	IdempotencyKey   string
+	RequestID        string
 }
 
 type DeleteRequest struct {
@@ -729,6 +776,9 @@ type ListFilter struct {
 	SiteIDs   []uuid.UUID
 	Owner     string
 	PackageID *uuid.UUID
+	// PackageSubscriptionID: only the sites bound to this package subscription (the billing bridge lists one
+	// service's sites).
+	PackageSubscriptionID *uuid.UUID
 	// Package (package name substring) and Site (domain substring or exact
 	// display ID) are the name forms of PackageID / SiteIDs.
 	Package       string

@@ -316,7 +316,7 @@ components:
     ServiceUnavailable: {description: Dependency unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
     Conflict: {description: Current alert revision or idempotency body conflicts, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
   schemas:
-    CanonicalUUID: {type: string, format: uuid, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+    CanonicalUUID: {type: string, format: uuid, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
     LowerSHA256: {type: string, pattern: '^[0-9a-f]{64}$'}
     Revision: {type: integer, format: int64, minimum: 1}
     UnsignedDecimal: {type: string, pattern: '^(0|[1-9][0-9]{0,19})$'}

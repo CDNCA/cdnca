@@ -182,6 +182,10 @@ type Rule struct {
 	// ActionTarget (CC temporary_ban with CountBy only): "count_key" bans the
 	// whole counted bucket (e.g. a TLS fingerprint); absent bans the client.
 	ActionTarget string `json:"action_target,omitempty"`
+	// CCReference (CC only): the rule is built from a CC matcher and filters
+	// of the policy's scope; saves expand it into the conditions and action
+	// above (cc_reference.go).
+	CCReference *CCReference `json:"cc_reference,omitempty"`
 }
 
 type Policy struct {

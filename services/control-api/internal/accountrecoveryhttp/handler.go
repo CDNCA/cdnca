@@ -249,7 +249,10 @@ func (handler *Handler) handleConfirmation(
 	scope, err := accountrecovery.VerifyRecoveryContext(
 		handler.digestKey, body.Token, body.RecoveryContext, handler.now(),
 	)
-	if err != nil {
+	// The signed link decides the scope. A tenant host may only confirm its own
+	// tenant's links; the platform host may confirm platform and tenant links.
+	if err != nil || trusted.TenantID != uuid.Nil &&
+		(scope.TenantID != trusted.TenantID || scope.ScopeID != trusted.ScopeID) {
 		handler.writeServiceError(writer, request, requestID, accountrecovery.ErrInvalidToken)
 		return
 	}

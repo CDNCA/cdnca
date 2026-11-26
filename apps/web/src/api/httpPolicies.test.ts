@@ -40,15 +40,26 @@ describe('httpPoliciesApi', () => {
       { site_owner_user_id: '55555555-5555-4555-8555-555555555555' },
       { internal: true },
     ]) {
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...policy, ...changed }] }), { status: 200 }))
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...policy, ...changed }], system_max_upload_bytes: 104857600 }), { status: 200 }))
       await expect(httpPoliciesApi.list('token', scopeID, siteID, ownerID))
         .rejects.toMatchObject({ code: 'invalid_response' })
     }
     fetchMock.mockRestore()
   })
 
-  it('rejects malformed nested configs and uses the contractual upload maximum default', async () => {
-    expect(emptyHttpPolicyConfig().max_upload_bytes).toBe(1073741824)
+  it('starts a site without a policy from the system upload limit and requires it in the list', async () => {
+    expect(emptyHttpPolicyConfig(104857600).max_upload_bytes).toBe(104857600)
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [], system_max_upload_bytes: 104857600 }), { status: 200 }))
+    await expect(httpPoliciesApi.list('token', scopeID, siteID, ownerID)).resolves.toEqual({ items: [], system_max_upload_bytes: 104857600 })
+    for (const page of [{ items: [] }, { items: [], system_max_upload_bytes: 0 }, { items: [], system_max_upload_bytes: 1073741825 }]) {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(page), { status: 200 }))
+      await expect(httpPoliciesApi.list('token', scopeID, siteID, ownerID)).rejects.toMatchObject({ code: 'invalid_response' })
+    }
+    fetchMock.mockRestore()
+  })
+
+  it('rejects malformed nested configs', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
     for (const changed of [
       { max_upload_bytes: 0 },
@@ -56,7 +67,7 @@ describe('httpPoliciesApi', () => {
       { redirects: [{ rule_id: 'redirect-1', status: 306 }] },
       { cors: { allowed_origins: ['*'], allowed_methods: ['GET'] } },
     ]) {
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...policy, ...changed }] }), { status: 200 }))
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...policy, ...changed }], system_max_upload_bytes: 104857600 }), { status: 200 }))
       await expect(httpPoliciesApi.list('token', scopeID, siteID, ownerID))
         .rejects.toMatchObject({ code: 'invalid_response' })
     }

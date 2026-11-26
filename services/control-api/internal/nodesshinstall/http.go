@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/google/uuid"
 )
@@ -88,11 +89,20 @@ func (handler *Handler) actor(response http.ResponseWriter, request *http.Reques
 	if !requestIDPattern.MatchString(requestID) {
 		requestID = uuid.NewString()
 	}
+	return Actor{UserID: session.Principal.UserID, ScopeID: session.Principal.ScopeID, RequestID: requestID, IP: sourceAddress(request)}, true
+}
+
+// sourceAddress is the console's resolved client address (httpapi
+// WithClientSourceIP, 源IP请求头 included), else the connection's.
+func sourceAddress(request *http.Request) string {
+	if address := audit.SourceIPFrom(request.Context()); address != "" {
+		return address
+	}
 	ip := request.RemoteAddr
 	if host, _, err := net.SplitHostPort(ip); err == nil {
 		ip = host
 	}
-	return Actor{UserID: session.Principal.UserID, ScopeID: session.Principal.ScopeID, RequestID: requestID, IP: ip}, true
+	return ip
 }
 
 // createBody is either hosts (one shared login: username + password or

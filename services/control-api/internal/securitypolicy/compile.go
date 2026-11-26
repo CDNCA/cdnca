@@ -274,6 +274,10 @@ func cloneRules(source []Rule) []Rule {
 		if rule.CountBy != nil {
 			rules[index].CountBy = slices.Clone(rule.CountBy)
 		}
+		if rule.CCReference != nil {
+			value := *rule.CCReference
+			rules[index].CCReference = &value
+		}
 	}
 	return rules
 }

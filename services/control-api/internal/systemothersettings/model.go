@@ -33,16 +33,22 @@ type Actor struct {
 }
 
 type Settings struct {
-	SourceIPHeader         string  `json:"source_ip_header"`
-	APIKeyEnabled          bool    `json:"api_key_enabled"`
-	DNSProtection          string  `json:"dns_protection"`
-	RecordRepairMode       string  `json:"record_repair_mode"`
-	SyncBatch              int     `json:"sync_batch"`
-	SyncScope              string  `json:"sync_scope"`
-	DisableFailedSyncNodes bool    `json:"disable_failed_sync_nodes"`
-	ResourceRank           int     `json:"resource_rank"`
-	HTTPProxy              string  `json:"http_proxy"`
-	TCPFactor              float64 `json:"tcp_factor"`
+	// SourceIPHeader is 源IP请求头: the header the console takes the visitor
+	// address from behind a CDN ("" direct, or one of clientip.Headers;
+	//). A stored value outside those reads as "".
+	SourceIPHeader         string `json:"source_ip_header"`
+	APIKeyEnabled          bool   `json:"api_key_enabled"`
+	DNSProtection          string `json:"dns_protection"`
+	RecordRepairMode       string `json:"record_repair_mode"`
+	SyncBatch              int    `json:"sync_batch"`
+	SyncScope              string `json:"sync_scope"`
+	DisableFailedSyncNodes bool   `json:"disable_failed_sync_nodes"`
+	ResourceRank           int    `json:"resource_rank"`
+	// HTTPProxy is http代理: the HTTP(S) proxy DNS provider API requests go
+	// through ("" direct; dnsapiproxy). Reads show the password as
+	// dnsapiproxy.RedactedPassword; a save sending that back keeps it.
+	HTTPProxy string  `json:"http_proxy"`
+	TCPFactor float64 `json:"tcp_factor"`
 	// L4DrainMaxSeconds bounds how long existing L4 sessions keep running on
 	// the worker generation a configuration change retires; 0 is unlimited.
 	// A save that omits it keeps the stored value.
@@ -83,7 +89,7 @@ type SaveRequest struct {
 
 func DefaultSettings() Settings {
 	return Settings{
-		SourceIPHeader: "X-Real-IP", APIKeyEnabled: true, DNSProtection: "", RecordRepairMode: "repair",
+		SourceIPHeader: "", APIKeyEnabled: true, DNSProtection: "", RecordRepairMode: "repair",
 		SyncBatch: 1000, SyncScope: "line_group", DisableFailedSyncNodes: false,
 		ResourceRank: 100, TCPFactor: 1.1, L4DrainMaxSeconds: intPointer(DefaultL4DrainMaxSeconds),
 		DomainOwnershipPolicy:       stringPointer(DefaultDomainOwnershipPolicy),

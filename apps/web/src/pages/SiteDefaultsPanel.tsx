@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Checkbox, Form, Input, Modal, Pagination, Popconfirm, Radio, Select, Space, Switch, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Form, Input, Modal, Popconfirm, Radio, Select, Space, Switch, Tag, type TableColumnsType } from 'antd'
 import { CircleCheck, CircleX, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Pagination, Table } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import { dnsApi, ownDNSProviders } from '../api/dns'
@@ -20,6 +20,7 @@ import { siteDefaultSettingOrder, siteDefaultValueError, tlsVersions } from './s
 import { CacheRulesDefaultEditor, CondOriginDefaultEditor } from './SiteDefaultDocumentEditors'
 import '../i18n/siteListTabs'
 import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 // 网站列表 > 默认设置（管理员与用户端同一页）：给用户新建网站设的默认值。管理员先选用户，
 // 列表多一列「用户」；租户只管自己的。只影响之后新建的网站；新建时手动填写的值优先（后端 /v1/site-defaults，迁移 490）。
@@ -98,7 +99,7 @@ type BatchKind = 'enable' | 'disable' | 'delete'
 type BatchItem = { item: SiteUserDefault; key: string; state: 'pending' | 'done' | 'unknown' | 'failed'; error?: ApiError }
 type Batch = { kind: BatchKind; items: BatchItem[] }
 type FormValues = { owner_id?: string; setting_name?: SiteDefaultSettingName; setting_value: string; scope_name: 'global' | 'group'; group_id?: string }
-type Owner = { id: string; scope_id: string; label: string }
+type Owner = { id: string; scope_id: string; label: string; name: string }
 type Editor = { mode: 'create' } | { mode: 'edit'; item: SiteUserDefault }
 
 function writeKey(kind: string): string {
@@ -112,6 +113,7 @@ function outcomeUnknown(error: unknown): boolean {
 
 export default function SiteDefaultsPanel() {
   const { t } = useTranslation('siteListTabs')
+  const namedRows = useNamedRowSelection()
   const queryClient = useQueryClient()
   const principal = useSessionStore((state) => state.principal)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
@@ -169,7 +171,8 @@ export default function SiteDefaultsPanel() {
   })
   const groups = useInfiniteQuery({
     queryKey: ['site-defaults-groups', principal?.scope_id, sessionEpoch, target?.scopeID],
-    enabled: editor !== null && Boolean(target),
+    // 编辑时范围只读，不再读分组
+    enabled: editor?.mode === 'create' && Boolean(target),
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const accessToken = token('sites.read')
@@ -398,8 +401,10 @@ export default function SiteDefaultsPanel() {
         <Space size={2}>
           <Button type="text" size="small" aria-label={`${t('defaults.actions.edit')} ${t(`defaults.names.${item.setting_name}`)}`}
             icon={<Pencil size={15} />} disabled={locked} onClick={() => { setWriteError(null); setEditor({ mode: 'edit', item }) }} />
-          <Popconfirm title={t('defaults.confirmDelete', { count: 1 })} okText={t('defaults.actions.delete')} cancelText={t('defaults.actions.cancel')}
-            okButtonProps={{ danger: true }} onConfirm={() => start({ kind: 'delete', item })}>
+          <Popconfirm title={t('defaults.confirmDeleteOne', { name: t(`defaults.names.${item.setting_name}`) })}
+            description={<>{t('defaults.columns.value')}：{displayValue(item)}<br />{t('defaults.columns.scope')}：{item.scope_name === 'group' ? t('defaults.scope.group', { name: item.group_name ?? item.group_id }) : t('defaults.scope.global')}</>}
+            okText={t('defaults.actions.delete')} cancelText={t('defaults.actions.cancel')}
+            okButtonProps={{ danger: true, 'aria-label': t('defaults.confirmDeleteNamed', { name: t(`defaults.names.${item.setting_name}`) }) }} onConfirm={() => start({ kind: 'delete', item })}>
             <Button danger type="text" size="small" aria-label={`${t('defaults.actions.delete')} ${t(`defaults.names.${item.setting_name}`)}`}
               icon={<Trash2 size={15} />} disabled={locked} />
           </Popconfirm>
@@ -409,8 +414,15 @@ export default function SiteDefaultsPanel() {
   ]
   const isSwitch = settingName ? siteDefaultSwitches.has(settingName) : false
   const ownerMissing = isPlatform && editor?.mode === 'create' && !owner
-  const ownerOptions = (owners.data ?? []).map((user) => ({ value: user.id, scope_id: user.scope_id,
+  const ownerOptions = (owners.data ?? []).map((user) => ({ value: user.id, scope_id: user.scope_id, name: user.username,
     label: `${user.username}（${user.display_id}）${user.email ? ` · ${user.email}` : ''}` }))
+  // 范围写明是谁的新建网站（租户是本账号，管理员是所选用户），不说「全局」
+  const scopeOwnerName = !isPlatform ? undefined
+    : editor?.mode === 'edit' ? editor.item.owner?.display_name ?? t('defaults.form.userMissing') : owner?.name
+  const scopeLabel = (scope: 'global' | 'group') => scopeOwnerName
+    ? t(scope === 'global' ? 'defaults.form.scopeGlobalUser' : 'defaults.form.scopeGroupUser', { name: scopeOwnerName })
+    : t(scope === 'global' ? 'defaults.form.scopeGlobal' : 'defaults.form.scopeGroup')
+  const editing = editor?.mode === 'edit' ? editor.item : null
   const unit = settingName ? valueUnits[settingName] : undefined
 
   return (
@@ -418,7 +430,6 @@ export default function SiteDefaultsPanel() {
       <header className="site-defaults-header">
         <h2 id="site-defaults-title">{t('defaults.title')}</h2>
         <p>{t('defaults.description')}</p>
-        <p>{t('defaults.descriptionDetail')}</p>
       </header>
       {canManage ? (
         <div className="site-groups-toolbar">
@@ -456,7 +467,7 @@ export default function SiteDefaultsPanel() {
       ) : null}
       <Table rowKey="id" size="small" columns={columns} dataSource={items} pagination={false}
         loading={query.isPending || query.isFetching} locale={{ emptyText: query.isPending ? ' ' : t('defaults.empty') }}
-        rowSelection={canManage ? { selectedRowKeys: selected, getCheckboxProps: () => ({ disabled: locked }), onChange: (keys) => setSelected(keys.map(String)) } : undefined} />
+        rowSelection={canManage ? namedRows<SiteUserDefault>({ selectedRowKeys: selected, getCheckboxProps: () => ({ disabled: locked }), onChange: (keys) => setSelected(keys.map(String)) }, (item) => `${item.display_id} ${t(`defaults.names.${item.setting_name}`)}`, t('defaults.selectionScope')) : undefined} />
       <div className="identity-pagination">
         <Pagination current={page} pageSize={limit} total={total} showSizeChanger pageSizeOptions={[10, 20, 50]}
           showTotal={(count) => t('defaults.total', { count })}
@@ -471,126 +482,116 @@ export default function SiteDefaultsPanel() {
         onOk={() => uncertain ? mutation.mutate() : void form.validateFields().then(submit).catch(() => undefined)}>
         {writeError && editor ? <FeedbackWhen title={errorText(writeError)} /> : null}
         <Form form={form} layout="horizontal" labelCol={{ flex: '96px' }} requiredMark={false} disabled={mutation.isPending || uncertain}>
-          <div className="site-defaults-form-section">
-            <h3>{t('defaults.form.sectionTarget')}</h3>
-            <p>{t('defaults.form.sectionTargetDesc')}</p>
-            {isPlatform ? (
-              editor?.mode === 'edit' ? (
-                <Form.Item label={t('defaults.form.user')}>
-                  <span>{editor.item.owner ? `${editor.item.owner.display_name}（${editor.item.owner.display_id}）` : t('defaults.form.userMissing')}</span>
-                </Form.Item>
-              ) : (
-                <Form.Item name="owner_id" label={t('defaults.form.user')} rules={[{ required: true, message: t('defaults.form.userRequired') }]}
-                  extra={!canPickOwner ? t('defaults.form.userForbidden') : owners.isError ? t('defaults.form.userFailed') : undefined}>
-                  <Select showSearch allowClear filterOption={false} disabled={!canPickOwner} placeholder={t('defaults.form.userPlaceholder')}
-                    loading={owners.isFetching} onSearch={setOwnerSearch} options={ownerOptions}
-                    notFoundContent={owners.isFetching ? null : owners.isError ? t('defaults.form.userFailed') : t('defaults.form.userNotFound')}
-                    onChange={(next?: string) => {
-                      const picked = ownerOptions.find((item) => item.value === next)
-                      setOwner(picked ? { id: picked.value, scope_id: picked.scope_id, label: picked.label } : null)
-                      // 换用户后分组、DNS API、规则库都要重选
-                      form.setFieldsValue({ setting_name: undefined, setting_value: '', scope_name: 'global', group_id: undefined })
-                    }} />
-                </Form.Item>
-              )
-            ) : null}
-            <Form.Item name="setting_name" label={t('defaults.form.name')} rules={[{ required: true, message: t('defaults.form.namePlaceholder') }]}
-              hidden={ownerMissing}>
-              <Select disabled={editor?.mode === 'edit'} placeholder={t('defaults.form.namePlaceholder')} showSearch optionFilterProp="label"
-                options={siteDefaultSettingOrder.map((name) => ({ value: name, label: t(`defaults.names.${name}`) }))}
-                onChange={(name: SiteDefaultSettingName) => form.setFieldValue('setting_value', siteDefaultSwitches.has(name) ? '1' : initialValues[name] ?? '')} />
-            </Form.Item>
-            {ownerMissing ? <Form.Item label={t('defaults.form.name')}><span className="site-defaults-empty-field">{t('defaults.form.nameNeedsUser')}</span></Form.Item> : null}
-          </div>
-          <div className="site-defaults-form-section">
-            <h3>{t('defaults.form.sectionValue')}</h3>
-            <p>{t('defaults.form.sectionValueDesc')}</p>
-            {!settingName ? <Form.Item label={t('defaults.form.value')}><span className="site-defaults-empty-field">{t('defaults.form.valueNeedsName')}</span></Form.Item> : null}
-            <Form.Item name="setting_value" label={t('defaults.form.value')} hidden={!settingName}
-              extra={settingName && hintedSettings.has(settingName) ? t(`defaults.hints.${settingName}`) : undefined}
-              rules={settingName ? [{ required: true, whitespace: true, max: siteDefaultDocuments.has(settingName) ? 65_536 : settingName === 'req_header' ? 8192 : settingName === 'ssl_cipher_suites' ? 1024 : 256, message: t('defaults.form.invalid') }, {
-                validator: (_, value?: string) => {
-                  const problem = siteDefaultValueError(settingName, value ?? '')
-                  return problem ? Promise.reject(new Error(t(`defaults.form.invalid_${problem}`))) : Promise.resolve()
-                },
-              }] : []}>
-              {isSwitch ? (
-                <SwitchValue aria-label={t('defaults.form.value')} />
-              ) : settingName === 'ssl_protocols' ? (
-                <ProtocolsValue />
-              ) : settingName === 'dns_provider' ? (
-                <Select showSearch optionFilterProp="label" loading={dnsProviders.isFetching} placeholder={t('defaults.form.dnsProviderPlaceholder')}
-                  options={[
-                    ...(editor?.mode === 'edit' && !dnsOptions.some((item) => item.id === editor.item.setting_value)
-                      ? [{ value: editor.item.setting_value, label: dnsNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
-                    ...dnsOptions.map((item) => ({ value: item.id, label: item.name })),
-                  ]}
-                  notFoundContent={dnsProviders.isError ? t('defaults.form.dnsProviderFailed') : t('defaults.form.dnsProviderEmpty')} />
-              ) : editingKind ? (
-                <Select showSearch optionFilterProp="label" loading={policyLoading} placeholder={t('defaults.form.policyPlaceholder')}
-                  options={[
-                    ...(editor?.mode === 'edit' && !policyOptions.some((item) => item.id === editor.item.setting_value)
-                      ? [{ value: editor.item.setting_value, label: policyNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
-                    ...policyOptions.map((item) => ({ value: item.id, label: item.name })),
-                  ]}
-                  notFoundContent={policyFailed ? t('defaults.form.policyFailed') : t('defaults.form.policyEmpty')} />
-              ) : settingName === 'proxy_cache' ? (
-                <CacheRulesDefaultEditor disabled={mutation.isPending || uncertain} />
-              ) : settingName === 'cond_origin' ? (
-                <CondOriginDefaultEditor disabled={mutation.isPending || uncertain} />
-              ) : settingName === 'ssl_cipher_suites' ? (
-                <CipherSuitesInput label={t('defaults.names.ssl_cipher_suites')} disabled={mutation.isPending || uncertain} />
-              ) : settingName === 'req_header' ? (
-                <Input.TextArea autoComplete="off" rows={4} placeholder={t('defaults.form.reqHeaderPlaceholder')} />
-              ) : settingName && describedChoices.has(settingName) ? (
-                <Radio.Group className="site-defaults-choice-list">
-                  {choiceValues[settingName]!.map((value) => (
-                    <Radio key={value} value={value}>
-                      {t(`defaults.choices.${settingName}.${value}`)}
-                      <span className="site-defaults-choice-hint">{t(`defaults.choiceHints.${settingName}.${value}`)}</span>
-                    </Radio>
-                  ))}
-                </Radio.Group>
-              ) : settingName && choiceValues[settingName] ? (
-                <Radio.Group options={choiceValues[settingName]!.map((value) => ({ value, label: t(`defaults.choices.${settingName}.${value}`) }))} />
-              ) : (
-                <Input autoComplete="off" suffix={unit ? t(`defaults.form.${unit}`) : undefined}
-                  placeholder={settingName?.endsWith('listen_port') ? t('defaults.form.portsPlaceholder')
-                  : settingName === 'backend_https_port' || settingName === 'backend_http_port' ? t('defaults.form.portPlaceholder')
-                  : settingName === 'ups_keepalive_timeout' ? t('defaults.form.timeoutPlaceholder')
-                  : settingName === 'origin_connect_timeout' || settingName === 'origin_read_timeout' ||
-                    settingName === 'cc_ban_seconds' || settingName === 'cc_pass_seconds' ? t(`defaults.form.${settingName}Placeholder`)
-                  : settingName === 'post_size_limit' ? t('defaults.form.postSizePlaceholder') : undefined} />
-              )}
-            </Form.Item>
-          </div>
-          <div className="site-defaults-form-section">
-            <h3>{t('defaults.form.sectionScope')}</h3>
-            <p>{t('defaults.form.sectionScopeDesc')}</p>
-            <Form.Item name="scope_name" label={t('defaults.form.scope')}>
-              <Radio.Group disabled={editor?.mode === 'edit'} optionType="button"
-                options={[{ value: 'global', label: t('defaults.form.scopeGlobal') }, { value: 'group', label: t('defaults.form.scopeGroup') }]} />
-            </Form.Item>
-            {scopeName === 'group' ? (
-              <Form.Item name="group_id" label={t('defaults.form.group')} rules={[{ required: true, message: t('defaults.form.groupRequired') }]}>
-                <Select disabled={editor?.mode === 'edit' || !target} placeholder={t('defaults.form.groupPlaceholder')} loading={groups.isFetching}
-                  showSearch optionFilterProp="label"
-                  options={[
-                    ...(editor?.mode === 'edit' && editor.item.group_id && !groupOptions.some((group) => group.id === editor.item.group_id)
-                      ? [{ value: editor.item.group_id, label: editor.item.group_name ?? editor.item.group_id }] : []),
-                    ...groupOptions.map((group) => ({ value: group.id, label: group.name })),
-                  ]}
-                  notFoundContent={groups.isFetching ? t('defaults.form.groupLoading') : t('defaults.form.groupEmpty')}
-                  popupRender={(menu) => <>{menu}{groups.hasNextPage ? <Button block loading={groups.isFetchingNextPage} onClick={() => void groups.fetchNextPage()}>{t('defaults.form.groupMore')}</Button> : null}</>} />
+          {isPlatform ? (
+            editor?.mode === 'edit' ? (
+              <Form.Item label={t('defaults.form.user')}>
+                <span>{editor.item.owner ? `${editor.item.owner.display_name}（${editor.item.owner.display_id}）` : t('defaults.form.userMissing')}</span>
               </Form.Item>
-            ) : null}
-            {scopeName === 'group' && groups.isError ? (
-              <p role="alert" className="site-defaults-group-error">
-                {(groups.error as ApiError | null)?.status === 403 ? t('defaults.form.groupForbidden') : t('defaults.form.groupFailed')}
-                {' '}<Button size="small" onClick={() => void groups.refetch()}>{t('defaults.actions.retry')}</Button>
-              </p>
-            ) : null}
-          </div>
+            ) : (
+              <Form.Item name="owner_id" label={t('defaults.form.user')} rules={[{ required: true, message: t('defaults.form.userRequired') }]}
+                extra={!canPickOwner ? t('defaults.form.userForbidden') : owners.isError ? t('defaults.form.userFailed') : undefined}>
+                <Select showSearch allowClear filterOption={false} disabled={!canPickOwner} placeholder={t('defaults.form.userPlaceholder')}
+                  loading={owners.isFetching} onSearch={setOwnerSearch} options={ownerOptions}
+                  notFoundContent={owners.isFetching ? null : owners.isError ? t('defaults.form.userFailed') : t('defaults.form.userNotFound')}
+                  onChange={(next?: string) => {
+                    const picked = ownerOptions.find((item) => item.value === next)
+                    setOwner(picked ? { id: picked.value, scope_id: picked.scope_id, label: picked.label, name: picked.name } : null)
+                    // 换用户后分组、DNS API、规则库都要重选
+                    form.setFieldsValue({ setting_name: undefined, setting_value: '', scope_name: 'global', group_id: undefined })
+                  }} />
+              </Form.Item>
+            )
+          ) : null}
+          {/* 编辑时设置项与范围不能改：只读显示 */}
+          {editing ? <Form.Item label={t('defaults.form.name')}><span>{t(`defaults.names.${editing.setting_name}`)}</span></Form.Item> : null}
+          <Form.Item name="setting_name" label={t('defaults.form.name')} rules={[{ required: true, message: t('defaults.form.namePlaceholder') }]}
+            hidden={ownerMissing || Boolean(editing)}>
+            <Select placeholder={t('defaults.form.namePlaceholder')} showSearch optionFilterProp="label"
+              options={siteDefaultSettingOrder.map((name) => ({ value: name, label: t(`defaults.names.${name}`) }))}
+              onChange={(name: SiteDefaultSettingName) => form.setFieldValue('setting_value', siteDefaultSwitches.has(name) ? '1' : initialValues[name] ?? '')} />
+          </Form.Item>
+          {ownerMissing ? <Form.Item label={t('defaults.form.name')}><span className="site-defaults-empty-field">{t('defaults.form.nameNeedsUser')}</span></Form.Item> : null}
+          <Form.Item name="setting_value" label={t('defaults.form.value')} hidden={!settingName}
+            extra={settingName && hintedSettings.has(settingName) ? t(`defaults.hints.${settingName}`) : undefined}
+            rules={settingName ? [{ required: true, whitespace: true, max: siteDefaultDocuments.has(settingName) ? 65_536 : settingName === 'req_header' ? 8192 : settingName === 'ssl_cipher_suites' ? 1024 : 256, message: t('defaults.form.invalid') }, {
+              validator: (_, value?: string) => {
+                const problem = siteDefaultValueError(settingName, value ?? '')
+                return problem ? Promise.reject(new Error(t(`defaults.form.invalid_${problem}`))) : Promise.resolve()
+              },
+            }] : []}>
+            {isSwitch ? (
+              <SwitchValue aria-label={t('defaults.form.value')} />
+            ) : settingName === 'ssl_protocols' ? (
+              <ProtocolsValue />
+            ) : settingName === 'dns_provider' ? (
+              <Select showSearch optionFilterProp="label" loading={dnsProviders.isFetching} placeholder={t('defaults.form.dnsProviderPlaceholder')}
+                options={[
+                  ...(editor?.mode === 'edit' && !dnsOptions.some((item) => item.id === editor.item.setting_value)
+                    ? [{ value: editor.item.setting_value, label: dnsNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
+                  ...dnsOptions.map((item) => ({ value: item.id, label: item.name })),
+                ]}
+                notFoundContent={dnsProviders.isError ? t('defaults.form.dnsProviderFailed') : t('defaults.form.dnsProviderEmpty')} />
+            ) : editingKind ? (
+              <Select showSearch optionFilterProp="label" loading={policyLoading} placeholder={t('defaults.form.policyPlaceholder')}
+                options={[
+                  ...(editor?.mode === 'edit' && !policyOptions.some((item) => item.id === editor.item.setting_value)
+                    ? [{ value: editor.item.setting_value, label: policyNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
+                  ...policyOptions.map((item) => ({ value: item.id, label: item.name })),
+                ]}
+                notFoundContent={policyFailed ? t('defaults.form.policyFailed') : t('defaults.form.policyEmpty')} />
+            ) : settingName === 'proxy_cache' ? (
+              <CacheRulesDefaultEditor disabled={mutation.isPending || uncertain} />
+            ) : settingName === 'cond_origin' ? (
+              <CondOriginDefaultEditor disabled={mutation.isPending || uncertain} />
+            ) : settingName === 'ssl_cipher_suites' ? (
+              <CipherSuitesInput label={t('defaults.names.ssl_cipher_suites')} disabled={mutation.isPending || uncertain} />
+            ) : settingName === 'req_header' ? (
+              <Input.TextArea autoComplete="off" rows={4} placeholder={t('defaults.form.reqHeaderPlaceholder')} />
+            ) : settingName && describedChoices.has(settingName) ? (
+              <Radio.Group className="site-defaults-choice-list">
+                {choiceValues[settingName]!.map((value) => (
+                  <Radio key={value} value={value}>
+                    {t(`defaults.choices.${settingName}.${value}`)}
+                    <span className="site-defaults-choice-hint">{t(`defaults.choiceHints.${settingName}.${value}`)}</span>
+                  </Radio>
+                ))}
+              </Radio.Group>
+            ) : settingName && choiceValues[settingName] ? (
+              <Radio.Group options={choiceValues[settingName]!.map((value) => ({ value, label: t(`defaults.choices.${settingName}.${value}`) }))} />
+            ) : (
+              <Input autoComplete="off" suffix={unit ? t(`defaults.form.${unit}`) : undefined}
+                placeholder={settingName?.endsWith('listen_port') ? t('defaults.form.portsPlaceholder')
+                : settingName === 'backend_https_port' || settingName === 'backend_http_port' ? t('defaults.form.portPlaceholder')
+                : settingName === 'ups_keepalive_timeout' ? t('defaults.form.timeoutPlaceholder')
+                : settingName === 'origin_connect_timeout' || settingName === 'origin_read_timeout' ||
+                  settingName === 'cc_ban_seconds' || settingName === 'cc_pass_seconds' ? t(`defaults.form.${settingName}Placeholder`)
+                : settingName === 'post_size_limit' ? t('defaults.form.postSizePlaceholder') : undefined} />
+            )}
+          </Form.Item>
+          {editing ? (
+            <Form.Item label={t('defaults.form.scope')}>
+              <span>{editing.scope_name === 'group' ? t('defaults.scope.group', { name: editing.group_name ?? editing.group_id }) : scopeLabel('global')}</span>
+            </Form.Item>
+          ) : null}
+          <Form.Item name="scope_name" label={t('defaults.form.scope')} hidden={!settingName || Boolean(editing)}>
+            <Radio.Group optionType="button"
+              options={[{ value: 'global', label: scopeLabel('global') }, { value: 'group', label: scopeLabel('group') }]} />
+          </Form.Item>
+          {settingName && !editing && scopeName === 'group' ? (
+            <Form.Item name="group_id" label={t('defaults.form.group')} rules={[{ required: true, message: t('defaults.form.groupRequired') }]}>
+              <Select disabled={!target} placeholder={t('defaults.form.groupPlaceholder')} loading={groups.isFetching}
+                showSearch optionFilterProp="label"
+                options={groupOptions.map((group) => ({ value: group.id, label: group.name }))}
+                notFoundContent={groups.isFetching ? t('defaults.form.groupLoading') : t('defaults.form.groupEmpty')}
+                popupRender={(menu) => <>{menu}{groups.hasNextPage ? <Button block loading={groups.isFetchingNextPage} onClick={() => void groups.fetchNextPage()}>{t('defaults.form.groupMore')}</Button> : null}</>} />
+            </Form.Item>
+          ) : null}
+          {settingName && !editing && scopeName === 'group' && groups.isError ? (
+            <p role="alert" className="site-defaults-group-error">
+              {(groups.error as ApiError | null)?.status === 403 ? t('defaults.form.groupForbidden') : t('defaults.form.groupFailed')}
+              {' '}<Button size="small" onClick={() => void groups.refetch()}>{t('defaults.actions.retry')}</Button>
+            </p>
+          ) : null}
         </Form>
       </Modal>
     </section>

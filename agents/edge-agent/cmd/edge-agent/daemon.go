@@ -579,8 +579,10 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_NODE_REGION, ApiVersion: siteobject.NodeRegionAPIVersion},
 		// The key document's node_storage sets the cache
 		// directory and limit (reload) and the log directory (next start);
-		// node telemetry reports what runs (NodeTelemetryV1.storage).
-		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_NODE_STORAGE, ApiVersion: siteobject.NodeStorageAPIVersion})
+		// node telemetry reports what runs (NodeTelemetryV1.storage). v2: the
+		// key document's node_facts_at picks the release the node region and
+		// storage come from (nodeFactsOf).
+		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_NODE_STORAGE, ApiVersion: siteobject.NodeStorageNodeFactsAPIVersion})
 	if drain != nil {
 		clientConfig.Capabilities.Features = append(clientConfig.Capabilities.Features, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_DRAIN_CONTROL, ApiVersion: 1,
@@ -1053,6 +1055,7 @@ func assembleTelemetryPipeline(config fileConfig, timeouts parsedTimeouts, nodeI
 		// manager keeps per-scope state): records name their scope.
 		telemetryConfig.ScopedRecords = true
 		telemetryConfig.ScopeForSite = dynamicManager.ScopeForSite
+		telemetryConfig.HeldVersion = dynamicManager.HeldVersion
 	}
 	sender, err := telemetryclient.New(telemetryConfig, dialer)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/statuspage"
@@ -28,31 +29,40 @@ type snapshot struct {
 	etag     string
 	disabled bool
 	builtAt  time.Time
+	gen      uint64
 }
 
 // publicCache rebuilds the public view at most once per snapshotTTL; a
 // failed rebuild keeps serving the last good one for up to staleTTL.
+// invalidate (after an admin write) retires the snapshot at once: the next
+// request rebuilds, and an invalidated snapshot is never served as stale.
 type publicCache struct {
 	mu      sync.Mutex
 	current *snapshot
+	gen     atomic.Uint64
 	build   func(context.Context) (statuspage.PublicView, error)
 	now     func() time.Time
 }
 
+// invalidate does not take mu, so a save never waits for a rebuild in flight;
+// a rebuild that started before the write is tagged with the old generation.
+func (c *publicCache) invalidate() { c.gen.Add(1) }
+
 func (c *publicCache) get(ctx context.Context) (*snapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	now := c.now()
-	if c.current != nil && now.Sub(c.current.builtAt) < snapshotTTL {
+	now, gen := c.now(), c.gen.Load()
+	fresh := c.current != nil && c.current.gen == gen
+	if fresh && now.Sub(c.current.builtAt) < snapshotTTL {
 		return c.current, nil
 	}
 	view, err := c.build(ctx)
 	switch {
 	case errors.Is(err, statuspage.ErrDisabled):
-		c.current = &snapshot{disabled: true, builtAt: now}
+		c.current = &snapshot{disabled: true, builtAt: now, gen: gen}
 		return c.current, nil
 	case err != nil:
-		if c.current != nil && now.Sub(c.current.builtAt) < staleTTL {
+		if fresh && now.Sub(c.current.builtAt) < staleTTL {
 			return c.current, nil
 		}
 		return nil, err
@@ -62,7 +72,7 @@ func (c *publicCache) get(ctx context.Context) (*snapshot, error) {
 		return nil, err
 	}
 	digest := sha256.Sum256(body)
-	c.current = &snapshot{body: body, etag: `"` + base64.RawURLEncoding.EncodeToString(digest[:16]) + `"`, builtAt: now}
+	c.current = &snapshot{body: body, etag: `"` + base64.RawURLEncoding.EncodeToString(digest[:16]) + `"`, builtAt: now, gen: gen}
 	return c.current, nil
 }
 
@@ -114,11 +124,14 @@ func (h *Handler) public(w http.ResponseWriter, r *http.Request, requestID strin
 		writeError(w, requestID, http.StatusServiceUnavailable, "status_page_unavailable")
 		return
 	}
-	header.Set("Cache-Control", "public, max-age=30")
+	// Clients revalidate every time (the ETag makes that a 304); the closed
+	// page is not stored, so turning it back on shows at once.
 	if current.disabled {
+		header.Set("Cache-Control", "no-store")
 		writeError(w, requestID, http.StatusNotFound, "status_page_disabled")
 		return
 	}
+	header.Set("Cache-Control", "public, no-cache")
 	header.Set("ETag", current.etag)
 	if noneMatch(r.Header.Get("If-None-Match"), current.etag) {
 		w.WriteHeader(http.StatusNotModified)

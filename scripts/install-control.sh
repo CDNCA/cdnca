@@ -347,7 +347,7 @@ CDNCA 管理端整包安装器（x86_64；Ubuntu 24.04 正式支持，Ubuntu 22.
 
 用法: install-control.sh [选项]
   --lang zh|en                     界面语言；默认按 CDNCA_INSTALL_LANG 或 LANG（zh* 为中文，其余英文）
-  --release-server URL            社区版发布站 HTTPS 地址（下载整包、节点包、运行时归档；也可全部用本地文件）
+  --release-server URL            社区版发布站 HTTPS 地址，如 https://www.cdnca.com/downloads/ce（带路径时即发布目录，只写域名时读其 /downloads/；也可全部用本地文件）
   --release-server-fallback URL    发布站备用 HTTPS 地址
   --master-host HOST               管理端公网域名或 IP；未传入时交互填写
   --master-port PORT               管理端 HTTPS 端口；默认 443
@@ -507,8 +507,17 @@ require_commands() {
 assert_fresh_installation() {
   local path
   if [ -e "$CONTROL_INSTALL_STATE_DIR" ] || [ -L "$CONTROL_INSTALL_STATE_DIR" ]; then
-    control_install_failed_hint
-    fail 'a previous control installation on this host did not finish; run install-control.sh --cleanup-failed first'
+    if control_install_record_only; then
+      # 上次停在改动本机之前（完整包下载 403）：持锁后移除那份记录，原命令直接继续；未持锁的
+      # 首次检查只放行，避免删掉另一个正在下载的安装的记录。
+      if [ "${CONTROL_INSTALL_LOCKED:-false}" = true ]; then
+        rm -rf -- "$CONTROL_INSTALL_STATE_DIR"
+        log "$(msg '上次安装停在改动本机之前（只留下安装记录），已移除该记录并继续' 'the previous installation stopped before changing this host (only its install record was left); the record was removed and the installation continues')"
+      fi
+    else
+      control_install_failed_hint
+      fail "a previous control installation on this host did not finish; run first: $(control_rerun_command --cleanup-failed)"
+    fi
   fi
   for path in "$CONFIG_DIR" "$DATA_DIR" "$INSTALL_ROOT" "$NATIVE_ROOT" /etc/cdnca-upgrade \
     /var/lib/cdnca-upgrade /run/cdnca-upgrade /var/lib/cdnca-native-upgrade-maintenance; do
@@ -525,6 +534,9 @@ assert_fresh_installation() {
 readonly CONTROL_INSTALL_STATE_DIR=/var/lib/cdnca-control-install
 readonly CONTROL_INSTALL_STATE_FILE="${CONTROL_INSTALL_STATE_DIR}/state"
 readonly CONTROL_INSTALL_STATE_SCHEMA=schema=cdnca.control-install-state/v1
+# 安装完成后留在本机的安装器副本（同 install-node.sh 的 INSTALLER_COPY）：官方命令把安装器下到 mktemp 文件、
+# 退出即删，汇总第 6 项的 check 要有一个装完还在的绝对路径（install-control.sh check 返回 127）。
+readonly CONTROL_INSTALLER_COPY="${CONTROL_INSTALL_STATE_DIR}/install-control.sh"
 readonly CONTROL_INSTALL_UNITS=(cdnca-control-backup.timer cdnca-control-backup.path cdnca-gateway-access.path
   cdnca-control-backup.service cdnca-control-frozen-console.service cdnca-native-control-upgrade-runner.service
   cdnca-control-web.service cdnca-agent-gateway.service cdnca-control-api.service cdnca-control-nats.service
@@ -652,11 +664,88 @@ control_install_state_begin() {
 }
 control_install_state_add() { [ ! -f "$CONTROL_INSTALL_STATE_FILE" ] || printf '%s\n' "$1" >>"$CONTROL_INSTALL_STATE_FILE"; }
 control_install_state_done() { control_install_state_add step=done; }
+# control_keep_installer_copy [SOURCE]：把正在运行的安装器（默认本文件；普通文件才存，`bash -s` 从管道读入的没有副本）
+# 存成 CONTROL_INSTALLER_COPY（root 0700）。失败只告警，不让已完成的安装失败。
+control_keep_installer_copy() {
+  local source=${1:-${BASH_SOURCE[0]:-}}
+  [ -f "$source" ] && [ ! -L "$source" ] && [ -d "$CONTROL_INSTALL_STATE_DIR" ] && [ ! -L "$CONTROL_INSTALL_STATE_DIR" ] || return 0
+  [ "$source" -ef "$CONTROL_INSTALLER_COPY" ] && return 0
+  install -m 0700 -- "$source" "${CONTROL_INSTALLER_COPY}.tmp" 2>/dev/null && mv -f -- "${CONTROL_INSTALLER_COPY}.tmp" "$CONTROL_INSTALLER_COPY" ||
+    { rm -f -- "${CONTROL_INSTALLER_COPY}.tmp"; warn "could not keep a copy of the installer at ${CONTROL_INSTALLER_COPY}"; }
+  return 0
+}
+control_shell_quote() { local q="'\"'\"'"; printf "'%s'" "${1//\'/$q}"; }
+# 只在需要时加引号（命令里的参数与路径保持可读）。
+control_shell_word() {
+  case "$1" in ''|*[!A-Za-z0-9@%+=:,./_-]*) control_shell_quote "$1" ;; *) printf '%s' "$1" ;; esac
+}
+
+# control_rerun_command [--other-host] ARGS...：本安装器带 ARGS 的、用户可直接粘贴运行的完整命令（
+# 提示里的裸命令 install-control.sh 不在 PATH，返回 127）。依次取：装完留下的副本（CONTROL_INSTALLER_COPY）；
+# 仍在原处的安装器文件（bash <绝对路径>）；与本次同源的官方命令。官方一行命令把安装器下到 mktemp 文件、退出即删，
+# 就打印同样的下载、完整性核对再执行（packages/cdnca-ui/src/installerCommand.ts 的同一形状，地址取
+# --licensing-server/--licensing-server-fallback 的 /downloads/install-control.sh）；从管道（bash -s、bash <(curl …)）
+# 运行的打印同一条管道命令。--other-host：命令在另一台机器上执行（migrate-from 在新机上跑），只给官方命令。
+control_rerun_command() {
+  local other=false source=${BASH_SOURCE[0]:-} args='' arg tmp server fallback protocols curl downloads
+  [ "${1:-}" != --other-host ] || { other=true; shift; }
+  for arg in "$@"; do args+=" $(control_shell_word "$arg")"; done
+  if [ "$other" = false ]; then
+    if [ -f "$CONTROL_INSTALLER_COPY" ] && [ -x "$CONTROL_INSTALLER_COPY" ] && [ ! -L "$CONTROL_INSTALLER_COPY" ]; then
+      printf '%s%s\n' "$CONTROL_INSTALLER_COPY" "$args"; return 0
+    fi
+    if [ -f "$source" ] && [ ! -L "$source" ]; then
+      source=$(realpath -- "$source" 2>/dev/null || printf '%s' "$source")
+      tmp=$(realpath -- "${TMPDIR:-/tmp}" 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}")
+      case "$source" in
+        "${tmp%/}"/tmp.*|/tmp/tmp.*) ;; # 官方命令的 mktemp 文件：退出即删
+        *) printf 'bash %s%s\n' "$(control_shell_word "$source")" "$args"; return 0 ;;
+      esac
+    fi
+  fi
+  server=${LICENSING_SERVER%/} fallback=${LICENSING_SERVER_FALLBACK%/}
+  [ -n "$server" ] || { printf 'install-control.sh%s\n' "$args"; return 0; }
+  protocols='=https'
+  case "$server $fallback" in *http://*) protocols='=http,https' ;; esac
+  curl="curl --proto $(control_shell_quote "$protocols") --proto-redir '=https'"
+  # The installer sits in the release directory (release_artifact_base).
+  if [ ! -f "$source" ]; then
+    printf '%s -fsSL %s | bash -s --%s\n' "$curl" "$(control_shell_quote "$(release_artifact_base "$server")/install-control.sh")" "$args"
+    return 0
+  fi
+  downloads="$curl -fsSL -o \"\$f\" $(control_shell_quote "$(release_artifact_base "$server")/install-control.sh")"
+  if [ -n "$fallback" ] && [ "$fallback" != "$server" ]; then
+    downloads+=" || $curl -fsSL -o \"\$f\" $(control_shell_quote "$(release_artifact_base "$fallback")/install-control.sh")"
+  fi
+  printf '%s\n' "(f=\$(mktemp) || exit 1; trap 'rc=\$?; rm -f \"\$f\"; exit \$rc' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; { $downloads; } || { rc=\$?; echo '[cdnca-control] error: $(msg '无法下载安装脚本' 'cannot download the installer')' >&2; exit \$rc; }; { [ \"\$(head -c 2 \"\$f\")\" = '#!' ] && [ \"\$(tail -n 1 \"\$f\")\" = 'main \"\$@\"' ]; } || { echo '[cdnca-control] error: $(msg '下载的安装脚本为空或不完整' 'the downloaded installer is empty or incomplete')' >&2; exit 1; }; bash \"\$f\"$args)"
+}
 control_install_state_has() { grep -Fxq -- "$1" "$CONTROL_INSTALL_STATE_FILE" 2>/dev/null; }
+
+# 只有安装记录：记录完好、没有 created=/step= 行（没建库），按记录算出的 --cleanup-failed 清单为空
+# （没建主控目录、单元、账户、防火墙表，没装上或启动依赖服务）。这样的失败按原命令直接重跑即可。
+control_install_record_only() {
+  [ -f "$CONTROL_INSTALL_STATE_FILE" ] && [ ! -L "$CONTROL_INSTALL_STATE_DIR" ] && [ ! -L "$CONTROL_INSTALL_STATE_FILE" ] &&
+    [ "$(stat -c '%u:%h:%a' "$CONTROL_INSTALL_STATE_FILE")" = 0:1:600 ] &&
+    [ "$(head -n 1 "$CONTROL_INSTALL_STATE_FILE")" = "$CONTROL_INSTALL_STATE_SCHEMA" ] || return 1
+  ! grep -Eq '^(created|step)=' "$CONTROL_INSTALL_STATE_FILE" || return 1
+  CLEANUP_PATHS=() CLEANUP_DEPENDENCY_PATHS=() CLEANUP_UNITS=() CLEANUP_REDIS_INCLUDES=() CLEANUP_SERVICES=() CLEANUP_SERVICES_MANUAL=()
+  CLEANUP_PG='' CLEANUP_CH='' CLEANUP_ACCOUNT=false CLEANUP_NFT=false
+  cleanup_failed_plan
+  [ "${#CLEANUP_PATHS[@]}" -eq 0 ] && [ "${#CLEANUP_DEPENDENCY_PATHS[@]}" -eq 0 ] && [ "${#CLEANUP_UNITS[@]}" -eq 0 ] &&
+    [ "${#CLEANUP_REDIS_INCLUDES[@]}" -eq 0 ] && [ "${#CLEANUP_SERVICES[@]}" -eq 0 ] && [ "${#CLEANUP_SERVICES_MANUAL[@]}" -eq 0 ] &&
+    [ -z "$CLEANUP_PG$CLEANUP_CH" ] && [ "$CLEANUP_ACCOUNT" = false ] && [ "$CLEANUP_NFT" = false ]
+}
 
 control_install_failed_hint() {
   [ -f "$CONTROL_INSTALL_STATE_FILE" ] && ! control_install_state_has step=done || return 0
-  warn "$(msg "安装未完成（记录 ${CONTROL_INSTALL_STATE_FILE}）：主控安装不支持续装。修复失败原因后，先执行 install-control.sh --cleanup-failed 清理本次安装创建的目录、服务与数据库（会列出清单并要求确认），再重新执行原安装命令" "installation not finished (record ${CONTROL_INSTALL_STATE_FILE}): the control installer cannot resume. Fix the cause, run install-control.sh --cleanup-failed to remove the directories, services and databases this installation created (it lists them and asks for confirmation), then rerun the original install command")"
+  if control_install_record_only; then
+    warn "$(msg '本次安装停在改动本机之前（未建库、未装服务）：按上方原因处理后直接重新执行原安装命令' 'this installation stopped before changing this host (no database, no service): fix the cause above and rerun the original install command')"
+    return 0
+  fi
+  local cleanup
+  cleanup=$(control_rerun_command --cleanup-failed)
+  warn "$(msg "安装未完成（记录 ${CONTROL_INSTALL_STATE_FILE}）：主控安装不支持续装。修复失败原因后，先以 root 执行下面的命令清理本次安装创建的目录、服务与数据库（会列出清单并要求确认），再重新执行原安装命令：" "installation not finished (record ${CONTROL_INSTALL_STATE_FILE}): the control installer cannot resume. Fix the cause, run the command below as root to remove the directories, services and databases this installation created (it lists them and asks for confirmation), then rerun the original install command:")"
+  warn "  $cleanup"
 }
 
 CLEANUP_PATHS=()
@@ -920,6 +1009,7 @@ acquire_control_install_lock() {
     fail 'unsafe installation lock'
   exec 8<>"$lock"
   flock -n 8 || fail 'another control installation is running'
+  CONTROL_INSTALL_LOCKED=true
 }
 
 install_dependencies() {
@@ -1775,9 +1865,10 @@ progress_tick() {
   elif [ "$waited" -ge "$PROGRESS_WAIT_NEXT" ]; then PROGRESS_WAIT_NEXT=$((PROGRESS_WAIT_NEXT + 10)); progress_line "$text"; fi
 }
 
-# apt 输出里的 “N/M：包名”；看不出时输出为空。
+# apt 输出里的 “N/M：包名”；看不出时输出为空。$2 为本次命令输出在文件里的起始行（默认 1），
+# 只看这之后的行，下一步不会继承上一步 apt 的包名。
 progress_apt_detail() {
-  awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
+  tail -n "+${2:-1}" "$1" 2>/dev/null | awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
     /^Get:[0-9]+ / { got++ }
     /^Unpacking / { name = $2 }
     /^Setting up / { done++; name = $3 }
@@ -1785,15 +1876,15 @@ progress_apt_detail() {
       if (total <= 0) exit
       if (name != "") printf (en ? "  installing %d/%d: %s" : "  正在安装 %d/%d：%s"), done, total, name
       else if (got > 0) printf (en ? "  downloading packages %d/%d" : "  正在下载软件包 %d/%d"), got, total
-    }' "$1" 2>/dev/null || true
+    }' 2>/dev/null || true
 }
 
 # 后台心跳：终端每秒、非终端每 15 秒一行；安装器进程（$$）退出后自停。
 progress_heartbeat() {
-  local label=$1 output=$2 started=$SECONDS next=15 elapsed text
+  local label=$1 output=$2 from=${3:-1} started=$SECONDS next=15 elapsed text
   while sleep 1 && kill -0 "$$" 2>/dev/null; do
     elapsed=$((SECONDS - started))
-    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
+    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output" "$from")"
     if "$PROGRESS_TTY"; then progress_inline "$text"
     elif [ "$elapsed" -ge "$next" ]; then next=$((next + 15)); progress_line "$text"; fi
   done
@@ -1823,7 +1914,7 @@ progress_run() {
   else
     : >"$output"
   fi
-  progress_heartbeat "$label" "$output" &
+  progress_heartbeat "$label" "$output" "$from" &
   PROGRESS_HEARTBEAT=$!
   "$@" >>"$output" 2>&1 </dev/null || status=$?
   progress_stop_heartbeat
@@ -2491,6 +2582,17 @@ gateway_direct_ports_hint() {
   msg "请在防火墙/云安全组放行网关两个端口 $2、$3（TCP），节点直连 $1" "Open both Gateway ports $2 and $3 (TCP) in the firewall / cloud security group; nodes connect directly to $1"
 }
 
+# release_artifact_base <release server>: the URL control-native/ and
+# edge-agent/ are read from (see normalise_defaults).
+release_artifact_base() {
+  local url=${1%/}
+  if [[ "$url" =~ ^https?://[^/]+$ ]]; then
+    printf '%s/downloads' "$url"
+  else
+    printf '%s' "$url"
+  fi
+}
+
 normalise_defaults() {
   local value architecture listeners
   [ -n "$LICENSING_SERVER" ] || fail '--release-server is required'
@@ -2533,24 +2635,31 @@ normalise_defaults() {
   [ "$NATS_URL" = nats://127.0.0.1:4222 ] && [ "$NATS_TELEMETRY_URL" = "$NATS_URL" ] ||
     fail 'the fresh native profile requires the same fixed local NATS for control and telemetry'
   NATS_LOCAL=true
-  CONTROL_NATIVE_URL=${CONTROL_NATIVE_URL:-$LICENSING_SERVER/downloads/control-native/latest/cdnca-control-native.tar}
-  CONTROL_NATIVE_FALLBACK_URL=${CONTROL_NATIVE_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/downloads/control-native/latest/cdnca-control-native.tar}
-  CONTROL_NATIVE_SHA256_URL=${CONTROL_NATIVE_SHA256_URL:-$LICENSING_SERVER/downloads/control-native/latest/SHA256SUMS}
-  CONTROL_NATIVE_SHA256_FALLBACK_URL=${CONTROL_NATIVE_SHA256_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/downloads/control-native/latest/SHA256SUMS}
-  CONTROL_NATIVE_TRUST_URL=${CONTROL_NATIVE_TRUST_URL:-$LICENSING_SERVER/downloads/control-native/artifacts.json}
-  CONTROL_NATIVE_TRUST_FALLBACK_URL=${CONTROL_NATIVE_TRUST_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/downloads/control-native/artifacts.json}
+  # --release-server names the release directory itself when it has a path
+  # (the official https://www.cdnca.com/downloads/ce: control-native/ and
+  # edge-agent/ sit right under it); a bare origin keeps the layout of the
+  # release tarball under /downloads/ (self-hosted mirrors, test release sites).
+  local release_base release_fallback_base
+  release_base=$(release_artifact_base "$LICENSING_SERVER")
+  release_fallback_base=$(release_artifact_base "$LICENSING_SERVER_FALLBACK")
+  CONTROL_NATIVE_URL=${CONTROL_NATIVE_URL:-$release_base/control-native/latest/cdnca-control-native.tar}
+  CONTROL_NATIVE_FALLBACK_URL=${CONTROL_NATIVE_FALLBACK_URL:-$release_fallback_base/control-native/latest/cdnca-control-native.tar}
+  CONTROL_NATIVE_SHA256_URL=${CONTROL_NATIVE_SHA256_URL:-$release_base/control-native/latest/SHA256SUMS}
+  CONTROL_NATIVE_SHA256_FALLBACK_URL=${CONTROL_NATIVE_SHA256_FALLBACK_URL:-$release_fallback_base/control-native/latest/SHA256SUMS}
+  CONTROL_NATIVE_TRUST_URL=${CONTROL_NATIVE_TRUST_URL:-$release_base/control-native/artifacts.json}
+  CONTROL_NATIVE_TRUST_FALLBACK_URL=${CONTROL_NATIVE_TRUST_FALLBACK_URL:-$release_fallback_base/control-native/artifacts.json}
   TRUSTED_KEYS_URL=${TRUSTED_KEYS_URL:-$LICENSING_SERVER/public/v1/signing-keyset}
   TRUSTED_KEYS_FALLBACK_URL=${TRUSTED_KEYS_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/public/v1/signing-keyset}
-  EDGE_AGENT_URL=${EDGE_AGENT_URL:-$LICENSING_SERVER/downloads/edge-agent/latest/cdnca-edge-agent.tar.gz}
-  EDGE_AGENT_FALLBACK_URL=${EDGE_AGENT_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/downloads/edge-agent/latest/cdnca-edge-agent.tar.gz}
-  EDGE_AGENT_SHA256_URL=${EDGE_AGENT_SHA256_URL:-$LICENSING_SERVER/downloads/edge-agent/latest/SHA256SUMS}
-  EDGE_AGENT_SHA256_FALLBACK_URL=${EDGE_AGENT_SHA256_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/downloads/edge-agent/latest/SHA256SUMS}
-  EDGE_ARTIFACT_TRUST_URL=${EDGE_ARTIFACT_TRUST_URL:-$LICENSING_SERVER/downloads/edge-agent/artifacts.json}
-  EDGE_ARTIFACT_TRUST_FALLBACK_URL=${EDGE_ARTIFACT_TRUST_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/downloads/edge-agent/artifacts.json}
+  EDGE_AGENT_URL=${EDGE_AGENT_URL:-$release_base/edge-agent/latest/cdnca-edge-agent.tar.gz}
+  EDGE_AGENT_FALLBACK_URL=${EDGE_AGENT_FALLBACK_URL:-$release_fallback_base/edge-agent/latest/cdnca-edge-agent.tar.gz}
+  EDGE_AGENT_SHA256_URL=${EDGE_AGENT_SHA256_URL:-$release_base/edge-agent/latest/SHA256SUMS}
+  EDGE_AGENT_SHA256_FALLBACK_URL=${EDGE_AGENT_SHA256_FALLBACK_URL:-$release_fallback_base/edge-agent/latest/SHA256SUMS}
+  EDGE_ARTIFACT_TRUST_URL=${EDGE_ARTIFACT_TRUST_URL:-$release_base/edge-agent/artifacts.json}
+  EDGE_ARTIFACT_TRUST_FALLBACK_URL=${EDGE_ARTIFACT_TRUST_FALLBACK_URL:-$release_fallback_base/edge-agent/artifacts.json}
   # Portable runtimes (hosts without a matching distribution package); the
   # signed dependency helper pins each archive by SHA-256.
-  RUNTIME_ARCHIVE_URL=${RUNTIME_ARCHIVE_URL:-$LICENSING_SERVER/downloads/control-native/runtime}
-  RUNTIME_ARCHIVE_FALLBACK_URL=${RUNTIME_ARCHIVE_FALLBACK_URL:-$LICENSING_SERVER_FALLBACK/downloads/control-native/runtime}
+  RUNTIME_ARCHIVE_URL=${RUNTIME_ARCHIVE_URL:-$release_base/control-native/runtime}
+  RUNTIME_ARCHIVE_FALLBACK_URL=${RUNTIME_ARCHIVE_FALLBACK_URL:-$release_fallback_base/control-native/runtime}
   architecture=$(host_architecture)
   [ "$architecture" = amd64 ] || fail 'the native profile only supports amd64'
   NATS_CLI_URL="https://github.com/nats-io/natscli/releases/download/v$NATS_CLI_VERSION/nats-$NATS_CLI_VERSION-linux-$architecture.zip"
@@ -2925,6 +3034,8 @@ generate_runtime_secrets() {
   CHALLENGE_POLICY_FACT_KEK_BASE64=$(openssl rand -base64 32 | tr -d '\n')
   IDENTITY_VERIFICATION_CURSOR_KEY_BASE64=$(openssl rand -base64 32 | tr -d '\n')
   CONTROL_BACKUP_RUN_CURSOR_KEY_BASE64=$(openssl rand -base64 32 | tr -d '\n')
+  ACCOUNT_RECOVERY_HMAC_KEY_BASE64=$(openssl rand -base64 32 | tr -d '\n')
+  ACCOUNT_RECOVERY_KEK_KEY_BASE64=$(openssl rand -base64 32 | tr -d '\n')
   [ ${#API_KEY_PEPPER_BASE64} -ge 40 ] || fail 'failed to generate API key pepper'
   [ ${#DNS_CREDENTIAL_KEY_BASE64} -ge 40 ] || fail 'failed to generate DNS credential key'
   [ ${#IMPERSONATION_HMAC_KEY_BASE64} -ge 64 ] || fail 'failed to generate impersonation HMAC key'
@@ -2940,6 +3051,8 @@ generate_runtime_secrets() {
   [ ${#CHALLENGE_POLICY_FACT_KEK_BASE64} -eq 44 ] || fail 'failed to generate challenge policy fact key'
   [ ${#IDENTITY_VERIFICATION_CURSOR_KEY_BASE64} -eq 44 ] || fail 'failed to generate identity verification cursor key'
   [ ${#CONTROL_BACKUP_RUN_CURSOR_KEY_BASE64} -eq 44 ] || fail 'failed to generate backup history cursor key'
+  [ ${#ACCOUNT_RECOVERY_HMAC_KEY_BASE64} -eq 44 ] || fail 'failed to generate account recovery HMAC key'
+  [ ${#ACCOUNT_RECOVERY_KEK_KEY_BASE64} -eq 44 ] || fail 'failed to generate account recovery encryption key'
 }
 
 
@@ -3650,6 +3763,8 @@ write_environment() {
   [ -n "$CHALLENGE_POLICY_FACT_KEK_BASE64" ] || fail 'runtime secrets were not generated'
   [ -n "$IDENTITY_VERIFICATION_CURSOR_KEY_BASE64" ] || fail 'runtime secrets were not generated'
   [ -n "$CONTROL_BACKUP_RUN_CURSOR_KEY_BASE64" ] || fail 'runtime secrets were not generated'
+  [ -n "$ACCOUNT_RECOVERY_HMAC_KEY_BASE64" ] || fail 'runtime secrets were not generated'
+  [ -n "$ACCOUNT_RECOVERY_KEK_KEY_BASE64" ] || fail 'runtime secrets were not generated'
   # DNS write runtime (site CNAME targets, node pause/auto-disable re-targeting).
   # Authoritative servers are discovered per zone from its NS delegation through
   # the recursive bootstrap resolvers; public propagation needs 2 of 3 to agree.
@@ -3667,10 +3782,12 @@ write_environment() {
   # CONTROL_ORIGIN records the console origin for later gateway releases
   # (gateway_access_control_domain). Identity verification mounts without a KYC
   # provider (provider calls answer identity_verification_provider_unavailable).
-  # Off, because they need external setup before control-api can start:
-  # account recovery/registration (notification channels + templates,
-  # Turnstile secret), the identity verification issuer (KYC provider, mTLS
-  # listener and workload identities). Market buyer settings are operator
+  # Recovery starts with a generated keyring and published email template. Its
+  # notification runtime remains unavailable until the administrator configures
+  # a sender and enables the email channel. Registration remains off until
+  # externally supplied verification settings are ready. The identity
+  # verification issuer also remains off until a KYC provider, mTLS listener
+  # and workload identities are configured. Market buyer settings are operator
   # supplied through optional.env (deploy/systemd/cdnca-control-optional.env.example).
   # Plugin webhooks stay off: the runtime requires NATS credentials and a CA
   # file (internal/config loadPluginWebhook) and the local NATS has neither, so
@@ -3806,7 +3923,15 @@ IDENTITY_VERIFICATION_SETTLEMENT_WORKER_ENABLED=true
 IDENTITY_VERIFICATION_RESOLVER_NAME=cdnca-control
 IDENTITY_VERIFICATION_CURSOR_KEY_BASE64=${IDENTITY_VERIFICATION_CURSOR_KEY_BASE64}
 IDENTITY_VERIFICATION_ISSUER_ENABLED=false
-ACCOUNT_RECOVERY_ENABLED=false
+ACCOUNT_RECOVERY_ENABLED=true
+ACCOUNT_RECOVERY_HMAC_KEY_BASE64=${ACCOUNT_RECOVERY_HMAC_KEY_BASE64}
+ACCOUNT_RECOVERY_KEK_ACTIVE_KEY_ID=account-recovery-v1
+ACCOUNT_RECOVERY_KEK_KEYS_JSON='{"account-recovery-v1":"${ACCOUNT_RECOVERY_KEK_KEY_BASE64}"}'
+ACCOUNT_RECOVERY_BASE_URL=${CONTROL_ORIGIN}/dashboard/reset-password
+ACCOUNT_RECOVERY_EMAIL_TEMPLATE_ID=account_recovery_email
+ACCOUNT_RECOVERY_EMAIL_TEMPLATE_VERSION=1
+ACCOUNT_RECOVERY_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128
+ACCOUNT_RECOVERY_PLATFORM_HOSTS=${CONTROL_DOMAIN}
 ACCOUNT_REGISTRATION_ENABLED=false
 PLUGIN_WEBHOOK_RUNTIME_ENABLED=false
 CONTROL_BACKUP_RUN_INSTALLATION_ID=${INSTALLATION_ID}
@@ -4865,8 +4990,16 @@ origin_auth_write_conf() {
   secret=$(origin_auth_secret)
   variable=http_$(printf '%s' "$REAL_IP_HEADER" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
   ipv4='(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
-  ipv6='[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}'
-  ip="(?<cdnca_ip>${ipv4}|${ipv6})"
+  # RFC 4291 文本形式（至多一处 ::，可带 IPv4 尾段如 ::ffff:192.0.2.1），与 control-api 的 netip.ParseAddr 一致；
+  # 映射地址由 control-api 还原为 IPv4。格式不合法时回退 TCP 对端，不会让 API 记成 unknown。
+  local h='[0-9A-Fa-f]{1,4}' ls32
+  ls32="(?:${h}:${h}|${ipv4})"
+  ipv6="(?:(?:${h}:){6}${ls32}|::(?:${h}:){5}${ls32}|(?:${h})?::(?:${h}:){4}${ls32}|(?:(?:${h}:){0,1}${h})?::(?:${h}:){3}${ls32}"
+  ipv6="${ipv6}|(?:(?:${h}:){0,2}${h})?::(?:${h}:){2}${ls32}|(?:(?:${h}:){0,3}${h})?::${h}:${ls32}|(?:(?:${h}:){0,4}${h})?::${ls32}"
+  ipv6="${ipv6}|(?:(?:${h}:){0,5}${h})?::${h}|(?:(?:${h}:){0,6}${h})?::)"
+  # control-api 拒绝的未指定地址（0.0.0.0、::）与组播（224/4、ffXX::，含点分与十六进制的映射形式）也回退 TCP 对端。
+  local reject="(?![0:.]+(?:\\s|,|\$)|(?:[0:]*[fF]{4}:)?(?:0\\.0\\.0\\.0(?![0-9])|2(?:2[4-9]|3[0-9])\\.)|[0:]*[fF]{4}:(?:0{1,4}:0{1,4}(?:\\s|,|\$)|[eE][0-9A-Fa-f]{3}:[0-9A-Fa-f]{1,4}(?:\\s|,|\$))|[fF]{2}[0-9A-Fa-f]{2}:)"
+  ip="(?<cdnca_ip>${reject}(?:${ipv4}|${ipv6}))"
   if [ "$REAL_IP_HEADER" = X-Forwarded-For ]; then pattern="~(?:^|,)\\s*${ip}\\s*\$"; else pattern="~^\\s*${ip}\\s*\$"; fi
   (umask 077; {
     printf '# 由 install-control.sh 生成（CDN 回源鉴权）。含回源密钥：root 0600，勿复制到别处。\n'
@@ -4882,21 +5015,43 @@ origin_auth_write_conf() {
 }
 
 # 改写 nginx.conf（幂等）：http 里 include origin-auth.conf；反代 location 的 X-Real-IP/X-Forwarded-For 改用
-# $cdnca_client_ip，并丢弃回源密钥头。
+# $cdnca_client_ip，丢弃回源密钥头，并用 X-Cdnca-Origin-Verified 告诉 control-api 本次是否确认了访客 IP：
+# 1 = 回源密钥匹配且所选头取到了访客 IP（与 $cdnca_client_ip 取访客 IP 同一条件），key_only = 密钥匹配但所选头
+# 没有合法 IP（仍用 TCP 对端），0 = 密钥不匹配。该 map 紧跟 include 写在 nginx.conf 里，旧主控的 origin-auth.conf
+# 不必重写；location 自己写了 proxy_set_header 就不继承 http 级，所以逐个 location 写；早于此规则改写过的主机重跑时补上。
 origin_auth_apply_nginx() { # <nginx.conf>
   local conf=$1 include="    include ${ORIGIN_AUTH_CONF};" has_include=0
   grep -qxF -- "$include" "$conf" && has_include=1
   grep -qxF -- '    include /etc/cdnca-upgrade/plan-source-nginx.conf;' "$conf" || fail "$conf $(msg "不是安装器生成的管理端 nginx 配置" "is not a console nginx configuration written by the installer")"
   # awk 变量不能叫 include：gawk（Ubuntu 24.04 默认 awk）里 include/load/namespace 等是保留字，-v include= 直接退出 2。
-  awk -v include_line="$include" -v has_include="$has_include" '
-    $0 == "    include /etc/cdnca-upgrade/plan-source-nginx.conf;" { print; if (!has_include) print include_line; next }
-    $0 == "            proxy_set_header X-Real-IP $remote_addr;" { print "            proxy_set_header X-Real-IP $cdnca_client_ip;"; next }
+  # 早于 Forwarded 清理规则安装的主控（控制台升级不改 nginx.conf）在这里一并补上，与 write_nginx_config 一致。
+  # 源IP请求头的客户端原值（X-Cdnca-Client-*，write_nginx_config）紧跟 X-Cdnca-Origin-Verified；早于该规则的主机在这里补上。
+  awk -v include_line="$include" -v has_include="$has_include" \
+    -v verified_map='    map "$cdnca_origin_ok:$cdnca_origin_peer" $cdnca_origin_verified { default 0; "1:" key_only; "~^1:." 1; }' \
+    -v verified_line='            proxy_set_header X-Cdnca-Origin-Verified $cdnca_origin_verified;' \
+    -v client_real_ip='            proxy_set_header X-Cdnca-Client-X-Real-IP $http_x_real_ip;' \
+    -v client_xff='            proxy_set_header X-Cdnca-Client-X-Forwarded-For $http_x_forwarded_for;' '
+    $0 == "    include /etc/cdnca-upgrade/plan-source-nginx.conf;" {
+      print; prev = $0; if (!has_include) { print include_line; print verified_map }; next
+    }
+    $0 == include_line { print; print verified_map; prev = $0; next }
+    $0 == verified_map { next }
+    $0 == "            proxy_set_header X-Real-IP $remote_addr;" { print "            proxy_set_header X-Real-IP $cdnca_client_ip;"; prev = $0; next }
     $0 == "            proxy_set_header X-Forwarded-For $remote_addr;" {
+      if (prev != "            proxy_set_header Forwarded \"\";") print "            proxy_set_header Forwarded \"\";"
       print "            proxy_set_header X-Forwarded-For $cdnca_client_ip;"
       print "            proxy_set_header X-Cdnca-Origin-Key \"\";"
+      print verified_line; print client_real_ip; print client_xff
+      prev = $0
       next
     }
-    { print }' "$conf" >"$conf.next"
+    $0 == "            proxy_set_header X-Cdnca-Origin-Key \"\";" { print; print verified_line; print client_real_ip; print client_xff; prev = $0; next }
+    $0 == verified_line || $0 == client_real_ip || $0 == client_xff { next }
+    $0 == "            proxy_set_header X-Forwarded-For $cdnca_client_ip;" {
+      if (prev != "            proxy_set_header Forwarded \"\";") print "            proxy_set_header Forwarded \"\";"
+      print; prev = $0; next
+    }
+    { print; prev = $0 }' "$conf" >"$conf.next"
   chmod --reference="$conf" "$conf.next" 2>/dev/null || chmod 0644 "$conf.next"
   mv -f "$conf.next" "$conf"
 }
@@ -4943,13 +5098,21 @@ origin_auth_main() {
   origin_auth_check_header "$bt"
   nginx_bin=$(awk '/^ExecStart=/{sub(/^ExecStart=/, ""); print $1; exit}' "$unit" 2>/dev/null)
   [ -n "$nginx_bin" ] && [ -x "$nginx_bin" ] || nginx_bin=$(command -v nginx) || fail "$(msg '找不到 nginx' 'nginx not found')"
+  # 写任何文件之前先确认这是安装器生成的管理端配置，免得写了 origin-auth.conf 才发现不适用。
+  grep -qxF -- '    include /etc/cdnca-upgrade/plan-source-nginx.conf;' "$NGINX_CONF" || fail "$NGINX_CONF $(msg "不是安装器生成的管理端 nginx 配置，未做任何修改" "is not a console nginx configuration written by the installer; nothing was changed")"
   backup=$(mktemp -d "${TEMP_DIR:-/tmp}/origin-auth.XXXXXX")
   cp -p "$NGINX_CONF" "$backup/nginx.conf"
   [ ! -e "$ORIGIN_AUTH_CONF" ] || { cp -p "$ORIGIN_AUTH_CONF" "$backup/origin-auth.conf"; had_conf=true; }
+  ORIGIN_AUTH_PENDING=true ORIGIN_AUTH_RELOADED=false
   origin_auth_restore() {
+    $ORIGIN_AUTH_PENDING || return 0
+    ORIGIN_AUTH_PENDING=false
     cp -p "$backup/nginx.conf" "$NGINX_CONF"
     if $had_conf; then cp -p "$backup/origin-auth.conf" "$ORIGIN_AUTH_CONF"; else rm -f "$ORIGIN_AUTH_CONF"; fi
+    ! $ORIGIN_AUTH_RELOADED || systemctl reload "$WEB_SERVICE_NAME" || true
   }
+  # 备份之后任何失败（写配置、改写 nginx.conf、检查、重载、被中断）都恢复两份原文件；退出码照旧交给 cleanup。
+  trap 'origin_auth_status=$?; [ "$origin_auth_status" -eq 0 ] || origin_auth_restore; (exit "$origin_auth_status"); ! declare -F cleanup >/dev/null || cleanup' EXIT
   origin_auth_write_conf
   origin_auth_apply_nginx "$NGINX_CONF"
   if ! "$nginx_bin" -t -c "$NGINX_CONF" -p "$NGINX_RUNTIME_DIR" >"$backup/nginx-t.log" 2>&1; then
@@ -4957,14 +5120,21 @@ origin_auth_main() {
     origin_auth_restore
     fail "$(msg 'nginx 配置检查失败，已恢复原配置' 'nginx configuration check failed; the previous configuration was restored')"
   fi
+  ORIGIN_AUTH_RELOADED=true
   if ! systemctl reload "$WEB_SERVICE_NAME"; then
     origin_auth_restore
-    systemctl reload "$WEB_SERVICE_NAME" || true
     fail "$(msg "重载 $WEB_SERVICE_NAME 失败，已恢复原配置" "reloading $WEB_SERVICE_NAME failed, previous configuration restored")"
   fi
+  ORIGIN_AUTH_PENDING=false
   log "$(msg "CDN 回源鉴权已启用：回源头 X-Cdnca-Origin-Key 填 $ORIGIN_AUTH_SECRET_FILE 的内容，客户端 IP 取 $REAL_IP_HEADER" "CDN origin authentication enabled: set the X-Cdnca-Origin-Key origin header to the content of $ORIGIN_AUTH_SECRET_FILE; the client IP is taken from $REAL_IP_HEADER")"
 }
 
+# 每个反代 location 在规范 X-Forwarded-For 前清空入站 Forwarded（RFC 7239）：API 同时看到两种标准头会把来源判为
+# unknown，CDN 链路保留的 Forwarded 会让回源鉴权后的访客 IP 落进共享限流。converge-management-web-nginx.py 同规则。
+# 「源IP请求头」（control-api internal/clientip）选 X-Real-IP / X-Forwarded-For 时读客户端
+# 原值：X-Real-IP/X-Forwarded-For 被改写成 TCP 对端，原值紧跟其后以 X-Cdnca-Client-X-Real-IP /
+# X-Cdnca-Client-X-Forwarded-For 转给 control-api。proxy_set_header 同名即替换客户端自带的这两个头（原值为空时
+# 不发送），客户端伪造不了内部头。converge-management-web-nginx.py 同规则。
 write_nginx_config() {
   local nginx_bin brotli_load='' brotli_static=''
   nginx_bin=$(control_nginx_bin)
@@ -5013,6 +5183,7 @@ http {
         "~^(?:200|304):/(?:dashboard/)?assets/[^/]+-[-_A-Za-z0-9]{8,}\.[^/]+\$" "public, max-age=31536000, immutable";
         "~^(?:200|304):/site/assets/[^/]+-[-_A-Za-z0-9]{8,}\.[^/]+\$" "public, max-age=31536000, immutable";
         "~^(?:200|304):/v1/brand-assets/(?:favicon|logo|login_ad)\$" "";
+        "~^(?:200|304|404):/v1/status-page/public\$" "";
     }
     # WebSocket upgrades under /v1/ (the console SSH terminal); other requests
     # keep "Connection: close" to the API exactly as before.
@@ -5058,7 +5229,10 @@ http {
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-For \$remote_addr;
+            proxy_set_header X-Cdnca-Client-X-Real-IP \$http_x_real_ip;
+            proxy_set_header X-Cdnca-Client-X-Forwarded-For \$http_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto https;
             proxy_pass http://127.0.0.1:8080;
         }
@@ -5068,7 +5242,10 @@ http {
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-For \$remote_addr;
+            proxy_set_header X-Cdnca-Client-X-Real-IP \$http_x_real_ip;
+            proxy_set_header X-Cdnca-Client-X-Forwarded-For \$http_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto https;
             proxy_pass http://127.0.0.1:8080;
         }
@@ -5078,7 +5255,10 @@ http {
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-For \$remote_addr;
+            proxy_set_header X-Cdnca-Client-X-Real-IP \$http_x_real_ip;
+            proxy_set_header X-Cdnca-Client-X-Forwarded-For \$http_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto https;
             proxy_pass http://127.0.0.1:8080;
         }
@@ -5107,12 +5287,6 @@ http {
             default_type text/x-shellscript;
             try_files /downloads/install-node.sh =404;
         }
-        # Billing integration PHP modules (ADR 0019) ship with the active release.
-        location ^~ /downloads/billing-bridge/ {
-            root ${NATIVE_ROOT}/current/static/web;
-            try_files \$uri =404;
-            default_type application/zip;
-        }
         # 节点 WebSocket 隧道（Q20，套 CDN 时节点经此 443 入口）：原样转给本机网关的通道端口，网关在同一端口
         # 区分 /agent/v1/tunnel 与 /agent/v1/enroll（ADR 0013 §4.2）。直连安装也开着，网关管理页可随时切 ws。
         location ^~ /agent/v1/ {
@@ -5121,7 +5295,10 @@ http {
             proxy_set_header Connection "upgrade";
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-For \$remote_addr;
+            proxy_set_header X-Cdnca-Client-X-Real-IP \$http_x_real_ip;
+            proxy_set_header X-Cdnca-Client-X-Forwarded-For \$http_x_forwarded_for;
             proxy_ssl_server_name on;
             proxy_ssl_name ${GATEWAY_HOST:-localhost};
             proxy_ssl_verify off;
@@ -5145,7 +5322,10 @@ http {
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-For \$remote_addr;
+            proxy_set_header X-Cdnca-Client-X-Real-IP \$http_x_real_ip;
+            proxy_set_header X-Cdnca-Client-X-Forwarded-For \$http_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto https;
             proxy_pass http://127.0.0.1:8080;
         }
@@ -5165,7 +5345,10 @@ http {
             proxy_set_header Connection \$connection_upgrade;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-For \$remote_addr;
+            proxy_set_header X-Cdnca-Client-X-Real-IP \$http_x_real_ip;
+            proxy_set_header X-Cdnca-Client-X-Forwarded-For \$http_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto https;
             proxy_pass http://127.0.0.1:8080;
         }
@@ -5794,7 +5977,9 @@ summary_certificate() {
 # “使用你设置的口令”，口令、激活凭据、令牌一律不进屏幕摘要、文件与日志。
 CONTROL_SUMMARY_FILE=${CONTROL_SUMMARY_FILE:-/root/cdnca-install-summary.txt}
 control_install_summary() {
-  local addresses public_ip private_ip url node_page web_line
+  local addresses public_ip private_ip url node_page web_line verify=install-control.sh
+  [ ! -x "$CONTROL_INSTALLER_COPY" ] || verify=$CONTROL_INSTALLER_COPY
+  verify="$verify check"
   addresses=$(summary_host_addresses)
   public_ip=${addresses%%|*} private_ip=${addresses#*|}
   url=$CONTROL_ORIGIN/dashboard/
@@ -5839,9 +6024,10 @@ control_install_summary() {
     printf '  1. %s %s\n' "$(msg '浏览器打开' 'Open')" "$url $(msg '用管理员账号登录。' 'and sign in as the administrator.')"
     printf '  2. %s %s %s\n' "$(msg '添加节点：在' 'Add a node: copy the command from')" "$node_page" "$(msg '复制安装命令，到节点服务器上以 root 执行。' 'and run it as root on the node server.')"
     printf '  3. %s %s\n' "$(msg '备份：' 'Backup:')" "$NATIVE_ROOT/current/bin/control-api native-backup create $(msg '（定时备份已启用；查看状态：native-backup status）' '(scheduled backups are on; status: native-backup status)')"
-    printf '  4. %s %s\n' "$(msg '卸载/迁移：' 'Uninstall / move:')" "$(msg '主控不提供一键卸载（避免误删数据）；换机用 install-control.sh migrate-from，重装请重装系统。' 'there is no one-step uninstall (to protect data); move with install-control.sh migrate-from, reinstall on a fresh system.')"
+    printf '  4. %s %s\n' "$(msg '卸载/迁移：' 'Uninstall / move:')" "$(msg '主控不提供一键卸载（避免误删数据），重装请重装系统；换机在新服务器（全新系统）上以 root 执行：' 'there is no one-step uninstall (to protect data), reinstall on a fresh system; to move, run as root on the new (fresh) server:')"
+    printf '     %s\n' "$(control_rerun_command --other-host migrate-from "root@${public_ip:-$CONTROL_DOMAIN}")"
     printf '  5. %s %s\n' "$(msg '日志：' 'Logs:')" "${PROGRESS_LOG:-/var/log}$(msg '；服务日志：' '; services: ')journalctl -u $SERVICE_NAME -u $GATEWAY_SERVICE_NAME -u $WEB_SERVICE_NAME"
-    printf '  6. %s %s\n' "$(msg '核对：' 'Verify:')" "install-control.sh check $(msg '（单元、就绪、节点安装合同、权限；全新安装应全部 OK）' '(units, readiness, node install contract, permissions; all OK on a fresh install)')"
+    printf '  6. %s %s\n' "$(msg '核对：' 'Verify:')" "$verify $(msg '（单元、就绪、节点安装合同、权限；全新安装应全部 OK）' '(units, readiness, node install contract, permissions; all OK on a fresh install)')"
     ! declare -F control_install_followups >/dev/null || control_install_followups
     printf '%s\n' '================================================================'
   } >"${TEMP_DIR}/install-summary.txt"
@@ -6088,8 +6274,12 @@ check_main() {
   else bad "$(msg "升级 runner 未就绪（${UPGRADE_STATUS_FILE}）" "upgrade runner not ready ($UPGRADE_STATUS_FILE)")"; fi
   if grep -Fxq step=done "$CONTROL_INSTALL_STATE_FILE" 2>/dev/null; then ok "$(msg '安装记录已完成' 'install record finished')"
   else bad "$(msg "安装记录未完成（$CONTROL_INSTALL_STATE_FILE 无 step=done）：安装没有走完" "install record unfinished ($CONTROL_INSTALL_STATE_FILE has no step=done): the installation did not complete")"; fi
-  # 对外合同经本机 nginx 取（与节点、浏览器同一路径）：管理端源站来自 control.env。
-  origin=$(check_env_value "${CONFIG_DIR}/control.env" PAYMENT_CHANNELS_NOTIFY_BASE)
+  # 对外合同经本机 nginx 取（与节点、浏览器同一路径）：管理端源站取 control.env 的 CONTROL_ORIGIN
+  # （安装器写入，https://域名[:端口]）；更早的安装只记在 PAYMENT_CHANNELS_NOTIFY_BASE，只读不写。
+  origin=$(check_env_value "${CONFIG_DIR}/control.env" CONTROL_ORIGIN)
+  [ -n "$origin" ] || origin=$(check_env_value "${CONFIG_DIR}/control.env" PAYMENT_CHANNELS_NOTIFY_BASE)
+  [[ "$origin" =~ ^https://[^/?#@[:space:]]+$ ]] ||
+    bad "$(msg "control.env 没有可用的 CONTROL_ORIGIN（读到「${origin}」）：下面的对外地址检查会失败" "control.env has no usable CONTROL_ORIGIN (read \"${origin}\"): the public address checks below fail")"
   port=$(sed -n 's/^ *listen \([0-9.:]*\) ssl.*/\1/p' "$NGINX_CONF" 2>/dev/null | head -n 1)
   port=${port##*:}
   local -a via=()
@@ -6416,6 +6606,7 @@ main() {
   bt_report
   report_public_certificate_renewal
   control_install_state_done
+  control_keep_installer_copy
   log 'cdnca community edition installed and ready'
   log "to buy on the node/plugin market, register once (free portal account): ${CONTROL_BINARY} community-register --account <portal account> --password-stdin"
   control_install_summary

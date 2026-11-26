@@ -227,6 +227,28 @@ type SystemRepublisher struct {
 	config  SystemRepublisherConfig
 	// errorPages delivers trigger theme_activation (WithErrorPagePublisher).
 	errorPages *ErrorPagePublisher
+	// automaticHandoff queues an automatic scope's node settings
+	// (WithAutomaticHandoff).
+	automaticHandoff AutomaticHandoff
+}
+
+// AutomaticHandoff hands a claim of a scope that turned automatic after its
+// triggers were queued, node settings among other triggers, to the scope's
+// policy (edgeautopublish.HandOffSystemRepublicationTx): an automatic request
+// that publishes the scope and carries the node settings, redelivering them
+// when its content is refused (NodeSettingsPending). The system channel
+// publishes nothing for it.
+type AutomaticHandoff func(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, triggers []string) error
+
+// WithAutomaticHandoff sets the hand-off of automatic scopes' node settings
+// (G8). Without it such a claim ends automatic_scope with nothing
+// queued.
+func (republisher *SystemRepublisher) WithAutomaticHandoff(handoff AutomaticHandoff) error {
+	if republisher == nil || handoff == nil {
+		return ErrInvalidInput
+	}
+	republisher.automaticHandoff = handoff
+	return nil
 }
 
 func NewSystemRepublisher(service *Service, config SystemRepublisherConfig) (*SystemRepublisher, error) {
@@ -424,8 +446,16 @@ func (republisher *SystemRepublisher) decideTx(
 		WHERE target_scope_id=$1 ORDER BY revision DESC LIMIT 1),false)`, claim.scopeID).Scan(&automatic); err != nil {
 		return systemAttempt{}, err
 	}
-	if automatic {
+	if automatic && !nodeSettingsOnlyTriggers(claim.triggers) {
 		// Its policy republishes it (edgeautopublish source node_capability).
+		// Node settings queued here with other triggers (the scope turned
+		// automatic after they were) go to a policy request that carries them
+		// (AutomaticHandoff); queued alone, they go out as for a manual scope.
+		if nodeSettingsTriggered(claim.triggers) && republisher.automaticHandoff != nil {
+			if err := republisher.automaticHandoff(ctx, tx, claim.scopeID, slices.Clone(claim.triggers)); err != nil {
+				return systemAttempt{}, err
+			}
+		}
 		return systemAttempt{outcome: SystemOutcomeAutomaticScope, excluded: claim.excluded}, nil
 	}
 	baseline, found, err := loadSystemBaseline(ctx, tx, claim.scopeID)
@@ -488,6 +518,24 @@ func (republisher *SystemRepublisher) decideTx(
 			normalized.overlay = overlay
 			return normalized, err
 		}, now)
+	redelivered := false
+	if refusal, refused := NodeSettingsContentRefusal(err); refused && nodeSettingsTriggered(claim.triggers) {
+		// Node settings changed (alone or with other triggers): they reach the
+		// nodes with the release in effect there (node settings redelivery);
+		// the content stays refused.
+		normalized, normalizeErr := normalizeAutomaticPublishRequest(
+			republisher.systemPublishRequest(claim, attemptID, baseline.actor, revision, schema, candidates, now), now)
+		if normalizeErr != nil {
+			return systemAttempt{}, normalizeErr
+		}
+		settings, nodes, settingsErr := republisher.service.publishNodeSettingsTx(ctx, outer, normalized, refusal, now)
+		switch {
+		case settingsErr == nil && len(nodes) > 0:
+			result, published, err, redelivered = settings, nodes, nil, true
+		case settingsErr != nil && !nodeSettingsRedeliveryRefused(settingsErr):
+			err = settingsErr
+		}
+	}
 	if err != nil {
 		return systemAttempt{}, err
 	}
@@ -517,7 +565,8 @@ func (republisher *SystemRepublisher) decideTx(
 			slices.Contains(claim.triggers, SystemTriggerOriginAuthPublished) ||
 			// the overlay re-marks expired sites from the current rows
 			slices.Contains(claim.triggers, SystemTriggerPackageExpiry) ||
-			// the node storage rides in the key documents, never in the sites
+			// the node storage rides in the key documents,
+			// never in the sites
 			slices.Contains(claim.triggers, SystemTriggerNodeStorage) ||
 			// the overlay swaps in the renewed certificate versions
 			slices.Contains(claim.triggers, SystemTriggerCertificateRenewal)
@@ -530,9 +579,10 @@ func (republisher *SystemRepublisher) decideTx(
 	if err := outer.Commit(ctx); err != nil {
 		return systemAttempt{}, err
 	}
-	if overlay != nil {
-		// The overlay did not publish the tenant's rows: give them a revision
-		// of their own again (unattributed), so the tenant can publish them.
+	if overlay != nil || redelivered {
+		// The overlay (or a node settings redelivery) did not publish the
+		// tenant's rows: give them a revision of their own again
+		// (unattributed), so the tenant can publish them.
 		if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, claim.scopeID); err != nil {
 			return systemAttempt{}, err
 		}
@@ -549,10 +599,11 @@ func loadSystemBaseline(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (syst
 	var baseline systemBaseline
 	var userID, actorScopeID uuid.UUID
 	// A stop overlay publication is not the scope's facts: rows edited before
-	// it were not published by it.
+	// it were not published by it; nor is a node settings redelivery.
 	err := tx.QueryRow(ctx, `SELECT publication.source_revision,publication.actor_user_id,publication.actor_scope_id,
 		publication.rollout_id FROM edge_config_publications publication
 		WHERE publication.configuration_scope_id=$1 AND publication.contract_version=1
+		  AND publication.publication_kind='content'
 		  AND NOT EXISTS(SELECT 1 FROM edge_publication_compile_inputs inputs
 		    WHERE inputs.config_version_id=publication.config_version_id AND inputs.overlay)
 		ORDER BY publication.source_revision DESC LIMIT 1`, scopeID).Scan(&baseline.revision, &userID, &actorScopeID, &baseline.rolloutID)
@@ -644,11 +695,12 @@ func systemTargetNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, seeds 
 			SELECT endpoint.node_id FROM sites site
 			LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 			 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+			LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 			LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=site.scope_id AND route.site_id=site.id
 			JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
 			     site.node_group_id,
-			     (subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
-			     (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+			     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+			     (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
 			     route.line_group_id, route.next_group_id,
 			     -- community edition: no package, no own group -> the platform default
 			     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND site.node_group_id IS NULL AND site.package_subscription_id IS NULL))
@@ -662,9 +714,10 @@ func systemTargetNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, seeds 
 			SELECT endpoint.node_id FROM l4_forwards forward
 			LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=forward.scope_id
 			 AND subscription.id=forward.package_subscription_id AND subscription.deleted_at IS NULL
+			LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 			JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
-			     COALESCE(forward.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid),
-			     COALESCE(forward.backup_node_group_id, (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
+			     COALESCE(forward.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid),
+			     COALESCE(forward.backup_node_group_id, (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
 			     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND forward.node_group_id IS NULL AND subscription.id IS NULL))
 			JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 			 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision
@@ -984,6 +1037,10 @@ func appendSystemRepublicationAudit(
 	}
 	if errorPageRolloutID != nil {
 		payload["error_page_rollout_id"] = errorPageRolloutID.String()
+	}
+	if publication != nil && publication.NodeSettingsRefusal != "" {
+		payload["publication_kind"] = PublicationKindNodeSettings
+		payload["content_refusal"] = publication.NodeSettingsRefusal
 	}
 	if overlay != nil {
 		payload["stop_overlay"] = true

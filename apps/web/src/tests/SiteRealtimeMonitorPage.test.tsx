@@ -7,6 +7,7 @@ import { changeLocale } from '../i18n'
 import SiteRealtimeMonitorPage from '../pages/SiteRealtimeMonitorPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { tabPanelOf } from '../test/tabs'
 
 const tenantId = '018f0000-0000-7000-8000-000000000010'
 const siteId = '018f0000-0000-7000-8000-000000000020'
@@ -131,6 +132,25 @@ describe('SiteRealtimeMonitorPage', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
+  // 筛选条与图表在选中页签 aria-controls 指向的面板里，切换后跟着走，不重新请求。
+  it('renders the filters and charts inside the panel of the selected tab', async () => {
+    authenticate('tenant')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(realtimeResponse(input)))
+    const user = userEvent.setup()
+    renderWithProviders(<SiteRealtimeMonitorPage />)
+
+    expect((await screen.findAllByText('120')).length).toBeGreaterThan(0)
+    const basic = tabPanelOf('基础数据')
+    expect(within(basic).getByRole('button', { name: '查询' })).toBeInTheDocument()
+    expect(within(basic).getByRole('table')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '回源监控' }))
+    expect(within(tabPanelOf('回源监控')).getByRole('img', { name: '回源带宽' })).toBeInTheDocument()
+    expect(within(tabPanelOf('回源监控')).getByRole('button', { name: '查询' })).toBeInTheDocument()
+    expect(tabPanelOf('基础数据')).toBeEmptyDOMElement()
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('renders the atomic tenant facts, evidence, quality, origin, and ranking without tenant override', async () => {
     authenticate('tenant')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(realtimeResponse(input)))
@@ -229,14 +249,16 @@ describe('SiteRealtimeMonitorPage', () => {
     }
   })
 
-  it('refreshes every 10 seconds, rolls a preset window to the current minute, and shows when it was updated', async () => {
+  it('refreshes every 10 seconds, rolls a preset window to the current minute, and shows the snapshot time once', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-10-24T08:37:20Z') })
     try {
       authenticate('tenant')
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(realtimeResponse(input)))
       renderWithProviders(<SiteRealtimeMonitorPage />)
       await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
-      expect(await screen.findByTestId('site-realtime-updated')).toHaveTextContent(/^每 10 秒自动刷新，更新于 /)
+      // 只有数据快照一行时间。
+      expect(await screen.findByTestId('site-realtime-snapshot')).toHaveTextContent(/^数据快照 /)
+      expect(screen.queryByText(/更新于/)).toBeNull()
       // 摘要里的连接数是窗口内聚合，不是当前并发。
       expect(screen.getByText('窗口内连接数')).toBeInTheDocument()
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
@@ -494,5 +516,29 @@ describe('SiteRealtimeMonitorPage', () => {
     const url = new URL(String(diagnosticCall![0]), 'http://cdnca.test')
     expect(url.searchParams.has('site_id')).toBe(false)
     expect(url.searchParams.has('tenant_id')).toBe(false)
+  })
+
+  // 非法监听端口的错误挂在端口输入框上并聚焦，不发请求；纠正后清除。
+  it('marks an invalid listen port on its field without querying', async () => {
+    authenticate('platform')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(realtimeResponse(input)))
+    const user = userEvent.setup()
+    renderWithProviders(<SiteRealtimeMonitorPage />)
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+
+    const port = screen.getByLabelText('监听端口')
+    for (const value of ['abc', '0', '65536']) {
+      await user.clear(port)
+      await user.type(port, value)
+      await user.click(screen.getByRole('button', { name: '查询' }))
+      expect(port).toHaveAttribute('aria-invalid', 'true')
+      expect(port).toHaveAccessibleDescription('监听端口必须为 1 到 65535。')
+      await waitFor(() => expect(port).toHaveFocus())
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    await user.clear(port)
+    await user.type(port, '443{Enter}')
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2))
+    expect(port).not.toHaveAttribute('aria-invalid')
   })
 })

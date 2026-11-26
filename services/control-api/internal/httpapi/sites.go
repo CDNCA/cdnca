@@ -82,6 +82,13 @@ type siteBasicPayload struct {
 	HTTP2Enabled           *bool `json:"http2_enabled,omitempty"`
 	HTTP3Enabled           *bool `json:"http3_enabled,omitempty"`
 	TLSPreferServerCiphers *bool `json:"tls_prefer_server_ciphers"`
+	// Response only, ignored on writes:
+	// http3_effective is http3_enabled as the site's current package
+	// entitlement lets it go out; http3_unavailable_reason
+	// (package_feature_denied) says the package leaves HTTP/3 out, while
+	// http3_enabled keeps the user's choice for a later package change.
+	HTTP3Effective         *bool   `json:"http3_effective,omitempty"`
+	HTTP3UnavailableReason *string `json:"http3_unavailable_reason,omitempty"`
 
 	decoded       bool
 	ipv6Present   bool
@@ -290,6 +297,9 @@ type siteDetailResponse struct {
 	// package_deleted while the site is not served for lack of a valid
 	// package; null while it is valid.
 	PackageUnavailableReason *string `json:"package_unavailable_reason"`
+	// PackageSuspension: who suspended the subscription and why, only while
+	// package_unavailable_reason is package_suspended (migration 698).
+	PackageSuspension *site.PackageSuspension `json:"package_suspension"`
 }
 
 type siteListItemResponse struct {
@@ -892,6 +902,12 @@ func siteDetailAt(item site.Site, now time.Time) siteDetailResponse {
 	tlsCipherPreset, tlsOCSPStapling, tlsClientAuth, tlsClientCAPEM := item.TLSCipherPreset, item.TLSOCSPStapling,
 		item.TLSClientAuth, item.TLSClientCAPEM
 	http2Enabled, http3Enabled := item.HTTP2Enabled, item.HTTP3Enabled
+	http3Effective := http3Enabled && !item.HTTP3PackageDenied
+	var http3UnavailableReason *string
+	if item.HTTP3PackageDenied {
+		reason := "package_feature_denied"
+		http3UnavailableReason = &reason
+	}
 	var tlsPreferServerCiphers *bool
 	if item.TLSPreferServerCiphers != nil {
 		value := *item.TLSPreferServerCiphers
@@ -960,6 +976,8 @@ func siteDetailAt(item site.Site, now time.Time) siteDetailResponse {
 			HTTP2Enabled:             &http2Enabled,
 			HTTP3Enabled:             &http3Enabled,
 			TLSPreferServerCiphers:   tlsPreferServerCiphers,
+			HTTP3Effective:           &http3Effective,
+			HTTP3UnavailableReason:   http3UnavailableReason,
 		},
 		TrafficEnforcement: item.TrafficEnforcement,
 		PackageExpiresAt:   expiresAt,
@@ -969,6 +987,7 @@ func siteDetailAt(item site.Site, now time.Time) siteDetailResponse {
 		AccessReadiness:      item.AccessReadiness,
 
 		PackageUnavailableReason: item.PackageUnavailableReason,
+		PackageSuspension:        item.PackageSuspension,
 	}
 }
 
@@ -1018,6 +1037,14 @@ func (s *Server) handleRepublishSite(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, site.ErrLockStateConflict):
 		s.writeAPIError(w, r, http.StatusConflict, "site_disabled", "a disabled site is not published")
+		return
+	case errors.Is(err, site.ErrPackageCancelled):
+		s.writeAPIError(w, r, http.StatusConflict, "package_subscription_inactive",
+			"the site's package subscription is cancelled; it is published again once the site is bound to another package")
+		return
+	case errors.Is(err, site.ErrPackageSuspended):
+		s.writeAPIError(w, r, http.StatusConflict, "package_subscription_suspended",
+			"the site's package subscription is suspended; it is published again once the subscription is resumed")
 		return
 	case err != nil:
 		s.writeError(w, r, err)

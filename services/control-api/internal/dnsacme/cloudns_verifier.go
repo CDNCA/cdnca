@@ -34,9 +34,7 @@ type ClouDNSProviderVerifier struct {
 }
 
 func NewClouDNSProviderVerifier() *ClouDNSProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newClouDNSProviderVerifier("", &http.Client{Transport: transport}, clouDNSVerifyTimeout)
+	return newClouDNSProviderVerifier("", providerAPIClient(), clouDNSVerifyTimeout)
 }
 
 func newClouDNSProviderVerifier(testEndpoint string, client *http.Client, timeout time.Duration) *ClouDNSProviderVerifier {

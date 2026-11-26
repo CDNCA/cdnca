@@ -19,8 +19,7 @@
 .system-sent-recipient { display: flex; flex-direction: column; gap: 2px; }
 .system-sent-recipient strong { color: var(--cdnca-color-text-emphasis, #27364e); font-size: 13px; font-weight: 600; }
 .system-sent-time small,
-.system-sent-recipient small,
-.system-sent-unavailable { color: var(--cdnca-color-text-faint, #98a2b3); font-size: 12px; }
+.system-sent-recipient small { color: var(--cdnca-color-text-faint, #98a2b3); font-size: 12px; }
 .system-sent-message-id { color: var(--cdnca-color-text-emphasis, #27364e); font-size: 12px; }
 .system-sent-log-panel .system-log-footer { justify-content: flex-start; }
 .system-sent-pagination { display: flex; align-items: center; gap: 8px; }

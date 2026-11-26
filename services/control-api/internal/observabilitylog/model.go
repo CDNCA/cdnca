@@ -60,6 +60,8 @@ type Query struct {
 	To                   time.Time
 	Limit                int
 	Cursor               string
+	// HideSessionRefresh drops successful auth.refresh rows (renewal failures stay).
+	HideSessionRefresh bool
 }
 
 // Fact.Category is the audit catalog category of an audit row (empty for
@@ -80,19 +82,19 @@ type Fact struct {
 	// looked up at query time; ResourceDeleted marks a nameable object that no
 	// longer exists in the row's scope (tp-b6b). Both empty: the resource type
 	// has no name lookup, show resource_id.
-	ResourceName    string `json:"resource_name,omitempty"`
-	ResourceDeleted bool   `json:"resource_deleted,omitempty"`
-	UserAgent          string     `json:"user_agent,omitempty"`
-	ChangeSummary      string     `json:"change_summary,omitempty"`
-	RequestID          string     `json:"request_id,omitempty"`
-	SourceIP           string     `json:"source_ip"`
-	GeoCode            string     `json:"geo_code"`
-	GeoRegion          string     `json:"geo_region,omitempty"`
-	GeoCity            string     `json:"geo_city,omitempty"`
-	GeoResolution      string     `json:"geo_resolution,omitempty"`
-	OccurredAt         time.Time  `json:"occurred_at"`
-	Category           string     `json:"category,omitempty"`
-	TotalCount         int64      `json:"-"`
+	ResourceName    string    `json:"resource_name,omitempty"`
+	ResourceDeleted bool      `json:"resource_deleted,omitempty"`
+	UserAgent       string    `json:"user_agent,omitempty"`
+	ChangeSummary   string    `json:"change_summary,omitempty"`
+	RequestID       string    `json:"request_id,omitempty"`
+	SourceIP        string    `json:"source_ip"`
+	GeoCode         string    `json:"geo_code"`
+	GeoRegion       string    `json:"geo_region,omitempty"`
+	GeoCity         string    `json:"geo_city,omitempty"`
+	GeoResolution   string    `json:"geo_resolution,omitempty"`
+	OccurredAt      time.Time `json:"occurred_at"`
+	Category        string    `json:"category,omitempty"`
+	TotalCount      int64     `json:"-"`
 }
 
 type Page struct {
@@ -156,6 +158,7 @@ type StoreQuery struct {
 	BeforeTime           time.Time
 	BeforeID             string
 	Limit                int
+	HideSessionRefresh   bool
 }
 
 type Repository interface {

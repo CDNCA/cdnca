@@ -8,13 +8,12 @@ import {
   Popconfirm,
   Result,
   Space,
-  Table,
-  Tabs,
   Tag,
   Tooltip,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, PageSection } from '@cdnca/ui'
+import { Tabs } from '../components/Tabs'
+import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, PageSection, Table } from '@cdnca/ui'
 import {
   Ban,
   ChevronLeft,
@@ -539,7 +538,16 @@ export default function SitePublicationsPage() {
       render: (value: string) => formatDateTime(value, i18n.resolvedLanguage) || value,
     },
     { title: t('columns.sourceRevision'), dataIndex: 'source_revision', width: 105 },
-    { title: t('columns.target'), width: 150, render: (_, item) => <Tag>{t(`targets.${item.target.kind}`)}</Tag> },
+    {
+      title: t('columns.target'), width: 150, render: (_, item) => <Space size={4} wrap>
+        <Tag>{t(`targets.${item.target.kind}`)}</Tag>
+        {item.kind === 'node_settings' && item.content_refusal ? (
+          <Tooltip title={t('nodeSettings.description', { reason: t(`automaticFailure.${item.content_refusal}.title`) })}>
+            <Tag color="processing" data-testid="publication-node-settings">{t('nodeSettings.tag')}</Tag>
+          </Tooltip>
+        ) : null}
+      </Space>,
+    },
     {
       title: t('columns.nodes'), dataIndex: 'node_count', width: 90,
       // Nodes this publication left on the old configuration.

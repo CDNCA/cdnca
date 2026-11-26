@@ -39,7 +39,6 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoverycontext"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoveryhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
-	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
 	"github.com/cdnca/cdnca/services/control-api/internal/acmehttp01"
 	"github.com/cdnca/cdnca/services/control-api/internal/analytics"
@@ -73,6 +72,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/dashboardhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsacme"
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsproviderremote"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsreconcilehttpmtls"
 	"github.com/cdnca/cdnca/services/control-api/internal/domaineventfanout"
@@ -115,8 +115,8 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/node"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeca"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodecertlifecycle"
-	"github.com/cdnca/cdnca/services/control-api/internal/nodegatewayaddr"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodedownloads"
+	"github.com/cdnca/cdnca/services/control-api/internal/nodegatewayaddr"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeidentity"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeisolationhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodemonitoringoutbox"
@@ -1453,7 +1453,7 @@ func runServer() error {
 	// until the Turnstile site key and secret are both set the flow checks
 	// the built-in image CAPTCHA instead (registrationConfig, set below)
 	var registrationConfig *registrationConfigSource
-	accountRegistrationConfig.HumanFallback = accountregistrationchallenge.CaptchaHumanVerifier{Captcha: identityService}
+	accountRegistrationConfig.HumanFallback = registrationCaptchaFallback(identityService)
 	accountRegistrationConfig.TurnstileReady = func(ctx context.Context) (bool, error) {
 		if registrationConfig == nil {
 			return false, errors.New("registration config is not ready")
@@ -1573,9 +1573,13 @@ func runServer() error {
 	}
 	registrationConfig = newRegistrationConfigSource(pool, publicSystemSettings, accountRegistrationConfig, registrationMounted,
 		builtInRegistrationService, registrationChannels, registrationNotifications, accountRecoveryConfig)
+	// terms are asked for only while some can be read
+	builtInRegistrationService.RequireTermsWhen(registrationConfig.terms.Required)
+	// login-methods reports 开放注册 from registration-config
+	loginRegistration := httpapi.LoginMethodsRegistration{Source: registrationConfig}
 	accountLoginRuntime, err := openAccountLoginRuntime(
 		ctx, accountRecoveryConfig, notificationConfig, pool, identityService, cfg.CookieSecure, cfg.CookieDomain,
-		registrationMounted, credentialCipher,
+		loginRegistration, credentialCipher,
 	)
 	loginErr := err
 	if err != nil {
@@ -1592,7 +1596,7 @@ func runServer() error {
 					return nil, nil
 				}
 				runtime, err := openAccountLoginRuntime(ctx, accountRecoveryConfig, next, pool, identityService,
-					cfg.CookieSecure, cfg.CookieDomain, registrationMounted, credentialCipher)
+					cfg.CookieSecure, cfg.CookieDomain, loginRegistration, credentialCipher)
 				return runtime.parts(), err
 			}, accountLoginRuntime.parts(),
 			accountMailStartError(notificationConfig.Enabled && len(accountLoginTemplates(notificationConfig)) > 0, loginErr))
@@ -1617,6 +1621,11 @@ func runServer() error {
 		}
 		trustedRecoveryContext = resolver.Resolve
 	}
+	// the built-in and the Turnstile registration store proofs under their own keys
+	registrationProofKeys := [][]byte{builtInRegistrationKey(cfg.AccessSecret, "")}
+	if accountRegistrationConfig.Enabled {
+		registrationProofKeys = append(registrationProofKeys, accountRegistrationConfig.DigestKey)
+	}
 	openRecovery := func(ctx context.Context) (*accountRecoveryRuntime, error) {
 		return openAccountRecoveryRuntime(
 			ctx, accountRecoveryConfig, pool, slog.Default(), accountRecoveryRuntimeDependencies{
@@ -1624,6 +1633,7 @@ func runServer() error {
 				RegistrationDispatcher: registrationDispatcher,
 				LoginDispatcher:        loginDispatcher,
 				Identity:               identityService,
+				RegistrationProofKeys:  registrationProofKeys,
 			},
 		)
 	}
@@ -1638,6 +1648,8 @@ func runServer() error {
 		failed: err != nil, retryAt: time.Now().Add(accountMailRetryInterval)}
 	err = nil
 	defer accountRecoveryRuntime.Close()
+	// 找回运行时没起来（模板或渠道未就绪）时公开配置不给找回表单。
+	registrationConfig.recoveryReady = func() bool { return accountRecoveryRuntime.runtime() != nil }
 	if notificationAuto != nil {
 		notificationAuto.SetAccountRuntimes(&accountMailRuntimes{slots: accountSlots, recovery: accountRecoveryRuntime})
 	}
@@ -2338,7 +2350,9 @@ func runServer() error {
 	if err != nil {
 		return runtimeStageError{stage: "initialize system mail settings runtime", err: err}
 	}
-	systemOtherSettingsHandlerFactory, err := buildSystemOtherSettingsHandlerFactory(systemSettingsConfig, pool, identityService)
+	sourceIPHeader := newSourceIPHeaderSetting(pool)
+	dnsapiproxy.Use(newDNSAPIProxySetting(pool))
+	systemOtherSettingsHandlerFactory, err := buildSystemOtherSettingsHandlerFactory(systemSettingsConfig, pool, identityService, sourceIPHeader)
 	if err != nil {
 		return runtimeStageError{stage: "initialize system other settings runtime", err: err}
 	}
@@ -3055,6 +3069,7 @@ func runServer() error {
 		APIKeyPepper:                        cfg.APIKeyPepper,
 		APIKeyPepperKeyring:                 cfg.APIKeyPepperKeyring,
 		APIKeyTrustedProxyCIDRs:             cfg.APIKeyTrustedProxyCIDRs,
+		SourceIPHeader:                      sourceIPHeader,
 		APIKeyMaxProxyHops:                  cfg.APIKeyMaxProxyHops,
 		APIKeyUsageRecorder:                 apiKeyUsageRuntime,
 		NodePresenceLeases:                  presenceLeases,
@@ -3553,6 +3568,14 @@ func runServer() error {
 		go func() {
 			defer background.Done()
 			_ = marketAdvisories.Run(ctx)
+		}()
+	}
+	if pluginInstallation != nil {
+		// Pending plugin lifecycle reports: logs and backs off on its own; never stops the server.
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			_ = pluginInstallation.runLicenseReports(ctx)
 		}()
 	}
 	if certificateNotices != nil {

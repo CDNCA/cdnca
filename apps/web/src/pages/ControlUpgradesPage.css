@@ -164,7 +164,6 @@
 .maintenance-node-settings { margin-top: 22px; }
 .maintenance-node-settings-card { margin-top: 14px; padding: 18px; border: 1px solid var(--cdnca-color-border-panel, #edf1f7); border-radius: 8px; background: var(--cdnca-color-bg-container, #fff); }
 .maintenance-node-settings-card > .ant-alert { margin-bottom: 14px; }
-.maintenance-node-settings-paths { margin: 4px 0 0; padding-left: 18px; color: var(--cdnca-color-text); font-size: 13px; line-height: 1.8; }
 .maintenance-gateway-address { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--cdnca-color-border-panel, #edf1f7); }
 .maintenance-gateway-address h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; color: var(--cdnca-color-text); }
 .maintenance-gateway-address-intro { margin: 0 0 12px; max-width: 72ch; color: var(--cdnca-color-text-secondary); font-size: 13px; line-height: 1.6; }
@@ -225,6 +224,10 @@
 }
 
 .upgrade-log-modal .upgrade-log-notice {
+  margin-bottom: 8px;
+}
+
+.upgrade-log-modal .upgrade-log-status {
   margin-bottom: 8px;
 }
 

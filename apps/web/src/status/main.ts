@@ -22,6 +22,7 @@ const titleNode = document.getElementById('status-title')!
 const logo = document.getElementById('status-logo') as HTMLImageElement
 const switcher = document.getElementById('status-lang') as HTMLAnchorElement
 const footer = document.getElementById('status-footer')!
+const genericTitles = new Set([messages('zh').defaultTitle, messages('en').defaultTitle])
 const expanded = new Map<string, boolean>()
 let last: View | null = null
 let flags = { stale: false, failed: false }
@@ -48,7 +49,11 @@ function brand(view: View | null) {
   titleNode.title = view?.description || ''
   logo.hidden = !view?.show_logo
   if (view?.show_logo && !logo.getAttribute('src')) logo.src = '/v1/brand-assets/logo'
-  footer.textContent = fill(m.poweredBy, { title })
+  // 署名只写服务方自己的品牌：开了品牌 logo 且标题是服务方填的名字；没填或就是泛称「服务状态」时不写。
+  const name = view?.title?.trim() ?? ''
+  const branded = !!view?.show_logo && name !== '' && !genericTitles.has(name)
+  footer.textContent = branded ? fill(m.poweredBy, { title: name }) : ''
+  footer.hidden = !branded
   return title
 }
 
@@ -128,6 +133,7 @@ async function fetchView(): Promise<{ view: View | null; disabled: boolean }> {
 
 async function load() {
   window.clearTimeout(timer)
+  root.setAttribute('aria-busy', 'true')
   const result = await fetchView()
   const picked = chooseView(result.view, Date.now())
   disabled = result.disabled
@@ -141,8 +147,10 @@ async function load() {
   if (!document.hidden) timer = window.setTimeout(() => { void load() }, picked && !picked.stale ? REFRESH_MS : RETRY_MS)
 }
 
-root.setAttribute('aria-busy', 'true')
-root.setAttribute('aria-label', m.loading)
+// main 的名称固定为「服务状态」；加载中只靠 aria-busy 与骨架里的 role=status 文字播报，首次画页时随骨架一起换掉。
+root.setAttribute('aria-label', m.defaultTitle)
+const loadingNote = document.getElementById('status-loading')
+if (loadingNote) loadingNote.textContent = m.loading
 window.addEventListener('hashchange', () => paint(true))
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) window.clearTimeout(timer)

@@ -1,9 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Alert, Badge, Button, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Modal, Result, Segmented, Select, Space, Spin, Table, Tag,
-  Typography, type TableColumnsType,
-} from 'antd'
+import { Alert, Badge, Button, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Modal, Result, Segmented, Select, Space, Spin, Tag, Typography, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, Eye, RefreshCw, Search, ShieldOff } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -35,7 +32,7 @@ import { useAdvisories } from './useAdvisories'
 import { pluginName, usePluginCatalog } from './usePluginCatalog'
 
 import './PluginMarketPage.css'
-import { FeedbackWhen, OutcomeUnknown, PageSection } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, PageSection, Table } from '@cdnca/ui'
 
 type ActionKind = 'confirm' | 'upgrade' | 'disable' | 'resume' | 'uninstall'
 

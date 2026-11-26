@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Input, Result, Spin, Table, Tabs } from 'antd'
+import { Alert, Button, Input, Result, Spin } from 'antd'
+import { Tabs } from '../components/Tabs'
 import dayjs from 'dayjs'
 import { Search } from 'lucide-react'
 import type { TFunction } from 'i18next'
@@ -22,7 +23,9 @@ import { businessTimeZone, formatDateTime, formatNumber } from '../i18n/formatte
 import { formatAnalyticsBandwidth, formatAnalyticsBytes } from '../i18n/analyticsUnits'
 import '../styles/analyticsControlParity.css'
 import './SiteRealtimeMonitorPage.css'
-import { FeedbackWhen, TimeRangeFilter, type TimeRangePreset } from '@cdnca/ui'
+import { FeedbackWhen, TimeRangeFilter, type TimeRangePreset, Table } from '@cdnca/ui'
+import { isPort } from '../api/addressRules'
+import { FieldErrorText, filterFieldProps, useFieldFocus } from '../components/FilterFieldError'
 
 const hourMilliseconds = 60 * 60 * 1000
 const maximumWindowMilliseconds = 31 * 24 * hourMilliseconds
@@ -105,10 +108,6 @@ function validateDraft(draft: DraftFilters, audience: SiteRealtimeAudience, t: T
   if (ids.some((value) => value.trim() !== '' && !validUuid(value.trim()))) return t('filters.invalidUuid')
   if (canonicalHosts(draft.host) === null) {
     return t('filters.invalidHost')
-  }
-  if (draft.listenPort.trim() !== '') {
-    const port = Number(draft.listenPort)
-    if (!Number.isInteger(port) || port < 1 || port > 65535) return t('filters.invalidPort')
   }
   const from = parseLocalHour(draft.from)
   const to = parseLocalHour(draft.to)
@@ -297,6 +296,10 @@ function SiteRealtimeContent({ owner, ownerKey }: { owner: RealtimeOwner; ownerK
   const [draft, setDraft] = useState<DraftFilters>({ tenantId: '', siteId: '', host: '', listenPort: '', ...initial })
   const [applied, setApplied] = useState<SiteRealtimeFilters>(() => filtersFromDraft({ tenantId: '', siteId: '', host: '', listenPort: '', ...initial }, audience))
   const [validationError, setValidationError] = useState<string | null>(null)
+  // 监听端口不合法时错误挂在端口输入框上并给它焦点，不发请求，已生效的范围与自动刷新不变。
+  const portFieldID = `${useId()}-port`
+  const [portError, setPortError] = useState<string | null>(null)
+  const focusField = useFieldFocus()
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
 
   const query = useQuery({
@@ -349,8 +352,11 @@ function SiteRealtimeContent({ owner, ownerKey }: { owner: RealtimeOwner; ownerK
     const nextDraft = window === null ? draft : { ...draft, ...window }
     if (window !== null) setDraft(nextDraft)
     const error = validateDraft(nextDraft, audience, t)
+    const port = nextDraft.listenPort.trim() === '' || isPort(nextDraft.listenPort.trim()) ? null : t('filters.invalidPort')
     setValidationError(error)
-    if (error) return
+    setPortError(port)
+    if (port) focusField(portFieldID)
+    if (error || port) return
     const next = filtersFromDraft(nextDraft, audience)
     if (JSON.stringify(next) === JSON.stringify(applied)) void query.refetch()
     else setApplied(next)
@@ -366,12 +372,15 @@ function SiteRealtimeContent({ owner, ownerKey }: { owner: RealtimeOwner; ownerK
   const filterBar = <div className="analytics-filter-bar analytics-realtime-filter-bar">
     <div className="analytics-realtime-primary-fields">
       <Input aria-label={t('filters.host')} placeholder={t('filters.hostPlaceholder')} value={draft.host} onChange={(event) => setDraft((current) => ({ ...current, host: event.target.value }))} />
-      <Input aria-label={t('filters.port')} placeholder={t('filters.portPlaceholder')} inputMode="numeric" value={draft.listenPort} onChange={(event) => setDraft((current) => ({ ...current, listenPort: event.target.value }))} />
+      <Input aria-label={t('filters.port')} placeholder={t('filters.portPlaceholder')} inputMode="numeric" value={draft.listenPort} onPressEnter={apply}
+        {...filterFieldProps(portFieldID, portError)}
+        onChange={(event) => { setDraft((current) => ({ ...current, listenPort: event.target.value })); setPortError(null) }} />
       <TimeRangeFilter label={t('filters.range')} presets={rangePresets} maxSpanMs={maximumWindowMilliseconds}
         value={{ preset: range, range: draft.from && draft.to ? [dayjs(draft.from), dayjs(draft.to)] : null }}
         onChange={({ preset: key, range: window }) => applyRange(key, window?.[0].format('YYYY-MM-DDTHH:mm') ?? '', window?.[1].format('YYYY-MM-DDTHH:mm') ?? '')} />
       <Button type="primary" icon={<Search size={15} />} loading={query.isFetching} onClick={apply}>{t('actions.query')}</Button>
     </div>
+    <FieldErrorText id={portFieldID} error={portError} />
   </div>
   const tabs = [
     { key: 'basic', label: t('tabs.basic') },
@@ -391,10 +400,10 @@ function SiteRealtimeContent({ owner, ownerKey }: { owner: RealtimeOwner; ownerK
       </div>
       {data ? <>
         <MetricStrip metrics={data.summary} language={language} />
-        {/* Live data (query_version=4) carries no settlement claim; only the snapshot time is meaningful. */}
+        {/* Live data (query_version=4) carries no settlement claim; only the snapshot time is meaningful.
+            只留数据快照时间一行（每次自动刷新随之更新），不再另写一行几乎同值的「更新于」。 */}
         <div className="analytics-meta" aria-label={t('evidence.title')}>
-          <span className="analytics-meta-item">{t('evidence.snapshot', { time: formatDateTime(data.evidence.snapshot_at, language) })}</span>
-          <span className="analytics-meta-item" data-testid="site-realtime-updated">{t('evidence.updated', { time: formatDateTime(new Date(query.dataUpdatedAt).toISOString(), language) })}</span>
+          <span className="analytics-meta-item" data-testid="site-realtime-snapshot">{t('evidence.snapshot', { time: formatDateTime(data.evidence.snapshot_at, language) })}</span>
         </div>
         <section className="analytics-realtime-ranking" aria-label={t('charts.ranking')}>
           <h2>{t('charts.ranking')}</h2>
@@ -453,19 +462,21 @@ function SiteRealtimeContent({ owner, ownerKey }: { owner: RealtimeOwner; ownerK
           className="analytics-tabs analytics-realtime-tabs"
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key as RealtimeTab)}
-          items={tabs.map((tab) => ({ key: tab.key, label: tab.label }))}
+          // 筛选条与图表放进当前页签自己的 tabpanel（筛选状态在本组件，切页签不丢），其余页签不挂载。
+          items={tabs.map((tab) => ({ key: tab.key, label: tab.label, children: tab.key === activeTab ? <>
+            {filterBar}
+            {range === 'custom' ? <p className="analytics-realtime-range-hint">{t('filters.minuteHint')}</p> : null}
+            {validationError ? <Alert className="analytics-filter-error" type="error" showIcon message={validationError} /> : null}
+            {errorContent}
+            {query.isPending ? <div className="analytics-chart-state" aria-label={t('states.loading')}><Spin size="small" /></div> : null}
+            <div key={`${activeTab}:${JSON.stringify(applied)}`}>{activeTab === 'basic' ? basicContent : activeTab === 'quality' ? qualityContent : originContent}</div>
+            {activeTab === 'quality' && data && (audience === 'tenant' || applied.tenantId) ? <details className="analytics-realtime-diagnostics" open={diagnosticsOpen}
+              onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)}>
+              <summary>{t('charts.advancedDiagnostics')}</summary>
+              {diagnosticsOpen ? <SiteQualityDiagnostics key={JSON.stringify(applied)} accessToken={currentAccess(ownerKey) ?? ''} audience={audience} filters={{ from: applied.from, to: applied.to, tenantId: applied.tenantId, siteId: applied.siteId }} /> : null}
+            </details> : null}
+          </> : null }))}
         />
-        {filterBar}
-        {range === 'custom' ? <p className="analytics-realtime-range-hint">{t('filters.minuteHint')}</p> : null}
-        {validationError ? <Alert className="analytics-filter-error" type="error" showIcon message={validationError} /> : null}
-        {errorContent}
-        {query.isPending ? <div className="analytics-chart-state" aria-label={t('states.loading')}><Spin size="small" /></div> : null}
-        <div key={`${activeTab}:${JSON.stringify(applied)}`}>{activeTab === 'basic' ? basicContent : activeTab === 'quality' ? qualityContent : originContent}</div>
-        {activeTab === 'quality' && data && (audience === 'tenant' || applied.tenantId) ? <details className="analytics-realtime-diagnostics" open={diagnosticsOpen}
-          onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)}>
-          <summary>{t('charts.advancedDiagnostics')}</summary>
-          {diagnosticsOpen ? <SiteQualityDiagnostics key={JSON.stringify(applied)} accessToken={currentAccess(ownerKey) ?? ''} audience={audience} filters={{ from: applied.from, to: applied.to, tenantId: applied.tenantId, siteId: applied.siteId }} /> : null}
-        </details> : null}
       </div>
     </section>
   )

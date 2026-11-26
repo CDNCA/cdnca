@@ -132,20 +132,14 @@ describe('system settings page theme override hint (fix-ui1026 #4)', () => {
     renderPage()
     const panel = await screen.findByTestId('system-settings-baseline-system')
     expect(within(panel).queryByTestId('theme-override-system_name')).not.toBeInTheDocument()
-    // redesign-a：摘要条显示本页保存的系统名称，不带主题覆盖标签。
-    const summary = within(within(panel).getByRole('navigation', { name: '当前生效' }))
-    expect(summary.getByRole('button', { name: /登录后显示名称/ })).toHaveTextContent(settingsDocument.value.system_name)
-    expect(summary.queryByText('主题覆盖')).not.toBeInTheDocument()
+    expect(within(panel).queryByText(/当前由主题/)).not.toBeInTheDocument()
   })
 
-  // redesign-a：摘要条"登录后显示名称"跟随主题覆盖，系统信息卡顶部概括覆盖并给出主题设置入口。
-  it('puts the theme name in the summary with a theme-override tag', async () => {
+  // 系统信息卡顶部概括主题覆盖并给出主题设置入口（起不再另设「当前生效」摘要条）。
+  it('states the theme override at the top of the system information card', async () => {
     renderPage('主题云')
     const panel = await screen.findByTestId('system-settings-baseline-system')
-    const summary = within(within(panel).getByRole('navigation', { name: '当前生效' }))
-    const name = summary.getByRole('button', { name: /登录后显示名称/ })
-    expect(name).toHaveTextContent('主题云')
-    expect(within(name).getByText('主题覆盖')).toBeInTheDocument()
+    expect(within(panel).queryByRole('navigation', { name: '当前生效' })).not.toBeInTheDocument()
     expect(within(panel).getByText(/当前由主题「石板」覆盖，登录后显示为「主题云」/)).toBeInTheDocument()
   })
 })

@@ -39,6 +39,8 @@ const panels = [
   { kind: 'defaults', add: '新增设置', created: '默认设置已创建', read: 'listUserConfigs', create: 'createUserConfig', remove: 'removeUserConfig', item: config, key: 'stream-user-configs' },
 ] as const
 type Panel = typeof panels[number]
+// 租户视角不显示用户列（归属由会话决定），用行内的分组名 / 设置名确认数据已渲染
+const rowText = (panel: Panel) => panel.kind === 'groups' ? '分组甲' : '监听协议'
 
 function setup(panel: Panel, admin = false, permissions?: string[]) {
   const actor = principal({ scope_kind: admin ? 'platform' : 'tenant', permissions: permissions ?? ['streams.read', 'streams.manage', ...(admin ? ['identity.users.manage'] : [])] })
@@ -78,14 +80,41 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
     expect(await screen.findByText('用户甲')).toBeInTheDocument()
   })
 
-  // 说明文字与工具条按钮同一行（同一个 flex 工具条），不再单独一行。
-  it('keeps the panel description and actions in one toolbar row', async () => {
+  // 工具条只放操作，不再常驻重复说明
+  it('keeps only actions in the toolbar without a repeated description', async () => {
     setup(panel, true)
     const add = await screen.findByRole('button', { name: panel.add })
     const toolbar = add.closest('.stream-panel-toolbar')!
-    const description = document.querySelector('.stream-panel-description')
-    if (panel.kind === 'defaults') expect(toolbar).toContainElement(description as HTMLElement)
+    expect(document.querySelector('.stream-panel-description')).toBeNull()
     expect(toolbar.classList.contains('is-end')).toBe(false)
+  })
+
+  // 普通租户归属由会话决定：弹窗无用户字段、列表无用户列，提交不带 owner
+  it('hides the owner field and column for tenants and sends no owner', async () => {
+    const create = vi.spyOn(streamGroupsApi, panel.create).mockResolvedValue(panel.item as never)
+    const { user } = setup(panel)
+    await screen.findAllByText(rowText(panel))
+    expect(screen.queryByRole('columnheader', { name: '用户' })).not.toBeInTheDocument()
+    expect(screen.queryByText('用户甲')).not.toBeInTheDocument()
+    const dialog = await openCreate(panel, user)
+    expect(within(dialog).queryByRole('combobox', { name: '用户' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('textbox', { name: '用户' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('用户')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '确认' }))
+    await waitFor(() => expect(create).toHaveBeenCalledOnce())
+    expect(create.mock.calls[0][1]).not.toHaveProperty('owner_id')
+    expect(create.mock.calls[0][1]).not.toHaveProperty('target_scope_id')
+  })
+
+  it('keeps the owner column and a required owner for administrators', async () => {
+    const create = vi.spyOn(streamGroupsApi, panel.create).mockResolvedValue(panel.item as never)
+    const { user } = setup(panel, true)
+    expect(await screen.findByRole('columnheader', { name: '用户' })).toBeInTheDocument()
+    const dialog = await openCreate(panel, user)
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: '用户' })).toBeEnabled())
+    await user.click(within(dialog).getByRole('button', { name: '确认' }))
+    expect(await within(dialog).findByText('请输入归属用户 ID')).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
   })
 
   it('retries failed reads and renders an empty result without raw errors', async () => {
@@ -182,12 +211,12 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
       .mockResolvedValue(list([panel.item], 1, 10) as never)
     const remove = vi.spyOn(streamGroupsApi, panel.remove).mockResolvedValue(undefined)
     const { user } = setup(panel)
-    await screen.findByText('用户甲')
+    await screen.findAllByText(rowText(panel))
     await user.click(screen.getByTitle('2'))
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.getAllByRole('button', { name: '删除' })[1]).toBeEnabled())
     await user.click(screen.getAllByRole('button', { name: '删除' })[1])
-    await user.click(await screen.findByRole('button', { name: '确认删除' }))
+    await user.click(await screen.findByRole('button', { name: /^确认删除/ }))
     await waitFor(() => expect(remove).toHaveBeenCalledOnce())
     await waitFor(() => expect(read).toHaveBeenCalledTimes(4))
     expect(read).toHaveBeenLastCalledWith(expect.any(String), { page: 1, limit: 10 })
@@ -196,10 +225,10 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
   it('hides stale data and prevents writes after a list 403', async () => {
     const read = vi.mocked(streamGroupsApi[panel.read])
     const { client, actor } = setup(panel)
-    await screen.findByText('用户甲')
+    await screen.findAllByText(rowText(panel))
     read.mockRejectedValue(new ApiError('private response', 403, 'permission_denied'))
     await act(async () => { await client.invalidateQueries({ queryKey: [panel.key, actor.scope_kind, actor.scope_id] }) })
-    await waitFor(() => expect(screen.queryByText('用户甲')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryAllByText(rowText(panel))).toHaveLength(0))
     expect(screen.getByRole('button', { name: panel.add })).toBeDisabled()
     expect(read).toHaveBeenCalledTimes(2)
   })
@@ -214,10 +243,10 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
       await user.click(within(dialog).getByRole('button', { name: '确认' }))
       expect(await screen.findByText('请输入分组名称')).toBeInTheDocument()
     } else {
-      await user.click(within(dialog).getByRole('radio', { name: '转发分组' }).closest('label')!)
+      await user.click(within(dialog).getByRole('radio', { name: '指定分组的新建转发' }).closest('label')!)
       await user.click(within(dialog).getByRole('button', { name: '取消' }))
       const fresh = await openCreate(panel, user)
-      expect(within(fresh).getByRole('radio', { name: '全局' })).toBeChecked()
+      expect(within(fresh).getByRole('radio', { name: '本账号全部新建转发' })).toBeChecked()
     }
     expect(create).not.toHaveBeenCalled()
   })
@@ -266,9 +295,9 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
     const pending = deferred<void>()
     const remove = vi.spyOn(streamGroupsApi, panel.remove).mockReturnValueOnce(pending.promise).mockResolvedValue(undefined)
     const { user, actor } = setup(panel)
-    await screen.findByText('用户甲')
+    await screen.findAllByText(rowText(panel))
     await user.click(screen.getAllByRole('button', { name: '删除' })[1])
-    await user.click(await screen.findByRole('button', { name: '确认删除' }))
+    await user.click(await screen.findByRole('button', { name: /^确认删除/ }))
     await waitFor(() => expect(remove).toHaveBeenCalledOnce())
     act(() => useSessionStore.getState().setSession(authResponse(actor), { ...actor, permissions: ['streams.read'] }, 'refresh'))
     await act(async () => pending.reject(new ApiError('lost response', 0, 'network_error')))
@@ -284,10 +313,10 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
     const pending = deferred<void>()
     const remove = vi.spyOn(streamGroupsApi, panel.remove).mockRejectedValueOnce(new ApiError('lost response', 0, 'network_error')).mockReturnValueOnce(pending.promise).mockResolvedValue(undefined)
     const { user } = setup(panel)
-    await screen.findAllByText('用户甲')
+    await screen.findAllByText(rowText(panel))
     await user.click(screen.getAllByRole('checkbox')[0])
     await user.click(screen.getAllByRole('button', { name: '删除' })[0])
-    await user.click(await screen.findByRole('button', { name: '确认删除' }))
+    await user.click(await screen.findByRole('button', { name: /^确认删除/ }))
     await waitFor(() => expect(remove).toHaveBeenCalledTimes(2))
     expect(screen.getByRole('button', { name: panel.add })).toBeDisabled()
     await act(async () => pending.resolve())
@@ -301,11 +330,11 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
   it('does not delete after permission is revoked while confirmation is open', async () => {
     const remove = vi.spyOn(streamGroupsApi, panel.remove)
     const { user, actor } = setup(panel)
-    await screen.findByText('用户甲')
+    await screen.findAllByText(rowText(panel))
     await user.click(screen.getAllByRole('button', { name: '删除' })[1])
-    await screen.findByRole('button', { name: '确认删除' })
+    await screen.findByRole('button', { name: /^确认删除/ })
     act(() => useSessionStore.getState().setSession(authResponse(actor), { ...actor, permissions: ['streams.read'] }, 'refresh'))
-    const confirm = screen.queryByRole('button', { name: '确认删除' })
+    const confirm = screen.queryByRole('button', { name: /^确认删除/ })
     if (confirm) await user.click(confirm)
     expect(remove).not.toHaveBeenCalled()
   })
@@ -324,6 +353,43 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
   })
 })
 
+// 分组行内「编辑」走带 If-Match 的 PATCH；版本冲突提示并刷新。
+describe('group edit', () => {
+  beforeEach(() => {
+    vi.spyOn(streamGroupsApi, 'listGroups').mockResolvedValue(list([group]))
+    vi.spyOn(usersApi, 'list').mockResolvedValue(list([owner]))
+  })
+
+  it('edits the name and remark with the row revision and no owner field', async () => {
+    const update = vi.spyOn(streamGroupsApi, 'updateGroup').mockResolvedValue({ ...group, name: '分组乙', revision: 4 })
+    const { user } = setup(panels[0], true)
+    await user.click(await screen.findByRole('button', { name: '编辑分组 分组甲' }))
+    const dialog = await screen.findByRole('dialog', { name: '编辑分组' })
+    expect(within(dialog).queryByRole('combobox', { name: '用户' })).not.toBeInTheDocument()
+    const name = within(dialog).getByRole('textbox', { name: '名称' })
+    expect(name).toHaveValue('分组甲')
+    await user.clear(name)
+    await user.type(name, '分组乙')
+    await user.click(within(dialog).getByRole('button', { name: '确认' }))
+    await waitFor(() => expect(update).toHaveBeenCalledOnce())
+    expect(update.mock.calls[0][1]).toBe(group.id)
+    expect(update.mock.calls[0][2]).toEqual({ name: '分组乙', remark: '', expected_revision: 3 })
+    expect(await screen.findByText('分组已保存')).toBeInTheDocument()
+    await waitFor(() => expect(streamGroupsApi.listGroups).toHaveBeenCalledTimes(2))
+  })
+
+  it('says the group changed and reloads the list on a version conflict', async () => {
+    vi.spyOn(streamGroupsApi, 'updateGroup').mockRejectedValue(new ApiError('conflict', 409, 'version_conflict'))
+    const { user } = setup(panels[0])
+    await user.click(await screen.findByRole('button', { name: '编辑分组 分组甲' }))
+    const dialog = await screen.findByRole('dialog', { name: '编辑分组' })
+    await user.click(within(dialog).getByRole('button', { name: '确认' }))
+    expect(await screen.findByText('分组已被其他操作修改，已刷新列表，请重新编辑')).toBeInTheDocument()
+    await waitFor(() => expect(streamGroupsApi.listGroups).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑分组' })).not.toBeInTheDocument())
+  })
+})
+
 describe('default group options', () => {
   it('loads every group page, filters by the selected owner tenant and clears a previous owner group', async () => {
     vi.spyOn(streamGroupsApi, 'listUserConfigs').mockResolvedValue(list([]))
@@ -336,7 +402,8 @@ describe('default group options', () => {
     const dialog = await openCreate(panels[1], user)
     await user.click(within(dialog).getByRole('combobox', { name: '用户' }))
     await user.click(await screen.findByText('用户甲', { selector: '.ant-select-item-option-content' }))
-    await user.click(within(dialog).getByRole('radio', { name: '转发分组' }).closest('label')!)
+    expect(within(dialog).getByRole('radio', { name: '用户甲 的全部新建转发' })).toBeChecked()
+    await user.click(within(dialog).getByRole('radio', { name: '用户甲 指定分组的新建转发' }).closest('label')!)
     await user.click(within(dialog).getByRole('combobox', { name: '转发分组' }))
     await user.click(await screen.findByText('分组甲', { selector: '.ant-select-item-option-content' }))
     expect(screen.queryByText('分组乙', { selector: '.ant-select-item-option-content' })).not.toBeInTheDocument()
@@ -363,7 +430,7 @@ describe('default group options', () => {
     const create = vi.spyOn(streamGroupsApi, 'createUserConfig').mockResolvedValue(config)
     const { user } = setup(panels[1])
     const dialog = await openCreate(panels[1], user)
-    await user.click(within(dialog).getByRole('radio', { name: '转发分组' }).closest('label')!)
+    await user.click(within(dialog).getByRole('radio', { name: '指定分组的新建转发' }).closest('label')!)
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('分组列表加载失败')
     expect(dialog).not.toHaveTextContent('private group error')
     expect(within(dialog).getByRole('button', { name: '确认' })).toBeDisabled()
@@ -375,5 +442,107 @@ describe('default group options', () => {
     await waitFor(() => expect(create).toHaveBeenCalledOnce())
     expect(create.mock.calls[0][1]).toEqual({ setting_name: 'listen_protocol', setting_value: 'tcp', scope_name: 'group', group_id: group.id })
     expect(read).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('default scope labels', () => {
+  it('describes the tenant scope as new forwarding rules of this account', async () => {
+    vi.spyOn(streamGroupsApi, 'listUserConfigs').mockResolvedValue(list([config, { ...config, id: otherID, display_id: '2', scope_name: 'group' as const, group: { id: group.id, name: '分组甲', remark: '' } }]))
+    setup(panels[1])
+    expect(await screen.findByText('本账号全部新建转发')).toBeInTheDocument()
+    expect(screen.getByText('指定分组的新建转发：分组甲')).toBeInTheDocument()
+    expect(screen.queryByText('全局')).not.toBeInTheDocument()
+  })
+
+  it('names the owner in administrator scope labels', async () => {
+    vi.spyOn(streamGroupsApi, 'listUserConfigs').mockResolvedValue(list([config]))
+    setup(panels[1], true)
+    expect(await screen.findByText('用户甲 的全部新建转发')).toBeInTheDocument()
+  })
+})
+
+describe('delete confirmations name their target', () => {
+  beforeEach(() => {
+    vi.spyOn(usersApi, 'list').mockResolvedValue(list([owner]))
+  })
+
+  it('titles a group delete with its name as text and states the real reference count', async () => {
+    const named = { ...group, name: '<i>分组甲</i>', stream_count: 3 }
+    vi.spyOn(streamGroupsApi, 'listGroups').mockResolvedValue(list([named]))
+    const { user } = setup(panels[0])
+    await screen.findAllByText('<i>分组甲</i>')
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '删除' })[1]).toBeEnabled())
+    await user.click(screen.getAllByRole('button', { name: '删除' })[1])
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('删除分组 <i>分组甲</i>？', { selector: '.ant-modal-confirm-title' })).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleName('删除分组 <i>分组甲</i>？')
+    expect(dialog.querySelector('i')).toBeNull()
+    expect(within(dialog).getByText('3 条转发引用此分组，删除后这些转发会失去分组归属。')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '确认删除分组 <i>分组甲</i>' })).toBeInTheDocument()
+  })
+
+  it('does not warn about losing the group when nothing references it, and counts a multi-select', async () => {
+    const second = { ...group, id: otherID, display_id: '2', name: '分组乙', stream_count: 0 }
+    vi.spyOn(streamGroupsApi, 'listGroups').mockResolvedValue(list([group, second]))
+    const { user } = setup(panels[0])
+    await screen.findAllByText('分组乙')
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '删除' })[1]).toBeEnabled())
+    await user.click(screen.getAllByRole('button', { name: '删除' })[1])
+    let dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('没有转发引用此分组。')).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent('失去分组归属')
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getAllByRole('checkbox')[0])
+    await user.click(screen.getAllByRole('button', { name: '删除' })[0])
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('删除 2 个分组？', { selector: '.ant-modal-confirm-title' })).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleName('删除 2 个分组？')
+    expect(within(dialog).getByRole('button', { name: '确认删除 2 个分组' })).toBeInTheDocument()
+  })
+
+  it('invalidates the forwarding list, details and group pickers of the scope after a group delete', async () => {
+    vi.spyOn(streamGroupsApi, 'listGroups').mockResolvedValueOnce(list([group])).mockResolvedValue(list([]))
+    vi.spyOn(streamGroupsApi, 'removeGroup').mockResolvedValue(undefined)
+    const { user, client, actor } = setup(panels[0])
+    const epoch = useSessionStore.getState().sessionEpoch
+    const streamsKey = ['streams', actor.scope_kind, actor.scope_id, epoch, 1, 10, {}]
+    const detailKey = ['stream-detail', actor.scope_kind, actor.scope_id, epoch, 'stream-1']
+    const pickerKey = ['stream-form-group-options', actor.scope_kind, actor.scope_id, epoch, actor.scope_id]
+    const otherScopeKey = ['streams', actor.scope_kind, otherID, epoch, 1, 10, {}]
+    for (const key of [streamsKey, detailKey, pickerKey, otherScopeKey]) client.setQueryData(key, { items: [{ group: { id: group.id, name: group.name } }] })
+    await screen.findAllByText('分组甲')
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '删除' })[1]).toBeEnabled())
+    await user.click(screen.getAllByRole('button', { name: '删除' })[1])
+    await user.click(await screen.findByRole('button', { name: /^确认删除/ }))
+    await waitFor(() => expect(streamGroupsApi.removeGroup).toHaveBeenCalledOnce())
+    await waitFor(() => expect(client.getQueryState(streamsKey)?.isInvalidated).toBe(true))
+    expect(client.getQueryState(detailKey)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(pickerKey)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(otherScopeKey)?.isInvalidated).toBe(false)
+  })
+
+  it('names the default setting, its value and scope, and counts a multi-select', async () => {
+    const grouped = { ...config, id: otherID, display_id: '2', scope_name: 'group' as const, group: { id: group.id, name: '分组甲', remark: '' } }
+    vi.spyOn(streamGroupsApi, 'listUserConfigs').mockResolvedValue(list([config, grouped]))
+    const { user } = setup(panels[1])
+    await screen.findByText('本账号全部新建转发')
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '删除' })[1]).toBeEnabled())
+    await user.click(screen.getAllByRole('button', { name: '删除' })[1])
+    let dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('删除默认设置「监听协议」？', { selector: '.ant-modal-confirm-title' })).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleName('删除默认设置「监听协议」？')
+    expect(within(dialog).getByText('设置值：TCP')).toBeInTheDocument()
+    expect(within(dialog).getByText('范围：本账号全部新建转发')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '确认删除默认设置 监听协议' })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getAllByRole('checkbox')[0])
+    await user.click(screen.getAllByRole('button', { name: '删除' })[0])
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('删除 2 项默认设置？', { selector: '.ant-modal-confirm-title' })).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleName('删除 2 项默认设置？')
+    expect(within(dialog).getByText('监听协议：TCP（指定分组的新建转发：分组甲）')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '确认删除 2 项默认设置' })).toBeInTheDocument()
   })
 })

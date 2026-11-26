@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, Button, Input, Result, Select, Table, Tabs, Tag, type TableColumnsType } from 'antd'
+import { Alert, Button, Checkbox, Input, Result, Select, Tag, type TableColumnsType } from 'antd'
+import { Tabs } from '../components/Tabs'
 import dayjs, { type Dayjs } from 'dayjs'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { AdvancedFilters, TimeRangeFilter, clampTimeRange, resolveTimeRangePreset, liveFilterDelay, useFeedback, useLiveApply } from '@cdnca/ui'
+import { AdvancedFilters, DEFAULT_TIME_RANGE_PRESETS, TimeRangeFilter, clampTimeRange, resolveTimeRangePreset, liveFilterDelay, useFeedback, useLiveApply, Table } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import { isIPAddress } from '../api/gateways'
@@ -24,6 +25,9 @@ import { filterParam, useFilterUrl } from './filterUrl'
 import './AccountLogPage.css'
 
 type LogTab = 'login' | 'operation' | 'notification'
+const logTabs: readonly LogTab[] = ['login', 'operation', 'notification']
+// 默认查询就是「近30天」，页面选中这一项（不再是空白的「自定义」）。
+const defaultPreset = 'last30d'
 type Verb = 'create' | 'update' | 'delete'
 
 const pageSizes = [10, 20, 50]
@@ -41,7 +45,17 @@ export default function AccountLogPage() {
   const accessToken = useSessionStore((state) => state.accessToken)
   const principal = useSessionStore((state) => state.principal)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
-  const [tab, setTab] = useState<LogTab>('login')
+  // 页签取自 ?tab=（只认 operation / notification，缺省或其它值是登录日志），
+  // 切换时写回 URL（默认的 login 不写，其它参数保留），刷新后停在原页签。
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab') as LogTab | null
+  const tab: LogTab = requestedTab && logTabs.includes(requestedTab) ? requestedTab : 'login'
+  const setTab = (next: LogTab) => setSearchParams((current) => {
+    const params = new URLSearchParams(current)
+    if (next === 'login') params.delete('tab')
+    else params.set('tab', next)
+    return params
+  }, { replace: true })
   const text = useCallback((key: ObservabilityLogMessageKey) => observabilityLogMessage(language, key), [language])
 
   if (!accessToken || !principal) return null
@@ -51,10 +65,12 @@ export default function AccountLogPage() {
   if (!allowed) return <Result status="403" title="403" subTitle={text('failed')} />
 
   return <section className="identity-page account-log-page" aria-label={text('title')} data-testid="account-log-page">
-    <Tabs className="account-log-tabs" activeKey={tab} onChange={(value) => setTab(value as LogTab)} aria-label={text('logTabs')}
-      items={[{ key: 'login', label: text('loginView') }, { key: 'operation', label: text('operationView') },
-        { key: 'notification', label: text('notification') }]} />
-    <AccountLogTable key={`${tab}:${principal.scope_id}:${sessionEpoch}`} tab={tab} accessToken={accessToken} language={language} />
+    {/* 各页签的表格放进自己的 tabpanel；切走即卸载，仍按 tab/scope/sessionEpoch 隔离筛选与游标 */}
+    <Tabs className="account-log-tabs" activeKey={tab} onChange={(value) => setTab(value as LogTab)} aria-label={text('logTabs')} destroyOnHidden
+      items={([['login', 'loginView'], ['operation', 'operationView'], ['notification', 'notification']] as const).map(([key, label]) => ({
+        key, label: text(label),
+        children: <AccountLogTable key={`${key}:${principal.scope_id}:${sessionEpoch}`} tab={key} accessToken={accessToken} language={language} />,
+      }))} />
   </section>
 }
 
@@ -63,25 +79,32 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
   const feedback = useFeedback()
   const text = useCallback((key: ObservabilityLogMessageKey) => observabilityLogMessage(language, key), [language])
   const [defaultFrom] = useState(() => new Date(Date.now() - defaultRangeMs).toISOString())
+  // 已生效的 IP 写进 URL（ip），分享链接带入。时间范围同样只写已生效值：快捷范围写 range，
+  // 自定义写 range=custom 与 from/to；默认的近30天不写；非法或超出 31 天的值回到默认。
+  const [initialParams] = useSearchParams()
+  const [initialTime] = useState(() => timeFromUrl(initialParams))
   // A3/A4：筛选项先进草稿，点「查询」或在输入框回车才发请求；校验不过就地标红，不发请求。
   const [status, setStatus] = useState<'success' | 'failed'>()
   const [verb, setVerb] = useState<Verb>()
   // No range = the default last 30 days with an open end; a quick range is resolved again on query.
-  const [timePreset, setTimePreset] = useState('custom')
-  const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null)
-  // 已生效的 IP 写进 URL（ip），分享链接带入。
-  const [initialParams] = useSearchParams()
+  const [timePreset, setTimePreset] = useState(initialTime.preset)
+  const [range, setRange] = useState<[Dayjs, Dayjs] | null>(initialTime.range)
+  const [appliedTime, setAppliedTime] = useState(initialTime)
   const [sourceIP, setSourceIP] = useState(() => filterParam(initialParams, 'ip'))
   const [categoryDraft, setCategory] = useState<ObservabilityLogCategory>()
   const [objectDraft, setObject] = useState('')
   const [changeDraft, setChange] = useState('')
+  // 操作日志默认不列成功的会话续期（服务端过滤，总数与翻页一致）；
+  // 高级筛选里勾「显示会话续期」看全部记录。续期失败始终列出。
+  const [showRefreshDraft, setShowRefresh] = useState(false)
   const [fieldError, setFieldError] = useState<{ ip?: ObservabilityLogMessageKey; range?: ObservabilityLogMessageKey }>({})
   const [pageSize, setPageSize] = useState(pageSizes[0])
   const [cursors, setCursors] = useState<string[]>([])
   const cursor = cursors.at(-1)
   // advanced: the operation tab's 高级筛选 values to apply (a tag × or 清空 passes them with the cleared ones).
-  type Advanced = { verb?: Verb; category?: ObservabilityLogCategory; object: string; change: string }
-  const draft = ({ verb: action, category, object, change }: Advanced = { verb, category: categoryDraft, object: objectDraft, change: changeDraft }): ObservabilityLogFilters => {
+  type Advanced = { verb?: Verb; category?: ObservabilityLogCategory; object: string; change: string; showRefresh: boolean }
+  const current: Advanced = { verb, category: categoryDraft, object: objectDraft, change: changeDraft, showRefresh: showRefreshDraft }
+  const draft = ({ verb: action, category, object, change, showRefresh }: Advanced = current): ObservabilityLogFilters => {
     // Quick ranges are re-resolved on query; the end is clipped to now (today would otherwise end at midnight, which the backend refuses).
     const resolved = timePreset === 'custom' ? null : resolveTimeRangePreset(timePreset)
     const window = timePreset === 'custom' ? range : resolved && clampTimeRange(resolved, { maxDate: dayjs() })
@@ -92,6 +115,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
     category: tab === 'operation' ? category : undefined,
     resourceId: tab === 'operation' ? object.trim() || undefined : undefined,
     change: tab === 'operation' ? change.trim() || undefined : undefined,
+    hideSessionRefresh: tab === 'operation' && !showRefresh ? true : undefined,
     sourceIp: sourceIP.trim() || undefined,
     from: window ? window[0].toDate().toISOString() : defaultFrom,
     to: window ? window[1].toDate().toISOString() : undefined,
@@ -99,8 +123,8 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
   // 打开页面按默认条件查一次；之后边输入边生效
   // （文本 400ms 防抖，下拉/时间范围选完即查），「查询」立即刷新；校验不过不发请求并就地标错。
   const [applied, setApplied] = useState<ObservabilityLogFilters>(draft)
-  const signature = (advanced: Advanced = { verb, category: categoryDraft, object: objectDraft, change: changeDraft }) =>
-    JSON.stringify([tab, status, advanced.verb, timePreset, range?.map((value) => value.valueOf()), sourceIP.trim(), advanced.category, advanced.object.trim(), advanced.change.trim()])
+  const signature = (advanced: Advanced = current) =>
+    JSON.stringify([tab, status, advanced.verb, timePreset, range?.map((value) => value.valueOf()), sourceIP.trim(), advanced.category, advanced.object.trim(), advanced.change.trim(), advanced.showRefresh])
   const [appliedSignature, setAppliedSignature] = useState(signature)
   const validate = () => {
     const ip = sourceIP.trim()
@@ -113,7 +137,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
   // control-log-ui：条件变了按新数据读；同一条件下翻页、切 tab 回来 30 秒内用缓存。
   const [generation, renew] = useLogListGeneration([applied, pageSize])
   const submit = (advanced?: Advanced) => {
-    if (advanced) { setVerb(advanced.verb); setCategory(advanced.category); setObject(advanced.object); setChange(advanced.change) }
+    if (advanced) { setVerb(advanced.verb); setCategory(advanced.category); setObject(advanced.object); setChange(advanced.change); setShowRefresh(advanced.showRefresh) }
     const errors = validate()
     setFieldError(errors)
     if (errors.ip || errors.range) return
@@ -121,6 +145,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
     if (!advanced && next === appliedSignature) { void query.refetch(); return }
     setAppliedSignature(next)
     setApplied(draft(advanced))
+    setAppliedTime({ preset: timePreset, range })
     setCursors([])
     renew()
   }
@@ -133,7 +158,9 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftErrors.ip, draftErrors.range])
   useLiveApply(signature(), appliedSignature, () => submit(), { valid: !draftErrors.ip && !draftErrors.range })
-  useFilterUrl({ ip: applied.sourceIp })
+  useFilterUrl({ ip: applied.sourceIp, range: appliedTime.preset === defaultPreset || (appliedTime.preset === 'custom' && !appliedTime.range) ? undefined : appliedTime.preset,
+    from: appliedTime.preset === 'custom' ? appliedTime.range?.[0].toISOString() : undefined,
+    to: appliedTime.preset === 'custom' ? appliedTime.range?.[1].toISOString() : undefined })
   const onEnter = { onPressEnter: () => submit() }
   const filters: ObservabilityLogFilters = { ...applied, limit: pageSize, cursor }
   const query = useQuery({ queryKey: ['account-logs', generation, filters], queryFn: () => observabilityLogsApi.list(accessToken, filters), retry: false, ...logListQueryOptions })
@@ -154,7 +181,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
       return [
         { title: text('action'), dataIndex: 'action', width: 200, render: (value: string) => observabilityLogCodeMessage(language, 'action', value) },
         { title: text('result'), dataIndex: 'result_code', width: 140, render: (value: string) => <Tag className="account-log-status"
-          color={value === 'success' || value === 'delivered' ? 'success' : value === 'accepted' || value === 'unknown' ? 'processing' : 'error'}>
+          color={value === 'success' || value === 'delivered' ? 'success' : value === 'accepted' || value === 'dispatching' || value === 'unknown' ? 'processing' : 'error'}>
           {observabilityLogCodeMessage(language, 'result', value)}</Tag> },
         { title: text('object'), key: 'object', width: 200, render: (_, fact) => <span className="account-log-muted">{objectLabel(fact, text)}</span> },
         { title: text('time'), dataIndex: 'occurred_at', width: 170, render: (value: string) => <DateTimeCell value={value} language={language} /> },
@@ -203,6 +230,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
     <AdvancedFilters
       className={`account-log-filters${tab === 'operation' ? ' account-log-filters-boxed' : ''}`}
       storageKey="account-log"
+      instant
       primary={<>
         {tab === 'login'
           ? <Select allowClear aria-label={text('loginStatus')} placeholder={text('allStatus')} value={status} onChange={setStatus} style={{ width: 160 }}
@@ -228,16 +256,20 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
         { key: 'category', label: text('category'), applied: applied.category ? t(`categories.${applied.category}`) : '',
           field: <Select allowClear showSearch optionFilterProp="label" aria-label={text('category')} placeholder={text('categoryPlaceholder')} value={categoryDraft}
             onChange={setCategory} options={observabilityLogCategories.map((value) => ({ value, label: t(`categories.${value}`) }))} /> },
+        { key: 'showRefresh', label: text('sessionRefresh'), applied: applied.hideSessionRefresh ? '' : text('sessionRefreshShown'), selfLabelled: true,
+          field: <Checkbox checked={showRefreshDraft} onChange={(event) => setShowRefresh(event.target.checked)}>{text('showSessionRefresh')}</Checkbox> },
         { key: 'object', label: text('object'), applied: applied.resourceId,
           field: <Input aria-label={text('object')} placeholder={text('objectPlaceholder')} value={objectDraft} onChange={(event) => setObject(event.target.value)} /> },
         { key: 'change', label: text('change'), applied: applied.change,
           field: <Input aria-label={text('change')} placeholder={text('changePlaceholder')} value={changeDraft} onChange={(event) => setChange(event.target.value)} /> },
       ] : []}
       queryText={text('query')}
-      queryLoading={query.isFetching}
+      queryLoading={query.isFetching && query.fetchStatus !== 'paused'}
+      // 离线时查询暂停，按钮旁标明等待网络；恢复后 Query 自动读一次，标记随之消失。
+      extra={query.fetchStatus === 'paused' ? <span className="account-log-waiting" role="status">{text('waitingNetwork')}</span> : undefined}
       onQuery={() => submit()}
-      onClearAdvanced={() => submit({ verb: undefined, category: undefined, object: '', change: '' })}
-      onRemove={(key) => submit({ verb, category: categoryDraft, object: objectDraft, change: changeDraft, [key]: key === 'category' || key === 'verb' ? undefined : '' })}
+      onClearAdvanced={() => submit({ verb: undefined, category: undefined, object: '', change: '', showRefresh: false })}
+      onRemove={(key) => submit({ ...current, [key]: key === 'category' || key === 'verb' ? undefined : key === 'showRefresh' ? false : '' })}
     />
     {loadError ? <Alert className="account-log-error" type="error" showIcon role="alert" message={loadError} /> : null}
     <div className="account-log-table" aria-busy={query.isFetching}>
@@ -264,6 +296,20 @@ function errorKey(error: unknown): ObservabilityLogMessageKey {
   if (error.code === 'observability_logs_unavailable') return 'unavailable'
   if (error.code === 'permission_denied') return 'permissionDenied'
   return 'failed'
+}
+
+// 已生效时间范围的 URL 形式：range=today|last7d|last30d，或 range=custom&from=…&to=…（不超过 31 天、结束不晚于现在）。
+function timeFromUrl(params: URLSearchParams): { preset: string; range: [Dayjs, Dayjs] | null } {
+  const preset = filterParam(params, 'range')
+  if ((DEFAULT_TIME_RANGE_PRESETS as readonly string[]).includes(preset)) return { preset, range: null }
+  if (preset === 'custom') {
+    const from = dayjs(filterParam(params, 'from'))
+    const to = dayjs(filterParam(params, 'to'))
+    if (from.isValid() && to.isValid() && !from.isAfter(to) && to.diff(from) <= maxRangeMs && to.valueOf() <= Date.now() + 60_000) {
+      return { preset, range: [from, to] }
+    }
+  }
+  return { preset: defaultPreset, range: null }
 }
 
 function FieldWithError({ error, id, children }: { error?: string; id: string; children: ReactNode }) {

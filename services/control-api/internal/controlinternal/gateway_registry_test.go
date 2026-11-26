@@ -3,8 +3,11 @@ package controlinternal
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"math/big"
+	"slices"
 	"testing"
+	"time"
 
 	controlv1 "github.com/cdnca/cdnca/proto/gen/go/controlinternal/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeidentity"
@@ -18,6 +21,11 @@ type fakeGatewayRegistry struct {
 	calls      int
 	ready      []string
 	renewKind  string
+	local      []string // ObserveLocalGateway calls: "<instance>@<version>@<cert not after set>"
+}
+
+func (f *fakeGatewayRegistry) ObserveLocalGateway(instanceID, version string, notAfter time.Time) {
+	f.local = append(f.local, fmt.Sprintf("%s@%s@%t", instanceID, version, !notAfter.IsZero()))
 }
 
 func (f *fakeGatewayRegistry) AuthorizeGateway(_ context.Context, id uuid.UUID, serial string, digest [32]byte) (bool, error) {
@@ -106,9 +114,18 @@ func TestReportGatewayReadyAndRenew(t *testing.T) {
 	}
 	// The co-located Gateway (shared SAN) learns the installation ID too, and
 	// is not recorded in the registry.
-	local, err := service.ReportGatewayReady(gatewayContext(t), &controlv1.ReportGatewayReadyRequest{Request: metadata(), GatewayInstanceId: testGatewayID})
+	localLeaf := testCertificateWithURI(t, DefaultGatewayWorkloadURISAN, 1)
+	localLeaf.NotAfter = testNow.Add(90 * 24 * time.Hour)
+	local, err := service.ReportGatewayReady(tlsContext(nil, [][]*x509.Certificate{{localLeaf}}),
+		&controlv1.ReportGatewayReadyRequest{Request: metadata(), GatewayInstanceId: testGatewayID, Version: "1.0.36"})
 	if err != nil || local.GetInstallationId() != registry.InstallationID() || len(registry.ready) != 1 {
 		t.Fatalf("co-located ready = %v %v %v", local, err, registry.ready)
+	}
+	// the co-located Gateway's
+	// call is observed (certificate on authentication, version on ready); a
+	// standalone Gateway's is not.
+	if want := []string{testGatewayID + "@@true", testGatewayID + "@1.0.36@false"}; !slices.Equal(registry.local, want) {
+		t.Fatalf("observed before ready version = %v", registry.local)
 	}
 
 	renewed, err := service.RenewGatewayCertificate(ctx, &controlv1.RenewGatewayCertificateRequest{Request: metadata(),
@@ -123,7 +140,7 @@ func TestReportGatewayReadyAndRenew(t *testing.T) {
 
 func (f *fakeGatewayRegistry) Settings(context.Context) (GatewaySettings, error) {
 	return GatewaySettings{
-		TrustedProxies:   []GatewayTrustedProxy{{CIDR: "173.245.48.0/20", Header: "CF-Connecting-IP"}},
+		TrustedProxies: []GatewayTrustedProxy{{CIDR: "173.245.48.0/20", Header: "CF-Connecting-IP"}},
 		Endpoints: []GatewayEndpoint{{Address: "gw.example.com:21444", ServerName: "gw.example.com", Transport: "grpc",
 			EnrollmentAddress: "gw.example.com:21443"}},
 		EndpointsVersion: "v1",

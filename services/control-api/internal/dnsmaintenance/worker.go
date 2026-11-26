@@ -29,6 +29,9 @@ type Targets interface {
 	ServingValues(context.Context, RepairTarget) (cnameallocation.TargetValues, error)
 	PublishSettings(context.Context, RepairTarget) (cnameallocation.PublishSettings, error)
 	ClaimedHostnames(context.Context, []uuid.UUID) (map[string]bool, error)
+	// CleanupPlanRecord is the full record a 清除CDN无关解析 item was planned
+	// for; ok is false for an item planned before migration 686.
+	CleanupPlanRecord(ctx context.Context, tenantID, jobID uuid.UUID, itemID string) (CleanupRecord, bool, error)
 	// ZoneApex returns the target zone's hosted domain, looked up once and
 	// written back for zones saved before migration 473.
 	ZoneApex(ctx context.Context, target RepairTarget, providerType string, credentials map[string]string) (string, error)

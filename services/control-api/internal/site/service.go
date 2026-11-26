@@ -41,6 +41,18 @@ func (s *Service) Create(ctx context.Context, actor Actor, request CreateRequest
 	if !validWriteMetadata(request.IdempotencyKey, request.RequestID) {
 		return WriteResult{}, ErrInvalidInput
 	}
+	// The replay digest is the request as sent, before the owner's defaults below: a retry after a 默认设置
+	// changed replays the receipt instead of conflicting with it.
+	digest, err := digestRequest(struct {
+		TargetScopeID uuid.UUID   `json:"target_scope_id"`
+		OwnerUserID   uuid.UUID   `json:"owner_user_id"`
+		Fields        SiteFields  `json:"fields"`
+		OriginPool    *OriginPool `json:"origin_pool"`
+		DNSProviderID *uuid.UUID  `json:"dns_provider_id,omitempty"`
+	}{request.TargetScopeID, request.OwnerUserID, checked, request.OriginPool, request.DNSProviderID})
+	if err != nil {
+		return WriteResult{}, err
+	}
 	// 网站列表 > 默认设置 (migration 490): the owner's defaults fill what the
 	// request left out (before normalizeFields fills its own); anything the
 	// request names wins.
@@ -81,16 +93,6 @@ func (s *Service) Create(ctx context.Context, actor Actor, request CreateRequest
 	}
 	request.OriginPool = &originPool
 	id, err := uuid.NewV7()
-	if err != nil {
-		return WriteResult{}, err
-	}
-	digest, err := digestRequest(struct {
-		TargetScopeID uuid.UUID  `json:"target_scope_id"`
-		OwnerUserID   uuid.UUID  `json:"owner_user_id"`
-		Fields        SiteFields `json:"fields"`
-		OriginPool    OriginPool `json:"origin_pool"`
-		DNSProviderID *uuid.UUID `json:"dns_provider_id,omitempty"`
-	}{request.TargetScopeID, request.OwnerUserID, request.Fields, originPool, request.DNSProviderID})
 	if err != nil {
 		return WriteResult{}, err
 	}

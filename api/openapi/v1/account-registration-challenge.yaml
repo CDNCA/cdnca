@@ -48,17 +48,46 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [registration_enabled, mode, human_check, turnstile_site_key, terms_version, email, sms, email_required, phone_required, ready, recovery]
+                    required: [registration_enabled, mode, human_check, turnstile_site_key, terms_version, terms_published, terms_required, email, sms, email_required, phone_required, qq_required, username_required, ready, recovery]
                     properties:
                       registration_enabled: {type: boolean}
                       mode: {type: string, enum: [builtin, verified, closed]}
                       human_check: {type: string, enum: [builtin_captcha, turnstile]}
                       turnstile_site_key: {type: string}
-                      terms_version: {type: string}
+                      terms_version:
+                        type: string
+                        description: >-
+                          The terms version a sign-up must accept (POST /v1/auth/register terms_version). Derived from the
+                          terms title and body saved on the system settings page ("terms-" and 12 hex digits of their
+                          SHA-256), so editing them asks for a new acceptance; the Turnstile flow uses
+                          ACCOUNT_REGISTRATION_TERMS_VERSION instead when the deployment sets it. Unpublished terms
+                          (terms_published false) have a version too (that of the empty body); the site's own terms
+                          page is not part of it.
+                      terms_published:
+                        type: boolean
+                        description: >-
+                          The system settings page has terms of its own: a body that is not blank and not the old
+                          default placeholder pair. False: GET /v1/auth/registration-terms answers 404 and the site pages
+                          link their own terms page; sign-up stays open (ready does not depend on it).
+                      terms_required:
+                        type: boolean
+                        description: >-
+                          Sign-up must accept terms: a visitor has some to read (published settings terms, a site page
+                          keyed terms or tos, or an agree link the site set itself). False: the pages show no agreement
+                          line and POST /v1/auth/register neither checks terms_accepted / terms_version nor records an
+                          acceptance; an exact retry still replays its receipt.
                       email: {$ref: '#/components/schemas/RegistrationChannel'}
                       sms: {$ref: '#/components/schemas/RegistrationChannel'}
                       email_required: {type: boolean}
                       phone_required: {type: boolean}
+                      qq_required:
+                        type: boolean
+                        description: Sign-up must give a QQ number (5–12 digits, POST /v1/auth/register qq).
+                      username_required:
+                        type: boolean
+                        description: >-
+                          Sign-up must give a username. False: it may be left empty and the controller generates one from the
+                          email (local part) or phone with a short keyed suffix; the 202 response returns it.
                       ready: {type: boolean}
                       recovery:
                         type: object
@@ -82,6 +111,40 @@ paths:
                             sms_sender_unavailable, email_template_missing, sms_template_missing, sms_template_unmapped,
                             turnstile_not_configured, verification_channel_unavailable]
         '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/auth/registration-terms:
+    get:
+      tags: [Account registration challenge]
+      operationId: getAccountRegistrationTerms
+      x-summary-zh: "注册用户协议：系统设置「账号与安全」里的协议标题、正文与当前版本"
+      summary: Sign-up terms
+      description: >-
+        Anonymous. The terms title and body edited on the system settings page (plain text, shown as text, never
+        as HTML) and the version registration-config reports, which a sign-up accepts.
+      x-description-zh: 匿名可读。正文为纯文本，页面按文本显示，不解析 HTML；version 与 registration-config 的 terms_version 相同。
+      responses:
+        '200':
+          description: The terms.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [title, body, version]
+                    properties:
+                      title: {type: string}
+                      body: {type: string}
+                      version: {type: string}
+        '404':
+          description: >-
+            registration_terms_not_configured: the system settings page has no published terms (registration-config
+            terms_published false).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
   /v1/auth/registration-challenges:
     post:
       tags: [Account registration challenge]
@@ -102,6 +165,12 @@ paths:
           description: Challenge accepted without identifying existing accounts.
           headers:
             X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Set-Cookie:
+              description: >-
+                Secure, HttpOnly, SameSite=Strict browser binding of the code, one per challenge
+                (cdnca_reg_challenge_bind_<channel>_<challenge_id>), Path=/v1/auth/registration-challenge-verifications,
+                expiring with the code; the verification is accepted only with it.
+              schema: {type: string}
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ChallengeResponse'}
@@ -132,8 +201,9 @@ paths:
             Set-Cookie:
               description: >-
                 Secure, HttpOnly, SameSite=Strict, host-only registration proof cookie, one per
-                verified channel (__Host-cdnca_registration_proof_email / _sms) so that several
-                required verifications can all be proved; registration reads both.
+                verified challenge (__Host-cdnca_registration_proof_<channel>_<challenge_id>) so that several
+                required verifications, and several sign-up tabs of one browser, can all be proved;
+                registration reads the challenges its verification_challenge_ids names.
               schema: {type: string}
         '409': {$ref: '#/components/responses/ErrorResponse'}
         '422': {$ref: '#/components/responses/ErrorResponse'}
@@ -192,8 +262,17 @@ components:
       additionalProperties: false
       required: [username, email, phone, verification_channel, human_token]
       properties:
-        username: {type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
-        email: {type: string, format: email, minLength: 3, maxLength: 254}
+        username:
+          type: string
+          maxLength: 128
+          pattern: '^(?:|[A-Za-z0-9][A-Za-z0-9._-]{2,127})$'
+          description: >-
+            May be empty while registration-config username_required is false: the code is then bound to the
+            username registration generates from the same email / phone.
+        email:
+          type: string
+          maxLength: 254
+          description: The email address; may be empty for an SMS code (verification_channel sms).
         phone: {type: string, minLength: 6, maxLength: 21, pattern: '^\+?[0-9]{6,20}$'}
         verification_channel: {type: string, enum: [email, sms]}
         human_token:
@@ -207,8 +286,17 @@ components:
       required: [challenge_id, username, email, phone, verification_channel, otp]
       properties:
         challenge_id: {type: string, format: uuid}
-        username: {type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
-        email: {type: string, format: email, minLength: 3, maxLength: 254}
+        username:
+          type: string
+          maxLength: 128
+          pattern: '^(?:|[A-Za-z0-9][A-Za-z0-9._-]{2,127})$'
+          description: >-
+            May be empty while registration-config username_required is false: the code is then bound to the
+            username registration generates from the same email / phone.
+        email:
+          type: string
+          maxLength: 254
+          description: The email address; may be empty for an SMS code (verification_channel sms).
         phone: {type: string, minLength: 6, maxLength: 21, pattern: '^\+?[0-9]{6,20}$'}
         verification_channel: {type: string, enum: [email, sms]}
         otp:
@@ -241,7 +329,12 @@ components:
           properties:
             code:
               type: string
+              description: >-
+                account_registration_human_invalid (422, challenge creation only): the image CAPTCHA or
+                Turnstile check failed, ask for a new one. account_registration_challenge_invalid (422):
+                the details (username, email, phone, channel) or the code are invalid.
               enum:
+                - account_registration_human_invalid
                 - account_registration_challenge_invalid
                 - account_registration_challenge_rate_limited
                 - account_registration_challenge_conflict

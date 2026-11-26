@@ -15,7 +15,9 @@ import (
 
 type securityBanApplierFunc func([]byte) SecurityBanResult
 
-func (function securityBanApplierFunc) ApplySecurityBans(encoded []byte) SecurityBanResult { return function(encoded) }
+func (function securityBanApplierFunc) ApplySecurityBans(encoded []byte) SecurityBanResult {
+	return function(encoded)
+}
 
 // The status binds the command (event, revision, digest); a refused snapshot
 // carries its error code, an Agent without an applier answers not_supported.

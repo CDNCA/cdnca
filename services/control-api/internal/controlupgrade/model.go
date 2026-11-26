@@ -87,6 +87,10 @@ type CreateRolloutBody struct {
 	CanaryNodeIDs     []string `json:"canary_node_ids"`
 	BatchSize         int      `json:"batch_size"`
 	AutomaticRollback bool     `json:"automatic_rollback"`
+	// StartWhenReady starts the plan once its background preparation made it
+	// (the console's create-then-start). Omitted when false, so the request
+	// digest of a create without it is unchanged.
+	StartWhenReady bool `json:"start_when_ready,omitempty"`
 }
 
 type CreateRolloutRequest struct {
@@ -195,4 +199,7 @@ type ListRolloutsResponse struct {
 	Page     int              `json:"page"`
 	PageSize int              `json:"page_size"`
 	Total    int64            `json:"total"`
+	// Preparations are the newest creates still being prepared or failed,
+	// independent of the page (only the node_id filter applies).
+	Preparations []RolloutPreparation `json:"preparations"`
 }

@@ -95,6 +95,34 @@ func TestNativeNewPlansRequireVerifiedReadyAndNeverUseBinaryDigest(t *testing.T)
 	}
 }
 
+// Problem 47: a running runner that refuses plans on an unverified current
+// release (the status.json read on test control) is reported with its own
+// reason, not as an unconfirmed runner or a generic version mismatch.
+func TestNativeStatusReportsCurrentReleaseUnverified(t *testing.T) {
+	handler, repository, request, status := nativeFixture(t)
+	status.Ready, status.Reason, status.Busy, status.Phase = false, controlplaneupgrade.NativeReasonCurrentReleaseUnverified, false, "idle"
+	status.CurrentVersion, status.CurrentArtifactSHA256, status.SourceCommit, status.SourceTree = "", "", "", ""
+	want := controlplaneupgrade.NativeReasonCurrentReleaseUnverified
+	if state := handler.MaintenanceRuntimeStatus(t.Context()); state.Ready || state.Reason != want {
+		t.Fatalf("runtime=%+v", state)
+	}
+	response := httptest.NewRecorder()
+	handler.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, nativePlanPath, nil))
+	var body NativePlanStatus
+	decodeBody(t, response, &body)
+	if response.Code != 200 || body.Runtime.Ready || body.Runtime.Reason != want || body.Execution.State != "unavailable" {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, err := handler.Publish(t.Context(), request); err == nil || repository.writes != 0 {
+		t.Fatalf("plan accepted on unverified release err=%v writes=%d", err, repository.writes)
+	}
+	// Only a not-ready status carries this reason through.
+	status.Ready = true
+	if state := handler.MaintenanceRuntimeStatus(t.Context()); state.Ready || state.Reason == want {
+		t.Fatalf("ready unverified status projected=%+v", state)
+	}
+}
+
 func TestNativeStatusProjectsOnlyMatchingPublicationAndExecution(t *testing.T) {
 	handler, repository, request, _ := nativeFixture(t)
 	publication, err := handler.Publish(t.Context(), request)

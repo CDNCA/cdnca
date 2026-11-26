@@ -236,6 +236,102 @@
      "description": "Settings storage or policy is unavailable"
     }
    ]
+  },
+  {
+   "operation_id": "testPlatformSystemMailSettings",
+   "method": "POST",
+   "path": "/v1/admin/system-mail-settings/tests",
+   "summary": "Send a test mail with the provider on the page",
+   "summary_zh": "用当前页面的邮件服务发送测试邮件",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Sends one test mail through value.mail_provider without saving anything, so a provider can be checked before switching. An official provider uses mail_secret or, only for the same provider, the stored credential; SMTP uses the page's SMTP fields with the stored SMTP password (smtp_password_configured), filling gaps from NOTIFICATION_SMTP_* only under smtp_tls/smtp_starttls; what is still missing comes back as 422 system_mail_settings_config_incomplete with details.missing. A send the provider refused or that could not be made is 502 system_mail_settings_test_failed with details.reason; only a sent mail is 200. The attempt is audited without the credential.",
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "value",
+      "type": "Settings",
+      "required": true
+     },
+     {
+      "name": "mail_secret",
+      "type": "string"
+     },
+     {
+      "name": "to",
+      "type": "string(email)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The provider accepted the test mail.",
+     "fields": [
+      {
+       "name": "ok",
+       "type": "boolean: true",
+       "required": true
+      },
+      {
+       "name": "provider",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "message_id",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "system_mail_settings_validation_error: the body is not valid JSON or has unknown fields, value or mail_secret is refused, or the recipient is refused. A missing or empty to is details {field: to, reason: required}; a to that is not one plain mail address (no display name, at most 254 characters) is details {field: to, reason: invalid_format}. Nothing was sent.",
+     "description_zh": "system_mail_settings_validation_error：请求体不是合法 JSON 或含未知字段、value 或 mail_secret 无效，或收件人无效。to 缺失或为空时 details 为 {field: to, reason: required}；to 不是单个纯邮箱地址（不带显示名、最长 254 个字符）时 details 为 {field: to, reason: invalid_format}。未发送。"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated (system_mail_settings_unauthenticated)"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied (system_mail_settings_permission_denied)"
+    },
+    {
+     "status": "422",
+     "description": "system_mail_settings_config_incomplete: the SMTP sender still lacks fields; details.missing names them as save body fields (value.smtp_address, value.smtp_user, smtp_password, value.smtp_from). Nothing was sent.",
+     "description_zh": "system_mail_settings_config_incomplete：SMTP 发信还缺字段，details.missing 按保存请求体路径列出（value.smtp_address、value.smtp_user、smtp_password、value.smtp_from），未发送。"
+    },
+    {
+     "status": "502",
+     "description": "system_mail_settings_test_failed: the provider refused the mail or could not be reached; details.reason is the stable code: config_invalid, credential_rejected, sender_rejected, recipient_rejected, provider_rate_limited, provider_unavailable, provider_rejected, provider_response_unknown, tls_required, or a plugin error code."
+    },
+    {
+     "status": "500",
+     "description": "Unexpected internal failure (system_mail_settings_unavailable)"
+    },
+    {
+     "status": "503",
+     "description": "system_mail_settings_test_unavailable: the notification runtime is forced off (NOTIFICATION_RUNTIME_ENABLED=off); unset, auto or false turn it on at start when this page holds a complete sender. system_mail_settings_unavailable: settings storage or policy is unavailable."
+    }
+   ]
   }
  ]
 }

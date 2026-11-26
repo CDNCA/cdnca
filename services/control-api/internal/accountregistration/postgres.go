@@ -73,13 +73,16 @@ func (store *PostgresStore) Register(ctx context.Context, record RegistrationRec
 		if err := savepoint.Commit(ctx); err != nil {
 			return fmt.Errorf("release account registration identity savepoint: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO account_registration_terms_159(
-				registration_id,scope_id,user_id,terms_version,accepted_at
-			) VALUES($1,$2,$3,$4,$5)`,
-			record.RegistrationID, record.ScopeID, record.UserID, record.TermsVersion, record.CreatedAt,
-		); err != nil {
-			return fmt.Errorf("persist account registration terms: %w", err)
+		// no terms version, no terms were required: nothing was accepted
+		if record.TermsVersion != "" {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO account_registration_terms_159(
+					registration_id,scope_id,user_id,terms_version,accepted_at
+				) VALUES($1,$2,$3,$4,$5)`,
+				record.RegistrationID, record.ScopeID, record.UserID, record.TermsVersion, record.CreatedAt,
+			); err != nil {
+				return fmt.Errorf("persist account registration terms: %w", err)
+			}
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO account_registration_verification_intents_159(
@@ -235,10 +238,10 @@ func createRegistrationIdentity(ctx context.Context, tx pgx.Tx, record Registrat
 		return fmt.Errorf("insert registration scope: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO users(id,username,display_name,email,phone,password_hash,created_at,updated_at)
-		VALUES($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$7)`,
+		INSERT INTO users(id,username,display_name,email,phone,password_hash,created_at,updated_at,qq)
+		VALUES($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$7,NULLIF($8,''))`,
 		record.UserID, record.Username, record.DisplayName, record.Email, record.Phone,
-		record.PasswordHash, record.CreatedAt,
+		record.PasswordHash, record.CreatedAt, record.QQ,
 	); err != nil {
 		return fmt.Errorf("insert registration user: %w", err)
 	}
@@ -296,7 +299,7 @@ func validRegistrationRecord(record RegistrationRecord) bool {
 	return record.RegistrationID != uuid.Nil && record.TenantID != uuid.Nil && record.ScopeID != uuid.Nil &&
 		record.UserID != uuid.Nil && record.OwnerRoleID != uuid.Nil && record.ViewerRoleID != uuid.Nil &&
 		record.VerificationID != uuid.Nil && record.Username != "" && record.PasswordHash != "" &&
-		record.DisplayName != "" && record.TermsVersion != "" && record.IdempotencyKey != "" &&
+		record.DisplayName != "" && record.IdempotencyKey != "" &&
 		record.RequestID != "" && !record.CreatedAt.IsZero()
 }
 

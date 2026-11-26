@@ -398,7 +398,7 @@ describe('SiteListPage', () => {
   it('cname-retry: shows why CNAME generation failed, offers regenerate, and shows generating', async () => {
     setSiteSession({ permissions: ['sites.read', 'sites.manage', 'dns.manage'] })
     const failed: SiteListItem = { ...site, id: 'site-failed', domain: 'failed.example.com', cname: '',
-      cname_state: 'failed', cname_failure_code: 'cname_zone_not_configured', cname_domain: 'cdn.cdnca.com' }
+      cname_state: 'failed', cname_failure_code: 'dns_reconcile_unavailable', cname_domain: 'cdn.cdnca.com' }
     const pending: SiteListItem = { ...site, id: 'site-pending', domain: 'pending.example.com', cname: '', cname_state: 'pending' }
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response([failed, pending]))
     const user = userEvent.setup({ delay: null })
@@ -408,10 +408,11 @@ describe('SiteListPage', () => {
     expect(screen.getByText('生成中')).toBeInTheDocument()
     // ui-feedback-modal: a 生成失败 mark in the CNAME cell; reason, code and actions open in a dialog.
     expect(cell).toHaveTextContent('生成失败')
-    expect(cell).not.toHaveTextContent('cname_zone_not_configured')
-    await user.click(within(cell).getByRole('button', { name: '生成失败：套餐 CNAME 域名 cdn.cdnca.com 未在 DNS 配置的 CNAME 域名里，点击查看原因' }))
+    expect(cell).not.toHaveTextContent('dns_reconcile_unavailable')
+    // 租户能自己重试的失败（平台侧配置缺失时租户不给重新生成，见 CnameFailureActions）。
+    await user.click(within(cell).getByRole('button', { name: 'CNAME 生成失败', description: 'DNS 服务商调用失败' }))
     const reason = await findDialog('CNAME 生成失败')
-    expect(reason).toHaveTextContent('套餐 CNAME 域名 cdn.cdnca.com 未在 DNS 配置的 CNAME 域名里')
+    expect(reason).toHaveTextContent('DNS 服务商调用失败')
     // 10-27 用户：失败弹窗里的「重新生成」就是确认，直接提交，不再弹确认框。
     const posts = vi.mocked(globalThis.fetch).mock.calls.length
     await user.click(within(reason).getByRole('button', { name: '重新生成' }))
@@ -428,7 +429,7 @@ describe('SiteListPage', () => {
 
     async function regenerateFromRow(user: ReturnType<typeof userEvent.setup>) {
       const cell = await screen.findByTestId('site-cname-failed')
-      await user.click(within(cell).getByRole('button', { name: /^生成失败：/ }))
+      await user.click(within(cell).getByRole('button', { name: 'CNAME 生成失败' }))
       await user.click(within(await findDialog('CNAME 生成失败')).getByRole('button', { name: '重新生成' }))
     }
 
@@ -2452,7 +2453,7 @@ describe('SiteListPage', () => {
     await user.click(await screen.findByText('tenant-a（27）'))
     await user.click(submit)
 
-    expect(await screen.findByText(/^网站 admin\.example\.com 创建成功。/)).toBeInTheDocument()
+    expect(await screen.findByText(/^网站 admin\.example\.com 创建成功$/)).toBeInTheDocument()
     expect(await screen.findByText(savedItem.domain)).toBeInTheDocument()
     const writes = fetchSpy.mock.calls.filter(
       ([url, init]) => String(url) === '/v1/sites' && init?.method === 'POST',
@@ -2634,7 +2635,7 @@ describe('SiteListPage', () => {
     await user.type(within(dialog).getByRole('textbox', { name: '网站域名' }), 'new.example.com')
     await user.type(within(dialog).getByRole('textbox', { name: '源站地址' }), 'origin.example.com:8080')
     await user.click(within(dialog).getByRole('button', { name: '创建网站' }))
-    expect(await screen.findByText(/^网站 new\.example\.com 创建成功。/)).toBeInTheDocument()
+    expect(await screen.findByText(/^网站 new\.example\.com 创建成功$/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '查看站点' }))
     expect(screen.getByTestId('location')).toHaveTextContent(`/site/${saved.id}/edit`)
   })
@@ -2665,7 +2666,7 @@ describe('SiteListPage', () => {
     await user.type(within(dialog).getByRole('textbox', { name: '源站地址' }), ' Origin.Example.COM:08080 ')
     await user.click(within(dialog).getByRole('button', { name: '创建网站' }))
 
-    expect(await screen.findByText(/^网站 new\.example\.com 创建成功。/)).toBeInTheDocument()
+    expect(await screen.findByText(/^网站 new\.example\.com 创建成功$/)).toBeInTheDocument()
     expect(queryDialog('添加网站')).not.toBeInTheDocument()
     expect(await screen.findByText(savedItem.domain)).toBeInTheDocument()
     expect(listReads).toBe(2)
@@ -2776,7 +2777,7 @@ describe('SiteListPage', () => {
       const spy = createSpy(saved)
       const { user, dialog } = await fillAndOpen()
       await user.click(within(dialog).getByRole('button', { name: '创建网站' }))
-      expect(await screen.findByText(/^网站 new\.example\.com 创建成功。/)).toBeInTheDocument()
+      expect(await screen.findByText(/^网站 new\.example\.com 创建成功$/)).toBeInTheDocument()
       const body = postBody(spy)
       expect(body.basic).not.toHaveProperty('ipv6_enabled')
       expect(body.basic).not.toHaveProperty('tls_protocols')
@@ -2795,7 +2796,7 @@ describe('SiteListPage', () => {
       await user.click(within(dialog).getByRole('combobox', { name: '回源协议' }))
       await user.click(await pickOption('HTTP'))
       await user.click(within(dialog).getByRole('button', { name: '创建网站' }))
-      expect(await screen.findByText(/^网站 new\.example\.com 创建成功。/)).toBeInTheDocument()
+      expect(await screen.findByText(/^网站 new\.example\.com 创建成功$/)).toBeInTheDocument()
       expect(postBody(spy).origin_pool).toMatchObject({ scheme: 'http' })
     })
 
@@ -2809,7 +2810,7 @@ describe('SiteListPage', () => {
       await user.click(within(dialog).getByRole('combobox', { name: '回源协议' }))
       await user.click(await pickOption('HTTP'))
       await user.click(within(dialog).getByRole('button', { name: '创建网站' }))
-      await waitFor(() => expect(screen.queryByText(/^网站 new\.example\.com 创建成功。/)).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByText(/^网站 new\.example\.com 创建成功$/)).not.toBeInTheDocument())
       expect(await within(dialog).findByRole('button', { name: /重试|原请求/ })).toBeInTheDocument()
     })
   })
@@ -2919,7 +2920,7 @@ describe('SiteListPage', () => {
 	    await user.click(await screen.findByText('最少连接'))
 	    await user.click(within(dialog).getByRole('button', { name: '创建网站' }))
 
-	    await screen.findByText(/^网站 api\.example\.com 创建成功。/)
+	    await screen.findByText(/^网站 api\.example\.com 创建成功$/)
 	    const write = fetchSpy.mock.calls.find(([url, init]) => String(url) === '/v1/sites' && init?.method === 'POST')
     // 社区版：写请求不带套餐字段（服务端按无套餐处理）。
     const { package_id: _packageID, package_subscription_id: _subscriptionID, package_name: _packageName, ...writtenBasic } = expectedBasic
@@ -3070,7 +3071,7 @@ describe('SiteListPage', () => {
       ([url, init]) => String(url) === '/v1/sites' && init?.method === 'POST',
     )).toHaveLength(1))
     act(() => resolveWrite(jsonResponse(createdDetail(), 201)))
-    expect(await screen.findByText(/^网站 new\.example\.com 创建成功。/)).toBeInTheDocument()
+    expect(await screen.findByText(/^网站 new\.example\.com 创建成功$/)).toBeInTheDocument()
   })
 
   it.each([
@@ -3171,7 +3172,7 @@ describe('SiteListPage', () => {
     expect(writes).toBe(1)
 
     await user.click(within(dialog).getByRole('button', { name: '使用同一请求重试' }))
-    expect(await screen.findByText(/^网站 new\.example\.com 创建成功。/)).toBeInTheDocument()
+    expect(await screen.findByText(/^网站 new\.example\.com 创建成功$/)).toBeInTheDocument()
     const requests = fetchSpy.mock.calls.filter(
       ([url, init]) => String(url) === '/v1/sites' && init?.method === 'POST',
     )

@@ -227,10 +227,7 @@ func TestDNSComProductionVerifierUsesFixedHTTPSDomainListEndpoint(t *testing.T) 
 	if dnscomVerifyEndpoint != "https://openapi.dns.com/api/domain/lists/" {
 		t.Fatalf("production endpoint = %q", dnscomVerifyEndpoint)
 	}
-	transport, ok := verifier.client.Transport.(*http.Transport)
-	if !ok || transport.Proxy != nil {
-		t.Fatalf("production transport = %#v; proxy must be disabled", verifier.client.Transport)
-	}
+	assertPlatformProxyClient(t, verifier.client)
 }
 
 func TestDNSComProviderVerifierRejectsInvalidCredentialsBeforeNetwork(t *testing.T) {

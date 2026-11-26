@@ -35,8 +35,10 @@ func (executor dockerClickHouse) Run(ctx context.Context, command Command) error
 // mount both containers read.
 type sameOwners struct{}
 
-func (sameOwners) Lookup(string, string, int, int) (int, int, error) { return os.Getuid(), os.Getgid(), nil }
-func (sameOwners) Chown(string, int, int) error                       { return nil }
+func (sameOwners) Lookup(string, string, int, int) (int, int, error) {
+	return os.Getuid(), os.Getgid(), nil
+}
+func (sameOwners) Chown(string, int, int) error { return nil }
 
 // TestClickHouseComponentRestoresOntoNewerServer captures with an older
 // ClickHouse (OLD_CLICKHOUSE_CONTAINER, e.g. 24.8) and restores onto a newer

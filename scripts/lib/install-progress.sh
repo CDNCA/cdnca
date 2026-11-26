@@ -195,9 +195,10 @@ progress_tick() {
   elif [ "$waited" -ge "$PROGRESS_WAIT_NEXT" ]; then PROGRESS_WAIT_NEXT=$((PROGRESS_WAIT_NEXT + 10)); progress_line "$text"; fi
 }
 
-# apt 输出里的 “N/M：包名”；看不出时输出为空。
+# apt 输出里的 “N/M：包名”；看不出时输出为空。$2 为本次命令输出在文件里的起始行（默认 1），
+# 只看这之后的行，下一步不会继承上一步 apt 的包名。
 progress_apt_detail() {
-  awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
+  tail -n "+${2:-1}" "$1" 2>/dev/null | awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
     /^Get:[0-9]+ / { got++ }
     /^Unpacking / { name = $2 }
     /^Setting up / { done++; name = $3 }
@@ -205,15 +206,15 @@ progress_apt_detail() {
       if (total <= 0) exit
       if (name != "") printf (en ? "  installing %d/%d: %s" : "  正在安装 %d/%d：%s"), done, total, name
       else if (got > 0) printf (en ? "  downloading packages %d/%d" : "  正在下载软件包 %d/%d"), got, total
-    }' "$1" 2>/dev/null || true
+    }' 2>/dev/null || true
 }
 
 # 后台心跳：终端每秒、非终端每 15 秒一行；安装器进程（$$）退出后自停。
 progress_heartbeat() {
-  local label=$1 output=$2 started=$SECONDS next=15 elapsed text
+  local label=$1 output=$2 from=${3:-1} started=$SECONDS next=15 elapsed text
   while sleep 1 && kill -0 "$$" 2>/dev/null; do
     elapsed=$((SECONDS - started))
-    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
+    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output" "$from")"
     if "$PROGRESS_TTY"; then progress_inline "$text"
     elif [ "$elapsed" -ge "$next" ]; then next=$((next + 15)); progress_line "$text"; fi
   done
@@ -243,7 +244,7 @@ progress_run() {
   else
     : >"$output"
   fi
-  progress_heartbeat "$label" "$output" &
+  progress_heartbeat "$label" "$output" "$from" &
   PROGRESS_HEARTBEAT=$!
   "$@" >>"$output" 2>&1 </dev/null || status=$?
   progress_stop_heartbeat

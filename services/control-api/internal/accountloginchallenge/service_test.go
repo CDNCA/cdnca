@@ -126,19 +126,42 @@ func (policy registrationPolicy) GetPublic(context.Context, uuid.UUID) (systemus
 	return systemusersettings.PublicSettings{RegistrationEnabled: policy.enabled, EmailAntiAbuseMode: "native", SMSAntiAbuseMode: "native"}, nil
 }
 
-// vis-1: the sign-in page shows the sign-up link only when the registration
-// switch is on and the registration endpoints are mounted.
-func TestMethodsAdvertiseRegistrationOnlyWhenSwitchOnAndMounted(t *testing.T) {
+type registrationSourceStub struct {
+	enabled bool
+	mode    string
+	err     error
+}
+
+func (stub registrationSourceStub) Registration(context.Context) (bool, string, error) {
+	return stub.enabled, stub.mode, stub.err
+}
+
+// vis-1 / the sign-up link follows the registration source (the
+// registration-config projection), not the raw switch: no source, no link;
+// a source that cannot answer makes the methods unavailable.
+func TestMethodsAdvertiseRegistrationFromSource(t *testing.T) {
 	t.Parallel()
 
 	scope := uuid.New()
 	for _, item := range []struct {
-		enabled, mounted, want bool
-	}{{false, true, false}, {true, false, false}, {false, false, false}, {true, true, true}} {
-		service := &Service{policy: registrationPolicy{enabled: item.enabled}, registrationMounted: item.mounted}
+		policy   bool
+		source   RegistrationSource
+		wantOpen bool
+		wantMode string
+	}{
+		{true, nil, false, ""},
+		{false, registrationSourceStub{enabled: true, mode: "builtin"}, true, "builtin"},
+		{true, registrationSourceStub{enabled: true}, true, ""},
+		{true, registrationSourceStub{}, false, ""},
+	} {
+		service := &Service{policy: registrationPolicy{enabled: item.policy}, registration: item.source}
 		methods, err := service.Methods(context.Background(), scope)
-		if err != nil || methods.RegistrationEnabled != item.want {
-			t.Fatalf("enabled=%t mounted=%t: methods=%#v err=%v", item.enabled, item.mounted, methods, err)
+		if err != nil || methods.RegistrationEnabled != item.wantOpen || methods.RegistrationMode != item.wantMode {
+			t.Fatalf("policy=%t source=%#v: methods=%#v err=%v", item.policy, item.source, methods, err)
 		}
+	}
+	service := &Service{policy: registrationPolicy{enabled: true}, registration: registrationSourceStub{err: errors.New("down")}}
+	if _, err := service.Methods(context.Background(), scope); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("err=%v, want ErrUnavailable", err)
 	}
 }

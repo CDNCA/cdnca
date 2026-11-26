@@ -9,10 +9,9 @@ import {
   Radio,
   Result,
   Select,
-  Table,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import { Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { TFunction } from 'i18next'
@@ -48,6 +47,7 @@ import {
 } from './l2RetryRecord'
 import './NodeSchedulingPage.css'
 import './NodeL2TopologyPage.css'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 type L2Owner = readonly [Principal['scope_kind'], string, string | null, string, number]
 type L2Permission = 'read' | 'manage' | 'regions'
@@ -275,6 +275,7 @@ function NodeL2TopologyContent({
 }) {
   const { t } = useTranslation('nodeScheduling')
   const { t: l2T } = useTranslation('nodeL2Topology')
+  const namedRows = useNamedRowSelection()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = useFeedbackMessage()
@@ -838,7 +839,7 @@ function NodeL2TopologyContent({
           scroll={{ x: 730 }}
           rowSelection={
             canManage
-              ? { columnWidth: 60, selectedRowKeys: selectedKeys, onChange: setSelectedKeys }
+              ? namedRows<L2Item>({ columnWidth: 60, selectedRowKeys: selectedKeys, onChange: setSelectedKeys }, (item) => item.name, l2T(`selectionScope.${inventory}`))
               : undefined
           }
           locale={{

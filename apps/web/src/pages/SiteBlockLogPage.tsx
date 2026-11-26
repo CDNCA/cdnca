@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, Button, Input, Modal, Result, Select, Table, Tabs, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, Modal, Result, Select, Typography, type TableColumnsType } from 'antd'
+import { Tabs } from '../components/Tabs'
 import { type Dayjs } from 'dayjs'
 
 import { blockWindow } from './blockWindow'
@@ -27,7 +28,11 @@ import { useSessionStore } from '../auth/session'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
 import '../i18n/blockLogCCBans'
 import './SiteBlockLogPage.css'
-import { FeedbackWhen, TimeRangeFilter, useLiveApply } from '@cdnca/ui'
+import { FeedbackWhen, TimeRangeFilter, useLiveApply, Table } from '@cdnca/ui'
+import { useNamedRowSelection } from '../components/namedRowSelection'
+import SearchSelect, { searchOptionLabel } from '../components/SearchSelect'
+import { FieldErrorText, filterFieldProps, useFieldFocus } from '../components/FilterFieldError'
+import { siteSearch } from './idNameSources'
 
 type BlockOwner = readonly [Principal['scope_kind'], string, string | null, string, number]
 type BlockView = 'current' | 'count' | 'history' | 'ccBans'
@@ -245,6 +250,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
   filters: BlockFilterState
 }) {
   const { t, i18n } = useTranslation('analyticsLogs')
+  const namedRows = useNamedRowSelection()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const audience: AnalyticsAudience = owner[0] === 'platform' ? 'admin' : 'tenant'
@@ -261,6 +267,19 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
   const [siteUnlockId, setSiteUnlockId] = useState('')
   const [siteUnlocking, setSiteUnlocking] = useState(false)
   const [siteUnlockError, setSiteUnlockError] = useState<string | null>(null)
+  // 按域名选网站（值是接口要的网站编号），确认前显示域名与解锁范围。
+  const [siteUnlockName, setSiteUnlockName] = useState('')
+  const siteUnlockFieldID = 'block-log-unlock-site'
+  const focusField = useFieldFocus()
+  const siteUnlockNames = useRef(new Map<string, string>())
+  const siteUnlockSearch = useMemo(() => {
+    const search = siteSearch(currentBlockAccess(ownerKey) ?? '')
+    return async (text: string, signal: AbortSignal) => {
+      const options = await search(text, signal)
+      for (const option of options) siteUnlockNames.current.set(option.id, searchOptionLabel(option))
+      return options
+    }
+  }, [ownerKey])
   const [success, setSuccess] = useState<string | null>(null)
   const [selectionHint, setSelectionHint] = useState(false)
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
@@ -399,6 +418,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
     const site = siteUnlockId.trim()
     if (!site) {
       setSiteUnlockError(t('blockState.states.siteIdRequired'))
+      focusField(siteUnlockFieldID)
       return
     }
     if (!/^\d+$/.test(site) || Number(site) < 1) {
@@ -553,7 +573,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
   const clearButton = <Button type="link" size="small" onClick={clear}>{t('blockState.actions.clear')}</Button>
 
   return (
-    <div className="block-log-view" role="tabpanel" aria-label={t(`blockState.tabs.${view}`)}>
+    <div className="block-log-view">
         <div className="analytics-filter-bar block-log-toolbar">
           <div className="block-log-toolbar-actions">
             {view === 'current' ? (
@@ -672,14 +692,14 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
               setPageSize(nextSize)
             },
           }}
-          rowSelection={view === 'current' ? {
+          rowSelection={view === 'current' ? namedRows<BlockStateRow>({
             selectedRowKeys: selectedKeys,
             onChange: (keys) => {
               setSelectedKeys(keys as string[])
               if (keys.length > 0) setSelectionHint(false)
             },
             getCheckboxProps: (row) => ({ disabled: !('unlockable' in row) || !row.unlockable }),
-          } : undefined}
+          }, (row) => `${row.cidr} ${row.domain}`, t('blockState.selectionScope')) : undefined}
           locale={{ emptyText: query.error ? ' ' : t(`blockState.states.empty.${view}`) }}
         />
       <Modal
@@ -704,7 +724,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
       </Modal>
       <Modal
         title={t('blockState.unlock.siteTitle')}
-        width={300}
+        width={420}
         open={siteUnlockOpen}
         okText={t('blockState.unlock.confirm')}
         cancelText={t('blockState.unlock.cancel')}
@@ -718,12 +738,24 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
           }
         }}
       >
-        <Input
-          placeholder={t('blockState.filters.site')}
+        <SearchSelect
+          {...filterFieldProps(siteUnlockFieldID, siteUnlockError)}
+          className="block-log-unlock-site-select"
+          queryKey={['block-log-unlock-sites', ownerKey]}
+          search={siteUnlockSearch}
+          ariaLabel={t('blockState.unlock.site')}
+          placeholder={t('blockState.unlock.sitePlaceholder')}
+          emptyText={t('blockState.unlock.siteEmpty')}
           value={siteUnlockId}
-          onChange={(event) => setSiteUnlockId(event.target.value)}
+          onChange={(next) => {
+            const site = next as string
+            setSiteUnlockId(site)
+            setSiteUnlockName(siteUnlockNames.current.get(site) ?? site)
+            setSiteUnlockError(null)
+          }}
         />
-        {siteUnlockError ? <Alert type="error" showIcon message={siteUnlockError} /> : null}
+        <FieldErrorText id={siteUnlockFieldID} error={siteUnlockError} />
+        {siteUnlockId ? <Typography.Paragraph type="secondary" style={{ margin: '8px 0 0' }}>{t('blockState.unlock.siteDescription', { site: siteUnlockName })}</Typography.Paragraph> : null}
       </Modal>
     </div>
   )
@@ -826,7 +858,7 @@ function CCBanPanel({ owner, ownerKey, principal }: { owner: BlockOwner; ownerKe
     },
   ]
   return (
-    <div className="block-log-view" role="tabpanel" aria-label={t('blockState.tabs.ccBans')}>
+    <div className="block-log-view">
       <div className="analytics-filter-bar">
         {tenantLookup ? (
           <Select
@@ -846,8 +878,8 @@ function CCBanPanel({ owner, ownerKey, principal }: { owner: BlockOwner; ownerKe
           />
         ) : audience === 'admin' ? (
           <Input
-            aria-label={t('filters.tenant')}
-            addonBefore={t('filters.tenant')}
+            aria-label={t('filters.tenantId')}
+            addonBefore={t('filters.tenantId')}
             style={{ width: 380 }}
             allowClear
             status={tenantError ? 'error' : undefined}
@@ -931,7 +963,7 @@ function BlacklistCountPanel({ owner, ownerKey }: { owner: BlockOwner; ownerKey:
   ]
 
   return (
-    <div className="block-log-view" role="tabpanel" aria-label={t('blockState.tabs.count')}>
+    <div className="block-log-view">
         <div className="analytics-filter-bar">
           <Button onClick={() => void query.refetch()}>{t('blockState.actions.refresh')}</Button>
         </div>
@@ -984,6 +1016,16 @@ export default function SiteBlockLogPage() {
     )
   }
   const ownerKey = JSON.stringify(owner)
+  const activeContent = view === 'ccBans' ? <CCBanPanel key={`${ownerKey}:ccBans`} owner={owner} ownerKey={ownerKey} principal={principal} /> : view === 'count'
+    ? <BlacklistCountPanel key={`${ownerKey}:count`} owner={owner} ownerKey={ownerKey} />
+    : <BlockStatePanel
+      key={`${ownerKey}:${view}`}
+      view={view}
+      owner={owner}
+      ownerKey={ownerKey}
+      principal={principal}
+      filters={filters}
+    />
 
   return (
     <section className="analytics-page analytics-log-page site-block-log-page" aria-labelledby="analytics-block-log-title">
@@ -995,20 +1037,11 @@ export default function SiteBlockLogPage() {
           activeKey={view}
           animated={false}
           onChange={(key) => setView(key as BlockView)}
+          // 当前页签的筛选与表格放进它自己的 tabpanel，其余页签不挂载。
           items={(['current', 'count', 'history', 'ccBans'] as BlockView[]).map((key) => ({
-            key, label: t(`blockState.tabs.${key}`),
+            key, label: t(`blockState.tabs.${key}`), children: key === view ? activeContent : null,
           }))}
         />
-        {view === 'ccBans' ? <CCBanPanel key={`${ownerKey}:ccBans`} owner={owner} ownerKey={ownerKey} principal={principal} /> : view === 'count'
-          ? <BlacklistCountPanel key={`${ownerKey}:count`} owner={owner} ownerKey={ownerKey} />
-          : <BlockStatePanel
-            key={`${ownerKey}:${view}`}
-            view={view}
-            owner={owner}
-            ownerKey={ownerKey}
-            principal={principal}
-            filters={filters}
-          />}
       </div>
     </section>
   )

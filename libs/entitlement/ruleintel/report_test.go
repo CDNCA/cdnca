@@ -44,19 +44,19 @@ func TestValidateAcceptsRedactedReport(t *testing.T) {
 
 func TestValidateRejectsLeaks(t *testing.T) {
 	cases := map[string][2]string{
-		"原始参数值":   {"value", "1' or 1=1"},
-		"IP 维度":   {"ip", "203.0.113.7"},
-		"cidr 维度": {"cidr", "203.0.113.0/24"},
-		"IP 藏在值里":  {"asn", "203.0.113.7"},
-		"IPv6 值":   {"country", "2001:db8::1"},
-		"完整路径":     {"path", "/user/42/profile"},
+		"原始参数值":               {"value", "1' or 1=1"},
+		"IP 维度":               {"ip", "203.0.113.7"},
+		"cidr 维度":             {"cidr", "203.0.113.0/24"},
+		"IP 藏在值里":             {"asn", "203.0.113.7"},
+		"IPv6 值":              {"country", "2001:db8::1"},
+		"完整路径":                {"path", "/user/42/profile"},
 		"路径进 path.class 但带查询": {"path.class", "/a?id=1"},
-		"请求体":      {"body", "a=b"},
-		"值带空白与引号":  {"ua_family", "Mozilla/5.0 (X11)"},
-		"域名":       {"ua_family", "shop.example.com"},
-		"站点 ID":    {"bucket.site", "0b6f2b0e-8d1c-4b3e-9e2a-1f2d3c4b5a69"},
-		"参数名哈希非摘要": {"param.hash", "password"},
-		"Cookie":   {"cookie", "sid"},
+		"请求体":                 {"body", "a=b"},
+		"值带空白与引号":             {"ua_family", "Mozilla/5.0 (X11)"},
+		"域名":                  {"ua_family", "shop.example.com"},
+		"站点 ID":               {"bucket.site", "0b6f2b0e-8d1c-4b3e-9e2a-1f2d3c4b5a69"},
+		"参数名哈希非摘要":            {"param.hash", "password"},
+		"Cookie":              {"cookie", "sid"},
 	}
 	for name, c := range cases {
 		r := empty()

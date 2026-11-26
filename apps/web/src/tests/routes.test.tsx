@@ -286,7 +286,7 @@ describe('role routes', () => {
     renderWithProviders(<AppRoutes />, ['/node/realtime'])
 
     expect(await screen.findByRole('heading', { name: '节点实时监控' }, { timeout: 5_000 })).toBeInTheDocument()
-    expect(screen.getByLabelText('面包屑')).toHaveTextContent('首页/节点管理/实时监控')
+    expect(screen.getByLabelText('面包屑')).toHaveTextContent('首页/节点管理/节点实时监控')
   })
 
   it('lazy-loads self identity verification for an authorized tenant', async () => {

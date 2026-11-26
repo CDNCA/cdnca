@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/clientip"
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 	"github.com/cdnca/cdnca/services/control-api/internal/fielderr"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -25,6 +27,7 @@ type Service struct {
 	pool    *pgxpool.Pool
 	auditor AuditAppender
 	now     Clock
+	saved   func(Settings)
 }
 
 type RowQuerier interface {
@@ -36,6 +39,57 @@ func NewService(pool *pgxpool.Pool, auditor AuditAppender, now Clock) (*Service,
 		return nil, ErrInvalidStore
 	}
 	return &Service{pool: pool, auditor: auditor, now: now}, nil
+}
+
+// WithSaved calls saved with the settings in force after each successful
+// save (the 源IP请求头 and http代理 of this process apply at once,
+// clientip.Setting.Store and dnsapiproxy.Store). The proxy password is not
+// redacted there.
+func (s *Service) WithSaved(saved func(Settings)) *Service {
+	s.saved = saved
+	return s
+}
+
+// SourceIPHeader is the stored 源IP请求头 ("" when unset or no row).
+func SourceIPHeader(ctx context.Context, query RowQuerier) (string, error) {
+	if query == nil {
+		return "", ErrInvalidStore
+	}
+	var raw []byte
+	err := query.QueryRow(ctx, `SELECT settings FROM platform_system_other_settings
+		WHERE platform_scope_id=(SELECT id FROM access_scopes WHERE kind='platform' AND tenant_id IS NULL)`).Scan(&raw)
+	if err == pgx.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read source IP header setting: %w", err)
+	}
+	value, err := decodeSettings(raw)
+	if err != nil || !validSettings(value) {
+		return "", ErrUnavailable
+	}
+	return value.SourceIPHeader, nil
+}
+
+// HTTPProxy is the stored http代理 ("" when unset or no row: direct).
+func HTTPProxy(ctx context.Context, query RowQuerier) (string, error) {
+	if query == nil {
+		return "", ErrInvalidStore
+	}
+	var raw []byte
+	err := query.QueryRow(ctx, `SELECT settings FROM platform_system_other_settings
+		WHERE platform_scope_id=(SELECT id FROM access_scopes WHERE kind='platform' AND tenant_id IS NULL)`).Scan(&raw)
+	if err == pgx.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read DNS API HTTP proxy setting: %w", err)
+	}
+	value, err := decodeSettings(raw)
+	if err != nil || !validSettings(value) {
+		return "", ErrUnavailable
+	}
+	return value.HTTPProxy, nil
 }
 
 // L4DrainMaxMS is the drain_max_ms edge publications carry for L4 v2 streams:
@@ -133,7 +187,7 @@ func (s *Service) Get(ctx context.Context, actor Actor) (Document, error) {
 		if err != nil || !validSettings(value) {
 			return ErrUnavailable
 		}
-		result = Document{Schema: schema, Revision: revision, UpdatedAt: updatedAt.UTC(), Value: value}
+		result = Document{Schema: schema, Revision: revision, UpdatedAt: updatedAt.UTC(), Value: redacted(value)}
 		return nil
 	})
 	if err != nil {
@@ -193,6 +247,22 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		if currentRevision != request.ExpectedRevision {
 			return ErrRevisionConflict
 		}
+		// The form sends back the redacted proxy password it read.
+		if request.Value.HTTPProxy != "" {
+			stored := ""
+			if exists {
+				previous, err := decodeSettings(currentRaw)
+				if err != nil {
+					return ErrUnavailable
+				}
+				stored = previous.HTTPProxy
+			}
+			restored, ok := dnsapiproxy.Restore(request.Value.HTTPProxy, stored)
+			if !ok {
+				return fielderr.New(ErrInvalidInput, "value.http_proxy", fielderr.Invalid)
+			}
+			request.Value.HTTPProxy = restored
+		}
 		if request.Value.L4DrainMaxSeconds == nil || request.Value.DomainOwnershipPolicy == nil ||
 			request.Value.CertificateExpiryNoticeDays == nil || request.Value.RuleIntelContribution == nil {
 			// Clients that predate a field keep its stored value.
@@ -229,7 +299,7 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		if err != nil {
 			return err
 		}
-		result = Document{Schema: schema, Revision: nextRevision, UpdatedAt: now, Value: request.Value}
+		result = Document{Schema: schema, Revision: nextRevision, UpdatedAt: now, Value: redacted(request.Value)}
 		if err := s.auditor.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID, Action: operationUpdate, ResourceType: "platform_system_other_settings", ResourceID: actor.ScopeID.String(), RequestID: request.RequestID, Result: "success", Payload: map[string]any{"revision": nextRevision}}); err != nil {
 			return err
 		}
@@ -243,7 +313,18 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 	if err != nil {
 		return Document{}, fmt.Errorf("save platform system other settings: %w", err)
 	}
+	// A replay carries the redacted proxy only; the first save already applied
+	// it here, and other instances read it within their refresh.
+	if s.saved != nil && !result.Replayed {
+		s.saved(request.Value)
+	}
 	return result, nil
+}
+
+// redacted is value as reads show it: the proxy password masked.
+func redacted(value Settings) Settings {
+	value.HTTPProxy = dnsapiproxy.Redact(value.HTTPProxy)
+	return value
 }
 
 func validActor(actor Actor) error {
@@ -288,6 +369,7 @@ func CertificateExpiryNoticeDays(ctx context.Context, query RowQuerier) ([]int, 
 	}
 	return value.CertificateExpiryNoticeDays, nil
 }
+
 // RuleIntelContribution reports the platform switch "向官方贡献规则情报"
 // (ADR 0011 §4.3): on when unset or when no settings row exists.
 func RuleIntelContribution(ctx context.Context, query RowQuerier) (bool, error) {
@@ -321,7 +403,7 @@ func settingsFieldError(value Settings) error {
 		max         int
 		lineBreaks  bool
 	}{
-		{"source_ip_header", value.SourceIPHeader, 256, true}, {"dns_protection", value.DNSProtection, 2048, false},
+		{"dns_protection", value.DNSProtection, 2048, false},
 		{"http_proxy", value.HTTPProxy, 2048, true},
 	} {
 		switch {
@@ -332,6 +414,10 @@ func settingsFieldError(value Settings) error {
 		}
 	}
 	switch {
+	case !dnsapiproxy.Valid(value.HTTPProxy):
+		return field("http_proxy", fielderr.Invalid)
+	case !clientip.ValidSetting(value.SourceIPHeader):
+		return field("source_ip_header", fielderr.Invalid)
 	case value.RecordRepairMode != "off" && value.RecordRepairMode != "repair" && value.RecordRepairMode != "repair_delete_extra":
 		return field("record_repair_mode", fielderr.Invalid)
 	case value.SyncBatch < 1 || value.SyncBatch > 10000:
@@ -393,6 +479,13 @@ func decodeSettings(raw []byte) (Settings, error) {
 	var value Settings
 	if err := json.Unmarshal(encoded, &value); err != nil {
 		return Settings{}, err
+	}
+	// Rows written while nothing read these fields may hold any text.
+	if !clientip.ValidSetting(value.SourceIPHeader) {
+		value.SourceIPHeader = ""
+	}
+	if !dnsapiproxy.Valid(value.HTTPProxy) {
+		value.HTTPProxy = ""
 	}
 	return value, nil
 }

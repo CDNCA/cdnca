@@ -12,6 +12,7 @@ import { useSessionStore } from '../auth/session'
 import CacheOperationHistoryPage from '../pages/CacheOperationHistoryPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { useLocation } from 'react-router-dom'
 
 // 加载/请求失败从页内 Alert 改为 FeedbackWhen 居中弹窗（.cdnca-feedback）
 const findFeedback = () => waitFor(() => { const element = document.querySelector<HTMLElement>('.cdnca-feedback'); if (!element) throw new Error('no feedback dialog'); return element })
@@ -90,14 +91,14 @@ describe('CacheOperationHistoryPage', () => {
     renderWithProviders(<CacheOperationHistoryPage />, ['/site/cache-clean/history'])
 
     expect(await screen.findByText('https://www.example.com/a.js')).toBeInTheDocument()
-    const tabs = screen.getByRole('tablist', { name: '缓存操作页签' }).closest('.site-cache-tabs-row')!
+    const tabs = screen.getByRole('navigation', { name: '缓存操作' }).closest('.site-cache-tabs-row')!
     expect(tabs).not.toBeNull()
     expect(within(tabs as HTMLElement).getByRole('button', { name: /重新提交选中/ })).toBeInTheDocument()
     expect(within(tabs as HTMLElement).getByRole('combobox', { name: '类型' })).toBeInTheDocument()
     expect(within(tabs as HTMLElement).getByRole('searchbox', { name: '搜索 URL 或域名' })).toBeInTheDocument()
     expect(within(tabs as HTMLElement).getByRole('button', { name: '刷新' })).toBeInTheDocument()
-    // The tab links stay a tablist of their own: the toolbar is not inside it.
-    expect(within(screen.getByRole('tablist', { name: '缓存操作页签' })).queryByRole('button')).toBeNull()
+    // The route links stay a navigation of their own: the toolbar is not inside it.
+    expect(within(screen.getByRole('navigation', { name: '缓存操作' })).queryByRole('button')).toBeNull()
   })
 
   it('lists the competitor six columns and sends type and URL search as server filters', async () => {
@@ -112,7 +113,8 @@ describe('CacheOperationHistoryPage', () => {
     expect(await screen.findByText('https://www.example.com/a.js')).toBeInTheDocument()
     expect(get).not.toHaveBeenCalled()
     const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent).filter(Boolean)
-    expect(headers).toEqual(['任务编号', '类型', 'URL', '状态', '创建时间', '操作'])
+    // 测试环境 matchMedia 全不匹配 = 窄屏：状态排在 URL 前（桌面顺序见下一条用例）
+    expect(headers).toEqual(['任务编号', '类型', '状态', 'URL', '创建时间', '操作'])
     expect(screen.getByText('12')).toBeInTheDocument()
     expect(screen.getByText('刷新 URL')).toBeInTheDocument()
     expect(screen.queryByText('节点数')).not.toBeInTheDocument()
@@ -126,6 +128,32 @@ describe('CacheOperationHistoryPage', () => {
     ))
     await user.type(screen.getByRole('searchbox', { name: '搜索 URL 或域名' }), ' www.example.com {enter}')
     await waitFor(() => expect(list.mock.calls.at(-1)?.[2]).toMatchObject({ search: 'www.example.com', action: 'prewarm' }))
+  })
+
+  it('fixes the actions column only from md up', async () => {
+    authenticate(['sites.read'])
+    vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [summary()] })
+    const actionsHeader = () => screen.getAllByRole('columnheader').find((cell) => cell.textContent === '操作')!
+
+    // 测试环境 matchMedia 全不匹配 = 窄屏：操作列随表格横滚，不盖住编号/类型/状态
+    const narrow = renderWithProviders(<CacheOperationHistoryPage />, ['/site/cache-clean/history'])
+    expect(await screen.findByText('https://www.example.com/a.js')).toBeInTheDocument()
+    expect(actionsHeader().className).not.toContain('ant-table-cell-fix-right')
+    // 编号 72 + 类型 96 + 状态 100 + 选择列 32 ≤ 308px 可视宽度
+    const widths = Array.from(document.querySelectorAll<HTMLTableColElement>('.ant-table-content col, .ant-table-header col')).map((col) => col.style.width).filter(Boolean)
+    expect(widths.slice(0, 4)).toEqual(expect.arrayContaining(['72px', '96px', '100px']))
+    narrow.unmount()
+
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({ ...original(query), matches: /min-width/.test(query) })) as typeof window.matchMedia
+    try {
+      renderWithProviders(<CacheOperationHistoryPage />, ['/site/cache-clean/history'])
+      expect(await screen.findByText('https://www.example.com/a.js')).toBeInTheDocument()
+      expect(actionsHeader().className).toContain('ant-table-cell-fix-right')
+      expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent).filter(Boolean)).toEqual(['任务编号', '类型', 'URL', '状态', '创建时间', '操作'])
+    } finally {
+      window.matchMedia = original
+    }
   })
 
   it('folds a system follow-up under its parent and marks an orphan follow-up (CACHE-ADD-09b)', async () => {
@@ -176,6 +204,46 @@ describe('CacheOperationHistoryPage', () => {
     await waitFor(() => expect(list.mock.calls.at(-1)?.[2]).toMatchObject({ states: ['failed', 'partial_failed'] }))
   })
 
+  // 已生效的类型、状态与搜索写进 URL，书签强刷后首个请求即带这些条件；
+  // 带查询串的搜索不进地址；非法值回到默认。路由链接不是页签。
+  it('reads the applied filters back from the URL and keeps signed search text out of it', async () => {
+    authenticate(['sites.read'])
+    const list = vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [summary()] })
+    const user = userEvent.setup()
+    function LocationProbe() {
+      return <output data-testid="location">{useLocation().search}</output>
+    }
+    const view = renderWithProviders(<><CacheOperationHistoryPage /><LocationProbe /></>, ['/site/cache-clean/history'])
+    expect(await screen.findByText('https://www.example.com/a.js')).toBeInTheDocument()
+    expect(screen.queryByRole('tab')).toBeNull()
+    expect(screen.getByRole('link', { name: '操作记录' })).toHaveAttribute('aria-current', 'page')
+    await user.click(screen.getByRole('combobox', { name: '类型' }))
+    await user.click(await screen.findByText('预热', { selector: '.ant-select-item-option-content' }))
+    await user.type(screen.getByRole('searchbox', { name: '搜索 URL 或域名' }), 'www.example.com{enter}')
+    await user.click(within(screen.getByLabelText('任务状态统计')).getByRole('button', { name: /^失败/ }))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('?kind=prewarm&q=www.example.com&state=failed'))
+    const search = screen.getByTestId('location').textContent!
+    await user.clear(screen.getByRole('searchbox', { name: '搜索 URL 或域名' }))
+    await user.type(screen.getByRole('searchbox', { name: '搜索 URL 或域名' }), 'https://www.example.com/a.js?token=secret{enter}')
+    await waitFor(() => expect(list.mock.calls.at(-1)?.[2]).toMatchObject({ search: 'https://www.example.com/a.js?token=secret' }))
+    expect(screen.getByTestId('location').textContent).toBe('?kind=prewarm&state=failed')
+    view.unmount()
+
+    list.mockClear()
+    renderWithProviders(<CacheOperationHistoryPage />, [`/site/cache-clean/history${search}`])
+    await waitFor(() => expect(list).toHaveBeenCalled())
+    expect(list.mock.calls[0]![2]).toMatchObject({ action: 'prewarm', target_type: 'exact_url', search: 'www.example.com', states: ['failed', 'partial_failed'] })
+    expect(screen.getByRole('searchbox', { name: '搜索 URL 或域名' })).toHaveValue('www.example.com')
+  })
+
+  it('falls back to the default filters for unknown URL values', async () => {
+    authenticate(['sites.read'])
+    const list = vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [summary()] })
+    renderWithProviders(<CacheOperationHistoryPage />, ['/site/cache-clean/history?kind=toString&state=constructor'])
+    await waitFor(() => expect(list).toHaveBeenCalled())
+    expect(list.mock.calls[0]![2]).toEqual({ limit: 20, cursor: undefined })
+  })
+
   it('resubmits selected tasks through the resubmit command and retries with the same batch key', async () => {
     authenticate()
     vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [
@@ -194,8 +262,8 @@ describe('CacheOperationHistoryPage', () => {
     const resubmitSelected = screen.getByRole('button', { name: /重新提交选中/ })
     expect(resubmitSelected).toBeDisabled()
     // A task still running cannot be selected.
-    expect(screen.getByRole('checkbox', { name: '14' })).toBeDisabled()
-    await user.click(screen.getByRole('checkbox', { name: '12' }))
+    expect(screen.getByRole('checkbox', { name: '选择 14' })).toBeDisabled()
+    await user.click(screen.getByRole('checkbox', { name: '选择 12' }))
     await user.click(resubmitSelected)
 
     expect(await screen.findByText('已重新提交 0 个任务，失败 1 个')).toBeInTheDocument()

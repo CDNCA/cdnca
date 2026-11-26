@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, Checkbox, Form, Input, InputNumber, Radio, Segmented, Select, Space, Switch, Table, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Form, Input, InputNumber, Radio, Segmented, Select, Space, Switch, Tag, Tooltip } from 'antd'
 import { ListChecks, Server, ShieldCheck, TerminalSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
 import { ApiError } from '../api/auth'
 import { nodesApi, type NodeInventoryItem } from '../api/nodes'
 import {

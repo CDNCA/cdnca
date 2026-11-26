@@ -66,8 +66,8 @@ func (authenticator *productionSessionAuthenticator) Authenticate(request *http.
 	}
 	authenticated, err := authenticator.identity.AuthenticateSession(request.Context(), token)
 	if err != nil {
-			if errors.Is(err, controlidentity.ErrInvalidSession) || errors.Is(err, controlidentity.ErrAccountDisabled) ||
-				errors.Is(err, controlidentity.ErrMembershipDisabled) {
+		if errors.Is(err, controlidentity.ErrInvalidSession) || errors.Is(err, controlidentity.ErrAccountDisabled) ||
+			errors.Is(err, controlidentity.ErrMembershipDisabled) {
 			return Principal{}, ErrUnauthenticated
 		}
 		return Principal{}, ErrAuthenticationUnavailable

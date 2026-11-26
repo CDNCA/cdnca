@@ -98,6 +98,8 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 	wantErrors := []string{
 		"authentication_required", "permission_denied", "invalid_request", "plugin_installation_not_found",
 		"plugin_installation_revision_conflict", "plugin_installation_idempotency_conflict",
+		"plugin_installation_required_scopes_missing", "plugin_installation_scope_not_approved",
+		"plugin_installation_approval_stale",
 		"plugin_installation_scope_approval_required", "plugin_installation_platform_paused",
 		"plugin_installation_platform_managed", "plugin_installation_targets_invalid",
 		"plugin_installation_license_unavailable",

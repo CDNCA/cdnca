@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { nativeRuntimeSummary, nodesApi, type NodeInventoryItem } from './nodes'
+import { nativeRuntimeSummary, nodeScopeSourceVersion, nodesApi, type NodeConfigurationScope, type NodeInventoryItem } from './nodes'
 import { nodeManagementSettingsFixture } from '../test/fixtures'
 
 const nodeID = '018f0000-0000-7000-8000-000000000001'
@@ -780,6 +780,117 @@ describe('nodesApi.getConfigurationScopes', () => {
   ])('rejects %s', async (_name, item) => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ ...scopes, capability_regressions: [item] }))
     await expect(nodesApi.getConfigurationScopes('token', nodeID)).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
+  // 
+  it('reads a scope reconciliation and reconciles it with what the node reports', async () => {
+    const reconciliation = {
+      reason: 'rollback_failed', source_deployment_id: '018f0000-0000-7000-8000-0000000000d1', source_deployment_attempt: 1,
+      observation: 'confirmed', unconfirmed_reason: null, reported_config_version_id: null, reported_at: '2026-10-16T08:02:00Z',
+    }
+    const waiting = { ...scopes, capability_regressions: [],
+      scopes: [{ ...scopes.scopes[0]!, reconciliation_required: true, reconciliation }] }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(waiting))
+    const read = await nodesApi.getConfigurationScopes('token', nodeID)
+    expect(read.scopes[0]!.reconciliation).toEqual(reconciliation)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ ...waiting,
+      scopes: [{ ...waiting.scopes[0]!, reconciliation: { ...reconciliation, source_deployment_id: 'd1' } }] }))
+    await expect(nodesApi.getConfigurationScopes('token', nodeID)).rejects.toMatchObject({ code: 'invalid_response' })
+
+    const post = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({}, 201))
+    await nodesApi.reconcileConfigurationScope('token', nodeID, read.scopes[0]!)
+    const [url, init] = post.mock.calls[0]!
+    expect(String(url)).toContain('/v1/admin/site-rollouts/reconciliations')
+    expect(init?.method).toBe('POST')
+    const headers = init?.headers as Record<string, string>
+    expect(headers['X-Request-ID']).toMatch(/^[0-9a-f-]{36}$/)
+    expect(headers['Idempotency-Key']).toBe(`node-reconcile-${headers['X-Request-ID']}`)
+    expect(headers.Traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/)
+    expect(JSON.parse(String(init?.body))).toEqual({
+      configuration_scope_id: scopes.scopes[0]!.scope_id, node_id: nodeID,
+      source_deployment_id: reconciliation.source_deployment_id, source_deployment_attempt: 1,
+      observed_config_version_id: null, resolution: 'agent_observed',
+      evidence: 'node heartbeat reported current config none at 2026-10-16T08:02:00Z',
+    })
+  })
+
+  // 
+  it('reconciles an unconfirmed scope only as an operator confirmation, never as an observed empty configuration', async () => {
+    const unconfirmed = { reason: 'rollback_failed', source_deployment_id: '018f0000-0000-7000-8000-0000000000d1',
+      source_deployment_attempt: 1, observation: 'unconfirmed', unconfirmed_reason: 'stale_report',
+      reported_config_version_id: null, reported_at: null }
+    const waiting = { ...scopes, capability_regressions: [],
+      scopes: [{ ...scopes.scopes[0]!, reconciliation_required: true, reconciliation: unconfirmed }] }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(waiting))
+    const read = await nodesApi.getConfigurationScopes('token', nodeID)
+    // an unconfirmed observation never carries a version
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ ...waiting, scopes: [{ ...waiting.scopes[0]!,
+      reconciliation: { ...unconfirmed, reported_config_version_id: '018f0000-0000-7000-8000-0000000000c1' } }] }))
+    await expect(nodesApi.getConfigurationScopes('token', nodeID)).rejects.toMatchObject({ code: 'invalid_response' })
+    const post = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({}, 201))
+    await nodesApi.reconcileConfigurationScope('token', nodeID, read.scopes[0]!)
+    expect(JSON.parse(String(post.mock.calls[0]![1]?.body))).toMatchObject({
+      observed_config_version_id: null, resolution: 'operator_confirmed',
+      evidence: 'operator confirmed; node state unconfirmed (stale_report)',
+    })
+  })
+
+  // 管理员核实节点仍在服务原发布时，按原部署自己的版本人工确认；别的版本不发请求。
+  it('confirms the source release the node still serves only with the source deployment version', async () => {
+    const source = '018f0000-0000-7000-8000-0000000000d1'
+    const version = '018f0000-0000-7000-8000-0000000000c1'
+    const scope = { ...scopes.scopes[0]!, reconciliation_required: true,
+      last_apply: { ...scopes.scopes[0]!.last_apply, state: 'rollback_failed' as const },
+      reconciliation: { reason: 'rollback_failed', source_deployment_id: source, source_deployment_attempt: 1,
+        observation: 'unconfirmed' as const, unconfirmed_reason: 'contradicting_report', reported_config_version_id: null, reported_at: null },
+    } as NodeConfigurationScope
+    expect(nodeScopeSourceVersion(scope)).toBe(version)
+    expect(nodeScopeSourceVersion({ ...scope, last_apply: { ...scope.last_apply!, attempt: 2 } })).toBeNull()
+    expect(nodeScopeSourceVersion({ ...scope, reconciliation: { ...scope.reconciliation!, observation: 'confirmed', unconfirmed_reason: null } })).toBeNull()
+    const post = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({}, 201))
+    await nodesApi.reconcileConfigurationScope('token', nodeID, scope, version)
+    expect(JSON.parse(String(post.mock.calls[0]![1]?.body))).toMatchObject({
+      source_deployment_id: source, source_deployment_attempt: 1,
+      observed_config_version_id: version, resolution: 'operator_confirmed',
+      evidence: `operator verified on the node that it still serves the source release ${version}; node state unconfirmed (contradicting_report)`,
+    })
+    await expect(nodesApi.reconcileConfigurationScope('token', nodeID, scope, '018f0000-0000-7000-8000-0000000000c2'))
+      .rejects.toMatchObject({ code: 'validation_error' })
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  // null 对账后补充确认，按 source_confirmation 发 operator_confirmed + 源部署版本。
+  it('reads a source confirmation and supplements the reconciliation with the source version', async () => {
+    const confirmation = { source_deployment_id: '018f0000-0000-7000-8000-0000000000d1', source_deployment_attempt: 1,
+      config_version_id: '018f0000-0000-7000-8000-0000000000c1', reconciled_at: '2026-11-23T01:00:00Z' }
+    const reconciled = { ...scopes, capability_regressions: [],
+      scopes: [{ ...scopes.scopes[0]!, reconciliation_required: false, source_confirmation: confirmation }] }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(reconciled))
+    const read = await nodesApi.getConfigurationScopes('token', nodeID)
+    expect(read.scopes[0]!.source_confirmation).toEqual(confirmation)
+    for (const malformed of [{ ...confirmation, config_version_id: 'c1' }, { ...confirmation, reconciled_at: 'yesterday' }]) {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ ...reconciled,
+        scopes: [{ ...reconciled.scopes[0]!, source_confirmation: malformed }] }))
+      await expect(nodesApi.getConfigurationScopes('token', nodeID)).rejects.toMatchObject({ code: 'invalid_response' })
+    }
+
+    const post = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({}, 201))
+    await nodesApi.confirmConfigurationScopeSource('token', nodeID, read.scopes[0]!)
+    const [url, init] = post.mock.calls[0]!
+    expect(String(url)).toContain('/v1/admin/site-rollouts/reconciliations')
+    expect(init?.method).toBe('POST')
+    const headers = init?.headers as Record<string, string>
+    expect(headers['Idempotency-Key']).toBe(`node-reconcile-${headers['X-Request-ID']}`)
+    expect(JSON.parse(String(init?.body))).toEqual({
+      configuration_scope_id: scopes.scopes[0]!.scope_id, node_id: nodeID,
+      source_deployment_id: confirmation.source_deployment_id, source_deployment_attempt: 1,
+      observed_config_version_id: confirmation.config_version_id, resolution: 'operator_confirmed',
+      evidence: `supplemental confirmation: operator verified on the node that the source release ${confirmation.config_version_id} ran there after its rollback failed; current version unchanged; reconciled without a version at ${confirmation.reconciled_at}`,
+    })
+    // Without a source confirmation nothing is sent.
+    await expect(nodesApi.confirmConfigurationScopeSource('token', nodeID, { ...read.scopes[0]!, source_confirmation: null }))
+      .rejects.toMatchObject({ code: 'validation_error' })
+    expect(post).toHaveBeenCalledTimes(1)
   })
 
   it('reads the node tenants with the session token', async () => {

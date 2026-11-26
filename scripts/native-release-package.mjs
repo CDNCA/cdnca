@@ -293,16 +293,6 @@ export function buildNativeRelease(options) {
     }
     fs.mkdirSync(path.join(release, 'static/web/downloads'), { recursive: true })
     fs.copyFileSync(nodeInstaller, path.join(release, 'static/web/downloads/install-node.sh'), fs.constants.COPYFILE_EXCL)
-    // Billing integration PHP modules (ADR 0019): integrations/build.sh output, served at
-    // /downloads/billing-bridge/ from the active release so an upgrade refreshes them.
-    // A source tree without integrations/build.sh (older commits, test fixtures) ships none.
-    if (fs.lstatSync(path.join(source, 'integrations/build.sh'), { throwIfNoEntry: false })?.isFile()) {
-      run(path.join(source, 'integrations'), 'bash', ['build.sh'], buildEnv)
-      fs.mkdirSync(path.join(release, 'static/web/downloads/billing-bridge'), { recursive: true })
-      for (const name of ['cdnca-whmcs.zip', 'cdnca-zjmf.zip', 'cdnca-zjmf-v10.zip']) {
-        fs.copyFileSync(path.join(source, 'integrations/dist', name), path.join(release, 'static/web/downloads/billing-bridge', name), fs.constants.COPYFILE_EXCL)
-      }
-    }
     preserveNativeWebFiles(previousRelease, release, previous.files)
     copyNativeRecoveryRunbook(source, release)
     for (const name of fs.readdirSync(path.join(source, 'services/control-api/migrations'))) {

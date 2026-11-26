@@ -62,9 +62,10 @@ type ProofReferenceResolver interface {
 }
 
 // MultiProofReferenceResolver also returns the per-channel proof references
-// (several verifications required at once).
+// (several verifications required at once), of the
+// challenges the registration names.
 type MultiProofReferenceResolver interface {
-	ResolveProofReferences(*http.Request) (string, map[string]string, error)
+	ResolveProofReferences(*http.Request, map[string]uuid.UUID) (string, map[string]string, error)
 }
 
 type ProofReferenceResolverFunc func(*http.Request) (string, error)
@@ -77,12 +78,21 @@ func (function ProofReferenceResolverFunc) ResolveProofReference(request *http.R
 }
 
 type Config struct {
-	TermsVersion    string
-	ScopeResolver   ScopeResolver
-	MaxRequestBytes int64
-	Timeout         time.Duration
-	RetryAfter      time.Duration
-	Logger          *slog.Logger
+	// TermsVersion is a fixed terms version set by the deployment
+	// (ACCOUNT_REGISTRATION_TERMS_VERSION); empty: CurrentTermsVersion
+	// answers it per request (the terms on the settings page).
+	TermsVersion        string
+	CurrentTermsVersion func(context.Context) (string, error)
+	ScopeResolver       ScopeResolver
+	MaxRequestBytes     int64
+	Timeout             time.Duration
+	RetryAfter          time.Duration
+	Logger              *slog.Logger
+
+	// TermsRequired: whether sign-up must accept terms now
+	// (registration-config terms_required); false, the acceptance is not
+	// checked. Nil: always required.
+	TermsRequired func(context.Context) (bool, error)
 }
 
 type Handler struct {
@@ -91,6 +101,8 @@ type Handler struct {
 	scope           ScopeResolver
 	proofs          ProofReferenceResolver
 	termsVersion    string
+	currentTerms    func(context.Context) (string, error)
+	termsRequired   func(context.Context) (bool, error)
 	maxRequestBytes int64
 	timeout         time.Duration
 	retryAfter      time.Duration
@@ -103,9 +115,13 @@ type registrationBody struct {
 	DisplayName         string `json:"display_name"`
 	Email               string `json:"email"`
 	Phone               string `json:"phone"`
+	QQ                  string `json:"qq"`
 	TermsAccepted       bool   `json:"terms_accepted"`
 	TermsVersion        string `json:"terms_version"`
 	VerificationChannel string `json:"verification_channel"`
+	// VerificationChallengeIDs names the verified challenge of each channel
+	// its proof cookie is the one spent.
+	VerificationChallengeIDs map[string]uuid.UUID `json:"verification_challenge_ids"`
 }
 
 type errorEnvelope struct {
@@ -126,7 +142,7 @@ func NewHandler(
 	config Config,
 ) (*Handler, error) {
 	if application == nil || source == nil || proofs == nil ||
-		!registrationMetadataPattern.MatchString(config.TermsVersion) {
+		!registrationMetadataPattern.MatchString(config.TermsVersion) && (config.TermsVersion != "" || config.CurrentTermsVersion == nil) {
 		return nil, errInvalidRequest
 	}
 	if config.MaxRequestBytes == 0 {
@@ -148,8 +164,8 @@ func NewHandler(
 	}
 	return &Handler{
 		application: application, source: source, scope: config.ScopeResolver, proofs: proofs,
-		termsVersion: config.TermsVersion, maxRequestBytes: config.MaxRequestBytes,
-		timeout: config.Timeout, retryAfter: config.RetryAfter, logger: config.Logger,
+		termsVersion: config.TermsVersion, currentTerms: config.CurrentTermsVersion, maxRequestBytes: config.MaxRequestBytes,
+		timeout: config.Timeout, retryAfter: config.RetryAfter, logger: config.Logger, termsRequired: config.TermsRequired,
 	}, nil
 }
 
@@ -187,15 +203,36 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		return
 	}
 	var body registrationBody
-	if err := handler.decodeJSON(response, request, &body); err != nil {
+	if err := handler.decodeJSON(response, request, &body); err != nil || !validChallengeIDs(body.VerificationChallengeIDs) {
 		handler.writeError(response, request, http.StatusUnprocessableEntity,
 			"account_registration_invalid_input", requestID)
 		return
 	}
-	if !body.TermsAccepted || body.TermsVersion != handler.termsVersion {
-		handler.writeError(response, request, http.StatusUnprocessableEntity,
-			"account_registration_terms_required", requestID)
-		return
+	termsRequired := true
+	if handler.termsRequired != nil {
+		required, err := handler.termsRequired(request.Context())
+		if err != nil {
+			handler.writeError(response, request, http.StatusServiceUnavailable,
+				"account_registration_unavailable", requestID)
+			return
+		}
+		termsRequired = required
+	}
+	// / the version in force goes to the service,
+	// which checks the acceptance after the replay read (an exact retry of a
+	// completed registration replays whatever changed since)
+	currentTermsVersion := ""
+	if termsRequired {
+		currentTermsVersion = handler.termsVersion
+		if currentTermsVersion == "" {
+			current, err := handler.currentTerms(request.Context())
+			if err != nil || current == "" {
+				handler.writeError(response, request, http.StatusServiceUnavailable,
+					"account_registration_unavailable", requestID)
+				return
+			}
+			currentTermsVersion = current
+		}
 	}
 	source, err := handler.source.ResolveSourceIP(request)
 	if err != nil || !validRegistrationSource(source) {
@@ -215,7 +252,7 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	var proofReference string
 	var proofReferences map[string]string
 	if multi, ok := handler.proofs.(MultiProofReferenceResolver); ok {
-		proofReference, proofReferences, err = multi.ResolveProofReferences(request)
+		proofReference, proofReferences, err = multi.ResolveProofReferences(request, body.VerificationChallengeIDs)
 	} else {
 		proofReference, err = handler.proofs.ResolveProofReference(request)
 	}
@@ -230,10 +267,10 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	defer cancel()
 	result, err := handler.application.Register(ctx, accountregistration.RegisterInput{
 		ScopeID: scopeID, Username: body.Username, Password: body.Password, DisplayName: body.DisplayName,
-		Email: body.Email, Phone: body.Phone, TermsAccepted: body.TermsAccepted,
+		Email: body.Email, Phone: body.Phone, QQ: body.QQ, TermsAccepted: body.TermsAccepted,
 		TermsVersion: body.TermsVersion, VerificationChannel: body.VerificationChannel,
 		IdempotencyKey: idempotencyKey, RequestID: requestID, Source: source.Unmap().String(),
-		ProofReference: proofReference, ProofReferences: proofReferences,
+		ProofReference: proofReference, ProofReferences: proofReferences, CurrentTermsVersion: currentTermsVersion,
 	})
 	if err != nil {
 		handler.writeServiceError(response, request, requestID, err)
@@ -245,6 +282,17 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		return
 	}
 	handler.writeJSON(response, http.StatusAccepted, result)
+}
+
+// validChallengeIDs: verification_challenge_ids names only email / sms
+// (accountregistrationproof.ValidChallengeIDs; that package's tests import this one).
+func validChallengeIDs(challenges map[string]uuid.UUID) bool {
+	for channel, id := range challenges {
+		if channel != "email" && channel != "sms" || id == uuid.Nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (handler *Handler) decodeJSON(response http.ResponseWriter, request *http.Request, destination any) error {
@@ -368,6 +416,8 @@ func (handler *Handler) writeServiceError(
 		status, code = http.StatusTooManyRequests, "account_registration_rate_limited"
 	case errors.Is(err, accountregistration.ErrIdempotencyConflict):
 		status, code = http.StatusConflict, "account_registration_idempotency_conflict"
+	case errors.Is(err, accountregistration.ErrTermsOutdated):
+		status, code = http.StatusUnprocessableEntity, "account_registration_terms_required"
 	}
 	if status == http.StatusTooManyRequests {
 		seconds := (handler.retryAfter + time.Second - 1) / time.Second

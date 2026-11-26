@@ -116,7 +116,7 @@ const zhCN = {
     mine: '我的报价', mineEmpty: '还没有创建报价', status: '状态',
     probeNotice: '开启质量拨测后报价会显示实测数据。', probeMore: '查看说明', probeDetail: '质量拨测：在池内节点的节点程序（agent）配置文件里打开 market_probe.enabled（拨测开关）。打开即表示同意该节点始终开放 80 端口，供其他卖家拨测（只应答 /.well-known/cdnca-market-probe，其余请求返回 421），同时该节点也会替市场拨测别家节点。没有打开的节点不参与拨测，报价会显示数据不足。',
     limits: '限额', unlimited: '不限', prepaid: '预付用完', overridden: '已被平台底线覆盖：{{items}}', pluginsUnavailable: '节点已不具备：{{plugins}}',
-    subscribers: '订阅者',
+    subscribers: '订阅者', selectionScope: '报价',
   },
   listing: {
     nodes: '选择节点', nodesHelp: '勾选一个即单节点供给，多个即多节点供给；提交时本机自动建一个隐藏的市场供给线路组。',
@@ -492,7 +492,7 @@ const enUS: typeof zhCN = {
     mine: 'My offers', mineEmpty: 'No offers yet', status: 'Status',
     probeNotice: 'With quality probing on, the offer shows measured data.', probeMore: 'Details', probeDetail: 'Quality probing: enable market_probe.enabled in the agent configuration of the pool nodes. Enabling it means agreeing that the node keeps port 80 open for other sellers to probe (only /.well-known/cdnca-market-probe is answered; anything else gets 421), and that the node probes other sellers for the market. Nodes without it do not take part, and the offer shows insufficient data.',
     limits: 'Limits', unlimited: 'Unlimited', prepaid: 'Prepaid used up', overridden: 'Overridden by the platform floor: {{items}}', pluginsUnavailable: 'No longer on every node: {{plugins}}',
-    subscribers: 'Subscribers',
+    subscribers: 'Subscribers', selectionScope: 'offers',
   },
   listing: {
     nodes: 'Select nodes', nodesHelp: 'One node makes a single-node supply, several a multi-node supply; on submit this controller creates a hidden market-supply line group.',

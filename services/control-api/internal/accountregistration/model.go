@@ -28,15 +28,21 @@ var (
 	ErrProofInvalid                  = errors.New("account registration proof invalid")
 	ErrProofUnavailable              = errors.New("account registration proof unavailable")
 	ErrIncompleteReceipt             = errors.New("account registration receipt is incomplete")
+	// ErrTermsOutdated: the accepted terms version is not the current one
+	// (the terms changed after the page loaded), or required
+	// terms were not accepted at all (built-in registration).
+	ErrTermsOutdated = errors.New("account registration terms version outdated")
 )
 
 type RegisterInput struct {
-	ScopeID             uuid.UUID
-	Username            string
-	Password            string
-	DisplayName         string
-	Email               string
-	Phone               string
+	ScopeID     uuid.UUID
+	Username    string
+	Password    string
+	DisplayName string
+	Email       string
+	Phone       string
+	// QQ is an optional contact, required when the platform asks for it.
+	QQ                  string
 	TermsAccepted       bool
 	TermsVersion        string
 	VerificationChannel string
@@ -47,11 +53,18 @@ type RegisterInput struct {
 	// ProofReferences holds one proof reference per verified channel
 	// (email / sms) when several verifications are required.
 	ProofReferences map[string]string `json:"-"`
+	// CurrentTermsVersion is the version a sign-up must accept now, set by
+	// the Turnstile HTTP entry (pinned or the settings one); empty: any
+	// well-formed version (Service.Register).
+	CurrentTermsVersion string `json:"-"`
 }
 
 type RegisterResult struct {
 	Accepted bool `json:"accepted"`
 	Replayed bool `json:"replayed"`
+	// Username is the generated username, only when the
+	// request left it empty.
+	Username string `json:"username,omitempty"`
 }
 
 type RateLimitRequest struct {
@@ -68,7 +81,6 @@ type RegistrationProofRequest struct {
 	Reference      string
 	Channel        string
 	Destination    string
-	Source         string
 	IdempotencyKey string
 	SubjectDigest  [32]byte
 }
@@ -126,6 +138,7 @@ type RegistrationRecord struct {
 	DisplayName         string
 	Email               string
 	Phone               string
+	QQ                  string
 	TermsVersion        string
 	VerificationChannel string
 	IdempotencyKey      string

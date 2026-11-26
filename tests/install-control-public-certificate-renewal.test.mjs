@@ -97,5 +97,5 @@ test('no end-of-install renewal notice for our own or a lineage certificate', ()
 })
 
 test('the installer reports the renewal notice after the endpoints, at the end of main', () => {
-  assert.match(source, /\n  print_gateway_ports\n  bt_report\n  report_public_certificate_renewal\n  log 'control-api installed, activated and ready'\n/)
+    assert.match(source, /\n  print_gateway_ports\n  bt_report\n  report_public_certificate_renewal\n  control_install_state_done\n  control_keep_installer_copy\n  log 'cdnca community edition installed and ready'\n/)
 })

@@ -200,10 +200,7 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 			return platformSyncErr
 		}
 		if err != nil {
-			if site.packageSubscriptionID == nil && req.Domain == "" && failureCode(err) == FailureCNAMEZoneNotConfigured {
-				return failWith(FailureNoDefaultZone, ErrNotFound)
-			}
-			return err
+			return siteZoneFailure(err, site.packageSubscriptionID != nil, req.Domain)
 		}
 		ownerID, packageID, err := resolveModeOwner(ctx, tx, req, site)
 		if err != nil {
@@ -488,7 +485,7 @@ type frozenTargetInput struct {
 	// streamID: a stream's own allocation (migration 505); its line group is
 	// the stream's own, else the package's (no website, migration 506), the
 	// row is anchored at the stream (site_id NULL, migration 507) and the
-	// site's HTTP-01 serving gate does not apply (the gate is per site).
+	// site's  serving gate does not apply (the gate is per site).
 	streamID *uuid.UUID
 }
 
@@ -517,11 +514,12 @@ func insertFrozenTarget(ctx context.Context, tx pgx.Tx, input frozenTargetInput,
 	rows, err := tx.Query(ctx, `SELECT host(endpoint.address)
 		FROM package_subscriptions subscription
 		LEFT JOIN sites selected_site ON selected_site.scope_id=subscription.tenant_scope_id AND selected_site.id=$3
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		JOIN node_line_groups line_group
 		  ON (line_group.tenant_scope_id=subscription.tenant_scope_id OR line_group.tenant_scope_id=(
 		      SELECT platform.id FROM access_scopes platform WHERE platform.kind='platform'))
 		 AND line_group.id=COALESCE((SELECT forward.node_group_id FROM l4_forwards forward WHERE forward.scope_id=$1 AND forward.id=$4::uuid),
-		      selected_site.node_group_id,(subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+		      selected_site.node_group_id,(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 		 AND line_group.deleted_at IS NULL
 		JOIN node_line_group_revisions revision
 		  ON revision.tenant_scope_id=line_group.tenant_scope_id
@@ -531,7 +529,7 @@ func insertFrozenTarget(ctx context.Context, tx pgx.Tx, input frozenTargetInput,
 		  ON endpoint.tenant_scope_id=revision.tenant_scope_id
 		 AND endpoint.line_group_id=revision.line_group_id
 		 AND endpoint.config_revision=revision.revision AND endpoint.published
-		 -- ACME HTTP-01 serving gate (migration 342).
+		 -- ACME  serving gate (migration 342).
 		 AND ($4::uuid IS NOT NULL OR endpoint.node_id IS NULL OR acme_http01_site_node_serving_blocked($1,$3,endpoint.node_id) IS NULL)
 		WHERE subscription.tenant_scope_id=$1 AND subscription.id=$2
 		  AND subscription.lifecycle_status='active'
@@ -558,11 +556,12 @@ func insertFrozenTarget(ctx context.Context, tx pgx.Tx, input frozenTargetInput,
 	if err := tx.QueryRow(ctx, `SELECT line_group.id,line_group.current_revision,line_group.tenant_scope_id
 		FROM package_subscriptions subscription
 		LEFT JOIN sites selected_site ON selected_site.scope_id=subscription.tenant_scope_id AND selected_site.id=$3
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		JOIN node_line_groups line_group
 		  ON (line_group.tenant_scope_id=subscription.tenant_scope_id OR line_group.tenant_scope_id=(
 		      SELECT platform.id FROM access_scopes platform WHERE platform.kind='platform'))
 		 AND line_group.id=COALESCE((SELECT forward.node_group_id FROM l4_forwards forward WHERE forward.scope_id=$1 AND forward.id=$4::uuid),
-		      selected_site.node_group_id,(subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+		      selected_site.node_group_id,(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 		 AND line_group.deleted_at IS NULL
 		JOIN node_line_group_revisions revision
 		  ON revision.tenant_scope_id=line_group.tenant_scope_id
@@ -593,11 +592,12 @@ func checkSettledLineGroup(ctx context.Context, tx pgx.Tx, scopeID, siteID, jobI
 		JOIN cname_allocation_targets frozen ON frozen.tenant_scope_id=selected_site.scope_id AND frozen.job_id=$3
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=selected_site.scope_id
 		 AND subscription.id=selected_site.package_subscription_id
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		JOIN node_line_groups line_group ON line_group.tenant_scope_id=frozen.node_group_scope_id
 		 AND line_group.id=frozen.node_group_id AND line_group.deleted_at IS NULL
 		WHERE selected_site.scope_id=$1 AND selected_site.id=$2
 		  AND line_group.id=CASE WHEN selected_site.node_group_id IS NOT NULL THEN selected_site.node_group_id
-		      WHEN selected_site.package_subscription_id IS NOT NULL THEN (subscription.product_snapshot->'spec'->>'node_group_id')::uuid
+		      WHEN selected_site.package_subscription_id IS NOT NULL THEN (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid
 		      WHEN line_group.is_platform_default THEN line_group.id END)`, scopeID, siteID, jobID).Scan(&current); err != nil {
 		return err
 	}
@@ -625,7 +625,7 @@ func insertNoPackageFrozenTarget(ctx context.Context, tx pgx.Tx, input frozenTar
 		  ON endpoint.tenant_scope_id=revision.tenant_scope_id
 		 AND endpoint.line_group_id=revision.line_group_id
 		 AND endpoint.config_revision=revision.revision AND endpoint.published
-		 -- ACME HTTP-01 serving gate (migration 342).
+		 -- ACME  serving gate (migration 342).
 		 AND (endpoint.node_id IS NULL OR acme_http01_site_node_serving_blocked($1,$2,endpoint.node_id) IS NULL)
 		WHERE selected_site.scope_id=$1 AND selected_site.id=$2
 		ORDER BY endpoint.address,endpoint.endpoint_id`, input.scopeID, input.siteID)
@@ -1069,7 +1069,7 @@ func (store *Store) bindPackageSite(
 // subscription before the scope row (checkPackageRuntime), so waiting on one
 // here would reverse their order; 55P03 is retried instead (ErrRetryable).
 // supersedeJobTx cancels the allocation job a regenerate superseded
-//, attributed to the regenerating user. Its worker loses the
+// , attributed to the regenerating user. Its worker loses the
 // lease: LoadTarget, AttachChild, Yield and the settlement (job_id CAS in
 // lockSettlement, lease CAS in settleBackgroundJob) all refuse it. A job that
 // already ended is left as it is.
@@ -1247,6 +1247,20 @@ func resolveZoneAuthority(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, dom
 	return zoneAuthority{}, zoneFailure(ctx, tx, scopeID, "")
 }
 
+// siteZoneFailure names why a site CNAME without a domain found no zone:
+// a site without a package has no default zone; a package site's package has
+// no CNAME domain (and no default or random-allocation zone stands in). Other
+// failures keep their code.
+func siteZoneFailure(err error, packaged bool, domain string) error {
+	if domain != "" || failureCode(err) != FailureCNAMEZoneNotConfigured {
+		return err
+	}
+	if packaged {
+		return failWith(FailurePackageCNAMEDomainMissing, ErrNotFound)
+	}
+	return failWith(FailureNoDefaultZone, ErrNotFound)
+}
+
 func lockZone(ctx context.Context, tx pgx.Tx, query string, args ...any) (zoneAuthority, bool, error) {
 	var zone zoneAuthority
 	err := tx.QueryRow(ctx, query+` FOR SHARE OF zone,provider`, args...).Scan(
@@ -1359,7 +1373,10 @@ func resolveModeOwner(
 		 AND package_order.user_id=$3
 		 AND package_order.product_kind='package_subscription'
 		WHERE subscription.tenant_scope_id=$1 AND subscription.id=$2
-		  AND subscription.product_id=$4 AND subscription.lifecycle_status='active'
+		  -- the site's package is the subscription's current product (or, saved before
+		  -- a package change, its purchased one): 
+		  AND $4 IN (subscription.product_id,package_subscription_current_product_id(subscription.id,now()))
+		  AND subscription.lifecycle_status='active'
 		  AND subscription.admin_enabled=true AND subscription.deleted_at IS NULL
 		  AND (owner.source_kind='subscription_state' OR EXISTS (SELECT 1 FROM package_order_events AS event
 		              WHERE event.order_id=package_order.id AND event.event_type='fulfilled'))

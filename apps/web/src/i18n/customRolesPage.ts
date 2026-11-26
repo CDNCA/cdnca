@@ -2,8 +2,7 @@ import i18n from './index'
 
 const zhCN = {
   title: '自定义角色',
-  description: '管理租户可委派权限、自定义角色版本和用户授权。',
-  sections: { permissions: '可委派权限', roles: '自定义角色', grants: '用户角色授权' },
+  sections: { roles: '自定义角色', grants: '用户角色授权' },
   actions: {
     create: '新建角色', rename: '重命名', publish: '发布权限', deactivate: '停用角色', assign: '分配用户', revoke: '撤销授权',
     refresh: '刷新', retry: '重试', save: '保存', cancel: '取消', previous: '上一页', next: '下一页',
@@ -11,14 +10,15 @@ const zhCN = {
     exactRetry: '使用同一请求重试', abandon: '放弃并刷新',
   },
   fields: {
-    name: '角色名称', permissions: '权限', permission: '权限名称', stepUpRequired: '二次认证要求',
+    name: '角色名称', permissions: '权限', permissionSearch: '搜索权限', permissionSearchPlaceholder: '按权限名称或权限码搜索',
     stepUpProof: '二次认证证明', subjectUserId: '用户 ID', subjectUser: '用户', subjectUserPlaceholder: '搜索用户名、显示名称或邮箱', role: '角色', status: '状态',
     actions: '操作', includeDeactivated: '包含已停用角色',
   },
-  values: { required: '必需', notRequired: '不需要', stepUp: '需二次认证' },
+  values: { stepUp: '需二次认证', selectedCount: '已选 {{count}} 项' },
+  groups: { sites: '网站与安全', dns: '域名与解析', billing: '财务与套餐', identity: '账号与团队', messages: '公告与工单', plugins: '插件', other: '其他' },
   statuses: { active: '生效中', deactivated: '已停用', revoked: '已撤销' },
   data: {
-    loadingRoles: '正在加载自定义角色', emptyPermissions: '暂无可委派权限',
+    loadingRoles: '正在加载自定义角色', emptyPermissions: '暂无可委派权限', noPermissionMatch: '没有匹配的权限',
     emptyRoles: '暂无自定义角色', emptyGrants: '暂无用户角色授权',
   },
   dialogs: {
@@ -32,16 +32,15 @@ const zhCN = {
     forbidden: '无权管理自定义角色', load: '自定义角色加载失败，请重试',
     revisionConflict: '内容已被其他人修改，请刷新后再保存', stepUpRequired: '此操作需要有效且未使用的二次认证证明',
     permissionNotDelegable: '所选权限不能委派给租户自定义角色', serviceUnavailable: '自定义角色服务暂不可用，请稍后重试',
-    nameConflict: '角色名称已存在', roleInactive: '该角色已停用', selfAssignment: '不能向当前操作者分配此角色',
-    validation: '请填写完整且有效的角色信息',
+    nameConflict: '角色名称已存在', roleInactive: '该角色已停用，不能再分配用户或修改，列表已刷新', selfAssignment: '不能向当前操作者分配此角色',
+    validation: '请填写完整且有效的角色信息', nameRequired: '请输入角色名称', permissionsRequired: '至少选择一项权限', subjectRequired: '请选择用户',
   },
   pagination: { roles: '角色分页', grants: '授权分页' },
 }
 
 const enUS: typeof zhCN = {
   title: 'Custom roles',
-  description: 'Manage tenant-delegable permissions, custom role revisions, and user grants.',
-  sections: { permissions: 'Delegable permissions', roles: 'Custom roles', grants: 'User role grants' },
+  sections: { roles: 'Custom roles', grants: 'User role grants' },
   actions: {
     create: 'Create role', rename: 'Rename', publish: 'Publish permissions', deactivate: 'Deactivate role', assign: 'Assign user', revoke: 'Revoke grant',
     refresh: 'Refresh', retry: 'Retry', save: 'Save', cancel: 'Cancel', previous: 'Previous', next: 'Next',
@@ -49,14 +48,15 @@ const enUS: typeof zhCN = {
     exactRetry: 'Retry the same request', abandon: 'Abandon and refresh',
   },
   fields: {
-    name: 'Role name', permissions: 'Permissions', permission: 'Permission', stepUpRequired: 'Step-up requirement',
+    name: 'Role name', permissions: 'Permissions', permissionSearch: 'Search permissions', permissionSearchPlaceholder: 'Search by permission name or code',
     stepUpProof: 'Step-up proof', subjectUserId: 'User ID', subjectUser: 'User', subjectUserPlaceholder: 'Search username, display name, or email', role: 'Role', status: 'Status',
     actions: 'Actions', includeDeactivated: 'Include deactivated roles',
   },
-  values: { required: 'Required', notRequired: 'Not required', stepUp: 'Step-up required' },
+  values: { stepUp: 'Step-up required', selectedCount: '{{count}} selected' },
+  groups: { sites: 'Sites and security', dns: 'Domains and DNS', billing: 'Billing and packages', identity: 'Accounts and team', messages: 'Announcements and tickets', plugins: 'Plugins', other: 'Other' },
   statuses: { active: 'Active', deactivated: 'Deactivated', revoked: 'Revoked' },
   data: {
-    loadingRoles: 'Loading custom roles', emptyPermissions: 'No delegable permissions',
+    loadingRoles: 'Loading custom roles', emptyPermissions: 'No delegable permissions', noPermissionMatch: 'No matching permissions',
     emptyRoles: 'No custom roles', emptyGrants: 'No user role grants',
   },
   dialogs: {
@@ -70,8 +70,8 @@ const enUS: typeof zhCN = {
     forbidden: 'You cannot manage custom roles', load: 'Failed to load custom roles. Try again.',
     revisionConflict: 'Someone else changed this content. Refresh before saving.', stepUpRequired: 'This operation requires a valid unused step-up proof.',
     permissionNotDelegable: 'A selected permission cannot be delegated to a tenant custom role.', serviceUnavailable: 'The custom role service is temporarily unavailable.',
-    nameConflict: 'That role name already exists.', roleInactive: 'This role is deactivated.', selfAssignment: 'You cannot assign this role to the current operator.',
-    validation: 'Complete the role form with valid values.',
+    nameConflict: 'That role name already exists.', roleInactive: 'This role is deactivated and can no longer be assigned or changed; the list has been refreshed.', selfAssignment: 'You cannot assign this role to the current operator.',
+    validation: 'Complete the role form with valid values.', nameRequired: 'Enter a role name', permissionsRequired: 'Select at least one permission', subjectRequired: 'Select a user',
   },
   pagination: { roles: 'Role pagination', grants: 'Grant pagination' },
 }

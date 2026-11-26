@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/cdnca/cdnca/services/control-api/internal/logincaptcha"
 	"log/slog"
 	"math/big"
 	"net/netip"
@@ -45,7 +46,7 @@ const (
 	loginCaptchaTTL       = 5 * time.Minute
 	loginCaptchaLength    = 5
 	loginCaptchaPerSource = 30 // CAPTCHA images per source per window
-	loginCaptchaAlphabet  = "23456789ABCDEFGHJKMNPQRSTUVWXZ"
+	loginCaptchaAlphabet  = logincaptcha.Alphabet
 )
 
 var (
@@ -63,6 +64,8 @@ var (
 
 	loginThrottleAccountDomain = []byte("cdnca/identity/login-throttle/v1/account\x00")
 	loginCaptchaAnswerDomain   = []byte("cdnca/identity/login-captcha/v1/answer\x00")
+	loginCaptchaBindingDomain  = []byte("cdnca/identity/login-captcha/v1/binding\x00")
+	loginCaptchaBrowserDomain  = []byte("cdnca/identity/login-captcha/v1/browser\x00")
 )
 
 // LoginThrottled is returned when an account+source pair or a source is locked.
@@ -72,17 +75,25 @@ type LoginThrottled struct {
 
 func (*LoginThrottled) Error() string { return "login throttled" }
 
-// LoginCaptchaProof is the built-in CAPTCHA the client solved.
+// LoginCaptchaProof is the built-in CAPTCHA the client solved. Binding is
+// the browser binding cookie sent with it ("" when absent).
 type LoginCaptchaProof struct {
-	ID     uuid.UUID
-	Answer string
+	ID      uuid.UUID
+	Answer  string
+	Binding string
 }
 
 // LoginCaptcha is a freshly issued challenge; Answer is rendered into the
-// image by the HTTP adapter and never stored.
+// image by the HTTP adapter and never stored. Binding is the random value the
+// HTTP adapter sets as the browser binding cookie; only its keyed digest is
+// stored, and the CAPTCHA is spent only together with it.
 type LoginCaptcha struct {
-	ID        uuid.UUID
-	Answer    string
+	ID      uuid.UUID
+	Answer  string
+	Binding string
+	// Minted: Binding is new (the request sent none this service signed);
+	// the HTTP adapter then also sets LoginCaptchaImageBindingCookie.
+	Minted    bool
 	ExpiresAt time.Time
 }
 
@@ -147,12 +158,35 @@ func (s *Service) accountDigest(username string) []byte {
 	return mac.Sum(nil)
 }
 
+// captchaLookAlikes maps what a person reads for a glyph of logincaptcha.Alphabet to that glyph: the
+// alphabet leaves the look-alikes out, so an issued answer never holds them and the mapping only forgives
+// the reader (two misreads in a row). It does not widen what an answer can be.
+var captchaLookAlikes = strings.NewReplacer("B", "8", "S", "5", "Z", "2", "G", "6", "V", "U", "Y", "X",
+	"O", "D", "0", "D", "Q", "D", " ", "")
+
+func normalizeCaptchaAnswer(answer string) string {
+	return captchaLookAlikes.Replace(strings.ToUpper(strings.TrimSpace(answer)))
+}
+
 func (s *Service) captchaDigest(id uuid.UUID, answer string) []byte {
 	mac := hmac.New(sha256.New, s.throttleKey)
 	_, _ = mac.Write(loginCaptchaAnswerDomain)
 	_, _ = mac.Write([]byte(id.String()))
 	_, _ = mac.Write([]byte{0})
-	_, _ = mac.Write([]byte(strings.ToUpper(strings.TrimSpace(answer))))
+	_, _ = mac.Write([]byte(normalizeCaptchaAnswer(answer)))
+	return mac.Sum(nil)
+}
+
+// captchaBindingDigest is nil for an absent binding, so it never matches.
+func (s *Service) captchaBindingDigest(id uuid.UUID, binding string) []byte {
+	if binding == "" {
+		return nil
+	}
+	mac := hmac.New(sha256.New, s.throttleKey)
+	_, _ = mac.Write(loginCaptchaBindingDomain)
+	_, _ = mac.Write([]byte(id.String()))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(binding))
 	return mac.Sum(nil)
 }
 
@@ -206,17 +240,11 @@ func (s *Service) reserveLoginAttempt(ctx context.Context, username string, requ
 			}
 			// The CAPTCHA is consumed whether or not it matches, so it cannot
 			// be brute forced; a wrong answer is not a credential failure.
-			tag, err := tx.Exec(ctx, `UPDATE identity_login_captchas SET consumed_at=$4
-				WHERE id=$1 AND consumed_at IS NULL AND expires_at > $4 AND source_ip=$3 AND answer_digest=$2`,
-				captcha.ID, s.captchaDigest(captcha.ID, captcha.Answer), source, now)
-			if err != nil {
-				return err
-			}
-			if tag.RowsAffected() != 1 {
-				if _, err := tx.Exec(ctx, `UPDATE identity_login_captchas SET consumed_at=$2 WHERE id=$1 AND consumed_at IS NULL`, captcha.ID, now); err != nil {
+			if err := s.spendLoginCaptcha(ctx, tx, *captcha, now); err != nil {
+				if !errors.Is(err, ErrLoginCaptchaInvalid) {
 					return err
 				}
-				outcome = ErrLoginCaptchaInvalid
+				outcome = err
 				return nil
 			}
 		}
@@ -302,8 +330,14 @@ func (reservation *loginThrottle) settle(ctx context.Context, err error) {
 	}
 }
 
-// IssueLoginCaptcha creates a one-time built-in CAPTCHA bound to the source.
-func (s *Service) IssueLoginCaptcha(ctx context.Context, sourceIP string) (LoginCaptcha, error) {
+// IssueLoginCaptcha creates a one-time built-in CAPTCHA bound to the browser
+// binding: browserBinding (the request's cookie) when it is one this service
+// signed, otherwise a fresh one (
+// every open CAPTCHA of one browser keeps its binding, so two tabs do not
+// invalidate each other). The source is recorded only for the per-source
+// issue limit: behind a CDN without origin authentication the issuing and
+// the spending request can come from different edge addresses.
+func (s *Service) IssueLoginCaptcha(ctx context.Context, sourceIP, browserBinding string) (LoginCaptcha, error) {
 	if !s.loginThrottleEnabled() {
 		return LoginCaptcha{}, ErrLoginSecurityUnavailable
 	}
@@ -317,7 +351,14 @@ func (s *Service) IssueLoginCaptcha(ctx context.Context, sourceIP string) (Login
 		return LoginCaptcha{}, err
 	}
 	now := s.now().UTC()
-	result := LoginCaptcha{ID: id, Answer: answer, ExpiresAt: now.Add(loginCaptchaTTL)}
+	binding, minted := browserBinding, false
+	if !s.signedBrowserBinding(binding) {
+		if binding, err = s.newBrowserBinding(); err != nil {
+			return LoginCaptcha{}, err
+		}
+		minted = true
+	}
+	result := LoginCaptcha{ID: id, Answer: answer, Binding: binding, Minted: minted, ExpiresAt: now.Add(loginCaptchaTTL)}
 	var limited bool
 	err = pgx.BeginFunc(ctx, s.store.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('identity-login-captcha:source:' || $1,0))`, source); err != nil {
@@ -335,8 +376,9 @@ func (s *Service) IssueLoginCaptcha(ctx context.Context, sourceIP string) (Login
 			limited = true
 			return nil
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO identity_login_captchas(id,answer_digest,source_ip,created_at,expires_at) VALUES($1,$2,$3,$4,$5)`,
-			id, s.captchaDigest(id, answer), source, now, result.ExpiresAt)
+		_, err := tx.Exec(ctx, `INSERT INTO identity_login_captchas(id,answer_digest,binding_digest,source_ip,created_at,expires_at)
+			VALUES($1,$2,$3,$4,$5,$6)`,
+			id, s.captchaDigest(id, answer), s.captchaBindingDigest(id, result.Binding), source, now, result.ExpiresAt)
 		return err
 	})
 	if err != nil {

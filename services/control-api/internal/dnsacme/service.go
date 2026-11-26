@@ -84,6 +84,8 @@ func (s *Service) zoneApex(ctx context.Context, providerType string, credentials
 		return "", ErrProviderCredentialsRejected
 	case dnsproviderremote.CodeInvalidInput:
 		return "", ErrProviderCredentialsInvalid
+	case dnsproviderremote.CodeProxyUnavailable:
+		return "", ErrProviderProxyUnavailable
 	default:
 		return "", ErrProviderVerificationUnavailable
 	}

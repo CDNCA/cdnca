@@ -544,11 +544,14 @@ func (store *Store) RuleGroups(ctx context.Context, request RuleGroupsRequest) (
 				rows.Close()
 			}
 		}
+		// custom groups are the CC security policies the same session lists
+		// (securitypolicy listWhere): a tenant its own scope, a platform operator every scope.
 		rows, err := tx.Query(ctx, `SELECT policy.id::text,policy.name,policy.enabled,
 			COALESCE(NULLIF(owner.display_name,''),policy.owner_user_id::text),policy.created_at
 			FROM security_policies policy
 			LEFT JOIN users owner ON owner.id=policy.owner_user_id
-			WHERE policy.scope_id=$1 AND policy.kind='cc' AND policy.deleted_at IS NULL ORDER BY policy.created_at,policy.id`, request.TargetScopeID)
+			WHERE ($2 OR policy.scope_id=$1) AND policy.kind='cc' AND policy.deleted_at IS NULL ORDER BY policy.created_at,policy.id`,
+			request.TargetScopeID, request.Actor.ScopeKind == ScopePlatform)
 		if err != nil {
 			return err
 		}

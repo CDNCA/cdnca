@@ -146,7 +146,7 @@ describe('analytics routes', () => {
     renderWithProviders(<AppRoutes />, ['/monitor/site/realtime'])
 
     expect(await screen.findByRole('tab', { name: '基础数据' })).toBeInTheDocument()
-    expect(screen.getByLabelText('面包屑')).toHaveTextContent('首页/统计分析/实时监控')
+    expect(screen.getByLabelText('面包屑')).toHaveTextContent('首页/统计分析/网站实时监控')
     expect(pageRequests(fetchSpy)).toHaveLength(1)
     for (const input of pageRequests(fetchSpy)) {
       const url = new URL(String(input), 'https://cdnca.test')

@@ -64,7 +64,7 @@
       {
        "name": "automatic_failure",
        "type": "AutomaticPublicationFailure",
-       "description": "The scope's latest automatic publication published nothing and no later publication exists. no_target_nodes means no enabled node serves the sites' line groups (their own or their package's primary/backup group); node_capability_unavailable means every target node's agent lacks a capability or JS challenge policy the release needs; node_artifacts_syncing means the target nodes are refused only because a node artifact the release needs (a rule pack, the IP library) is still reaching them through their node artifact set; node_scope_conflict means a target node carries another tenant's configuration this one cannot share (such as its managed WAF), so the request ended instead of retrying, and the next configuration change or a manual publish tries again; site_config_invalid means a site's stored configuration cannot be compiled (such as HTTPS off with HTTPS ports), the request ended instead of retrying, the site and rule are in the edge_publication.site_config_invalid audit event, and the site's next save publishes again. The first three are republished automatically once they change. Omitted otherwise."
+       "description": "The scope's latest automatic publication published nothing and no later publication exists. no_target_nodes means no enabled node serves the sites' line groups (their own or their package's primary/backup group); node_capability_unavailable means every target node's agent lacks a capability or JS challenge policy the release needs; node_artifacts_syncing means the target nodes are refused only because a node artifact the release needs (a rule pack, the IP library) is still reaching them through their node artifact set; node_scope_conflict means a target node carries another tenant's configuration this one cannot share (such as its managed WAF), so the request ended instead of retrying, and the next configuration change or a manual publish tries again; site_config_invalid means a site's stored configuration cannot be compiled (such as HTTPS off with HTTPS ports), the request ended instead of retrying, the site and rule are in the edge_publication.site_config_invalid audit event, and the site's next save publishes again. package_subscription_inactive, package_resource_quota_exceeded, package_feature_denied, entitlement_feature_denied, site_l2_unavailable, rule_pack_out_of_profile and sdk_shield_port_shared are the manual publication's refusals of the same codes (a site or forward bound to a package subscription not in effect, over its package quota, using a feature its package or the local entitlement lacks, a custom L2 without nodes, a rule pack outside the site's CRS profile, an SDK shield port shared); the request ended instead of retrying, and the change that clears it (a renewal, a package change or rebinding, a module grant, the resource's next save) publishes again. A suspended or cancelled package subscription refuses nothing; its sites and forwards are left out of the publication. The first three are republished automatically once they change. When the scope's latest publication is an automatic request's node settings redelivery (kind node_settings), the reason is its content_refusal and source_revision and failed_at are the redelivery's (the node settings went out, the content did not). Omitted otherwise."
       }
      ]
     },
@@ -235,6 +235,16 @@
        "type": "boolean"
       },
       {
+       "name": "kind",
+       "type": "string: node_settings",
+       "description": "node_settings (节点设置更新): a node settings redelivery. The trigger changed node settings only (DoH, node storage) while the scope's own facts refused its content; the release in effect on the target nodes went out again unchanged with new key documents (node settings). Omitted for a content publication."
+      },
+      {
+       "name": "content_refusal",
+       "type": "string: site_config_invalid / package_subscription_inactive / package_resource_quota_exceeded / package_feature_denied / entitlement_feature_denied / site_l2_unavailable / rule_pack_out_of_profile / sdk_shield_port_shared",
+       "description": "With kind node_settings, why the scope's content was not published (the codes of AutomaticPublicationFailure). Omitted otherwise."
+      },
+      {
        "name": "key_envelope_oversized_node_ids",
        "type": "array<string(uuid)>",
        "description": "Stored on the publication for every channel (manual, automatic, system republication, sold package, system configuration); publish, replay, list and detail return the same list. Requested nodes left out of this release: their Agent predates SITE_SELECTION (capability 82) and the key envelope exceeds the 4096 bytes it accepts. They keep their previous configuration, so websites withheld and forwards deleted by this release still serve there until they upgrade to a version with capability 82, after which the release is redelivered automatically. Sorted; omitted when none (also on publications made before this list was stored)."
@@ -361,6 +371,16 @@
       {
        "name": "replayed",
        "type": "boolean"
+      },
+      {
+       "name": "kind",
+       "type": "string: node_settings",
+       "description": "node_settings (节点设置更新): a node settings redelivery. The trigger changed node settings only (DoH, node storage) while the scope's own facts refused its content; the release in effect on the target nodes went out again unchanged with new key documents (node settings). Omitted for a content publication."
+      },
+      {
+       "name": "content_refusal",
+       "type": "string: site_config_invalid / package_subscription_inactive / package_resource_quota_exceeded / package_feature_denied / entitlement_feature_denied / site_l2_unavailable / rule_pack_out_of_profile / sdk_shield_port_shared",
+       "description": "With kind node_settings, why the scope's content was not published (the codes of AutomaticPublicationFailure). Omitted otherwise."
       },
       {
        "name": "key_envelope_oversized_node_ids",

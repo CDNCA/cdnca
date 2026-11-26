@@ -121,7 +121,7 @@ func node(root, versionID string, listeners []edgeconfig.SecurityListener, profi
 	manifest, err := edgeconfig.ParseWAFEngineManifest(runtime.Files[edgeconfig.WAFEngineManifestPath])
 	must(err)
 	gate, err := edgeconfig.RenderWAFEngineGate(manifest, edgeconfig.WAFEngineGate{ReleasePath: release,
-		ModulePath: filepath.Join(*modSecurity, "modules", "ngx_http_modsecurity_module.so"),
+		ModulePath:     filepath.Join(*modSecurity, "modules", "ngx_http_modsecurity_module.so"),
 		UnicodeMapPath: filepath.Join(*modSecurity, "unicode.mapping")})
 	must(err)
 	dir := edgeconfig.WAFEngineGateDir(root, versionID)

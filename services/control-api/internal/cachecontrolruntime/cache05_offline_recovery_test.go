@@ -187,4 +187,6 @@ func cache05AppendSchedulerEvent(events *[]string, event string) {
 	}
 }
 
-func (control *cache05SchedulerControl) SyncCarryingNodes(context.Context, uuid.UUID, string) (int, error) { return 0, nil }
+func (control *cache05SchedulerControl) SyncCarryingNodes(context.Context, uuid.UUID, string) (int, error) {
+	return 0, nil
+}

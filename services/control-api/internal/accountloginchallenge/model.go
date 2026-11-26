@@ -30,10 +30,13 @@ type Methods struct {
 	// RegistrationEnabled: the registration switch is on and the registration
 	// endpoints are mounted, so the sign-in page may offer a sign-up link.
 	RegistrationEnabled bool
-	EmailEnabled        bool
-	SMSEnabled          bool
-	EmailAntiAbuseMode  string
-	SMSAntiAbuseMode    string
+	// RegistrationMode: "builtin" while sign-up uses the built-in image
+	// CAPTCHA (no registration verification runtime), empty otherwise.
+	RegistrationMode   string
+	EmailEnabled       bool
+	SMSEnabled         bool
+	EmailAntiAbuseMode string
+	SMSAntiAbuseMode   string
 	// Set only when a channel uses tencent or geetest_v4, for the browser widget.
 	CaptchaProvider string
 	CaptchaAppID    string
@@ -139,7 +142,13 @@ type Config struct {
 	SubjectLimit      int
 	MaxAttempts       int
 	AvailableChannels []notification.Channel
-	// RegistrationMounted is false when the registration runtime is off; the
-	// public methods then never advertise registration.
-	RegistrationMounted bool
+	// Registration answers RegistrationEnabled / RegistrationMode; nil: the
+	// public methods never advertise registration.
+	Registration RegistrationSource
+}
+
+// RegistrationSource reports whether sign-up is open and by which flow, from
+// the same projection as GET /v1/auth/registration-config.
+type RegistrationSource interface {
+	Registration(context.Context) (enabled bool, mode string, err error)
 }

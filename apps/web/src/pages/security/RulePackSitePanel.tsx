@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Card, List, Space, Table, Tag, Typography, type TableColumnsType } from 'antd'
-import { useFeedbackMessage, useFeedback } from '@cdnca/ui'
+import { Alert, Button, Card, List, Space, Tag, Typography, type TableColumnsType } from 'antd'
+import { useFeedbackMessage, useFeedback, Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'

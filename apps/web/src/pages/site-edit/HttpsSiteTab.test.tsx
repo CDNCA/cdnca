@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -146,11 +146,9 @@ function mockCertificateRead(currentBinding: CertificateAssetBinding | null = nu
   })
 }
 
-function clearCertificate(container: HTMLElement) {
-  const clear = container.querySelector<HTMLElement>('.ant-select-clear')
-  expect(clear).not.toBeNull()
-  fireEvent.mouseDown(clear!)
-  fireEvent.click(clear!)
+// 解除绑定走明确按钮，选择框不再有清除图标
+async function unbindCertificate(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: '解除绑定' }))
 }
 
 async function selectCertificate(user: ReturnType<typeof userEvent.setup>) {
@@ -193,6 +191,54 @@ describe('HttpsSiteTab', () => {
     await selectCertificate(user)
     await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))
     expect(screen.queryByRole('button', { name: '应用证书' })).toBeNull()
+  })
+
+  it('offers an issued ACME certificate that was never activated and binds it', async () => {
+    const domain = 'e2e-user.example.com'
+    const acmeAsset: CertificateAsset = { ...asset, name: domain, source: 'acme', revision: 1 }
+    const issued: CertificateAssetVersion = { ...version, version: 1, status: 'default', sans: [domain], subject: `CN=${domain}` }
+    const activated: CertificateAssetVersion = { ...issued, status: 'active' }
+    const newBinding: CertificateAssetBinding = { ...binding, revision: 1 }
+    let current: CertificateAssetBinding | null = null
+    vi.spyOn(certificatesApi, 'listAssets').mockResolvedValue({ items: [acmeAsset], total: 1 })
+    vi.spyOn(certificatesApi, 'getAsset').mockImplementation(async () => current
+      ? { asset: { ...acmeAsset, revision: 2 }, versions: [activated] }
+      : { asset: acmeAsset, versions: [issued] })
+    vi.spyOn(certificatesApi, 'getSiteBinding').mockImplementation(async () => {
+      if (!current) throw siteBindingNotFound()
+      return { binding: current, version: activated }
+    })
+    const bind = vi.spyOn(certificatesApi, 'bindAsset').mockImplementation(async () => {
+      current = newBinding
+      return newBinding
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<Harness initial={{ ...disabledConfig, domains: [domain] }} />)
+
+    const access = screen.getByRole('switch', { name: 'HTTPS访问' })
+    await waitFor(() => expect(access).toBeDisabled())
+    await user.click(await screen.findByRole('combobox', { name: '证书' }))
+    expect(screen.queryByText('暂无可用证书，请先申请或上传并激活证书。')).toBeNull()
+    await user.click(await screen.findByText(`${domain} · ${domain}`))
+
+    await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))
+    expect(bind.mock.calls[0][1]).toBe(assetID)
+    expect(bind.mock.calls[0][2]).toEqual({ site_id: siteID, version_id: versionID, expected_revision: 0, default: true })
+    expect(await screen.findByText('当前绑定 #1')).toBeInTheDocument()
+    await waitFor(() => expect(access).toBeEnabled())
+  })
+
+  it('does not offer a default version once another version of the asset was activated', async () => {
+    const superseded: CertificateAssetVersion = { ...version, id: otherVersionID, version: 2, status: 'superseded' }
+    const leftDefault: CertificateAssetVersion = { ...version, version: 1, status: 'default' }
+    vi.spyOn(certificatesApi, 'listAssets').mockResolvedValue({ items: [asset], total: 1 })
+    vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({ asset, versions: [leftDefault, superseded] })
+    vi.spyOn(certificatesApi, 'getSiteBinding').mockRejectedValue(siteBindingNotFound())
+    const user = userEvent.setup()
+    renderWithProviders(<Harness initial={disabledConfig} />)
+
+    await user.click(await screen.findByRole('combobox', { name: '证书' }))
+    expect(await screen.findByText('暂无可用证书，请先申请或上传并激活证书。')).toBeInTheDocument()
   })
 
   it('still turns HTTPS off without a certificate and locks forced HTTPS until one is bound (be-gap-2)', async () => {
@@ -389,10 +435,12 @@ describe('HttpsSiteTab', () => {
       current = null
       return { ...binding, revision: 4, bound: false }
     })
+    const user = userEvent.setup()
     const view = renderWithProviders(<Harness initial={disabledConfig} />)
 
     await screen.findByText('边缘证书 · www.example.com')
-    clearCertificate(view.container)
+    expect(view.container.querySelector('.ant-select-clear')).toBeNull()
+    await unbindCertificate(user)
 
     await waitFor(() => expect(unbind).toHaveBeenCalledTimes(1))
     expect(unbind.mock.calls[0].slice(0, 4)).toEqual([
@@ -409,17 +457,17 @@ describe('HttpsSiteTab', () => {
     mockCertificateRead(binding)
     const unbind = vi.spyOn(certificatesApi, 'unbindAsset').mockResolvedValue({ ...binding, revision: 4, bound: false })
     const user = userEvent.setup()
-    const view = renderWithProviders(<Harness initial={{ ...disabledConfig, https_enabled: true, force_https: true }} />)
+    renderWithProviders(<Harness initial={{ ...disabledConfig, https_enabled: true, force_https: true }} />)
 
     await screen.findByText('边缘证书 · www.example.com')
-    clearCertificate(view.container)
+    await unbindCertificate(user)
     expect((await screen.findAllByText('解绑证书？'))[0]).toBeInTheDocument()
     expect(screen.getByText(/强制 HTTPS 与 HSTS 随之失效/u)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(unbind).not.toHaveBeenCalled()
     expect(screen.getByText('边缘证书 · www.example.com')).toBeInTheDocument()
 
-    clearCertificate(view.container)
+    await unbindCertificate(user)
     await user.click(await screen.findByRole('button', { name: '解绑' }))
     await waitFor(() => expect(unbind).toHaveBeenCalledTimes(1))
   })
@@ -499,6 +547,33 @@ describe('HttpsSiteTab', () => {
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(bind).toHaveBeenCalledTimes(2)
     expect(bind.mock.calls[1][2]).toMatchObject({ version_id: otherVersionID, expected_revision: 3 })
+  })
+
+  it('reaches the unbind button by keyboard and offers none without a binding or manage permission', async () => {
+    mockCertificateRead(binding)
+    const unbind = vi.spyOn(certificatesApi, 'unbindAsset').mockResolvedValue({ ...binding, revision: 4, bound: false })
+    const user = userEvent.setup()
+    renderWithProviders(<Harness initial={disabledConfig} />)
+
+    const button = await screen.findByRole('button', { name: '解除绑定' })
+    button.focus()
+    expect(button).toHaveFocus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(unbind).toHaveBeenCalledTimes(1))
+    expect(unbind.mock.calls[0][3]).toEqual({ expected_revision: 3 })
+  })
+
+  it('shows no unbind button for an unbound site or a read-only certificate account', async () => {
+    mockCertificateRead(null)
+    const first = renderWithProviders(<Harness initial={disabledConfig} />)
+    await screen.findByRole('combobox', { name: '证书' })
+    expect(screen.queryByRole('button', { name: '解除绑定' })).not.toBeInTheDocument()
+    first.unmount()
+
+    mockCertificateRead(binding)
+    renderWithProviders(<Harness permissions={['certificates.read']} />)
+    await screen.findByText('边缘证书 · www.example.com')
+    expect(screen.queryByRole('button', { name: '解除绑定' })).not.toBeInTheDocument()
   })
 
   it('keeps certificate operations read-only without certificate permissions', () => {

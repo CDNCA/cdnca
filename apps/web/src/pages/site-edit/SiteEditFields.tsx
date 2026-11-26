@@ -1,7 +1,6 @@
 import { useId } from 'react'
-import { Alert, Tag, Tooltip } from 'antd'
-import { CircleHelp, LockKeyhole } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Tag, Tooltip } from 'antd'
+import { CircleHelp } from 'lucide-react'
 
 // HelpTip is the (?) icon that holds a long explanation (keyboard focusable;
 // the full text is its accessible name).
@@ -131,22 +130,4 @@ export function FormRow({
       </div>
     </div>
   )
-}
-
-export function LockedSectionNotice() {
-  const { t } = useTranslation('sites')
-  return (
-    <Alert
-      className="site-edit-locked-notice"
-      showIcon
-      icon={<LockKeyhole size={15} aria-hidden="true" />}
-      type="info"
-      message={t('edit.locked.notice')}
-    />
-  )
-}
-
-export function LockedControl({ children }: { children: React.ReactNode }) {
-  const { t } = useTranslation('sites')
-  return <Tooltip title={t('edit.locked.unavailable')}>{children}</Tooltip>
 }

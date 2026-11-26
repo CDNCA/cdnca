@@ -988,6 +988,109 @@
    ]
   },
   {
+   "operation_id": "disconnectPlatformDNSConfig",
+   "method": "DELETE",
+   "path": "/v1/dns/platform-config",
+   "summary": "Disconnect the DNS provider - remove the saved credentials and disable every tenant copy",
+   "summary_zh": "断开 DNS 服务商：撤销已保存的凭据并停用每个租户副本",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Removes the provider and its encrypted credentials from the installation-wide DNS configuration and disables the provider copy of every tenant (its credential is revoked). The CNAME domains, their tenant zones, the TTL and the DNS records already written are kept. Afterwards CNAME allocation reports dns_provider_not_configured, record repair and cleanup dns_not_configured and DNS-01 orders acme_dns_provider_unavailable until a provider is saved again. A configuration without a provider is returned unchanged.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The configuration read back (provider_type absent, secret_saved false).",
+     "fields": [
+      {
+       "name": "provider_type",
+       "type": "string"
+      },
+      {
+       "name": "identifiers",
+       "type": "object",
+       "required": true,
+       "description": "Non-secret credential fields (ID"
+      },
+      {
+       "name": "secret_saved",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "ttl",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "ip_weight",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "weight_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "The provider writes record weights (DNSPod)."
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "sync",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "last_error",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
    "operation_id": "testPlatformDNSConnection",
    "method": "POST",
    "path": "/v1/dns/platform-config/connection-test",
@@ -1060,7 +1163,7 @@
     },
     {
      "status": "503",
-     "description": "provider_verification_unavailable or credential_encryption_unavailable."
+     "description": "provider_verification_unavailable, provider_proxy_unavailable (the DNS API HTTP proxy in system other settings could not be used) or credential_encryption_unavailable."
     },
     {
      "status": "504",

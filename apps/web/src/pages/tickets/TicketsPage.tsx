@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactElement } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Alert, App, Button, Card, Checkbox, Drawer, Form, Image, Input, Popconfirm, Result, Select, Space, Table, Tag,
-  Typography,
-} from 'antd'
+import { Alert, App, Button, Card, Checkbox, Drawer, Form, Image, Input, Popconfirm, Result, Select, Space, Tag, Typography } from 'antd'
 import { ArrowLeft, BellRing, Eye, File, FileImage, FileText, Lock, Paperclip, Plus, Send, ShieldOff, Trash2, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -18,7 +15,7 @@ import {
 import { useSessionStore } from '../../auth/session'
 import '../../i18n/tickets'
 import { outcomeUnknown, useIdempotencyKey } from '../market/idempotency'
-import { AdvancedFilters, FeedbackWhen, useLiveApply, PageSection } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, useLiveApply, PageSection, Table } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from '../filterUrl'
 import {
   emptyDraft, fingerprintOf, identityOf, isUnknown, keyFor, markUnknown, replyInputOf, settle, slotKeyOf, useReplySlots,

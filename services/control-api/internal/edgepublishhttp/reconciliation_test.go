@@ -3,6 +3,7 @@ package edgepublishhttp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -126,6 +127,22 @@ func TestNodeConfigReconciliationRouteAuthorizesValidatesAndReturnsAuditFact(t *
 			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 		}
 	})
+
+	// the operator-confirmed version refusals
+	// have their own stable codes.
+	for code, err := range map[string]error{
+		"reconciliation_version_not_source":  edgedeployment.ErrReconciliationObservedNotSource,
+		"reconciliation_source_unverifiable": edgedeployment.ErrReconciliationSourceUnverifiable,
+		//
+		"reconciliation_supplement_not_eligible": edgedeployment.ErrReconciliationSupplementNotEligible,
+	} {
+		t.Run(code, func(t *testing.T) {
+			domain := &fakeNodeConfigReconciliationDomain{fakeDomain: &fakeDomain{}, err: fmt.Errorf("reconcile node running config: %w", err)}
+			response := performRequest(newReconciliationTestHandler(t, domain), http.MethodPost,
+				"/v1/admin/site-rollouts/reconciliations", "platform-manage", body, true)
+			assertAPIError(t, response, http.StatusConflict, code)
+		})
+	}
 }
 
 func TestNodeConfigReconciliationReplayHeader(t *testing.T) {

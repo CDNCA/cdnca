@@ -22,8 +22,8 @@ func TestDNS02HTTPLineWeightRoundTrip(t *testing.T) {
 	}`)
 	request := httptest.NewRequest("POST", "/", bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
-	decoded, err := (&Handler{maxRequestBytes: defaultMaxRequestBytes}).decodeCheck(
-		httptest.NewRecorder(), request, tenantID, siteID,
+	decoded, _, err := (&Handler{maxRequestBytes: defaultMaxRequestBytes}).decodeCheck(
+		httptest.NewRecorder(), request, tenantID, siteID, false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -57,8 +57,8 @@ func TestDNS02HTTPRejectsInvalidLineWeight(t *testing.T) {
 	} {
 		request := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 		request.Header.Set("Content-Type", "application/json")
-		_, err := (&Handler{maxRequestBytes: defaultMaxRequestBytes}).decodeCheck(
-			httptest.NewRecorder(), request, uuid.New(), uuid.New(),
+		_, _, err := (&Handler{maxRequestBytes: defaultMaxRequestBytes}).decodeCheck(
+			httptest.NewRecorder(), request, uuid.New(), uuid.New(), false,
 		)
 		if err != ErrInvalidRequest {
 			t.Fatalf("decode error = %v", err)

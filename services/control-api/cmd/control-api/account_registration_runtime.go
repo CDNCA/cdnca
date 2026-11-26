@@ -89,6 +89,14 @@ func (verifier registrationHumanVerifier) Verify(ctx context.Context, verificati
 	return verifier.fallback.Verify(ctx, verification)
 }
 
+// registrationCaptchaFallback is the built-in image CAPTCHA check of the
+// Turnstile registration runtime: spent with the browser binding cookie the
+// challenge route passes on (httpapi.WithLoginCaptchaBinding), whatever the
+// request source.
+func registrationCaptchaFallback(captcha accountregistrationchallenge.CaptchaConsumer) accountregistrationchallenge.HumanVerifier {
+	return accountregistrationchallenge.CaptchaHumanVerifier{Captcha: captcha}
+}
+
 func loadAccountRegistrationRuntimeConfig(
 	trusted accountRecoveryRuntimeConfig,
 ) (accountRegistrationRuntimeConfig, error) {
@@ -132,9 +140,13 @@ func loadAccountRegistrationRuntimeConfigFromEnv(
 	if err != nil {
 		return accountRegistrationRuntimeConfig{}, err
 	}
-	config.TermsVersion, err = accountRecoveryRequiredEnv(lookup, "ACCOUNT_REGISTRATION_TERMS_VERSION")
-	if err != nil || !accountRecoveryTemplateIDPattern.MatchString(config.TermsVersion) {
-		return accountRegistrationRuntimeConfig{}, errors.New("ACCOUNT_REGISTRATION_TERMS_VERSION is invalid")
+	// optional; unset, the version is derived from the terms on
+	// the system settings page (systemusersettings.TermsVersion).
+	if value, exists := lookup("ACCOUNT_REGISTRATION_TERMS_VERSION"); exists && value != "" {
+		config.TermsVersion, err = accountRecoveryRequiredEnv(lookup, "ACCOUNT_REGISTRATION_TERMS_VERSION")
+		if err != nil || !accountRecoveryTemplateIDPattern.MatchString(config.TermsVersion) {
+			return accountRegistrationRuntimeConfig{}, errors.New("ACCOUNT_REGISTRATION_TERMS_VERSION is invalid")
+		}
 	}
 	config.Templates, err = loadAccountRegistrationTemplates(lookup)
 	if err != nil {
@@ -352,13 +364,20 @@ func openAccountRegistrationRuntime(
 	if err != nil {
 		return nil, err
 	}
+	// the same terms requirement as registration-config and the built-in flow
+	terms := newRegistrationTerms(pool, publicSettings)
+	service.RequireTermsWhen(terms.Required)
 	sourceResolver, err := accountrecoverycontext.NewSourceIPResolver(config.TrustedProxyCIDRs, config.MaxProxyHops)
 	if err != nil {
 		return nil, err
 	}
 	registrationHandler, err := accountregistrationhttp.NewHandler(
 		service, sourceResolver, accountregistrationproof.CookieReferenceResolver{}, accountregistrationhttp.Config{
-			TermsVersion: config.TermsVersion, Logger: logger,
+			TermsVersion: config.TermsVersion, Logger: logger, TermsRequired: terms.Required,
+			CurrentTermsVersion: func(ctx context.Context) (string, error) {
+				policy, err := publicSettings.GetPublic(ctx, uuid.Nil)
+				return policy.TermsVersion, err
+			},
 			ScopeResolver: accountregistrationhttp.ScopeResolverFunc(func(request *http.Request) (uuid.UUID, error) {
 				trusted, err := trustedResolver.Resolve(request)
 				if err != nil {
@@ -413,7 +432,8 @@ func openAccountRegistrationRuntime(
 	}
 	mux := http.NewServeMux()
 	mux.Handle("POST /v1/auth/register", registrationHandler)
-	mux.Handle("POST /v1/auth/registration-challenges", challengeHandler)
+	// The built-in CAPTCHA fallback spends the CAPTCHA with its browser binding cookie.
+	mux.Handle("POST /v1/auth/registration-challenges", httpapi.WithLoginCaptchaBinding(challengeHandler))
 	mux.Handle("POST /v1/auth/registration-challenge-verifications", challengeHandler)
 	providerOwned = false
 	_, email := config.Templates[notification.ChannelEmail]
@@ -744,8 +764,12 @@ func mapAccountRegistrationProviderResult(
 	return registrationProviderFailure(notification.FailurePermanent, "provider_contract_invalid", 0)
 }
 
+// validAccountRegistrationDeliveryID follows notificationruntime.validProviderDeliveryID: the built-in SMTP
+// transport accepts with no provider delivery id (DATA 250 has none), so an empty one is valid; a non-empty
+// one is checked, never invented (an accepted SMTP code mail was recorded as
+// permanent_failed provider_contract_invalid).
 func validAccountRegistrationDeliveryID(value string) bool {
-	if value == "" || len(value) > 256 {
+	if len(value) > 256 {
 		return false
 	}
 	return strings.IndexFunc(value, func(character rune) bool {

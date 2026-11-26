@@ -65,7 +65,7 @@ describe('AccountUserPage internationalization', () => {
     expect(screen.getByRole('heading', { name: t('title') })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: t('profile.sectionTitle') })).toBeInTheDocument()
     expect(screen.getByText(t('profile.username'))).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: t('profile.compatibility.emailRebind') })).toBeEnabled()
+    expect(screen.getByRole('button', { name: t('profile.compatibility.actionFor', { item: t('profile.compatibility.emailBinding'), action: t('profile.compatibility.emailRebind') }) })).toBeEnabled()
     expect(screen.getByRole('button', { name: t('actions.changePassword') })).toBeEnabled()
     expect(screen.queryByText(t('errors.profileLoadFailed'))).not.toBeInTheDocument()
     recoveryView.unmount()
@@ -228,7 +228,7 @@ describe('AccountUserPage internationalization', () => {
     const user = userEvent.setup()
 
     renderWithProviders(<AccountUserPage />, ['/account/user'])
-    await user.click(await screen.findByRole('button', { name: t('profile.compatibility.emailRebind') }))
+    await user.click(await screen.findByRole('button', { name: t('profile.compatibility.actionFor', { item: t('profile.compatibility.emailBinding'), action: t('profile.compatibility.emailRebind') }) }))
     const bindForm = within(document.querySelector('.account-user-bind-form') as HTMLElement)
     await user.type(bindForm.getByLabelText(t('profile.compatibility.emailBinding')), 'narrow@example.com')
     const currentPassword = bindForm.getByLabelText(t('password.current'))

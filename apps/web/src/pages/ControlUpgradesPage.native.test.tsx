@@ -565,6 +565,20 @@ describe('native control upgrade panel', () => {
       expect(issue).toHaveBeenCalledWith(expect.any(String), expect.any(String), chosen.artifact_id)
     })
 
+    // an unconfirmed current head is shown as unconfirmed, not as a number.
+    it('shows an unconfirmed current database schema with its reason', async () => {
+      const chosen = option('1.0.36', { control_schema_head: 697 })
+      vi.mocked(nativeControlUpgradesApi.options).mockResolvedValue({ schema: 'cdnca.native-control-upgrade-options/v1',
+        observed_at: new Date().toISOString(), options: { current_version: '1.0.35', current_schema_head: null,
+          current_schema_head_reason: 'current_artifact_unregistered', target_mode: 'follow_channel', items: [chosen] } })
+      await openPicker()
+      await userEvent.setup().click(screen.getByRole('combobox', { name: mt('nativeVersionPick') }))
+      await screen.findByRole('listbox')
+      fireEvent.click(document.querySelector('[data-version="1.0.36"]')!)
+      expect(await screen.findByText('未确认（授权端未登记本机安装包） → 697')).toBeInTheDocument()
+      expect(screen.queryByText(/^\? →/)).not.toBeInTheDocument()
+    })
+
     it('keeps the channel latest by default and sends no requested version', async () => {
       listed([option('1.0.36', { channel_target: true })])
       const issue = vi.spyOn(nativeControlUpgradesApi, 'issue').mockResolvedValue(nativePublicationFixture())

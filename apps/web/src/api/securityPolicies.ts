@@ -58,6 +58,19 @@ export interface SecurityPolicyRule {
   count_by?: SecurityPolicyCountKey[]
   /** CC temporary ban with count_by: ban the counted bucket instead of the client. */
   action_target?: 'count_key'
+  /** CC: the rule is built from a matcher and filters of the policy's scope; the server expands it into conditions and action. */
+  cc_reference?: SecurityPolicyCCReference
+}
+
+export interface SecurityPolicyCCReference {
+  matcher_id: string
+  filter1_id: string
+  filter2_id?: string
+  action: 'block' | 'log'
+  /** Set by the server: the revisions expanded. */
+  matcher_version?: number
+  filter1_version?: number
+  filter2_version?: number
 }
 
 export type SecurityPolicyCountKeyName = 'client_ip' | 'client_cidr' | 'host' | 'uri' | 'uri_path' | 'ja4'
@@ -415,6 +428,8 @@ export interface SecurityPolicyReferenceFilters {
   name?: string
   id?: string
   owner?: string
+  /** Only rows of this tenant scope (a CC policy editor offers those of the policy's scope). */
+  scope_id?: string
 }
 
 export interface SecurityPolicyMatcherFields {
@@ -584,6 +599,9 @@ export interface SecurityActivationStatus {
   }
   /** P11: when latest_candidate failed, each failed node's own failure text. */
   failure_reasons?: SecurityActivationFailureReason[]
+  /** When latest_candidate failed at promotion (another publication of the scope reached its nodes first):
+   * retrying = the worker publishes the version again (at most max_reclaims times) or a newer saved one. */
+  promotion_failure?: { reason: 'superseded'; failures: number; max_reclaims: number; retrying: boolean }
   /** sec-rebind: the latest candidate withdraws the site's library of this kind. */
   latest_detach?: boolean
   /** sec-rebind: whether the latest promotion can be rolled back, to what, or why not. */
@@ -724,6 +742,7 @@ function listReferences(
   if (filters.name) values.set('name', filters.name)
   if (filters.id) values.set('id', filters.id)
   if (filters.owner) values.set('owner', filters.owner)
+  if (filters.scope_id) values.set('scope_id', filters.scope_id)
   return request(accessToken, `/v1/security-policies/${kind === 'matcher' ? 'matchers' : 'filters'}?${values}`)
 }
 

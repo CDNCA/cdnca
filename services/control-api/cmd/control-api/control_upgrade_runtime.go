@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -66,6 +67,7 @@ const (
 	controlUpgradeMaxCommandBytes    = 1 << 20
 	controlUpgradeMaxStatusBytes     = 256 << 10
 	controlUpgradeIdlePoll           = 250 * time.Millisecond
+	controlUpgradePreparationPoll    = 2 * time.Second
 	controlUpgradeTransientBackoff   = 500 * time.Millisecond
 	controlUpgradeRetractInterval    = 2 * time.Second
 	controlUpgradeOutboxClaimLease   = 30 * time.Second
@@ -171,6 +173,8 @@ type controlUpgradeProductionRuntime struct {
 	connection          natsRuntimeConnection
 	dispatcher          *controlupgrade.OutboxDispatcher
 	receiptDispatcher   *controlupgrade.LicenseReceiptDispatcher
+	preparations        *controlupgrade.Service
+	workerID            string
 	status              *controlupgrade.StatusProcessor
 	license             *controlupgrade.LicenseClient
 	controlSigner       controlUpgradeSigningProvider
@@ -700,7 +704,7 @@ func openControlUpgradeProductionRuntime(ctx context.Context, cfg config.Config,
 		return nil, nil, err
 	}
 	runtime := &controlUpgradeProductionRuntime{connection: connection, dispatcher: dispatcher,
-		receiptDispatcher: receiptDispatcher, status: status,
+		receiptDispatcher: receiptDispatcher, status: status, preparations: service, workerID: runtimeConfig.WorkerID,
 		license: license, controlSigner: controlSigner, edgeSigner: edgeSigner, closed: closed,
 		shutdownTimeout: runtimeConfig.ShutdownTimeout, receiptHealthLoaded: true}
 	failedStatus = false
@@ -748,10 +752,11 @@ func (runtime *controlUpgradeProductionRuntime) Run(ctx context.Context) error {
 	defer runtime.running.Store(false)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	results := make(chan error, 4)
+	results := make(chan error, 5)
 	go func() { results <- runtime.runDispatcher(runCtx) }()
 	go func() { results <- runtime.runReceiptDispatcher(runCtx) }()
 	go func() { results <- runtime.runStatus(runCtx) }()
+	go func() { results <- runtime.runPreparations(runCtx) }()
 	go func() {
 		select {
 		case <-runCtx.Done():
@@ -762,7 +767,7 @@ func (runtime *controlUpgradeProductionRuntime) Run(ctx context.Context) error {
 	}()
 	first := <-results
 	cancel()
-	for remaining := 3; remaining > 0; remaining-- {
+	for remaining := 4; remaining > 0; remaining-- {
 		<-results
 	}
 	if ctx.Err() != nil {
@@ -789,6 +794,27 @@ func (runtime *controlUpgradeProductionRuntime) runReceiptDispatcher(ctx context
 		if dispatchErr != nil || healthErr != nil {
 			delay = controlUpgradeTransientBackoff
 		} else if count > 0 {
+			continue
+		}
+		if !controlUpgradeWait(ctx, delay) {
+			return ctx.Err()
+		}
+	}
+}
+
+// runPreparations turns queued rollout creates into plans in the background
+// . A failed preparation is recorded on its
+// row; only a database error here is logged and retried, readiness is unaffected.
+func (runtime *controlUpgradeProductionRuntime) runPreparations(ctx context.Context) error {
+	for {
+		claimed, err := runtime.preparations.PrepareRolloutsOnce(ctx, runtime.workerID)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		delay := controlUpgradePreparationPoll
+		if err != nil {
+			slog.Warn("control upgrade create preparation worker failed", "error", err)
+		} else if claimed {
 			continue
 		}
 		if !controlUpgradeWait(ctx, delay) {

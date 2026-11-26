@@ -64,9 +64,11 @@ func (resolver *PostgresPublicationTargetResolver) LoadPublicationTarget(ctx con
 		-- package's primary line group (sec-followup; was: no target at all)
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 			AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		-- the current entitlement's line (701: a changed package moves it)
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		-- (a package's group may be the platform's)
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL
-			AND line_group.id=COALESCE(site.node_group_id,(subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+			AND line_group.id=COALESCE(site.node_group_id,(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 			AND (line_group.tenant_scope_id=site.scope_id OR site.node_group_id IS NULL AND line_group.tenant_scope_id=
 				(SELECT id FROM access_scopes WHERE kind='platform' AND tenant_id IS NULL))
 		JOIN edge_target_snapshots snapshot ON snapshot.tenant_scope_id=line_group.tenant_scope_id

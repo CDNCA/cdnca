@@ -28,6 +28,8 @@ import type { SystemConfigurationCategory } from './api/systemConfiguration'
 import { marketAccess } from './api/marketAccess'
 import { fetchRuntimeFeatures, type RuntimeFeature } from './api/runtimeFeatures'
 import { runtimeFeaturesQueryKey } from './components/useRuntimeFeatures'
+import { LinkButton } from './pages/market/LinkButton'
+import { PinnedBanners } from './components/PinnedBanners'
 import { RouteErrorBoundary, RouteStatusPage } from './components/RouteErrorBoundary'
 import type { SystemGlobalSettingsTab } from './pages/SystemGlobalSettingsPage'
 import {
@@ -276,6 +278,8 @@ function InstallationDNSRoute({ children }: { children: React.ReactNode }) {
 // GET /v1/runtime-features does not report the runtime (or fails, which the
 // menu also treats as off) the page is replaced by "feature not enabled"
 // instead of mounting a page whose API answers 404.
+// the tenant's origin auth pages say only the state and
+// offer the way back to the site list; how to enable the runtime is in the install docs, not on a tenant page.
 function RuntimeRoute({ feature, detailKey = 'featureNotEnabledDetail', children }: {
   feature: RuntimeFeature, detailKey?: 'featureNotEnabledDetail' | 'originAuthNotEnabledDetail', children: React.ReactNode
 }) {
@@ -290,7 +294,8 @@ function RuntimeRoute({ feature, detailKey = 'featureNotEnabledDetail', children
   })
   if (features.isPending && accessToken) return <RouteFallback />
   if (features.data?.includes(feature)) return children
-  return <Result status="info" title={t('featureNotEnabled')} subTitle={t(detailKey)} />
+  return <Result status="info" title={<span role="heading" aria-level={1}>{t('featureNotEnabled')}</span>} subTitle={t(detailKey)}
+    extra={detailKey === 'originAuthNotEnabledDetail' ? <LinkButton type="primary" to="/site/list">{t('returnSiteList')}</LinkButton> : undefined} />
 }
 
 // MarketRoute admits any marketplace code (migration 296) or, for one release,
@@ -381,10 +386,12 @@ function LegacyRecoveryRedirect() {
 function ImpersonationRouteBoundary() {
   return (
     <>
-      <Suspense fallback={null}>
-        <ImpersonationStatusBanner />
-        <InstallationLockBanner />
-      </Suspense>
+      <PinnedBanners>
+        <Suspense fallback={null}>
+          <ImpersonationStatusBanner />
+          <InstallationLockBanner />
+        </Suspense>
+      </PinnedBanners>
       <Outlet />
     </>
   )

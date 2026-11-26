@@ -33,8 +33,7 @@ func TestBILL07PackagePeriodResetWorkloadAuthority165Contract(t *testing.T) {
 		}
 	}
 	if guard, mutation := strings.Index(up, "migration 165 requires the exact verified 164 release head"),
-		strings.Index(up, "CREATE TABLE package_period_reset_workload_authority_bindings_165");
-		guard < 0 || mutation < 0 || guard > mutation {
+		strings.Index(up, "CREATE TABLE package_period_reset_workload_authority_bindings_165"); guard < 0 || mutation < 0 || guard > mutation {
 		t.Fatal("165 predecessor guard must precede the first schema mutation")
 	}
 	for _, forbidden := range []string{"CASCADE", "DROP SCHEMA", "__UP_SHA256__"} {

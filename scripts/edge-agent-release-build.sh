@@ -80,7 +80,8 @@ publish_dir=${publish_work}/release
 docker run --rm --user "$(id -u):$(id -g)" \
   --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=1g \
   -e HOME=/tmp/home -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod-cache \
-  -v "${REPO_ROOT}:/workspace:ro" -v "${work}:/input:ro" -v "${output_parent}:/output:rw" \
+    ${CDNCA_GOPROXY:+-e "GOPROXY=${CDNCA_GOPROXY}"} \
+    -v "${REPO_ROOT}:/workspace:ro" -v "${work}:/input:ro" -v "${output_parent}:/output:rw" \
   "${builder}" /workspace/agents/edge-agent/packaging/build/recipe.sh \
   --source-root /workspace --source-manifest /input/source.sha256 --c-manifest /input/c.sha256 \
   --contract /workspace/agents/edge-agent/packaging/build/contract.json \

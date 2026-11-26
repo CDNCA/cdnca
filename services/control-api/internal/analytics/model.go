@@ -411,11 +411,15 @@ func validateScopeFilter(scope Scope, filter Filter) error {
 
 // validateSummaryScopeFilter: summarySQL filters on millisecond occurred_at,
 // so the window only has to be minute aligned (10/30-minute analysis presets).
+// Domain and listen port narrow it exactly as they narrow the ranking.
 func validateSummaryScopeFilter(scope Scope, filter Filter) error {
-	if filter.ListenPort != 0 || filter.Domain != "" && !validDomainFilter(filter.Domain) {
-		return ErrInvalidInput
-	}
-	return validateScopeFilterGranularity(scope, filter, time.Minute)
+	return validateRankScopeFilter(scope, filter)
+}
+
+// summarySecurityApplicable: the security hourly facts record neither host
+// nor listen port, so a summary narrowed by either has no security count.
+func summarySecurityApplicable(domain string, listenPort uint16) bool {
+	return domain == "" && listenPort == 0
 }
 
 func validateRankScopeFilter(scope Scope, filter Filter) error {
@@ -677,25 +681,28 @@ func validCapturedBodyKey(value string) bool {
 		strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\r\n\x00")
 }
 
+// capturePathSafe: every sensitive query parameter carries the redaction marker. Same reading as the Gateway's
+// telemetryCapturePathSafe: pairs split on "&" and ";", each part percent-decoded when it decodes and read raw when
+// it does not, so a ";" query is checked pair by pair instead of refusing the event.
 func capturePathSafe(value string) bool {
 	parsed, err := url.ParseRequestURI(value)
 	if err != nil {
 		return false
 	}
-	query, err := url.ParseQuery(parsed.RawQuery)
-	if err != nil {
-		return false
-	}
-	for name, values := range query {
-		if captureSensitiveName(name) {
-			for _, item := range values {
-				if item != redactedCaptureValue {
-					return false
-				}
-			}
+	for _, pair := range strings.FieldsFunc(parsed.RawQuery, func(character rune) bool { return character == '&' || character == ';' }) {
+		name, item, _ := strings.Cut(pair, "=")
+		if captureSensitiveName(captureQueryUnescape(name)) && captureQueryUnescape(item) != redactedCaptureValue {
+			return false
 		}
 	}
 	return true
+}
+
+func captureQueryUnescape(value string) string {
+	if decoded, err := url.QueryUnescape(value); err == nil {
+		return decoded
+	}
+	return value
 }
 
 func captureSensitiveName(value string) bool {

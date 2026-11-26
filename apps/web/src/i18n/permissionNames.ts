@@ -139,14 +139,54 @@ i18n.addResourceBundle('zh-CN', 'permissionNames', zhCN, true, true)
 
 export const permissionNameCodes: readonly string[] = Object.keys(zhCN)
 
+// Scopes official plugin manifests declare towards the platform (plugins/official/*/manifest.json, license-service
+// plugin_data_pack.go). They are not control-plane permissions, so they are kept apart from the seeded codes above.
+const pluginScopeZhCN: Record<string, string> = {
+  'platform.ui_pages.provide': '提供插件页面',
+  'platform.themes.provide': '提供主题',
+  'security.rule_packs.provide': '提供 WAF 规则包',
+  'platform.announcements.manage': '提供公告管理',
+  'platform.site_articles.manage': '提供网站文章管理',
+  'platform.escalate.manage': '提供攻击自动升级',
+  'platform.echo.provide': '提供示例回显',
+  'platform.icp.query': '查询 ICP 备案',
+  'platform.ipintel.build': '构建 IP 情报库',
+  'platform.migrate.read': '读取迁移来源数据',
+  'platform.promotions.manage': '提供促销活动管理',
+  'platform.status_page.manage': '提供状态页管理',
+  'platform.tickets.manage': '提供工单管理',
+  'platform.waf_subscription.fetch': '拉取 WAF 规则订阅',
+}
+const pluginScopeEnUS: Record<string, string> = {
+  'platform.ui_pages.provide': 'Provide plugin pages',
+  'platform.themes.provide': 'Provide themes',
+  'security.rule_packs.provide': 'Provide WAF rule packs',
+  'platform.announcements.manage': 'Provide announcement management',
+  'platform.site_articles.manage': 'Provide site article management',
+  'platform.escalate.manage': 'Provide attack auto-escalation',
+  'platform.echo.provide': 'Provide the sample echo',
+  'platform.icp.query': 'Query ICP filings',
+  'platform.ipintel.build': 'Build the IP intelligence library',
+  'platform.migrate.read': 'Read migration source data',
+  'platform.promotions.manage': 'Provide promotion management',
+  'platform.status_page.manage': 'Provide status page management',
+  'platform.tickets.manage': 'Provide ticket management',
+  'platform.waf_subscription.fetch': 'Fetch WAF rule subscriptions',
+}
+i18n.addResourceBundle('zh-CN', 'pluginScopeNames', pluginScopeZhCN, true, true)
+i18n.addResourceBundle('en-US', 'pluginScopeNames', pluginScopeEnUS, true, true)
+
+export const pluginScopeNameCodes: readonly string[] = Object.keys(pluginScopeZhCN)
+
 /**
- * The display name of a permission code in the current language. English and
- * unknown codes (e.g. one added by a newer control plane) show the code itself.
+ * The display name of a permission code (or an official plugin scope) in the current language. English permission
+ * codes and unknown codes (e.g. one added by a newer control plane) show the code itself.
  */
 export function permissionName(code: string): string {
   const language = i18n.resolvedLanguage ?? 'zh-CN'
-  // Codes contain dots, so read the flat bundle instead of a dotted i18n key.
-  const bundle = i18n.store.data[language]?.permissionNames as Record<string, unknown> | undefined
-  const name = bundle?.[code]
+  // Codes contain dots, so read the flat bundles instead of a dotted i18n key.
+  const data = i18n.store.data[language]
+  const name = (data?.permissionNames as Record<string, unknown> | undefined)?.[code] ??
+    (data?.pluginScopeNames as Record<string, unknown> | undefined)?.[code]
   return typeof name === 'string' ? name : code
 }

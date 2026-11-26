@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 )
 
 const (
@@ -81,14 +83,12 @@ type httpResponse struct {
 }
 
 func newBoundedHTTPClient(transport http.RoundTripper, timeout time.Duration) *boundedHTTPClient {
+	// Provider API requests go through the platform http代理 when one is set
+	// (never through environment proxies).
 	if transport == nil {
-		configured := http.DefaultTransport.(*http.Transport).Clone()
-		configured.Proxy = nil
-		transport = configured
+		transport = dnsapiproxy.NewTransport(nil)
 	} else if configured, ok := transport.(*http.Transport); ok {
-		cloned := configured.Clone()
-		cloned.Proxy = nil
-		transport = cloned
+		transport = dnsapiproxy.NewTransport(configured)
 	}
 	client := &http.Client{
 		Transport: transport,
@@ -129,6 +129,9 @@ func (c *boundedHTTPClient) do(
 	if err != nil {
 		if ctx.Err() != nil {
 			return httpResponse{}, contextFailure(ctx.Err())
+		}
+		if errors.Is(err, dnsapiproxy.ErrProxyUnavailable) {
+			return httpResponse{}, failure(CodeProxyUnavailable, true)
 		}
 		if errors.Is(requestContext.Err(), context.DeadlineExceeded) {
 			return httpResponse{}, failure(CodeTimeout, true)

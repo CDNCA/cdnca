@@ -146,11 +146,11 @@ export default function SiteCapturePolicyPanel({ siteId, scopeId, accessToken, o
   return (
     // 与「更多设置」其它卡片同一形态，启用开关放标题右侧，三个上限并排
     <SettingGroup title={t('title')} tip={t('description')} className="is-wide"
-      help={draft.enabled ? t('help.explicit') : t('states.disabled')}
+      help={draft.enabled ? t('help.explicit') : undefined}
       extra={<Switch aria-label={t('fields.enabled')} checked={draft.enabled} disabled={!canWrite} onChange={(checked) => set('enabled', checked)} />}>
       <div aria-busy={mutation.isPending} {...instant.typingProps}>
       {!canWrite ? <Alert type="info" message={t('states.readOnly')} /> : null}
-      {unconfigured && !saved ? <Alert type="info" message={t('states.unconfigured')} /> : null}
+      {unconfigured && !saved && draft.enabled ? <Alert type="info" message={t('states.unconfigured')} /> : null}
       {mutation.isError ? <FeedbackWhen title={t(`errors.${errorKey(mutation.error)}`, { defaultValue: t('errors.unknown') })} action={attempt ? <Button onClick={() => mutation.mutate(attempt)}>{t('actions.retry')}</Button> : undefined} /> : null}
       {!valid ? <Alert type="warning" message={t('help.explicit')} /> : null}
       {draft.enabled ? <>
@@ -165,7 +165,6 @@ export default function SiteCapturePolicyPanel({ siteId, scopeId, accessToken, o
           <Input.TextArea aria-label={t(`fields.${label}`)} value={draft[key]} autoSize={{ minRows: 2, maxRows: 5 }} disabled={!canWrite || !draft.enabled} onChange={(event) => set(key, event.target.value)} />
         </FormRow>
       ))}
-      </> : null}
       <div className="site-setting-inline-fields">
       {([
         ['max_value_bytes', 'maxValueBytes', 1, 16 * 1024], ['max_body_bytes', 'maxBodyBytes', 1, 1024 * 1024],
@@ -176,6 +175,7 @@ export default function SiteCapturePolicyPanel({ siteId, scopeId, accessToken, o
         </FormRow>
       ))}
       </div>
+      </> : null}
       <div className="site-setting-actions">
         <Button icon={<RefreshCw size={15} />} disabled={mutation.isPending} onClick={() => void query.refetch()}>{t('actions.refresh')}</Button>
       </div>

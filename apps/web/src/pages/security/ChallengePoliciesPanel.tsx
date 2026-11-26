@@ -13,12 +13,11 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   Tooltip,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import { CloudUpload, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'

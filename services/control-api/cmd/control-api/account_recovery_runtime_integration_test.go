@@ -54,6 +54,8 @@ func TestAccountRecoveryRuntimeConstructorAndPublicRoutesWithPostgreSQL17(t *tes
 		t.Fatal(err)
 	}
 	config := validAccountRecoveryRuntimeConfig(t)
+	// 迁移 681 已预置 account_recovery_email；本测试用自己的模板 ID 验证缺模板/建模板两种情形。
+	config.Templates = map[notification.Channel]notification.TemplateRef{notification.ChannelEmail: {ID: "account_recovery_email_itest", Version: 1, Channel: notification.ChannelEmail}}
 	sender := &accountRecoveryIntegrationSender{deliveries: make(chan accountrecovery.RecoveryDelivery, 1)}
 	bridge := &accountRecoveryIntegrationBridge{sender: sender}
 	resolver := func(request *http.Request) (accountrecoveryhttp.TrustedContext, error) {
@@ -74,7 +76,7 @@ func TestAccountRecoveryRuntimeConstructorAndPublicRoutesWithPostgreSQL17(t *tes
 		t.Fatalf("missing notification template did not fail closed before registration: %v", err)
 	}
 	if err := store.SaveTemplate(t.Context(), notification.TemplateDefinition{
-		Ref:     notification.TemplateRef{ID: "account_recovery_email", Version: 1, Channel: notification.ChannelEmail},
+		Ref:     notification.TemplateRef{ID: "account_recovery_email_itest", Version: 1, Channel: notification.ChannelEmail},
 		Subject: "Reset your password", Body: "Use the secure recovery link.", Variables: []string{},
 	}); err != nil {
 		t.Fatal(err)

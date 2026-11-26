@@ -411,8 +411,17 @@ export interface SystemConfigurationDocument<C extends SystemConfigurationCatego
   revision: number
   status: SystemConfigurationStatus
   snapshot_sha256: string
+  /** The active revision's snapshot hash; absent before any activation. Equal to snapshot_sha256 when the head changes nothing. */
+  active_snapshot_sha256?: string
   /** Categories whose head value differs from the active revision; activating makes all of them effective. */
   pending_categories: SystemConfigurationCategory[]
+  /** The revision stores this category's own value; false for an optional category never saved (its value is the default). */
+  configured?: boolean
+  /**
+   * The active revision stores this category's own value (false before any activation). The revision
+   * stream is shared, so active_revision > 0 alone does not mean this category was published.
+   */
+  active_configured?: boolean
   value: SystemConfigurationValueMap[C]
 }
 
@@ -1017,7 +1026,11 @@ function parseDocument<C extends SystemConfigurationCategory>(
   if (!isRecord(value) || !hasExactKeys(value, [
     'schema', 'category', 'head_revision', 'active_revision', 'revision', 'status', 'snapshot_sha256',
     'pending_categories', 'value',
-  ]) || !isPendingCategories(value.pending_categories) || value.schema !== 'cdnca.system-configuration/v2' || value.category !== category ||
+  ], ['configured', 'active_configured', 'active_snapshot_sha256']) || (value.configured !== undefined && typeof value.configured !== 'boolean') ||
+    (value.active_snapshot_sha256 !== undefined && (typeof value.active_snapshot_sha256 !== 'string' ||
+      !sha256Pattern.test(value.active_snapshot_sha256) || value.active_revision === 0)) ||
+    (value.active_configured !== undefined && typeof value.active_configured !== 'boolean') ||
+    !isPendingCategories(value.pending_categories) || value.schema !== 'cdnca.system-configuration/v2' || value.category !== category ||
     !isInteger(value.head_revision, 0, Number.MAX_SAFE_INTEGER) ||
     !isInteger(value.active_revision, 0, value.head_revision) ||
     !isInteger(value.revision, 0, value.head_revision) ||
@@ -1028,6 +1041,18 @@ function parseDocument<C extends SystemConfigurationCategory>(
     typeof value.snapshot_sha256 !== 'string' || !sha256Pattern.test(value.snapshot_sha256) ||
     !isCategoryValue(category, value.value)) throw invalidResponse()
   return value as unknown as SystemConfigurationDocument<C>
+}
+
+/**
+ * The head carries changes the controller has not activated: never
+ * activated, or a newer head whose snapshot differs from the active one. A head restored to the active configuration
+ * is newer by revision but carries nothing; without the active hash (older server) the pending categories decide.
+ */
+export function hasUnactivatedChanges(document: SystemConfigurationDocument<SystemConfigurationCategory>): boolean {
+  if (document.active_revision === 0) return true
+  if (document.head_revision <= document.active_revision) return false
+  if (document.active_snapshot_sha256) return document.snapshot_sha256 !== document.active_snapshot_sha256
+  return document.pending_categories.length > 0
 }
 
 function isPendingCategories(value: unknown): value is SystemConfigurationCategory[] {

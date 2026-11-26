@@ -369,12 +369,17 @@ func mergeTarget(item targetInput, stored map[string]nativebackup.Target) (nativ
 	return target, nil
 }
 
-// fieldRefusal names the console field of a target error it can pin (X08).
+// fieldRefusal names the console field of a refused target (X08): every
+// structural rule maps to its request field, so the console marks that input.
 func fieldRefusal(target nativebackup.Target) error {
-	if errors.Is(target.Validate(), nativebackup.ErrInvalidEndpoint) {
-		return targetError{code: "control_backup_invalid_endpoint", target: target.Name, field: "endpoint"}
+	switch field := target.InvalidField(); field {
+	case "":
+		return nil
+	case "endpoint":
+		return targetError{code: "control_backup_invalid_endpoint", target: target.Name, field: field}
+	default:
+		return targetError{code: "control_backup_invalid_settings", target: target.Name, field: field}
 	}
-	return nil
 }
 
 // loadForEdit reads the stored settings and checks the console's revision.

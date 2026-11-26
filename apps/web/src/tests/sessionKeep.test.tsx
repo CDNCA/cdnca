@@ -1,5 +1,5 @@
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ticketsApi } from '../api/tickets'
@@ -63,6 +63,59 @@ describe('session keep', () => {
     for (const name of ['a', 'b', 'c']) expect(await screen.findByText(`${name}:3`)).toBeInTheDocument()
     expect(refreshCalls).toBe(1)
     expect(useSessionStore.getState()).toMatchObject({ status: 'authenticated', accessToken: 'renewed-access-token' })
+  })
+
+  it('renews a known-expired token before the request, once for concurrent queries, without a 401', async () => {
+    const user = signIn('expired-access-token')
+    useSessionStore.setState({ expiresAt: Date.now() - 1_000 })
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = urlOf(input)
+      if (url === '/v1/auth/refresh') {
+        calls.push('refresh')
+        return json({ ...authResponse(user), access_token: 'renewed-access-token' })
+      }
+      if (url.startsWith('/v1/admin/tickets/summary')) {
+        const renewed = authorization(init) === 'Bearer renewed-access-token'
+        calls.push(renewed ? 'summary:200' : 'summary:401')
+        return renewed ? json({ unread: 0, pending: 2 }) : json({ code: 'invalid_session' }, 401)
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+
+    render(
+      <QueryClientProvider client={createSessionQueryClient()}>
+        <Summary name="a" /><Summary name="b" />
+      </QueryClientProvider>,
+    )
+
+    for (const name of ['a', 'b']) expect(await screen.findByText(`${name}:2`)).toBeInTheDocument()
+    expect(calls).toEqual(['refresh', 'summary:200', 'summary:200'])
+  })
+
+  it('renews before a poll that fires when the token is about to run out', async () => {
+    const user = signIn('first-access-token')
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = urlOf(input)
+      if (url === '/v1/auth/refresh') {
+        calls.push('refresh')
+        return json({ ...authResponse(user), access_token: 'renewed-access-token' })
+      }
+      const token = authorization(init)
+      const valid = calls.includes('refresh') ? token === 'Bearer renewed-access-token' : token === 'Bearer first-access-token'
+      calls.push(valid ? 'summary:200' : 'summary:401')
+      return valid ? json({ unread: 0, pending: calls.length }) : json({ code: 'invalid_session' }, 401)
+    })
+    const client = createSessionQueryClient()
+    render(<QueryClientProvider client={client}><Summary name="poll" /></QueryClientProvider>)
+    expect(await screen.findByText('poll:1')).toBeInTheDocument()
+
+    // The badge poll / a page switch refetches with under 30 seconds left on the token.
+    useSessionStore.setState({ expiresAt: Date.now() + 10_000 })
+    await act(() => client.refetchQueries({ queryKey: ['tickets', 'admin', 'summary', 'poll'], exact: true }))
+    expect(await screen.findByText('poll:3')).toBeInTheDocument()
+    expect(calls).toEqual(['summary:200', 'refresh', 'summary:200'])
   })
 
   it('stays signed in when the renewal fails transiently', async () => {

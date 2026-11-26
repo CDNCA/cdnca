@@ -19,7 +19,7 @@ import (
 // is the code intents recorded for these before the reasons were split.
 var CNAMERecoverableFailureCodes = []string{
 	"dns_provider_not_configured", "cname_zone_not_configured", "cname_zone_provider_mismatch", "allocation_rejected",
-	"platform_dns_sync_failed",
+	"platform_dns_sync_failed", "cname_package_domain_missing",
 }
 
 // cnameRecoveryBatch bounds one recovery pass per tenant scope.

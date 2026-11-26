@@ -6,6 +6,7 @@ import {
 } from '../api/streams'
 import { useSessionStore } from '../auth/session'
 import { localizedUnknownApiError } from '../i18n/apiError'
+import { packageQuotaText } from './site-edit/SitePackageQuotaError'
 
 export interface StreamFormValues extends StreamFields {
   target_scope_id?: string
@@ -247,6 +248,9 @@ export function errorMessage(error: ApiError, t: TFunction<'streams'>): string {
     const name = conflict.name ? t('errors.portConflict.named', { name: conflict.name }) : ''
     return t(`errors.portConflict.${conflict.with}`, { protocol: conflict.protocol.toUpperCase(), ports, name })
   }
+  // 409 package_resource_quota_exceeded names stream_ports, its use and limit.
+  const quota = packageQuotaText(error)
+  if (quota) return quota
   const code = knownStreamErrorCodes.find((known) => known === error.code)
   return code ? t(`errors.${code}`) : localizedUnknownApiError(error, t('errors.operationFailed'))
 }

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnscustomhttp"
 )
 
@@ -82,7 +84,31 @@ func (v *ProviderVerifierDispatcher) Verify(ctx context.Context, providerType, a
 	return v.VerifyCredentials(ctx, providerType, map[string]string{"api_token": apiToken})
 }
 
+// VerifyCredentials checks the credentials against the provider. A request
+// that could not use the platform http代理 is ErrProviderProxyUnavailable.
 func (v *ProviderVerifierDispatcher) VerifyCredentials(
+	ctx context.Context,
+	providerType string,
+	credentials map[string]string,
+) error {
+	if ctx == nil {
+		return v.verifyCredentials(ctx, providerType, credentials)
+	}
+	traced, proxyFailed := dnsapiproxy.WithFailureRecorder(ctx)
+	err := v.verifyCredentials(traced, providerType, credentials)
+	if err != nil && ctx.Err() == nil && proxyFailed() {
+		return ErrProviderProxyUnavailable
+	}
+	return err
+}
+
+// providerAPIClient is the HTTP client of the provider verifiers: through
+// the platform http代理 when one is set, direct otherwise.
+func providerAPIClient() *http.Client {
+	return &http.Client{Transport: dnsapiproxy.NewTransport(nil)}
+}
+
+func (v *ProviderVerifierDispatcher) verifyCredentials(
 	ctx context.Context,
 	providerType string,
 	credentials map[string]string,

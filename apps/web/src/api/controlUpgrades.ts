@@ -80,6 +80,8 @@ export interface ControlUpgradeCreateInput {
   canary_node_ids: string[]
   batch_size: number
   automatic_rollback: true
+  /** Start the plan once its background preparation made it (sent last; omitted when not wanted). */
+  start_when_ready?: true
 }
 
 export interface ControlUpgradeActionInput {
@@ -197,11 +199,45 @@ export interface ControlUpgradeRolloutDetail extends ControlUpgradeRolloutSummar
   status_receipts: ControlUpgradeStatusReceipt[]
 }
 
+export const controlUpgradePreparationFailures = [
+  'license_unavailable', 'license_outcome_unknown', 'license_rejected', 'grant_invalid',
+  'artifact_download_failed', 'artifact_invalid', 'cohort_incompatible', 'permission_denied',
+  'resource_unavailable', 'internal_error',
+] as const
+export type ControlUpgradePreparationFailure = (typeof controlUpgradePreparationFailures)[number]
+export type ControlUpgradePreparationPhase = 'queued' | 'issuing' | 'downloading' | 'finalizing' | 'starting' | 'done'
+/** Why a ready plan asked to start was left queued. */
+export type ControlUpgradeStartFailure = ControlUpgradePreparationFailure | 'approval_required' | 'start_refused'
+
+/** A create prepared in the background; plan_id names the plan once state is ready. */
+export interface ControlUpgradePreparation {
+  id: string
+  plan_id: string
+  state: 'preparing' | 'failed' | 'ready'
+  phase: ControlUpgradePreparationPhase
+  failure_code?: ControlUpgradePreparationFailure
+  /** License's refusal code (http_<status> when it sent none), with license_rejected only. */
+  failure_reason?: string
+  start_when_ready: boolean
+  /** Set on a ready preparation whose plan was not started as asked. */
+  start_failure_code?: ControlUpgradeStartFailure
+  node_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ControlUpgradePreparationResponse {
+  data: ControlUpgradePreparation
+  replayed: boolean
+}
+
 export interface ControlUpgradeRolloutListResponse {
   data: ControlUpgradeRolloutSummary[]
   page: number
   page_size: number
   total: number
+  /** Newest creates still preparing or failed, and ready ones not started as asked, independent of the page. */
+  preparations: ControlUpgradePreparation[]
 }
 
 export interface ControlUpgradeRolloutDetailResponse {
@@ -220,6 +256,7 @@ export const maintenanceUpgradeReasons = [
   'control_upgrade_execution_unavailable', 'node_upgrade_runtime_unavailable',
   'control_upgrade_plan_writer_unconfigured', 'control_upgrade_state_unavailable',
   'control_upgrade_ha_unavailable', 'control_upgrade_runner_unconfirmed', 'control_upgrade_draining',
+  'control_upgrade_current_release_unverified',
   'node_disabled', 'node_offline', 'node_capability_unavailable',
   'upgrade_available', 'rerelease_available', 'same_version', 'target_is_older', 'target_unset',
   'license_inactive', 'customer_inactive', 'channel_inactive', 'target_not_allowed',
@@ -377,7 +414,7 @@ function validCreate(input: ControlUpgradeCreateInput): boolean {
 	if (input.schema !== 'cdnca.control-upgrade-rollout.create/v1' || !sortedUniqueUUIDs(input.node_ids) ||
 		!sortedUniqueUUIDs(input.canary_node_ids) || input.canary_node_ids.length > 2 ||
 		!integer(input.batch_size, 1) || input.batch_size > 100 ||
-    input.automatic_rollback !== true) return false
+    input.automatic_rollback !== true || (input.start_when_ready !== undefined && input.start_when_ready !== true)) return false
   const nodes = new Set(input.node_ids)
   return input.canary_node_ids.every((nodeID) => nodes.has(nodeID))
 }
@@ -543,8 +580,30 @@ function detail(value: unknown): value is ControlUpgradeRolloutDetail {
       nodeIDs.has(item.node_id) && batchIDs.has(item.batch_id))
 }
 
+const preparationPhases = new Set(['queued', 'issuing', 'downloading', 'finalizing', 'starting', 'done'])
+const preparationFailures = new Set<string>(controlUpgradePreparationFailures)
+const startFailures = new Set<string>([...controlUpgradePreparationFailures, 'approval_required', 'start_refused'])
+
+function preparation(value: unknown): value is ControlUpgradePreparation {
+  if (!isRecord(value) || !hasExactKeys(value, ['id', 'plan_id', 'state', 'phase', 'start_when_ready', 'node_ids', 'created_at', 'updated_at'],
+    ['failure_code', 'failure_reason', 'start_failure_code']) || !uuid(value.id) || !uuid(value.plan_id) ||
+    typeof value.phase !== 'string' || !preparationPhases.has(value.phase) || !sortedUniqueUUIDs(value.node_ids) ||
+    typeof value.start_when_ready !== 'boolean' || !dateTime(value.created_at) || !dateTime(value.updated_at)) return false
+  const failed = value.state === 'failed'
+  if (!['preparing', 'failed', 'ready'].includes(value.state as string) || (value.state === 'ready') !== (value.phase === 'done') ||
+    failed !== (typeof value.failure_code === 'string' && preparationFailures.has(value.failure_code)) ||
+    (value.phase === 'starting' && !value.start_when_ready)) return false
+  if (value.start_failure_code !== undefined && (value.state !== 'ready' || !value.start_when_ready ||
+    typeof value.start_failure_code !== 'string' || !startFailures.has(value.start_failure_code))) return false
+  return value.failure_reason === undefined ||
+    (value.failure_code === 'license_rejected' || value.start_failure_code === 'license_rejected') &&
+    typeof value.failure_reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(value.failure_reason)
+}
+
 function parseList(value: unknown, params: ControlUpgradeListParams): ControlUpgradeRolloutListResponse {
-  if (!isRecord(value) || !hasExactKeys(value, ['data', 'page', 'page_size', 'total']) ||
+  if (!isRecord(value) || !hasExactKeys(value, ['data', 'page', 'page_size', 'total', 'preparations']) ||
+    !Array.isArray(value.preparations) || value.preparations.length > 20 || !value.preparations.every(preparation) ||
+    value.preparations.some((item) => item.state === 'ready' && item.start_failure_code === undefined) ||
     !Array.isArray(value.data) || value.data.length > params.pageSize || !value.data.every(summary) ||
     value.page !== params.page || value.page_size !== params.pageSize || !integer(value.total) ||
     value.data.length > value.total) throw invalidResponse()
@@ -556,6 +615,12 @@ function parseDetail(value: unknown, planID: string): ControlUpgradeRolloutDetai
     throw invalidResponse()
   }
   return value as unknown as ControlUpgradeRolloutDetailResponse
+}
+
+function parsePreparationWrite(value: unknown, nodeIDs: string[]): ControlUpgradePreparationResponse {
+  if (!isRecord(value) || !hasExactKeys(value, ['data', 'replayed']) || !preparation(value.data) ||
+    typeof value.replayed !== 'boolean' || value.data.node_ids.join(',') !== nodeIDs.join(',')) throw invalidResponse()
+  return value as unknown as ControlUpgradePreparationResponse
 }
 
 function parseWrite(value: unknown, planID?: string): ControlUpgradeRolloutWriteResponse {
@@ -756,13 +821,13 @@ function create(
   accessToken: string,
   input: ControlUpgradeCreateInput,
   metadata: ControlUpgradeRequestMetadata,
-): Promise<ControlUpgradeRolloutWriteResponse> {
+): Promise<ControlUpgradePreparationResponse> {
   if (!accessToken || !validCreate(input) || !validMetadata(metadata)) return Promise.reject(invalidRequest())
-  return request('/v1/admin/control-upgrade-rollouts', accessToken, 201, {
+  return request('/v1/admin/control-upgrade-rollouts', accessToken, 202, {
     method: 'POST',
     headers: { 'Idempotency-Key': metadata.idempotencyKey, 'X-Request-ID': metadata.requestId },
     body: JSON.stringify(input),
-  }).then((value) => parseWrite(value))
+  }).then((value) => parsePreparationWrite(value, input.node_ids))
 }
 
 function actionRequest(

@@ -205,7 +205,8 @@ func (client *LicenseClient) IssueCommandGrant(ctx context.Context, input Comman
 		return CommandGrantResult{}, ErrLicenseOutcomeUnknown
 	}
 	if response.StatusCode != http.StatusOK {
-		return CommandGrantResult{}, mapLicenseStatus(response.StatusCode)
+		// Same sentinels as mapLicenseStatus; a refusal keeps its code or HTTP status.
+		return CommandGrantResult{}, licenseIssueError(response.StatusCode, responseBytes)
 	}
 	var wire struct {
 		ID           string `json:"id"`

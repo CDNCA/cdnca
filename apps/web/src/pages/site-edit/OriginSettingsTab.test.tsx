@@ -1,8 +1,11 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { RuntimeFeature } from '../../api/runtimeFeatures'
 import type { SiteOriginPool } from '../../api/sites'
+import { runtimeFeaturesQueryKey } from '../../components/useRuntimeFeatures'
 import i18n from '../../i18n'
 import BalanceKeyFields from './BalanceKeyFields'
 import OriginSettingsTab, { type OriginSettingsTabProps } from './OriginSettingsTab'
@@ -15,9 +18,14 @@ function pool(changes: Partial<SiteOriginPool> = {}): SiteOriginPool {
   }
 }
 
-function renderTab(props: Partial<Omit<OriginSettingsTabProps, 'onChange'>> = {}) {
+// runtime: the shell's GET /v1/runtime-features answer (undefined = not answered yet).
+function renderTab(props: Partial<Omit<OriginSettingsTabProps, 'onChange'>> = {}, runtime?: RuntimeFeature[]) {
   const onChange = vi.fn()
-  const result = render(<MemoryRouter><OriginSettingsTab pool={pool()} {...props} onChange={onChange} /></MemoryRouter>)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  if (runtime) client.setQueryData(runtimeFeaturesQueryKey, runtime)
+  const result = render(<MemoryRouter><OriginSettingsTab pool={pool()} {...props} onChange={onChange} /></MemoryRouter>, {
+    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  })
   return { ...result, onChange }
 }
 
@@ -65,6 +73,25 @@ describe('OriginSettingsTab', () => {
     // Our conditional origin editor sits folded below the main fields.
     expect(screen.getByRole('button', { name: /高级：条件回源/u })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('条件回源编辑器')).toBeNull()
+  })
+
+  // 
+  it('says the switch is not in effect and drops the rules link while the origin_auth runtime is off', () => {
+    renderTab({ canReadOriginAuth: true }, [])
+    const card = screen.getByRole('heading', { name: '回源鉴权', level: 2 }).closest('section')!
+    expect(screen.getByRole('switch', { name: '回源鉴权开关' })).toBeChecked()
+    expect(card).toHaveTextContent('已开启，平台尚未启用源站鉴权，暂不向源站发送鉴权信息。')
+    expect(screen.queryByRole('link', { name: '管理回源鉴权规则' })).toBeNull()
+    expect(screen.getByRole('region', { name: '本页摘要' })).toHaveTextContent('已开启 · 未生效')
+    expect(card).not.toHaveTextContent('开关鉴权规则')
+  })
+
+  it('keeps the rules link and the plain on state while the origin_auth runtime is on', () => {
+    renderTab({ canReadOriginAuth: true }, ['origin_auth'])
+    const card = screen.getByRole('heading', { name: '回源鉴权', level: 2 }).closest('section')!
+    expect(card).toHaveTextContent('已开启，按回源鉴权规则向源站发送鉴权信息。')
+    expect(screen.getByRole('link', { name: '管理回源鉴权规则' })).toHaveAttribute('href', '/site/origin-auth/rules')
+    for (const label of ['开关', '鉴权规则']) expect(screen.queryByText(label, { exact: true })).toBeNull()
   })
 
   it('hides the rules link without origin_auth.read and opens the fold when asked', () => {

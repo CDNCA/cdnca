@@ -255,6 +255,14 @@ function notifyApiError(status: number, code: string): void {
   try { apiErrorObserver?.(signal) } catch { /* Reporting cannot replace the request error. */ }
 }
 
+/** details of 409 package_resource_quota_exceeded (resource: domains, root_domains or http_ports). */
+export interface PackageQuotaRefusal {
+  resource: string
+  limit: number
+  used: number
+  requested: number
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
@@ -279,7 +287,9 @@ export class ApiError extends Error {
   declare channelDisable?: { emailUsers: number; smsUsers: number }
   /** D3: the sites still running a policy whose delete was refused (security_policy_in_use error.details.sites). */
   declare inUseSites?: { id: string; domain: string }[]
-  /** What still uses a line group whose delete was refused (node_scheduling_reference_conflict error.details). */
+  /** The CC rule groups using a matcher / filter whose delete or disable was refused (cc_reference_in_use error.details.policies). */
+  declare ccReferenceUsers?: { id: string; name: string }[]
+  /** lgdel: what still uses a line group whose delete was refused (node_scheduling_reference_conflict error.details). */
   declare lineGroupInUse?: LineGroupReferences
   /** LIC-REC-03: whether an entitlement refresh error installed the lease (error.outcome). */
   declare outcome?: 'not_applied' | 'unknown' | 'applied'
@@ -287,6 +297,12 @@ export class ApiError extends Error {
   declare targetRejection?: { ordinal: number; reason: string }
   /** The domain a certificate order was refused for (certificate_dns_zone_unavailable / certificate_http01_not_serving error.domain). */
   declare domain?: string
+  /** The scope codes a plugin installation confirm was refused for (required_scopes_missing / scope_not_approved error.details.scopes). */
+  declare scopes?: string[]
+  /** The license feature an entitlement_feature_denied refusal needs (error.details.required_feature, e.g. packages.manage). */
+  declare requiredFeature?: string
+  /** The package resource a package_resource_quota_exceeded refusal is for (error.details): usage before the change, what it adds, the limit. */
+  declare packageQuota?: PackageQuotaRefusal
 
   constructor(message: string, status = 0, code = 'network_error', requestId?: string, params?: LoginVerificationRequirement) {
     super(message)
@@ -305,9 +321,12 @@ export function networkApiError(): ApiError {
 
 export async function responseApiError(response: Response): Promise<ApiError> {
   const body = (await response.json().catch(() => ({}))) as ErrorEnvelope
+  // The market answers with a top-level string ({"error":"invalid_json"}) that
+  // control-api relays as is; read it the same way (补充).
+  const flat = typeof (body as { error?: unknown })?.error === 'string' ? (body as { error: string }).error : ''
   const code = body?.error?.code && stableErrorCodePattern.test(body.error.code)
     ? body.error.code
-    : 'request_failed'
+    : flat && stableErrorCodePattern.test(flat) ? flat : 'request_failed'
   const requestId = body?.error?.request_id && safeRequestIdPattern.test(body.error.request_id)
     ? body.error.request_id
     : undefined
@@ -353,6 +372,12 @@ export async function responseApiError(response: Response): Promise<ApiError> {
     const rulePacks = rulePackRefusal(body?.error?.rule_packs)
     if (rulePacks) error.rulePacks = rulePacks
   }
+  if (code === 'plugin_installation_required_scopes_missing' || code === 'plugin_installation_scope_not_approved') {
+    const scopes = (body?.error?.details as { scopes?: unknown } | undefined)?.scopes
+    if (Array.isArray(scopes)) {
+      error.scopes = scopes.slice(0, 100).filter((scope): scope is string => typeof scope === 'string' && scope.length > 0 && scope.length <= 128)
+    }
+  }
   if (code === 'security_policy_in_use') {
     const sites = (body?.error?.details as { sites?: unknown } | undefined)?.sites
     if (Array.isArray(sites)) {
@@ -360,6 +385,16 @@ export async function responseApiError(response: Response): Promise<ApiError> {
         const { id, domain } = (site ?? {}) as { id?: unknown; domain?: unknown }
         return typeof id === 'string' && loginUUIDPattern.test(id) && typeof domain === 'string' && domain.length > 0 && domain.length <= 253
           ? [{ id, domain }] : []
+      })
+    }
+  }
+  if (code === 'cc_reference_in_use') {
+    const policies = (body?.error?.details as { policies?: unknown } | undefined)?.policies
+    if (Array.isArray(policies)) {
+      error.ccReferenceUsers = policies.slice(0, 5).flatMap((policy: unknown) => {
+        const { id, name } = (policy ?? {}) as { id?: unknown; name?: unknown }
+        return typeof id === 'string' && loginUUIDPattern.test(id) && typeof name === 'string' && name.length > 0 && name.length <= 128
+          ? [{ id, name }] : []
       })
     }
   }
@@ -390,6 +425,18 @@ export async function responseApiError(response: Response): Promise<ApiError> {
   if (code === 'certificate_dns_zone_unavailable' || code === 'certificate_http01_not_serving') {
     const domain = body?.error?.domain
     if (typeof domain === 'string' && /^[a-z0-9*][a-z0-9.*-]{0,252}$/.test(domain)) error.domain = domain
+  }
+  if (code === 'entitlement_feature_denied') {
+    const feature = (body?.error?.details as { required_feature?: unknown } | undefined)?.required_feature
+    if (typeof feature === 'string' && /^[a-z][a-z0-9._-]{0,127}$/.test(feature)) error.requiredFeature = feature
+  }
+  if (code === 'package_resource_quota_exceeded') {
+    const details = body?.error?.details as { resource?: unknown; limit?: unknown; used?: unknown; requested?: unknown } | undefined
+    const count = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0
+    if (details && typeof details.resource === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(details.resource) &&
+      count(details.limit) && count(details.used) && count(details.requested)) {
+      error.packageQuota = { resource: details.resource, limit: Number(details.limit), used: Number(details.used), requested: Number(details.requested) }
+    }
   }
   attachFieldRefusal(error, body?.error?.details)
   // package publish/withdraw refusals name the spec field / state reason.

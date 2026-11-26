@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Drawer, Form, Input, InputNumber, Modal, Radio, Result, Space, Spin, Table, Tag, Typography, type TableColumnsType } from 'antd'
-import { ChevronDown, ChevronLeft, ChevronRight, ListChecks, Plus, RefreshCw, Save } from 'lucide-react'
+import { Alert, Button, Checkbox, Descriptions, Drawer, Form, Input, InputNumber, Modal, Radio, Result, Select, Space, Spin, Tag, Typography, type InputRef, type TableColumnsType } from 'antd'
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, Eye, FileText, ListChecks, Plus, RefreshCw, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
@@ -21,10 +21,10 @@ import {
 } from '../api/notifications'
 import { useSessionStore } from '../auth/session'
 import { notificationTemplateName, notificationVariableName } from '../i18n/notificationTemplateNames'
-import NotificationDeliveryPolicyPanel from './NotificationDeliveryPolicyPanel'
+import NotificationDeliveryPolicyPanel, { type ChannelState } from './NotificationDeliveryPolicyPanel'
 import '../i18n/tickets'
 import type { EventSubscriptionRow } from './tickets/useEventSubscriptionRows'
-import { FeedbackWhen, OutcomeUnknown, fieldReasonText, useFormSubmitError, type FormErrorMap, type SubmitFieldError } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, fieldReasonText, useFormSubmitError, type FormErrorMap, type SubmitFieldError, Table } from '@cdnca/ui'
 
 type Mode = 'admin' | 'account'
 type AccountOwner = readonly ['tenant', string, string, string, number]
@@ -288,7 +288,6 @@ function NotificationSettingsPageContent({ accessToken, principal, scopeID, sess
           />
         ) : (
           <>
-            <NotificationDeliveryPolicyPanel />
             <AdminSettings
               key={adminDraftVersion}
               accessToken={accessTokenRef.current}
@@ -351,7 +350,7 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
   t: (key: string, options?: Record<string, unknown>) => string
 }) {
   const [moreOpen, setMoreOpen] = useState(false)
-  const announcement: AccountRow = { key: value.event_type, label: t('events.announcementPublished'), hint: t('hints.announcementPublished'), value, disabled, onChange }
+  const announcement: AccountRow = { key: value.event_type, label: t('events.announcementPublished'), value, disabled, onChange }
   const mainRows: AccountRow[] = grouped ? eventRows : [announcement, ...eventRows]
   const moreRows: AccountRow[] = grouped ? [announcement, ...extraEventRows] : []
   const rows = [...mainRows, ...moreRows]
@@ -403,15 +402,18 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
         </span> : null}
       </div> },
     ]
-    if (smsColumn) columns.push({ title: t('columns.sms'), key: 'sms', width: 136, align: 'center', render: channelSwitch('sms') })
-    if (emailColumn) columns.push({ title: t('columns.email'), key: 'email', width: 136, align: 'center', render: channelSwitch('email') })
-    if (inboxColumn(list)) columns.push({ title: t('columns.inbox'), key: 'inbox', width: 136, align: 'center', render: channelSwitch('inbox') })
+    // 表格不再固定 520px 横向滚动；提醒名称可换行，渠道列按表头宽，
+    // 窄屏表头显示短名（CSS 取 data-short），可访问名称与文本仍是完整列名，勾选框都在容器内。
+    const channelTitle = (channel: 'sms' | 'email' | 'inbox') => (
+      <span className="account-subscriptions-col" data-short={t(`columns.${channel}Short`)}>
+        <span className="account-subscriptions-col-full">{t(`columns.${channel}`)}</span>
+      </span>
+    )
+    if (smsColumn) columns.push({ title: channelTitle('sms'), key: 'sms', align: 'center', render: channelSwitch('sms') })
+    if (emailColumn) columns.push({ title: channelTitle('email'), key: 'email', align: 'center', render: channelSwitch('email') })
+    if (inboxColumn(list)) columns.push({ title: channelTitle('inbox'), key: 'inbox', align: 'center', render: channelSwitch('inbox') })
     return columns
   }
-  // 计数胶囊按主表（提醒项）统计。
-  const count = (channel: 'sms' | 'email') => mainRows.filter((row) => channel === 'sms'
-    ? row.value.sms_supported && row.value.sms_enabled
-    : row.value.email_supported && row.value.email_enabled).length
   const table = (list: AccountRow[], label?: string) => (
     <div className="identity-table-scroll account-subscriptions-table" style={{ minWidth: 0 }}>
       <Table<AccountRow>
@@ -419,7 +421,6 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
         size="small"
         pagination={false}
         dataSource={list}
-        scroll={{ x: 520 }}
         columns={columnsFor(list)}
         aria-label={label}
       />
@@ -432,11 +433,6 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
           <h1 id="account-subscriptions-title">{t('title')}</h1>
           <p>{t('subtitle')}</p>
         </div>
-        {smsColumn || emailColumn ? <div className="account-subscriptions-stats">
-          <span>{t('stats.items')} <strong>{mainRows.length}</strong></span>
-          {smsColumn ? <span>{t('stats.sms')} <strong>{count('sms')}</strong></span> : null}
-          {emailColumn ? <span>{t('stats.email')} <strong>{count('email')}</strong></span> : null}
-        </div> : null}
       </header>
       {eventError ? <FeedbackWhen title={t('errors.eventsFailed', { code: eventError instanceof ApiError ? eventError.code : 'request_failed' })} /> : null}
       {!mainVisible && !moreVisible ? (
@@ -485,9 +481,25 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
   const [emailEnabled, setEmailEnabled] = useState(channels.email_enabled)
   const [smsEnabled, setSMSEnabled] = useState(channels.sms_enabled)
   const [templateOpen, setTemplateOpen] = useState(false)
+  // 只读查看某个已保存版本；「以此版本新建」把它带进新建表单，版本号由用户另填。
+  const [viewedTemplate, setViewedTemplate] = useState<NotificationTemplate | null>(null)
+  const [templateSeed, setTemplateSeed] = useState<Partial<TemplateForm> | null>(null)
+  // 新建表单在关闭后保留草稿；换成（或离开）预填版本时才按新的初始值重置一次。
+  const templateResetPending = useRef(false)
   const { i18n } = useTranslation()
   const localized = i18n.resolvedLanguage !== 'en-US'
   const [deliveryOpen, setDeliveryOpen] = useState(false)
+  const [templateKeyword, setTemplateKeyword] = useState('')
+  const [templateChannelFilter, setTemplateChannelFilter] = useState<NotificationTemplate['channel'] | undefined>()
+  const [templatePage, setTemplatePage] = useState({ current: 1, pageSize: 20 })
+  const templateSectionRef = useRef<HTMLElement>(null)
+  const templateSearchRef = useRef<InputRef>(null)
+  // a seeded template shows its name; one created here (no name field) its mail subject, else its ID.
+  const templateDisplayName = (item: NotificationTemplate) => (localized && notificationTemplateName(item.template_id)) || item.subject.trim() || item.template_id
+  const keyword = templateKeyword.trim().toLowerCase()
+  const visibleTemplates = templates.filter((item) =>
+    (!templateChannelFilter || item.channel === templateChannelFilter) &&
+    (!keyword || item.template_id.toLowerCase().includes(keyword) || templateDisplayName(item).toLowerCase().includes(keyword)))
   const [form] = Form.useForm<TemplateForm>()
   const templateChannel = Form.useWatch('channel', form) ?? 'email'
   // The last submitted variables, to name a refused variables[n] by its value.
@@ -501,16 +513,28 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
     return value === undefined ? undefined : `${value}：${fieldReasonText(reason, locale)}`
   } })
   useEffect(() => setEmailEnabled(channels.email_enabled), [channels.email_enabled])
+  useEffect(() => {
+    if (!templateOpen || !templateResetPending.current) return
+    templateResetPending.current = false
+    form.resetFields()
+  }, [templateOpen, templateSeed, form])
   useEffect(() => setSMSEnabled(channels.sms_enabled), [channels.sms_enabled])
   // Why a channel cannot be switched on: no sender configured (fixed on the
   // sender settings tab), or the runtime is off by environment; otherwise unsupported.
   const unsupportedNote = (channel: 'email' | 'sms') => {
     const item = health.channels?.[channel]
     if (item?.state === 'not_configured' || item?.reason === 'config_incomplete') {
-      return <Typography.Text type="secondary" data-testid={`notification-channel-unconfigured-${channel}`}>{t('values.senderNotConfigured')} <Link to="/sys/setting?tab=mail">{t('values.openSenderSettings')}</Link></Typography.Text>
+      return <Typography.Text type="secondary" data-testid={`notification-channel-unconfigured-${channel}`}>{t(channel === 'sms' ? 'values.smsSenderNotConfigured' : 'values.emailSenderNotConfigured')} <Link to={`/sys/setting?tab=mail&section=${channel === 'sms' ? 'sms' : 'smtp'}`}>{t(channel === 'sms' ? 'values.openSmsSettings' : 'values.openEmailSettings')}</Link></Typography.Text>
     }
     if (item?.state === 'disabled_by_env') return <Typography.Text type="secondary">{t('health.states.disabled_by_env')}</Typography.Text>
     return <Typography.Text type="secondary">{t('values.unsupported')}</Typography.Text>
+  }
+  // 事件摘要里已选渠道的投递状态：全局停用、发送方未配置、运行环境未开启各自区分。
+  const channelState = (channel: 'email' | 'sms'): ChannelState => {
+    if (channel === 'email' ? channels.email_supported && channels.email_enabled : channels.sms_supported && channels.sms_enabled) return 'ready'
+    if (channel === 'email' ? channels.email_supported : channels.sms_supported) return 'off'
+    const item = health.channels?.[channel]
+    return item?.state === 'not_configured' || item?.reason === 'config_incomplete' ? 'not_configured' : 'unavailable'
   }
   return (
     <>
@@ -540,28 +564,120 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
               ? <Typography.Text type="secondary">{t('health.lastRebuild', { time: new Date(health.last_rebuild_at).toLocaleString() })}</Typography.Text>
               : null}
           <Button icon={<Save size={14} />} disabled={!canManage || locked || (smsEnabled === channels.sms_enabled && emailEnabled === channels.email_enabled)} loading={saving} onClick={() => onSave({ sms_enabled: smsEnabled, email_enabled: emailEnabled })}>{t('actions.save')}</Button>
-          <Button icon={<Plus size={14} />} disabled={!canManage || locked} onClick={() => setTemplateOpen(true)}>{t('actions.newTemplate')}</Button>
+          <Button icon={<Plus size={14} />} disabled={!canManage || locked} onClick={() => {
+            if (templateSeed) {
+              setTemplateSeed(null)
+              templateResetPending.current = true
+            }
+            setTemplateOpen(true)
+          }}>{t('actions.newTemplate')}</Button>
           <Button icon={<ListChecks size={14} />} onClick={() => setDeliveryOpen(true)}>{t('deliveries.actions.open')}</Button>
+          {/* 模板区排在上百个通知事件之后，首屏给入口直达模板搜索。 */}
+          <Button icon={<FileText size={14} />} onClick={() => {
+            templateSectionRef.current?.scrollIntoView?.({ block: 'start' })
+            templateSearchRef.current?.focus({ preventScroll: true })
+          }}>{t('templates.jump')}</Button>
         </Space>
       </section>
-      <section className="notification-settings-policy-card" aria-label={t('sections.templates')}>
+      <NotificationDeliveryPolicyPanel channelAvailability={{ email: channelState('email'), sms: channelState('sms') }} />
+      <section ref={templateSectionRef} id="notification-templates" className="notification-settings-policy-card" aria-label={t('sections.templates')}>
         <Typography.Title level={5}>{t('sections.templates')}</Typography.Title>
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Input
+            ref={templateSearchRef}
+            allowClear
+            style={{ width: 280 }}
+            aria-label={t('templates.search')}
+            placeholder={t('templates.search')}
+            value={templateKeyword}
+            onChange={(event) => {
+              setTemplateKeyword(event.target.value)
+              setTemplatePage((page) => ({ ...page, current: 1 }))
+            }}
+          />
+          <Select<NotificationTemplate['channel']>
+            allowClear
+            style={{ width: 160 }}
+            aria-label={t('templates.channelFilter')}
+            placeholder={t('templates.allChannels')}
+            value={templateChannelFilter}
+            options={(['email', 'sms'] as const).map((channel) => ({ value: channel, label: t(`channels.${channel}`) }))}
+            onChange={(channel) => {
+              setTemplateChannelFilter(channel)
+              setTemplatePage((page) => ({ ...page, current: 1 }))
+            }}
+          />
+        </Space>
         <Table
           rowKey={(item) => `${item.template_id}:${item.version}:${item.channel}`}
           size="small"
-          pagination={false}
-          dataSource={templates}
-          locale={{ emptyText: t('values.emptyTemplates') }}
+          pagination={{
+            ...templatePage,
+            showSizeChanger: true,
+            pageSizeOptions: [20, 50, 100],
+            hideOnSinglePage: visibleTemplates.length <= 20,
+            showTotal: (count) => t('templates.total', { count }),
+            onChange: (current, pageSize) => setTemplatePage({ current, pageSize }),
+          }}
+          dataSource={visibleTemplates}
+          locale={{ emptyText: templates.length > 0 ? t('values.noMatchingTemplates') : t('values.emptyTemplates') }}
           scroll={{ x: 720 }}
           columns={[
-            { title: t('templates.name'), key: 'name', render: (_: unknown, item) => (localized && notificationTemplateName(item.template_id)) || '—' },
+            { title: t('templates.name'), key: 'name', render: (_: unknown, item) => templateDisplayName(item) },
             { title: t('templates.id'), dataIndex: 'template_id' },
             { title: t('templates.version'), dataIndex: 'version', width: 90 },
             { title: t('templates.channel'), dataIndex: 'channel', width: 100, render: (channel: NotificationTemplate['channel']) => t(`channels.${channel}`) },
             { title: t('templates.variables'), dataIndex: 'variables', render: (variables: string[]) => variables.map((v) => localized ? notificationVariableName(v) : v).join('、') },
+            { title: t('templates.actions'), key: 'actions', width: 90, render: (_: unknown, item) => (
+              <Button size="small" icon={<Eye size={14} />} aria-label={t('templates.viewLabel', { name: templateDisplayName(item), version: item.version, channel: t(`channels.${item.channel}`) })} onClick={() => setViewedTemplate(item)}>
+                {t('actions.view')}
+              </Button>
+            ) },
           ] satisfies TableColumnsType<NotificationTemplate>}
         />
       </section>
+      <Drawer
+        open={viewedTemplate !== null}
+        width="min(720px, 100vw)"
+        title={viewedTemplate ? t('templates.detailTitle', { name: templateDisplayName(viewedTemplate), version: viewedTemplate.version }) : null}
+        onClose={() => setViewedTemplate(null)}
+        destroyOnHidden
+        extra={viewedTemplate && canManage ? (
+          <Button icon={<Copy size={14} />} disabled={locked} onClick={() => {
+            setTemplateSeed({
+              template_id: viewedTemplate.template_id,
+              version: undefined,
+              channel: viewedTemplate.channel,
+              subject: viewedTemplate.subject,
+              body: viewedTemplate.body,
+              variables_text: viewedTemplate.variables.join(', '),
+            })
+            templateResetPending.current = true
+            setViewedTemplate(null)
+            setTemplateOpen(true)
+          }}>{t('actions.newFromVersion')}</Button>
+        ) : null}
+      >
+        {viewedTemplate ? (
+          <Descriptions column={1} size="small" bordered data-testid="notification-template-detail">
+            <Descriptions.Item label={t('templates.id')}>{viewedTemplate.template_id}</Descriptions.Item>
+            <Descriptions.Item label={t('templates.version')}>{viewedTemplate.version}</Descriptions.Item>
+            <Descriptions.Item label={t('templates.channel')}>{t(`channels.${viewedTemplate.channel}`)}</Descriptions.Item>
+            {viewedTemplate.channel === 'email' ? (
+              <Descriptions.Item label={t('form.subject')}>{viewedTemplate.subject}</Descriptions.Item>
+            ) : null}
+            {/* 正文是纯文本模板（HTML 版式由发信端另行套用），按文本原样显示，不解释任何标记。 */}
+            <Descriptions.Item label={t(viewedTemplate.channel === 'sms' ? 'form.smsBody' : 'form.body')}>
+              <pre className="notification-template-body" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{viewedTemplate.body}</pre>
+            </Descriptions.Item>
+            <Descriptions.Item label={t('templates.variables')}>
+              {viewedTemplate.variables.length > 0
+                ? <Space size={[4, 4]} wrap>{viewedTemplate.variables.map((v) => <Tag key={v}>{localized ? notificationVariableName(v) : v}</Tag>)}</Space>
+                : '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        ) : null}
+      </Drawer>
       <Modal
         open={templateOpen}
         title={t('form.title')}
@@ -589,7 +705,7 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
           name="notification-template-create"
           layout="vertical"
           disabled={locked}
-          initialValues={{ version: 1, channel: 'email', variables_text: '' }}
+          initialValues={templateSeed ?? { version: 1, channel: 'email', variables_text: '' }}
           onFinish={async (value) => {
             const variables = value.variables_text.split(',').map((item) => item.trim()).filter(Boolean)
             submittedVariables.current = variables

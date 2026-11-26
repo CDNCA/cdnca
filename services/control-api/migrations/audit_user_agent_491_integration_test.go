@@ -10,7 +10,7 @@ import (
 )
 
 // TestAuditUserAgent491 (tp-b6b): up/down/up round-trips, pre-491 rows get
-// '' (shown as —), the column refuses control characters and over-long
+// ” (shown as —), the column refuses control characters and over-long
 // values, the archive guard is the 491 one, and down refuses while a stored
 // (hashed) user agent exists but allows rows without one.
 func TestAuditUserAgent491(t *testing.T) {

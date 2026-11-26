@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Alert, App, Button, Drawer, Form, Input, Select, Space, Typography } from 'antd'
+import { Alert, App, Button, Drawer, Form, Input, Select, Space, Typography, theme } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -28,6 +28,13 @@ export function TicketStaffCreateDrawer({ onClose, onCreated, errorText }: {
   const token = useSessionStore((state) => state.accessToken) ?? ''
   const [form] = Form.useForm<FormValues>()
   const [search, setSearch] = useState('')
+  // 必填星号只作装饰（aria-hidden），字段名读作「标题」「首条内容」，
+  // 必填语义由输入框的 aria-required 表达（同状态页事件抽屉的写法）。
+  const { token: themeToken } = theme.useToken()
+  const requiredMark = (label: ReactNode, { required }: { required: boolean }) => required ? (
+    <><span aria-hidden="true" style={{ display: 'inline-block', marginInlineEnd: themeToken.marginXXS, color: themeToken.colorError, fontSize: themeToken.fontSize,
+      fontFamily: 'SimSun, sans-serif', lineHeight: 1 }}>*</span>{label}</>
+  ) : label
   const [error, setError] = useState<string | null>(null)
   const [unknown, setUnknown] = useState(false)
   const key = useIdempotencyKey('ticket-staff-create')
@@ -76,6 +83,7 @@ export function TicketStaffCreateDrawer({ onClose, onCreated, errorText }: {
       className="ticket-staff-create">
       {error ? <Alert type="error" showIcon className="ticket-drawer-alert" message={error} /> : null}
       <Form<FormValues> form={form} layout="vertical" initialValues={{ category: 'technical', priority: 'normal' }}
+        requiredMark={requiredMark} scrollToFirstError={{ focus: true }}
         onValuesChange={() => setUnknown(false)}
         onFinish={(values) => {
           if (inFlight.current) return

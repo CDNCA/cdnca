@@ -19,13 +19,15 @@ test('control API trusts only the loopback nginx as the client-address proxy', (
   try {
     const result = spawnSync('bash', ['-c', [
       'set -Eeuo pipefail', ...source.match(/^readonly UPGRADE_[A-Z_]+=.*$/gm), block('fail'),
-      block('generate_runtime_secrets'), block('signer_revocation_environment'), block('remote_gateway_access'), block('local_gateway_environment'), 'GATEWAY_HOST=gateway.example.test GATEWAY_AGENT_PORT=9444 GATEWAY_ENROLLMENT_PORT=9443', block('write_environment'),
+      block('generate_runtime_secrets'), block('signer_revocation_environment'), block('remote_gateway_access'), block('local_gateway_environment'),
+      block('public_https_trust_args'), block('upgrade_download_root_ca_file'), block('upgrade_download_root_env'), block('upgrade_download_origin'), 'GATEWAY_HOST=gateway.example.test GATEWAY_AGENT_PORT=9444 GATEWAY_ENROLLMENT_PORT=9443', block('write_environment'),
       'generate_runtime_secrets', 'write_environment',
     ].join('\n')], { encoding: 'utf8', env: { ...process.env, CONFIG_DIR: directory, KEY_DIR: directory,
       PKI_DIR: directory, DATABASE_URL: 'postgresql://localhost/test', REDIS_URL: 'redis://localhost/0',
       NATS_URL: 'nats://localhost:4222', LICENSING_SERVER: 'https://auth.example.test',
       INSTALLATION_ID: 'test-installation', INSTALLATION_NAME: 'test', CONTROL_VERSION: '1.0.1',
       DOWNLOAD_DIR: join(directory, 'downloads'), CONTROL_ORIGIN: 'https://control.example.test', DATA_DIR: directory,
+      CONTROL_DOMAIN: 'control.example.test', PUBLIC_CERT_FILE: '',
     } })
     assert.equal(result.status, 0, result.stderr)
     const lines = readFileSync(join(directory, 'control.env'), 'utf8').trim().split('\n')
@@ -46,7 +48,8 @@ test('every nginx API proxy replaces client forwarding headers with the TCP peer
     assert.match(body, /proxy_set_header X-Real-IP \\\$remote_addr;/)
     assert.match(body, /proxy_set_header X-Forwarded-For \\\$remote_addr;/)
     assert.doesNotMatch(body, /proxy_add_x_forwarded_for/)
-    assert.doesNotMatch(body, /proxy_set_header Forwarded\b/)
+    // the inbound RFC 7239 Forwarded is cleared right before the canonical XFF.
+    assert.match(body, /proxy_set_header Forwarded "";\n {12}proxy_set_header X-Forwarded-For \\\$remote_addr;/)
   }
   assert.doesNotMatch(config, /proxy_add_x_forwarded_for/)
 })

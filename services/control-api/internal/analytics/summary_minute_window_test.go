@@ -48,4 +48,6 @@ func TestSummaryAcceptsMinuteAlignedWindowButTrendStaysHourly(t *testing.T) {
 
 type fakeSummaryStore struct{ QueryStore }
 
-func (*fakeSummaryStore) Summary(context.Context, Scope, Filter) (Summary, error) { return Summary{}, nil }
+func (*fakeSummaryStore) Summary(context.Context, Scope, Filter) (Summary, error) {
+	return Summary{}, nil
+}

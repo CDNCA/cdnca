@@ -100,6 +100,7 @@ exit 0
   // curl：按 URL 末段返回 web/ 下同名文件；不存在 = HTTP 失败。
   writeFileSync(p('bin/curl'), `#!/usr/bin/env bash
 for last; do :; done
+printf '%s\\n' "$last" >>"${root}/curl.log"
 case "$last" in
   */health/ready) f=${root}/web/$( [[ "$last" == *8082* ]] && echo gateway-ready || echo ready ) ;;
   *) f=${root}/web/\${last##*/} ;;
@@ -162,10 +163,35 @@ test('check accepts installs without origin auth or signer trust (community buil
   assert.equal(result.status, 0, result.stdout + result.stderr)
 }))
 
+// 社区版 control.env 只有 CONTROL_ORIGIN（不写支付回调地址）：check 取的 node-install-defaults、runtime-config.js、
+// signer-trust.json 都要带上主控主机，经本机 nginx 端口访问。
+test('check reads the console origin from CONTROL_ORIGIN (community control.env)', () => withRoot((root) => {
+  const result = installed(root, (p) => {
+    rmSync(p('etc/origin-auth.conf')); rmSync(p('etc/origin-auth.secret'))
+    writeFileSync(p('etc/nginx.conf'), '        listen 443 ssl http2;\n')
+    writeFileSync(p('etc/control.env'), 'CONTROL_ORIGIN=https://console.example\nEDGE_SIGNER_TRUST_ENABLED=false\n', { mode: 0o600 })
+    rmSync(p('web/signer-trust.json'))
+  })
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  const urls = readFileSync(join(root, 'curl.log'), 'utf8').split('\n').filter(Boolean)
+  for (const path of ['/downloads/node-install-defaults', '/runtime-config.js']) {
+    assert.ok(urls.includes(`https://console.example:443${path}`), `${path} not fetched from the console host: ${urls.join(' ')}`)
+  }
+  assert.ok(!urls.some((url) => url.startsWith('/') || url.startsWith('https://:') || url.startsWith('https:///')), urls.join(' '))
+}))
+
+test('check fails when control.env names no console origin', () => withRoot((root) => {
+  const result = installed(root, (p) => {
+    writeFileSync(p('etc/control.env'), 'LICENSE_SERVICE_URL=https://auth.example\nEDGE_SIGNER_TRUST_ENABLED=false\n', { mode: 0o600 })
+  })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stdout + result.stderr, /CONTROL_ORIGIN/)
+}))
+
 test('main dispatches the check subcommand before the install path and usage documents it', () => {
   assert.match(block('parse_args'), /^parse_args\(\) \{\n  # [^\n]*\n  \[ "\$\{1:-\}" != check \] \|\| \{ shift; check_main "\$@"; exit \$\?; \}\n/)
   assert.match(block('usage'), /install-control\.sh check/)
-  assert.match(block('control_install_summary'), /install-control\.sh check/)
+  assert.match(block('control_install_summary'), /verify=install-control\.sh\n  \[ ! -x "\$CONTROL_INSTALLER_COPY" \] \|\| verify=\$CONTROL_INSTALLER_COPY\n  verify="\$verify check"/)
 })
 
 // ---- Q20：节点 WebSocket 入口（CDN 模式默认 ws，node-install-defaults 写 transport/tunnel_host/endpoints，:443） ----

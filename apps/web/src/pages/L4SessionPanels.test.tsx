@@ -10,6 +10,7 @@ import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
 import { stream } from '../tests/streamFixture'
 import { L4AccessLogPage, L4LiveConnectionsPage } from './L4SessionPanels'
+import { clearFilterUrlMemory } from './filterUrl'
 
 const tenantID = '018f0000-0000-7000-8000-000000000010'
 const nodeA = '018f0000-0000-7000-8000-000000000021'
@@ -29,6 +30,7 @@ describe('L4 access log and live connections', () => {
     await changeLocale('zh-CN')
     useSessionStore.getState().clearSession()
     vi.spyOn(streamsApi, 'list').mockResolvedValue({ items: [{ ...stream, session_log_enabled: true }], total: 1, page: 1, limit: 100 })
+    clearFilterUrlMemory()
   })
   afterEach(() => vi.restoreAllMocks())
 
@@ -215,5 +217,66 @@ describe('L4 access log and live connections', () => {
     await user.click(summary)
     expect(details).toHaveAttribute('open')
     expect(await screen.findByText('当前没有连接')).toBeInTheDocument()
+  })
+
+  // 客户端 IP 与端口的错误挂在各自输入框上，查询时聚焦第一个，不发请求。
+  it.each([
+    ['access log', () => <L4AccessLogPage />, ['sites.read', 'streams.read'], '/l4-session-logs'],
+    ['live connections', () => <L4LiveConnectionsPage />, ['streams.read'], '/l4-live-connections'],
+  ] as const)('marks an invalid client IP and port on their fields on the %s', async (_name, page, permissions, path) => {
+    authenticate([...permissions])
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => String(input).includes('l4-live')
+      ? json({ connections: [], problems: [], streams: 0 })
+      : json({ version: 'l4-session-logs/v1', from: '2026-09-15T02:00:00Z', to: '2026-09-15T03:00:00Z', rows: [] }))
+    const user = userEvent.setup()
+    renderWithProviders(page())
+    await waitFor(() => expect(fetch.mock.calls.some(([input]) => String(input).includes(path))).toBe(true))
+    const before = fetch.mock.calls.length
+
+    const client = screen.getByRole('textbox', { name: '客户端 IP' })
+    await user.type(client, 'not-an-ip')
+    const toggle = screen.getByRole('button', { name: '高级筛选' })
+    if (toggle.getAttribute('aria-expanded') !== 'true') await user.click(toggle)
+    const port = within(screen.getByRole('group', { name: '高级筛选' })).getByRole('textbox', { name: '端口' })
+    await user.type(port, '65536')
+    await user.keyboard('{Enter}')
+
+    expect(client).toHaveAttribute('aria-invalid', 'true')
+    expect(client).toHaveAccessibleDescription('请输入有效的 IP 或 CIDR。')
+    expect(port).toHaveAttribute('aria-invalid', 'true')
+    expect(port).toHaveAccessibleDescription('请输入 1-65535 的端口。')
+    await waitFor(() => expect(client).toHaveFocus())
+    expect(fetch.mock.calls.slice(before).some(([input]) => String(input).includes('client_ip='))).toBe(false)
+
+    await user.clear(client)
+    await user.type(client, '2001:db8::/32')
+    await user.clear(port)
+    await user.type(port, '443')
+    await user.click(screen.getByRole('button', { name: '应用' }))
+    await waitFor(() => expect(fetch.mock.calls.some(([input]) => String(input).includes('client_ip=2001%3Adb8%3A%3A%2F32'))).toBe(true))
+    expect(client).not.toHaveAttribute('aria-invalid')
+    expect(port).not.toHaveAttribute('aria-invalid')
+  })
+
+
+  // 链接里的时间范围、结束原因、转发、IP、端口在首条请求就生效。
+  it('starts the access log from the applied filters in the URL', async () => {
+    authenticate(['sites.read', 'streams.read'])
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      json({ version: 'l4-session-logs/v1', from: '2026-09-15T02:00:00Z', to: '2026-09-15T03:00:00Z', rows: [] }))
+    renderWithProviders(<L4AccessLogPage />, [`/monitor/stream/access-log?range=6h&end_reason=closed&stream_id=${stream.id}&client_ip=203.0.113.77&port=443`])
+    await waitFor(() => expect(fetch.mock.calls.some(([input]) => String(input).includes('/l4-session-logs'))).toBe(true))
+    const reads = fetch.mock.calls.filter(([input]) => String(input).includes('/l4-session-logs'))
+    expect(reads).toHaveLength(1)
+    const url = new URL(String(reads[0][0]), 'https://cdnca.test')
+    expect(url.searchParams.get('range')).toBe('6h')
+    expect(url.searchParams.get('end_reason')).toBe('closed')
+    expect(url.searchParams.get('stream_id')).toBe(stream.id)
+    expect(url.searchParams.get('client_ip')).toBe('203.0.113.77')
+    expect(url.searchParams.get('listen_port')).toBe('443')
+    // 「只记录开启会话日志的转发」只在折叠说明里出现一次，空表只说没有记录。
+    expect(await screen.findByText('暂无访问日志')).toBeInTheDocument()
+    expect(document.body.textContent?.match(/会话日志”的转发/g)).toHaveLength(1)
+    expect(screen.getByText(/保留 30 天/).closest('details')).not.toBeNull()
   })
 })

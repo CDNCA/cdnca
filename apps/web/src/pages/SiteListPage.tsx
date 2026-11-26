@@ -1,24 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Alert,
-  App,
-  Button,
-  Dropdown,
-  Input,
-  Modal,
-  Pagination,
-  Popconfirm,
-  Result,
-  Select,
-  Spin,
-  Switch,
-  Table,
-  Tag,
-  Tooltip,
-  type MenuProps,
-  type TableColumnsType,
-} from 'antd'
+import { Alert, App, Button, Dropdown, Input, Modal, Popconfirm, Result, Select, Spin, Switch, Tag, Tooltip, type MenuProps, type TableColumnsType } from 'antd'
 import { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Ellipsis, Lock } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -89,7 +71,7 @@ import SiteDnsApiPanel from './SiteDnsApiPanel'
 import SiteDefaultsPanel from './SiteDefaultsPanel'
 import SiteDnsCheckPanel, { type SiteDnsCheckContext } from './SiteDnsCheckPanel'
 import SiteHttpsQuickModal from './SiteHttpsQuickModal'
-import { AdvancedFilters, FeedbackWhen, IdOrNameInput, OutcomeUnknown, useLiveApply, type AdvancedFilterItem } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, IdOrNameInput, OutcomeUnknown, useLiveApply, type AdvancedFilterItem, Pagination, Table } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from './filterUrl'
 import { siteSearch, userSearch } from './idNameSources'
 import '../i18n/marketNames'

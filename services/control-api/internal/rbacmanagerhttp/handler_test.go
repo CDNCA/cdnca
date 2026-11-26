@@ -229,10 +229,10 @@ func TestStepUpBindingDigestIncludesEveryAuthorizationFact(t *testing.T) {
 		{"permissions", func(value *rbacmanager.StepUpCheck) { value.Permissions = []string{"certificates.manage"} }},
 	}
 	for _, test := range mutations {
-			t.Run(test.name, func(t *testing.T) {
-				changed := base
-				changed.Permissions = append([]string(nil), base.Permissions...)
-				changed.MutationDigest = append([]byte(nil), base.MutationDigest...)
+		t.Run(test.name, func(t *testing.T) {
+			changed := base
+			changed.Permissions = append([]string(nil), base.Permissions...)
+			changed.MutationDigest = append([]byte(nil), base.MutationDigest...)
 			test.mutate(&changed)
 			got, err := stepUpBindingDigest(changed)
 			if err != nil {

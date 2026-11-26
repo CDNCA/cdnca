@@ -6,6 +6,8 @@ import { useSessionStore } from '../auth/session'
 import SiteBlockEventLogPage from '../pages/SiteBlockEventLogPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { useLocation } from 'react-router-dom'
+import { clearFilterUrlMemory } from '../pages/filterUrl'
 
 const tenantId = '018f0000-0000-7000-8000-000000000010'
 const siteId = '018f0000-0000-7000-8000-000000000020'
@@ -45,7 +47,16 @@ function blockPage(input: RequestInfo | URL, replacement: Record<string, unknown
   })
 }
 
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-testid="location">{location.search}</output>
+}
+
+const blockRoute = '/monitor/site/block-event-log'
+
 describe('SiteBlockEventLogPage', () => {
+  // 高级筛选的展开状态记在 localStorage；字段出错会强制展开并记下，用例之间清掉，避免下一用例点「高级筛选」反而收起。
+  beforeEach(() => { window.localStorage.clear(); clearFilterUrlMemory() })
   it.each([
     ['a tenant with a blank scope identity', principal({
       scope_id: '   ', tenant_id: '   ', permissions: ['sites.read'],
@@ -66,6 +77,20 @@ describe('SiteBlockEventLogPage', () => {
     expect(await screen.findByText('无权查看日志')).toBeInTheDocument()
     expect(screen.getByText('当前账户没有此范围的日志读取权限。')).toBeInTheDocument()
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  // the standalone page keeps its 拉黑日志 region name.
+  it('keeps the 拉黑日志 region name on the standalone block log page', async () => {
+    const actor = principal({
+      scope_kind: 'platform', scope_id: 'platform', tenant_id: null,
+      permissions: ['sites.read', 'platform.admin'],
+    })
+    useSessionStore.getState().setSession(authResponse(actor), actor)
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(blockPage(input)))
+
+    renderWithProviders(<SiteBlockEventLogPage />)
+
+    expect(await screen.findByRole('region', { name: '拉黑日志' })).toBeInTheDocument()
   })
 
   // stats-platform-l7：进入即按发生时间倒序拉取全平台拦截事件；租户只是可选筛选。
@@ -242,6 +267,8 @@ describe('SiteBlockEventLogPage', () => {
     expect(screen.getByText(/"kind":"sqli"/)).toBeInTheDocument()
     expect(screen.getByText('t13d1516h2_8daaf6152771')).toBeInTheDocument()
   })
+
+
 
   it('names the site and rule, falls back to a copyable short ID, and shows the redacted query (P14)', async () => {
     const actor = principal({ permissions: ['sites.read'] })
@@ -540,5 +567,35 @@ describe('SiteBlockEventLogPage', () => {
       const last = requests.filter((url) => url.pathname === '/v1/analytics/market-security').at(-1)!
       expect(last.searchParams.get('action')).toBe('log')
     })
+  })
+
+
+  it('reopens the market source with its tenant and range and only queries that source', async () => {
+    const actor = principal({ scope_kind: 'platform', scope_id: 'platform', tenant_id: null, permissions: ['sites.read', 'platform.admin'] })
+    useSessionStore.getState().setSession(authResponse(actor), actor)
+    const requests: URL[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://cdnca.test')
+      requests.push(url)
+      if (url.pathname.endsWith('/market-security')) return Promise.resolve(json({ data: [], meta: {} }))
+      if (url.pathname === '/v1/admin/users') return Promise.resolve(json({ items: [], total: 0, page: 1, limit: 20 }))
+      return Promise.resolve(blockPage(input))
+    })
+    renderWithProviders(<><SiteBlockEventLogPage /><LocationProbe /></>, [`${blockRoute}?source=market&range=last7d&tenant_id=${tenantId}`])
+    const source = screen.getByRole('group', { name: '来源' })
+    expect(within(source).getByRole('tab', { name: '市场供给' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(requests.some((url) => url.pathname.endsWith('/market-security'))).toBe(true))
+    const first = requests.find((url) => url.pathname.endsWith('/market-security'))!
+    expect(first.searchParams.get('tenant_id')).toBe(tenantId)
+    expect(new Date(first.searchParams.get('to')!).getTime() - new Date(first.searchParams.get('from')!).getTime()).toBeGreaterThan(6 * 86_400_000)
+    expect(requests.some((url) => url.pathname.includes('block-events'))).toBe(false)
+    // 面板正文在活动页签面板里。
+    expect(screen.getByRole('tabpanel')).toContainElement(screen.getByTestId('market-security-panel'))
+
+    // 切回本地节点：上一来源的条件键清掉，本地节点按默认（今天、全部租户）查询。
+    await userEvent.setup().click(within(source).getByRole('tab', { name: '本地节点' }))
+    await waitFor(() => expect(requests.some((url) => url.pathname.includes('block-events'))).toBe(true))
+    expect(requests.find((url) => url.pathname.includes('block-events'))!.searchParams.has('tenant_id')).toBe(false)
+    expect(screen.getByTestId('location').textContent).toBe('')
   })
 })

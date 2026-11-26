@@ -66,7 +66,8 @@ func init() {
 		e("url_auth_policy.revoke", CategorySite, "吊销 URL 鉴权 {resource} 的旧密钥", "revoked a key of URL auth policy {resource}"),
 		e("url_auth_policy.publish_material", CategorySite, "下发 URL 鉴权 {resource} 的密钥", "published the keys of URL auth policy {resource}"),
 		e("analytics_log.export.create", CategorySite, "申请导出访问日志 {resource}", "requested access log export {resource}"),
-		e("analytics_log.export.grant", CategorySite, "批准导出访问日志 {resource}", "approved access log export {resource}"),
+		// grant 是下载前签发绑定会话的一次性下载凭证（export_postgres.go grant_issued），没有审批人，不写「批准」。
+		e("analytics_log.export.grant", CategorySite, "签发访问日志导出 {resource} 的下载凭证", "issued a download credential for access log export {resource}"),
 		e("analytics_log.export.retry", CategorySite, "重试导出访问日志 {resource}", "retried access log export {resource}"),
 		e("analytics_log.export.reject", CategorySite, "拒绝导出访问日志 {resource}", "rejected access log export {resource}"),
 		e("analytics_log.export.complete", CategorySite, "访问日志导出 {resource} 已生成", "access log export {resource} is ready"),

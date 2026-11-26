@@ -109,7 +109,7 @@ export interface HttpPolicy extends HttpPolicyConfig {
   updated_at: string
 }
 
-export interface HttpPolicyPage { items: HttpPolicy[]; next_cursor?: string }
+export interface HttpPolicyPage { items: HttpPolicy[]; next_cursor?: string; system_max_upload_bytes: number }
 export interface HttpPolicyWriteMetadata { idempotencyKey: string; requestID: string; traceID: string }
 export interface HttpPolicyIdentity { scopeId: string; siteId?: string; ownerUserId?: string }
 export interface HttpPolicyPublicationPreview {
@@ -246,9 +246,10 @@ function matchesIdentity(policy: HttpPolicy, identity: HttpPolicyIdentity, polic
 }
 
 function isPage(value: unknown, identity: HttpPolicyIdentity): value is HttpPolicyPage {
-  return isRecord(value) && hasOnlyKeys(value, ['items', 'next_cursor']) && Object.hasOwn(value, 'items') &&
+  return isRecord(value) && hasOnlyKeys(value, ['items', 'next_cursor', 'system_max_upload_bytes']) && Object.hasOwn(value, 'items') &&
     Array.isArray(value.items) && value.items.length <= 1 && value.items.every((item) => isPolicy(item) && matchesIdentity(item, identity)) &&
-    (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 1024)
+    (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 1024) &&
+    integerBetween(value.system_max_upload_bytes, 1, MAX_HTTP_POLICY_UPLOAD_BYTES)
 }
 
 function isPreview(value: unknown): value is HttpPolicyPublicationPreview {
@@ -342,10 +343,24 @@ export const httpPoliciesApi = {
   },
 }
 
-export const emptyHttpPolicyConfig = (): HttpPolicyConfig => ({
-  max_upload_bytes: MAX_HTTP_POLICY_UPLOAD_BYTES,
+// emptyHttpPolicyConfig(systemMaxUpload): a site without a policy; its upload
+// limit is the system one the node applies (the list's system_max_upload_bytes),
+// so a policy saved only for headers keeps the site's limit.
+export const emptyHttpPolicyConfig = (systemMaxUpload: number): HttpPolicyConfig => ({
+  max_upload_bytes: systemMaxUpload,
   request_headers: [], response_headers: [], rewrites: [], redirect_allowed_hosts: [], redirects: [], cors: null, referer_check: null,
 })
+
+// formatUploadBytes: an upload limit as the page shows it (MB, GB when whole).
+export function formatUploadBytes(bytes: number): string {
+  return bytes % 1073741824 === 0 ? `${bytes / 1073741824} GB` : `${Math.round(bytes / 1048576 * 10) / 10} MB`
+}
+
+// customUploadStart: the value 自定义 starts from, distinct from the system
+// limit (which would read back as 系统默认) and from the maximum.
+export function customUploadStart(systemMax: number): number {
+  return systemMax === 100 * 1048576 ? 200 * 1048576 : 100 * 1048576
+}
 
 export function configFromHttpPolicy(policy: HttpPolicy): HttpPolicyConfig {
   return {

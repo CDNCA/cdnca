@@ -40,9 +40,11 @@ const zhSettings = {
     tabs: {
       global: '全局配置', region: '区域配置', regionNode: '区域及节点配置', site: '网站', stream: '转发', common: '公共', certificate: '证书',
     },
+    fieldHelp: '{{name}}说明',
     units: { ms: '毫秒', bytes: '字节', items: '个', multiplier: '倍', perDay: '次/日', perRequest: '个/次', rules: '条', hours: '小时', seconds: '秒', hits: '次' },
     overrides: {
       title: '区域覆盖配置',
+      selectionScope: '覆盖配置',
       nodeDescription: '按区域或节点查看已经发布的差异配置。',
       regionDescription: '按区域查看已经发布的差异配置。',
       id: '配置 ID',
@@ -101,7 +103,7 @@ const zhSettings = {
           proxyHttpVersion: '回源 HTTP 版本', proxyMaxTempFileSize: '回源临时文件上限', proxyNextUpstream: '回源失败重试条件', proxyConnectTimeout: '回源连接超时', proxySendTimeout: '回源发送超时',
           proxyReadTimeout: '回源读取超时', serverHeader: 'Server 响应头', clientMaxBodySize: '请求体大小上限', defaultType: '默认 MIME 类型', keepaliveRequests: '长连接最大请求数',
           keepaliveTimeout: '长连接超时', logNotFound: '记录文件不存在错误', serverTokens: '显示 Nginx 版本号', largeClientHeaderBuffers: '大请求头缓冲区', serverNamesHashMaxSize: '域名哈希表大小',
-          serverNamesHashBucketSize: '域名哈希桶大小',
+          serverNamesHashBucketSize: '域名哈希桶大小', clientBodyBufferSize: '请求体缓冲区大小',
         },
         help: {
           workerRlimit: '每个工作进程可打开的文件句柄上限，需不小于单进程最大连接数。范围 1024–1048576。',
@@ -134,6 +136,7 @@ const zhSettings = {
           largeClientHeaderBuffers: '格式为“数量 大小”，例如 4 32k；数量 1–32，大小 1k–1m。',
           serverNamesHashMaxSize: '域名哈希表最大容量，必须是 2 的幂（512–65536）。',
           serverNamesHashBucketSize: '域名哈希桶大小，必须是 2 的幂（32–1024），域名较长时调大。',
+          clientBodyBufferSize: '单个客户端请求体缓冲区大小。',
         },
       },
       defaults: {
@@ -143,16 +146,15 @@ const zhSettings = {
     },
     nginx: {
       worker: {
-        title: 'Worker 运行参数', description: '控制 Nginx worker 进程和连接容量。',
-        processTitle: '进程与连接', processDescription: '调整 worker 数量和单进程连接上限。',
-        resourceTitle: '资源与退出', resourceDescription: '限制文件句柄，控制优雅退出时间。',
+        title: 'Worker 运行参数',
+        processTitle: '进程与连接',
+        resourceTitle: '资源与退出',
       },
       http: {
-        title: 'HTTP 运行参数', description: '控制压缩、缓存、回源连接和请求处理行为。',
-        gzipTitle: 'Gzip 压缩', gzipDescription: '设置压缩级别、最小响应大小和协议版本。',
-        cacheTitle: '缓存与回源', cacheDescription: '设置每个节点的缓存总容量（各网站配额按比例缩小）、磁盘最小剩余空间、回源缓冲和失败重试。缓存固定存放在节点状态目录下的 shared/cache。', cacheMinFree: '缓存最小剩余空间（min_free）', entryOrigin: '入口 IP 回源',
-        connectionTitle: '连接与请求', connectionDescription: '设置客户端请求、长连接、响应头和哈希表容量。',
-        bufferHint: '单个客户端请求体缓冲区大小。', headerBufferCount: '大请求头缓冲区数量', headerBufferSize: '大请求头缓冲区大小',
+        title: 'HTTP 运行参数',
+        gzipTitle: 'Gzip 压缩',
+        cacheTitle: '缓存与回源',
+        connectionTitle: '连接与请求',
       },
     },
     resources: {
@@ -298,9 +300,11 @@ const enSettings = {
     tabs: {
       global: 'Global configuration', region: 'Regional configuration', regionNode: 'Regional and node configuration', site: 'Website', stream: 'Forwarding', common: 'Common', certificate: 'Certificate',
     },
+    fieldHelp: 'About {{name}}',
     units: { ms: 'ms', bytes: 'bytes', items: 'items', multiplier: 'x', perDay: '/day', perRequest: '/request', rules: 'rules', hours: 'hours', seconds: 'seconds', hits: 'hits' },
     overrides: {
       title: 'Regional overrides',
+      selectionScope: 'overrides',
       nodeDescription: 'Review published differences by region or node.',
       regionDescription: 'Review published differences by region.',
       id: 'Configuration ID',
@@ -359,7 +363,7 @@ const enSettings = {
           proxyHttpVersion: 'Origin HTTP version', proxyMaxTempFileSize: 'Origin temp file limit', proxyNextUpstream: 'Origin retry conditions', proxyConnectTimeout: 'Origin connect timeout', proxySendTimeout: 'Origin send timeout',
           proxyReadTimeout: 'Origin read timeout', serverHeader: 'Server response header', clientMaxBodySize: 'Max request body size', defaultType: 'Default MIME type', keepaliveRequests: 'Max requests per keep-alive',
           keepaliveTimeout: 'Keep-alive timeout', logNotFound: 'Log file-not-found errors', serverTokens: 'Show Nginx version', largeClientHeaderBuffers: 'Large request header buffers', serverNamesHashMaxSize: 'Server names hash size',
-          serverNamesHashBucketSize: 'Server names hash bucket size',
+          serverNamesHashBucketSize: 'Server names hash bucket size', clientBodyBufferSize: 'Request body buffer size',
         },
         help: {
           workerRlimit: 'File handle limit per worker; must be at least the connections per worker. Range 1024–1048576.',
@@ -392,6 +396,7 @@ const enSettings = {
           largeClientHeaderBuffers: 'Format "count size", such as 4 32k; count 1–32, size 1k–1m.',
           serverNamesHashMaxSize: 'Maximum server names hash size; a power of two (512–65536).',
           serverNamesHashBucketSize: 'Server names hash bucket size; a power of two (32–1024). Raise it for long domain names.',
+          clientBodyBufferSize: 'Buffer size for one client request body.',
         },
       },
       defaults: {
@@ -401,16 +406,15 @@ const enSettings = {
     },
     nginx: {
       worker: {
-        title: 'Worker runtime', description: 'Control Nginx worker processes and connection capacity.',
-        processTitle: 'Processes and connections', processDescription: 'Adjust worker count and per-process connection limits.',
-        resourceTitle: 'Resources and shutdown', resourceDescription: 'Limit file handles and configure graceful shutdown.',
+        title: 'Worker runtime',
+        processTitle: 'Processes and connections',
+        resourceTitle: 'Resources and shutdown',
       },
       http: {
-        title: 'HTTP runtime', description: 'Control compression, caching, origin connections, and request handling.',
-        gzipTitle: 'Gzip compression', gzipDescription: 'Set compression level, minimum response size, and protocol version.',
-        cacheTitle: 'Cache and origin', cacheDescription: 'Set each node\'s total cache size (site quotas scale down to fit), the minimum free disk space, buffering and origin retries. The cache lives in shared/cache under the node state directory.', cacheMinFree: 'Cache minimum free space (min_free)', entryOrigin: 'Use entry IP for origin',
-        connectionTitle: 'Connections and requests', connectionDescription: 'Set client requests, keepalive, headers, and hash-table capacity.',
-        bufferHint: 'Buffer size for one client request body.', headerBufferCount: 'Large header buffer count', headerBufferSize: 'Large header buffer size',
+        title: 'HTTP runtime',
+        gzipTitle: 'Gzip compression',
+        cacheTitle: 'Cache and origin',
+        connectionTitle: 'Connections and requests',
       },
     },
     resources: {

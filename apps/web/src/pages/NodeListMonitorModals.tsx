@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Form, Input, Modal, Radio, Select, Switch, Table, Tag, Tooltip } from 'antd'
+import { Alert, Button, Checkbox, Form, Input, Modal, Radio, Select, Switch, Tag, Tooltip } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -15,7 +15,7 @@ import { probeDNSPupModule } from '../api/probeDNSPup'
 import { useGrantedModules } from '../components/useGrantedModules'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
 import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
-import { TimeRangeFilter } from '@cdnca/ui'
+import { TimeRangeFilter, Table } from '@cdnca/ui'
 
 const monitorGroups = ['domestic', 'telecom', 'unicom', 'mobile', 'overseas'] as const
 

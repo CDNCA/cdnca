@@ -524,6 +524,15 @@ components:
             confirm sends the confirmation to the license service and then installs it.
           type: string
           enum: [pending_confirmation, authorized, enabled, disabled]
+        license_sync:
+          description: >-
+            Whether the license service acknowledged every lifecycle receipt of this local head. A write (confirm,
+            upgrade, disable, resume, uninstall) is answered 200 once it is committed on this controller and is in
+            force here at once; if its report to the license service did not go through, the answer carries pending
+            and the same receipt is replayed unchanged (in the background, and when the details are read), never
+            applied twice. synced once acknowledged. Omitted on candidates not installed here.
+          type: string
+          enum: [pending, synced]
         paused_by:
           description: >-
             Who paused a disabled authorization, from the signed license snapshot. installation is this
@@ -642,6 +651,9 @@ components:
                 - plugin_installation_not_found
                 - plugin_installation_revision_conflict
                 - plugin_installation_idempotency_conflict
+                - plugin_installation_required_scopes_missing
+                - plugin_installation_scope_not_approved
+                - plugin_installation_approval_stale
                 - plugin_installation_scope_approval_required
                 - plugin_installation_platform_paused
                 - plugin_installation_platform_managed
@@ -651,3 +663,16 @@ components:
                 - plugin_installation_result_unknown
                 - plugin_installation_activation_response_invalid
                 - internal_error
+            details:
+              description: >-
+                Confirming a pending market authorization takes exactly its approved_scopes. Present only with
+                plugin_installation_required_scopes_missing (422, scopes lists the approved scopes left out) and
+                plugin_installation_scope_not_approved (422, scopes lists requested scopes the platform did not
+                approve); scope codes only. A missing sensitive or new permission confirmation stays 422
+                plugin_installation_scope_approval_required; a verification or state the license service no longer
+                waits for is 409 plugin_installation_approval_stale.
+              type: object
+              additionalProperties: false
+              required: [scopes]
+              properties:
+                scopes: {$ref: '#/components/schemas/Scopes'}

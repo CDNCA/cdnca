@@ -162,3 +162,39 @@ func TestS3EndpointRefusalNamesTheField(t *testing.T) {
 		t.Fatalf("valid probe = %d %s probed=%d", got.Code, got.Body, probed)
 	}
 }
+
+// a structurally invalid
+// S3/SFTP target is refused by save and probe with the target and field named
+// (not only a sentence), before any connection.
+func TestTargetStructureRefusalNamesTheField(t *testing.T) {
+	h := newHarness(t)
+	probed := 0
+	h.handler.dependencies.Probe = func(context.Context, nativebackup.Target) error { probed++; return nil }
+	s3 := `{"name":"rustfs","kind":"s3","enabled":true,"endpoint":"https://rustfs.internal:9000","region":"us-east-1","bucket":"",
+	  "prefix":"cdnca/","access_key":"AKIA1","secret_key":"secret-1"}`
+	noHostKey := strings.Replace(sftpTarget(`,"password":"ssh-password"`), `"SHA256:`+strings.Repeat("Q", 43)+`"`, `""`, 1)
+	for _, test := range []struct{ target, field string }{
+		{s3, "bucket"},
+		{strings.Replace(s3, `"region":"us-east-1"`, `"region":""`, 1), "region"},
+		{strings.Replace(strings.Replace(s3, `"bucket":""`, `"bucket":"cdnca-backups"`, 1), `"prefix":"cdnca/"`, `"prefix":"cdnca"`, 1), "prefix"},
+		{noHostKey, "host_key_sha256"},
+		{strings.Replace(sftpTarget(`,"password":"ssh-password"`), `"/srv/cdnca"`, `"srv"`, 1), "remote_dir"},
+	} {
+		save := h.do(http.MethodPut, Prefix+"/settings", `{"expected_revision":"`+h.revision()+`","schedule":{"enabled":false,"weekdays":[1],"hour":3,"minute":0},
+		  "keep_local":5,"keep_remote":5,"targets":[`+test.target+`]}`)
+		code, field := refusal(t, save, save.Body.Bytes())
+		if save.Code != http.StatusBadRequest || code != "control_backup_invalid_settings" || field != test.field {
+			t.Fatalf("save %s = %d %s", test.field, save.Code, save.Body)
+		}
+		if strings.Contains(save.Body.String(), "needs") {
+			t.Fatalf("save %s leaked the English rule: %s", test.field, save.Body)
+		}
+		got := h.do(http.MethodPost, Prefix+"/targets/probe", `{"expected_revision":"`+h.revision()+`","target":`+test.target+`}`)
+		if code, field := refusal(t, got, got.Body.Bytes()); got.Code != http.StatusBadRequest || code != "control_backup_invalid_settings" || field != test.field {
+			t.Fatalf("probe %s = %d %s", test.field, got.Code, got.Body)
+		}
+	}
+	if probed != 0 {
+		t.Fatalf("probed %d invalid targets", probed)
+	}
+}

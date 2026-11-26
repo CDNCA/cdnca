@@ -1,0 +1,10 @@
+/* 残留：窄屏单个日期时间弹层（约 290×510px）在抽屉下半部的结束时间下方
+   放不下、上方也放不下，确认按钮落到屏外。窄屏弹层固定为视口底部的面板，整体在视口内，过矮的屏幕在面板内滚动。 */
+.status-window-picker-sheet.ant-picker-dropdown {
+  position: fixed !important;
+  top: auto !important;
+  bottom: 8px !important;
+  left: 8px !important;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}

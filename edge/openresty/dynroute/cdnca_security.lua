@@ -406,6 +406,17 @@ function _M.access(site)
     end
 end
 
+-- resume: an internal pass after ngx.exec (cache variant, origin follow,
+-- unbuffered location): nginx cleared ngx.ctx, so the HTTP policy state its
+-- header_filter reads is restored (v7 httppolicy.resume); nothing else of the
+-- client pass's decisions runs again.
+function _M.resume(site)
+    local policy = site.http_policy
+    if type(policy) == "table" then
+        return httppolicy.resume_object(policy, read_object, site.site_id)
+    end
+end
+
 -- header_filter: the HTTP policy's response headers (its access phase left
 -- the site entry in ngx.ctx; an ngx.exec dispatch clears it, as in v7).
 function _M.header_filter(site)

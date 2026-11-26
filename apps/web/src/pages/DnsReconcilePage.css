@@ -152,20 +152,15 @@
   width: 100%;
 }
 
-.dns-fix-option {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+/* 诊断里的 DNS 区域：区域名 + 刷新托管范围 */
+.dns-fix-zone {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
 }
 
-.dns-fix-option > span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dns-fix-option-meta {
-  flex: none;
+.dns-fix-zone-note {
   color: var(--cdnca-color-text-secondary);
 }
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App as AntApp, ConfigProvider } from 'antd'
 import dayjs from 'dayjs'
@@ -293,6 +293,73 @@ describe('SiteAnalysisPage', () => {
     expect(refererURL.pathname).toBe('/v1/analytics/top/referer')
     expect(refererURL.searchParams.get('domain')).toBe('static.example.test cdn.example.test')
     expect(screen.queryByText('当前版本不支持此排行维度。')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['tenant', '/v1/analytics/summary'],
+    ['platform', '/v1/admin/analytics/summary'],
+  ] as const)('narrows the %s range summary by the same site, domain and port filters as the ranking', async (scope, summaryPath) => {
+    authenticate(scope)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'http://cdnca.test')
+      if (!isSummary(input) || !url.searchParams.has('domain') && !url.searchParams.has('listen_port')) {
+        return Promise.resolve(rankResponse(input))
+      }
+      // Narrowed by domain or port the API reports security counts as null (no host/port on security facts).
+      return Promise.resolve(json({
+        data: { ...zeroSummary, security_events: null, security_event_rows: null },
+        meta: { from: url.searchParams.get('from'), to: url.searchParams.get('to'), timezone: 'UTC', metric_version: 1 },
+      }))
+    })
+    const summaryCalls = () => fetchSpy.mock.calls.filter(([input]) => isSummary(input))
+    const user = userEvent.setup()
+    renderWithProviders(<SiteAnalysisPage />)
+
+    await screen.findByText('first.example')
+    await waitFor(() => expect(summaryCalls()).toHaveLength(1))
+    const strip = await screen.findByRole('group', { name: '范围汇总' })
+    expect(within(strip).getByText(/^安全事件请求数：/)).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('输入域名，多个空格分隔'), 'Static.Example.Test. cdn.example.test')
+    await user.click(screen.getByRole('button', { name: '刷新' }))
+    await waitFor(() => expect(summaryCalls()).toHaveLength(2))
+    const domainSummary = new URL(String(summaryCalls().at(-1)![0]), 'http://cdnca.test')
+    expect(domainSummary.pathname).toBe(summaryPath)
+    expect(domainSummary.searchParams.get('domain')).toBe('static.example.test cdn.example.test')
+    expect(domainSummary.searchParams.get('domain'))
+      .toBe(new URL(String(rankCalls(fetchSpy).at(-1)![0]), 'http://cdnca.test').searchParams.get('domain'))
+    await waitFor(() => expect(within(screen.getByRole('group', { name: '范围汇总' })).queryByText(/安全事件请求数/)).not.toBeInTheDocument())
+    expect(within(screen.getByRole('group', { name: '范围汇总' })).getByText(/^缓存命中率：/)).toBeInTheDocument()
+    expect(screen.queryByText(/全部网站/)).not.toBeInTheDocument()
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '统计维度' }))
+    await user.click(await screen.findByRole('option', { name: '服务器端口' }))
+    await user.type(screen.getByPlaceholderText('输入端口，如 80 或 443'), '8443')
+    await user.click(screen.getByRole('button', { name: '搜索' }))
+    await waitFor(() => expect(summaryCalls()).toHaveLength(3))
+    const portSummary = new URL(String(summaryCalls().at(-1)![0]), 'http://cdnca.test')
+    const portRank = new URL(String(rankCalls(fetchSpy).at(-1)![0]), 'http://cdnca.test')
+    expect(portSummary.searchParams.get('listen_port')).toBe('8443')
+    expect(portSummary.searchParams.get('listen_port')).toBe(portRank.searchParams.get('listen_port'))
+    expect(portSummary.searchParams.get('domain')).toBe(portRank.searchParams.get('domain'))
+    expect(screen.queryByText(/全部网站/)).not.toBeInTheDocument()
+  })
+
+  it('shows security counts in the summary of an unnarrowed range', async () => {
+    authenticate('tenant')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(rankResponse(input)))
+    const user = userEvent.setup()
+    renderWithProviders(<SiteAnalysisPage />)
+    const strip = await screen.findByRole('group', { name: '范围汇总' })
+    expect(within(strip).getByText(/^安全事件请求数：0/)).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('输入域名，多个空格分隔'), siteId)
+    await user.click(screen.getByRole('button', { name: '刷新' }))
+    await waitFor(() => expect(fetchSpy.mock.calls.filter(([input]) => isSummary(input))).toHaveLength(2))
+    const siteSummary = new URL(String(fetchSpy.mock.calls.filter(([input]) => isSummary(input)).at(-1)![0]), 'http://cdnca.test')
+    expect(siteSummary.searchParams.get('site_id')).toBe(siteId)
+    expect(siteSummary.searchParams.has('domain')).toBe(false)
+    expect(siteSummary.searchParams.has('listen_port')).toBe(false)
   })
 
   it('keeps the table shell mounted through localized loading and empty states', async () => {
@@ -716,8 +783,8 @@ describe('SiteAnalysisPage', () => {
     expect(landed!.state).toEqual({ drillFrom: 'analysis' })
   })
 
-  // analytics-meta-del：删掉结果区上方的本地时间范围、排行快照、汇总范围三行；
-  // 汇总条指标行保留，汇总仍不带域名参数。
+  // analytics-meta-del（用户）：删掉结果区上方的本地时间范围、排行快照、汇总范围三行；
+  // 汇总条指标行保留；汇总与排行带同一域名参数。
   it('hides the local window, snapshot and summary scope lines but keeps the summary metrics (analytics-meta-del)', async () => {
     authenticate('tenant')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(rankResponse(input)))
@@ -735,7 +802,7 @@ describe('SiteAnalysisPage', () => {
     await waitFor(() => expect(rankCalls(fetchSpy).length).toBeGreaterThan(rankBefore))
     expect(screen.queryByText(/汇总范围/)).not.toBeInTheDocument()
     const summaryURL = new URL(String(fetchSpy.mock.calls.filter(([input]) => isSummary(input)).at(-1)![0]), 'http://cdnca.test')
-    expect(summaryURL.searchParams.has('domain')).toBe(false)
+    expect(summaryURL.searchParams.get('domain')).toBe('a.example')
   })
 
   it('ranks provinces, browsers and OS by name, shows the range summary and warns about retention', async () => {

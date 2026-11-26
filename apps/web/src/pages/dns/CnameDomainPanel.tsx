@@ -1,14 +1,15 @@
 import { useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Pagination, Switch, Table, Typography } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, InlineNotice } from '@cdnca/ui'
+import { Button, Dropdown, Form, Grid, Input, Modal, Switch } from 'antd'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, InlineNotice, Pagination, Table } from '@cdnca/ui'
 import type { InputRef, TableColumnsType } from 'antd'
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { Ellipsis, Plus, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
 import { dnsPlatformApi, type PlatformDNSZone } from '../../api/dnsPlatform'
 import '../../i18n/dnsConfig'
+import { useNamedRowSelection } from '../../components/namedRowSelection'
 
 const domainPattern = /^(?=.{1,253}$)(?!-)([a-z0-9-]{1,63}(?<!-)\.)+[a-z]{2,63}$/i
 const newKey = (action: string) => `dns-zone-${action}-${crypto.randomUUID()}`
@@ -25,6 +26,7 @@ const nameFieldCodes = new Set(['dns_zone_not_hosted', 'dns_resource_conflict', 
 // domains; with none checked they use the default zone.
 export default function CnameDomainPanel({ accessToken, owner, canManage }: { accessToken: string; owner: string[]; canManage: boolean }) {
   const { t } = useTranslation('dnsConfig')
+  const namedRows = useNamedRowSelection()
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = useFeedbackMessage()
   const feedback = useFeedback()
@@ -42,6 +44,8 @@ export default function CnameDomainPanel({ accessToken, owner, canManage }: { ac
   const nameInput = useRef<InputRef>(null)
   const saveKey = useRef<string | null>(null)
   const prefix = ['dns-platform-zones', ...owner]
+  // 窄屏行操作合成一个「更多」。
+  const compact = Grid.useBreakpoint().xs === true
   const zonesQuery = useQuery({
     queryKey: [...prefix, page, limit, search], placeholderData: keepPreviousData, retry: false,
     queryFn: () => dnsPlatformApi.zones(accessToken, { page, limit, search }),
@@ -161,10 +165,21 @@ export default function CnameDomainPanel({ accessToken, owner, canManage }: { ac
         disabled={!canManage || randomMutation.isPending} onChange={(random) => randomMutation.mutate({ zone, random })} />,
     },
     {
-      title: t('zone.actions'), key: 'actions', align: 'center', width: 251, render: (_, zone) => <span className="dns-zone-actions">
-        <Typography.Link disabled={!canManage} onClick={() => open({ mode: 'edit', zone })}>{t('actions.edit')}</Typography.Link>
-        <Typography.Link disabled={!canManage} onClick={() => confirmDelete([zone])}>{t('actions.delete')}</Typography.Link>
-      </span>,
+      // 操作列固定在右侧；行内操作是按钮，可访问名称带域名。
+      title: t('zone.actions'), key: 'actions', align: 'center', width: compact ? 72 : 251, fixed: 'right', render: (_, zone) => compact
+        ? <Dropdown trigger={['click']} disabled={!canManage} menu={{
+          items: [{ key: 'edit', label: t('actions.edit') }, { key: 'delete', label: t('actions.delete'), danger: true }],
+          onClick: ({ key }) => key === 'edit' ? open({ mode: 'edit', zone }) : confirmDelete([zone]),
+        }}>
+          <Button type="link" size="small" icon={<Ellipsis size={14} aria-hidden="true" />} disabled={!canManage}
+            aria-label={t('zone.moreRow', { name: zone.name })} />
+        </Dropdown>
+        : <span className="dns-zone-actions">
+          <Button type="link" size="small" disabled={!canManage} aria-label={t('zone.editRow', { name: zone.name })}
+            onClick={() => open({ mode: 'edit', zone })}>{t('actions.edit')}</Button>
+          <Button type="link" size="small" disabled={!canManage} aria-label={t('zone.deleteRow', { name: zone.name })}
+            onClick={() => confirmDelete([zone])}>{t('actions.delete')}</Button>
+        </span>,
     },
   ]
   const data = zonesQuery.data
@@ -183,7 +198,6 @@ export default function CnameDomainPanel({ accessToken, owner, canManage }: { ac
 
   return <div className="dns-cname-panel">
     {messageContext}{modalContext}
-    <Alert className="dns-cname-help" type="info" showIcon message={t('zone.nameHelp')} description={t('zone.randomHelp')} />
     <div className="dns-cname-toolbar">
       <Button type="primary" icon={<Plus size={14} />} disabled={!canManage} onClick={() => open({ mode: 'create' })}>{t('actions.addZone')}</Button>
       <Button danger icon={<Trash2 size={14} />} disabled={!canManage || zonesQuery.isError} onClick={() => confirmDelete(shown)}>{t('actions.delete')}</Button>
@@ -195,9 +209,9 @@ export default function CnameDomainPanel({ accessToken, owner, canManage }: { ac
     {zonesQuery.isError ? <FeedbackWhen title={t('errors.zonesLoadFailed')}
       action={<Button size="small" onClick={() => void zonesQuery.refetch()}>{t('actions.retry')}</Button>} /> : null}
     <Table<PlatformDNSZone> className="dns-cname-table" rowKey="id" size="middle" columns={columns} dataSource={listed}
-      loading={zonesQuery.isFetching} pagination={false} locale={{ emptyText: zonesQuery.isError ? t('errors.zonesLoadFailed') : t('zone.empty') }}
-      rowSelection={{ columnWidth: 70, selectedRowKeys: shown.map((zone) => zone.id), getCheckboxProps: () => ({ disabled: !canManage }),
-        onChange: (_, rows) => setSelected(rows) }} />
+      loading={zonesQuery.isFetching} pagination={false} scroll={{ x: 'max-content' }} locale={{ emptyText: zonesQuery.isError ? t('errors.zonesLoadFailed') : t('zone.empty') }}
+      rowSelection={namedRows<PlatformDNSZone>({ columnWidth: 70, selectedRowKeys: shown.map((zone) => zone.id), getCheckboxProps: () => ({ disabled: !canManage }),
+        onChange: (_, rows) => setSelected(rows) }, (zone) => zone.name, t('zone.selectionScope'))} />
     <Pagination className="dns-cname-pagination" current={page} pageSize={limit} total={zonesQuery.isError ? 0 : data?.total ?? 0} showSizeChanger
       pageSizeOptions={[10, 20, 50, 100]} showTotal={(total) => t('zone.total', { total })}
       locale={{ items_per_page: '条/页' }} onChange={(next, size) => query({ page: size === limit ? next : 1, limit: size })} />
@@ -208,10 +222,10 @@ export default function CnameDomainPanel({ accessToken, owner, canManage }: { ac
         <Button key="ok" type="primary" loading={saveMutation.isPending} onClick={submit}>{t('actions.ok')}</Button>,
       ]}>
       <Form className="dns-zone-form" labelCol={{ flex: '100px' }} labelAlign="right" colon={false}>
-        <Form.Item label={t('zone.nameLabel')} extra={t('zone.nameHelp')}
-          validateStatus={fieldErrors.name ? 'error' : undefined} help={fieldErrors.name}>
-          <Input ref={nameInput} aria-label={t('zone.name')} value={form.name} placeholder={t('zone.namePlaceholder')} autoComplete="off"
-            aria-invalid={fieldErrors.name ? true : undefined}
+        <Form.Item label={t('zone.nameLabel')}
+          validateStatus={fieldErrors.name ? 'error' : undefined} help={fieldErrors.name ? <span id="dns-zone-name-error">{fieldErrors.name}</span> : undefined}>
+          <Input ref={nameInput} aria-label={t('zone.cnameDomain')} value={form.name} placeholder={t('zone.namePlaceholder')} autoComplete="off"
+            aria-invalid={fieldErrors.name ? true : undefined} aria-describedby={fieldErrors.name ? 'dns-zone-name-error' : undefined}
             onChange={(event) => { saveKey.current = null; setFieldErrors({}); setForm((value) => ({ ...value, name: event.target.value })) }} />
         </Form.Item>
         <Form.Item label={t('zone.remarkLabel')} validateStatus={fieldErrors.remark ? 'error' : undefined} help={fieldErrors.remark}>
@@ -219,8 +233,8 @@ export default function CnameDomainPanel({ accessToken, owner, canManage }: { ac
             aria-invalid={fieldErrors.remark ? true : undefined}
             onChange={(event) => { saveKey.current = null; setFieldErrors({}); setForm((value) => ({ ...value, remark: event.target.value })) }} />
         </Form.Item>
-        <Form.Item label={t('zone.randomLabel')} extra={t('zone.randomEditHelp')}>
-          <Switch aria-label={t('zone.random')} checked={form.random}
+        <Form.Item label={t('zone.randomLabel')} extra={<span id="dns-zone-random-help">{t('zone.randomEditHelp')}</span>}>
+          <Switch aria-label={t('zone.random')} aria-describedby="dns-zone-random-help" checked={form.random}
             onChange={(random) => { saveKey.current = null; setForm((value) => ({ ...value, random })) }} />
         </Form.Item>
       </Form>

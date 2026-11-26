@@ -926,6 +926,16 @@ func TestBackgroundJobCommands094DownSerializesCommandAndCustomRoleWrites(t *tes
 		if err := downConn.QueryRow(t.Context(), `SELECT pg_backend_pid()`).Scan(&downPID); err != nil {
 			t.Fatal(err)
 		}
+		// The writer already holds custom_role_revisions when it waits on the
+		// down, so the two deadlock once the blocker commits. PostgreSQL aborts
+		// the waiter whose deadlock check runs first, and with both at the
+		// default 1s that was sometimes the down (deadlock detected on the
+		// down, the writer then succeeding). The writer checks at 5s and the
+		// down at 60s, so the writer is the one refused, as this test requires
+		//.
+		if _, err := downConn.Exec(t.Context(), `SET deadlock_timeout = '60s'`); err != nil {
+			t.Fatal(err)
+		}
 		downResult := make(chan error, 1)
 		go func() {
 			_, downErr := downConn.Exec(context.Background(),
@@ -941,6 +951,9 @@ func TestBackgroundJobCommands094DownSerializesCommandAndCustomRoleWrites(t *tes
 		defer writerConn.Release()
 		var writerPID int32
 		if err := writerConn.QueryRow(t.Context(), `SELECT pg_backend_pid()`).Scan(&writerPID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writerConn.Exec(t.Context(), `SET deadlock_timeout = '5s'`); err != nil {
 			t.Fatal(err)
 		}
 		writerResult := make(chan error, 1)

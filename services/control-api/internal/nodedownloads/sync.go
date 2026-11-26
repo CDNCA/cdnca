@@ -60,7 +60,7 @@ type Facts struct {
 type Config struct {
 	// Source is the release server origin (commercial: LICENSE_SERVICE_URL,
 	// community: the --release-server base); packages are read from
-	// <Source>/downloads/edge-agent/latest/.
+	// <ArtifactBase(Source)>/edge-agent/latest/.
 	Source string
 	// DownloadDir is the served /downloads directory (DATA_DIR/downloads).
 	DownloadDir string
@@ -106,6 +106,18 @@ func SourceURL(raw string) (string, error) {
 		return "", fmt.Errorf("node downloads source %q is not an https URL", raw)
 	}
 	return parsed.String(), nil
+}
+
+// ArtifactBase is the URL edge-agent/ is read from, the same rule as
+// install-control.sh release_artifact_base: a source with a path is the
+// release directory itself (https://www.cdnca.com/downloads/ce), a bare
+// origin keeps the release tarball layout under /downloads.
+func ArtifactBase(source string) string {
+	parsed, err := url.Parse(source)
+	if err == nil && strings.Trim(parsed.Path, "/") == "" {
+		return strings.TrimRight(source, "/") + "/downloads"
+	}
+	return strings.TrimRight(source, "/")
 }
 
 func New(config Config) (*Syncer, error) {
@@ -184,7 +196,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) Status {
 }
 
 func (s *Syncer) sync(ctx context.Context, status *Status) (string, string, error) {
-	base := s.config.Source + "/downloads/edge-agent/latest/"
+	base := ArtifactBase(s.config.Source) + "/edge-agent/latest/"
 	var sums strings.Builder
 	if err := s.fetch(ctx, base+ChecksumsName, maxChecksums, &sums); err != nil {
 		return StateFailed, "source_unreachable", err

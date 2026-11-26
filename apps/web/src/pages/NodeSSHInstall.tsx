@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Checkbox, Form, Input, InputNumber, Radio, Space, Table, Tag } from 'antd'
+import { Button, Checkbox, Form, Input, InputNumber, Radio, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/auth'
 import { nodeSSHInstallApi, parseHosts, restrictAllowOf, restrictErrorText, type SSHInstallJob } from '../api/nodeSSHInstall'
 import './NodeSSHInstall.locale'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
 
 interface FormValues {
   hosts: string

@@ -27,6 +27,16 @@ type ModuleGrants struct {
 	Status      string
 	LeaseSerial uint64
 	Codes       []string
+	// LeaseCodes is the usable lease's literal module codes before local disables (GET /v1/modules
+	// lease_modules); LocallyDisabled is the codes this controller stopped. Both empty unless Status is valid
+	// (a local stop is not a missing grant).
+	LeaseCodes      []string
+	LocallyDisabled []string
+	// Features is the other (non-module) feature codes of the same usable
+	// lease, e.g. packages.manage, so a page can tell "the license lacks this
+	// feature" from "the license is not usable" before calling a gated write
+	//. Empty under the same rule as Codes.
+	Features []string
 }
 
 func (grants ModuleGrants) Has(code string) bool {
@@ -119,12 +129,14 @@ func (g *Guard) grantedLeaseModules(ctx context.Context, tx pgx.Tx) (ModuleGrant
 		WHERE installation.singleton = true`,
 	).Scan(&installationID, &serial, &encodedLease, &cachedStatus)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (serial == nil || len(encodedLease) == 0)) {
-		return ModuleGrants{Status: StatusUninstalled, Codes: []string{}}, nil
+		return ModuleGrants{Status: StatusUninstalled, Codes: []string{}, LeaseCodes: []string{}, LocallyDisabled: []string{},
+			Features: []string{}}, nil
 	}
 	if err != nil {
 		return ModuleGrants{}, err
 	}
-	denied := ModuleGrants{Status: StatusInvalid, LeaseSerial: uint64(*serial), Codes: []string{}}
+	denied := ModuleGrants{Status: StatusInvalid, LeaseSerial: uint64(*serial), Codes: []string{}, LeaseCodes: []string{},
+		LocallyDisabled: []string{}, Features: []string{}}
 	if g.trust == nil {
 		return denied, nil
 	}
@@ -152,17 +164,30 @@ func (g *Guard) grantedLeaseModules(ctx context.Context, tx pgx.Tx) (ModuleGrant
 	if cachedStatus != nil && *cachedStatus == string(entitlement.StatusRevoked) {
 		status = entitlement.StatusRevoked
 	}
-	grants := ModuleGrants{Status: string(status), LeaseSerial: verified.Lease.Serial, Codes: []string{}}
+	grants := ModuleGrants{Status: string(status), LeaseSerial: verified.Lease.Serial, Codes: []string{}, LeaseCodes: []string{},
+		LocallyDisabled: []string{}, Features: []string{}}
 	if leaseUsable(status) {
+		for _, feature := range verified.Lease.Features {
+			if _, _, module := entitlement.ParseModuleFeatureCode(feature.Code); !module {
+				grants.Features = append(grants.Features, feature.Code)
+			}
+		}
 		stopped, err := LocallyDisabledCodes(ctx, tx)
 		if err != nil {
 			return ModuleGrants{}, err
 		}
 		for _, code := range verified.Lease.ModuleCodes() {
+			grants.LeaseCodes = append(grants.LeaseCodes, code)
 			if !stopped[code] {
 				grants.Codes = append(grants.Codes, code)
 			}
 		}
+		for code, off := range stopped {
+			if off {
+				grants.LocallyDisabled = append(grants.LocallyDisabled, code)
+			}
+		}
+		slices.Sort(grants.LocallyDisabled)
 	}
 	return grants, nil
 }

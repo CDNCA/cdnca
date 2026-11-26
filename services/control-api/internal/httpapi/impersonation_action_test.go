@@ -11,7 +11,7 @@ import (
 func TestImpersonationAPIKeyReadIsNotSensitive(t *testing.T) {
 	for _, c := range []struct {
 		method, path string
-		sensitive   bool
+		sensitive    bool
 	}{
 		{"GET", "/v1/account/api-keys", false},
 		{"GET", "/v1/account/api-keys/compatibility", false},

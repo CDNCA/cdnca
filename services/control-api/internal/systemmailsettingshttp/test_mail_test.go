@@ -88,3 +88,40 @@ func TestHandlerMapsUnlicensedMailModuleToForbidden(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+// Issue 15: a test that did not send is not a 2xx.
+func TestHandlerTestMailStatusFollowsOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result systemmailsettings.TestResult
+		status int
+		want   []string
+	}{
+		{"sent", systemmailsettings.TestResult{OK: true, Provider: "smtp", MessageID: "m-1"}, http.StatusOK,
+			[]string{`"ok":true`, `"message_id":"m-1"`}},
+		{"incomplete", systemmailsettings.TestResult{Provider: "smtp", Code: systemmailsettings.CodeConfigIncomplete,
+			Missing: []string{"value.smtp_address", "smtp_password"}}, http.StatusUnprocessableEntity,
+			[]string{`"code":"system_mail_settings_config_incomplete"`, `"missing":["value.smtp_address","smtp_password"]`, `"request_id":"mail-test-3"`}},
+		{"refused", systemmailsettings.TestResult{Provider: "smtp", Code: "credential_rejected"}, http.StatusBadGateway,
+			[]string{`"code":"system_mail_settings_test_failed"`, `"reason":"credential_rejected"`, `"provider":"smtp"`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler, _ := New(&testerStub{result: tc.result}, func(*http.Request, string) (identity.AuthenticatedSession, error) { return testSession(), nil })
+			handler.WithTestSender(func(context.Context, systemmailsettings.TestTarget) (string, error) { return "", nil })
+			body, _ := json.Marshal(map[string]any{"value": systemmailsettings.DefaultSettings(), "to": "ops@example.com"})
+			request := httptest.NewRequest(http.MethodPost, route+"/tests", bytes.NewReader(body))
+			request.Header.Set("Authorization", "Bearer session")
+			request.Header.Set("X-Request-ID", "mail-test-3")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != tc.status {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(response.Body.String(), want) {
+					t.Fatalf("body %s lacks %s", response.Body.String(), want)
+				}
+			}
+		})
+	}
+}

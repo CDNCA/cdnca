@@ -15,7 +15,7 @@ const zhCN = {
     imported: '已导入：新增 {{created}} 条，更新 {{updated}} 条', saved: '已保存', deleted: '已删除', save: '保存', cancel: '取消',
   },
   hits: {
-    hint: '以下站点的域名被黑名单覆盖。停用走站点批量停用，会下发到节点并写审计。',
+    hint: '以下站点的域名被黑名单覆盖。停用走站点批量停用，会下发到节点并写审计。', selectionScope: '站点',
     site: '站点', domain: '命中域名', pattern: '黑名单规则', status: '状态', enabled: '已启用', disabled: '已停用',
     disable: '一键停用所选', disabled_count: '已停用 {{count}} 个站点', failed_count: '{{count}} 个站点停用失败', none: '没有命中的站点',
   },
@@ -33,6 +33,7 @@ const zhCN = {
   statuses: { pending: '待验证', verified: '已验证', expired: '已失效', revoked: '已撤销' },
   user: {
     title: '已验证域名',
+    conflictSelectionScope: '域名',
     subtitle: '验证根域名所有权后长期有效（仅管理员可撤销），其他账户不能再添加该根域名下的任何域名；他人已先添加的同名站点可以认领，对方站点会被自动停用。',
     add: '验证新域名', domain: '域名', domainPlaceholder: '例如 example.com 或 www.example.com', start: '获取验证信息',
     txtStep: '在域名的 DNS 中添加以下 TXT 记录，生效后点“立即检查”：', httpStep: '在网站根目录放置以下文件，内容为验证码：',
@@ -80,7 +81,7 @@ const enUS: Messages = {
     imported: 'Imported: {{created}} created, {{updated}} updated', saved: 'Saved', deleted: 'Deleted', save: 'Save', cancel: 'Cancel',
   },
   hits: {
-    hint: 'These sites use a blocklisted domain. Disabling uses the site batch action, publishes to nodes and is audited.',
+    hint: 'These sites use a blocklisted domain. Disabling uses the site batch action, publishes to nodes and is audited.', selectionScope: 'sites',
     site: 'Site', domain: 'Domain', pattern: 'Rule', status: 'Status', enabled: 'Enabled', disabled: 'Disabled',
     disable: 'Disable selected', disabled_count: '{{count}} sites disabled', failed_count: '{{count}} sites could not be disabled', none: 'No sites match',
   },
@@ -98,6 +99,7 @@ const enUS: Messages = {
   statuses: { pending: 'Pending', verified: 'Verified', expired: 'Expired', revoked: 'Revoked' },
   user: {
     title: 'Verified domains',
+    conflictSelectionScope: 'domains',
     subtitle: 'A verified root domain stays verified until an administrator revokes it; other accounts cannot add any domain under it. Sites others added first can be claimed; their sites are disabled.',
     add: 'Verify a domain', domain: 'Domain', domainPlaceholder: 'e.g. example.com or www.example.com', start: 'Get verification details',
     txtStep: 'Add this TXT record to the domain DNS, then click Check now:', httpStep: 'Serve this file from the site root with the token as its content:',

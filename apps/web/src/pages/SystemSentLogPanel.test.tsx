@@ -40,13 +40,15 @@ it('renders the eight reference columns from real history fields and labels unav
     ...fact, id: `${outboxID}:3`, sequence: 3, recipient_user_id: null, recipient_user_display_id: null, recipient_kind: 'anonymous', failure_code: null,
   }]))
   renderWithProviders(<SystemSentLogPanel />)
-  expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['收件人', '消息ID', '标题/内容', '媒介', '失败次数', '状态', '原因', '发送时间'])
+  expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['收件人', '消息ID', '媒介', '失败次数', '状态', '原因', '发送时间'])
   const row = await screen.findByText('用户 15')
   expect(within(row.closest('tr')!).getByText('2', { selector: 'td' })).toBeInTheDocument()
   expect(within(row.closest('tr')!).getByText('等待重试')).toBeInTheDocument()
   expect(within(row.closest('tr')!).getByText('发送服务暂不可用')).toBeInTheDocument()
   expect(screen.getByText('匿名收件人')).toBeInTheDocument()
-  expect(screen.getAllByText('暂无历史快照')).toHaveLength(4)
+  // the always-empty title/content column is gone; the recipient
+  // snapshot note stays.
+  expect(screen.getAllByText('暂无历史快照')).toHaveLength(2)
   expect(screen.getAllByText(messageID)).toHaveLength(2)
 })
 
@@ -173,13 +175,13 @@ it('removes old history immediately when read permission is revoked', async () =
 })
 
 it.each<[UserLocale, string, string]>([
-  ['zh-TW', '標題/內容', '暫無歷史快照'], ['en-US', 'Title/content', 'Historical snapshot unavailable'], ['qps-ploc', '［标~题~/~内~容~］', '［暂~无~历~史~快~照~］'],
+  ['zh-TW', '收件人', '暫無歷史快照'], ['en-US', 'Recipient', 'Historical snapshot unavailable'], ['qps-ploc', '［收~件~人~］', '［暂~无~历~史~快~照~］'],
 ])('renders the %s language resources without missing keys', async (locale, heading, unavailable) => {
   await changeLocale(locale)
   vi.mocked(notificationHistoryApi.list).mockResolvedValue(page([fact]))
   renderWithProviders(<SystemSentLogPanel />)
   expect(screen.getByRole('columnheader', { name: heading })).toBeInTheDocument()
-  await waitFor(() => expect(screen.getAllByText(unavailable)).toHaveLength(2))
+  await waitFor(() => expect(screen.getAllByText(unavailable)).toHaveLength(1))
 })
 
 
@@ -189,7 +191,7 @@ it('shows recorded masked contacts and distinguishes call time from record time'
   expect(await screen.findByText('m***@example.test')).toBeInTheDocument()
   expect(screen.getByText('2026/09/28 09:01:02')).toBeInTheDocument()
   expect(screen.getByText('记录时间：2026/09/28 09:02:03')).toBeInTheDocument()
-  expect(screen.getAllByText('暂无历史快照')).toHaveLength(1)
+  expect(screen.queryByText('暂无历史快照')).toBeNull()
 })
 
 it.each([

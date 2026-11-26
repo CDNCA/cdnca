@@ -42,24 +42,121 @@ describe('dashboard trend display', () => {
     expect(screen.queryByRole('button', { name: '下一组排行' })).not.toBeInTheDocument()
   })
 
-  it('shows scroll arrows only while ranking tabs overflow and removes them after expansion', async () => {
+  // overflow compares the tab bar with the tabs' own
+  // track, so showing the arrows (which shrinks the scroll viewport) cannot
+  // flip the decision back.
+  function observeRankTabs() {
+    const callbacks: ResizeObserverCallback[] = []
+    const observed: Element[] = []
+    window.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) { callbacks.push(callback) }
+      observe(target: Element) { observed.push(target) }
+      unobserve() {}
+      disconnect() {}
+    }
+    const fire = () => act(() => { for (const callback of callbacks) callback([], {} as ResizeObserver) })
+    return { observed, fire }
+  }
+
+  function sizeRankTabs(container: HTMLElement, barWidth: number, tabsWidth: number) {
+    const bar = container.querySelector<HTMLElement>('.dashboard-rank-tabbar')!
+    const viewport = container.querySelector<HTMLElement>('.dashboard-rank-tablist')!
+    const track = container.querySelector<HTMLElement>('.dashboard-rank-tabtrack')!
+    Object.defineProperty(bar, 'clientWidth', { value: barWidth, configurable: true })
+    Object.defineProperty(track, 'scrollWidth', { value: tabsWidth, configurable: true })
+    // The viewport loses the arrows' width once they show, as in a browser.
+    Object.defineProperty(viewport, 'clientWidth', { configurable: true,
+      get: () => barWidth - (container.querySelectorAll('.dashboard-rank-tab-arrow').length > 0 ? 52 : 0) })
+    Object.defineProperty(viewport, 'scrollWidth', { configurable: true, get: () => Math.max(tabsWidth, viewport.clientWidth) })
+    return { bar, viewport, track }
+  }
+
+  const arrows = () => screen.queryAllByRole('button', { name: /一组排行$/ }).length
+
+  it.each(['admin', 'tenant'] as const)('keeps ranking tabs without arrows while they fit (%s caller)', (caller) => {
     const originalObserver = window.ResizeObserver
-    let update: ResizeObserverCallback | undefined
-    window.ResizeObserver = class { constructor(callback: ResizeObserverCallback) { update = callback } observe() {} unobserve() {} disconnect() {} }
+    const { observed, fire } = observeRankTabs()
     try {
-      const view = renderWithProviders(<DashboardAnalyticsView variant="admin" mode="rankings" locale="zh-CN" analytics={{ summary, trend: [], top: [] }} />)
-      const viewport = view.container.querySelector<HTMLElement>('.dashboard-rank-tablist')!
-      Object.defineProperty(viewport, 'scrollWidth', { value: 350 })
-      Object.defineProperty(viewport.parentElement, 'clientWidth', { value: 300, configurable: true })
-      act(() => update!([], {} as ResizeObserver))
-      await userEvent.setup().click(screen.getByRole('button', { name: '下一组排行' }))
-      expect(viewport.scrollLeft).toBe(112)
-      Object.defineProperty(viewport.parentElement, 'clientWidth', { value: 360, configurable: true })
-      act(() => update!([], {} as ResizeObserver))
-      expect(screen.queryByRole('button', { name: '下一组排行' })).not.toBeInTheDocument()
+      const view = renderWithProviders(<DashboardAnalyticsView variant="admin" mode="rankings" locale="zh-CN"
+        rankingsTitle={caller === 'tenant' ? 'TOP10 数据' : undefined} analytics={{ summary, trend: [], top: [] }} />)
+      const { bar, viewport, track } = sizeRankTabs(view.container, 288, 246)
+      expect(observed).toEqual([bar, track])
+      expect(observed).not.toContain(viewport)
+      for (let round = 0; round < 5; round++) {
+        fire()
+        expect(arrows()).toBe(0)
+      }
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['域名', 'URL', 'IP', '国家'])
     } finally {
       window.ResizeObserver = originalObserver
     }
+  })
+
+  it('shows stable scroll arrows while ranking tabs overflow and removes them after widening', async () => {
+    const originalObserver = window.ResizeObserver
+    const { fire } = observeRankTabs()
+    try {
+      const view = renderWithProviders(<DashboardAnalyticsView variant="admin" mode="rankings" locale="zh-CN" analytics={{ summary, trend: [], top: [] }} />)
+      const { viewport } = sizeRankTabs(view.container, 238, 246)
+      for (let round = 0; round < 5; round++) {
+        fire()
+        expect(arrows()).toBe(2)
+      }
+      await userEvent.setup().click(screen.getByRole('button', { name: '下一组排行' }))
+      expect(viewport.scrollLeft).toBe(112)
+      sizeRankTabs(view.container, 360, 246)
+      fire()
+      fire()
+      expect(arrows()).toBe(0)
+    } finally {
+      window.ResizeObserver = originalObserver
+    }
+  })
+
+  it('scrolls overflowing ranking tabs sideways with a vertical wheel', () => {
+    const originalObserver = window.ResizeObserver
+    const { fire } = observeRankTabs()
+    try {
+      const view = renderWithProviders(<DashboardAnalyticsView variant="admin" mode="rankings" locale="zh-CN" analytics={{ summary, trend: [], top: [] }} />)
+      const { viewport } = sizeRankTabs(view.container, 238, 300)
+      fire()
+      const wheel = new WheelEvent('wheel', { deltaY: 40, cancelable: true })
+      viewport.dispatchEvent(wheel)
+      expect(viewport.scrollLeft).toBe(40)
+      expect(wheel.defaultPrevented).toBe(true)
+    } finally {
+      window.ResizeObserver = originalObserver
+    }
+  })
+
+  it('scrolls a selected ranking tab fully into the viewport', async () => {
+    const originalObserver = window.ResizeObserver
+    const { fire } = observeRankTabs()
+    try {
+      const view = renderWithProviders(<DashboardAnalyticsView variant="admin" mode="rankings" locale="zh-CN" analytics={{
+        summary, trend: [], top: [{ dimension: 'domain', snapshot_at: '2026-09-25T05:00:00Z', items: [] }, { dimension: 'region', snapshot_at: '2026-09-25T05:00:00Z', items: [] }],
+      }} />)
+      const { viewport } = sizeRankTabs(view.container, 238, 246)
+      fire()
+      const rect = (left: number, width: number) => ({ left, right: left + width, width, top: 0, bottom: 32, height: 32, x: left, y: 0, toJSON: () => ({}) })
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        if (this === viewport) return rect(26, 186) as DOMRect
+        if (this.textContent === '国家') return rect(200 - viewport.scrollLeft, 60) as DOMRect
+        return rect(0, 0) as DOMRect
+      })
+      await userEvent.setup().click(screen.getByRole('tab', { name: '国家' }))
+      expect(viewport.scrollLeft).toBe(48)
+    } finally {
+      window.ResizeObserver = originalObserver
+    }
+  })
+
+  it('names the ranking section by the caller title and defaults to the admin 30-minute title', () => {
+    const admin = renderWithProviders(<DashboardAnalyticsView variant="admin" mode="rankings" locale="zh-CN" analytics={{ summary, trend: [], top: [] }} />)
+    expect(screen.getByRole('region', { name: 'TOP10 数据 (近30分钟)' })).toBeInTheDocument()
+    admin.unmount()
+    renderWithProviders(<DashboardAnalyticsView variant="admin" mode="rankings" locale="zh-CN" rankingsTitle="TOP10 数据" analytics={{ summary, trend: [], top: [] }} />)
+    expect(screen.getByRole('region', { name: 'TOP10 数据' })).toBeInTheDocument()
   })
 
   it.each(['zh-CN', 'en-US', 'qps-ploc'])('formats timestamps in the business timezone for %s', async (locale) => {

@@ -1,4 +1,5 @@
-import { Button, Empty, Space, Table, Tag, Tooltip, Typography } from 'antd'
+import { Button, Empty, Space, Tag, Tooltip, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 

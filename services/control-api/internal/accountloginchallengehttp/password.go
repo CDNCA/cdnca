@@ -10,6 +10,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountloginchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
+	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/google/uuid"
 )
 
@@ -61,6 +62,13 @@ func (handler *Handler) servePasswordChallenge(writer http.ResponseWriter, reque
 			return
 		}
 		captcha = &identity.LoginCaptchaProof{ID: id, Answer: body.Captcha.Answer}
+		// spent with the binding cookie it was issued with,
+		// its own when its issue minted the browser binding
+		if cookie, err := request.Cookie(identity.LoginCaptchaImageBindingCookie(id)); err == nil {
+			captcha.Binding = cookie.Value
+		} else if cookie, err := request.Cookie(identity.LoginCaptchaBindingCookie); err == nil {
+			captcha.Binding = cookie.Value
+		}
 	}
 	creator, ok := handler.service.(interface {
 		CreatePassword(context.Context, accountloginchallenge.PasswordCreateInput) (accountloginchallenge.CreateResult, error)
@@ -82,6 +90,7 @@ func (handler *Handler) servePasswordChallenge(writer http.ResponseWriter, reque
 		Source:  source.Unmap().String(), HumanToken: body.HumanToken, IdempotencyKey: key, RequestID: requestID,
 	})
 	if err != nil {
+		refusalreason.Record(request.Context(), refusalreason.Of(err))
 		handler.writeServiceError(writer, requestID, err)
 		return
 	}

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { AppRoutes } from '../App'
 import { sitesApi, type SiteListResponse } from '../api/sites'
 import { useSessionStore } from '../auth/session'
+import { clearFilterUrlMemory } from '../pages/filterUrl'
 import { getNavigation } from '../routes/navigation'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
@@ -39,6 +40,9 @@ function authenticate(scope: 'tenant' | 'platform', permissions: string[]) {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
+
+// 每个用例是新标签页：上一用例写进 URL 的条件不算本会话写的。
+beforeEach(() => clearFilterUrlMemory())
 
 describe('security ban list page', () => {
   it('lists bans and releases one on confirmation', async () => {
@@ -309,5 +313,114 @@ describe('security ban list page', () => {
     const auto = (await screen.findByText('198.51.100.8')).closest('tr') as HTMLElement
     expect(within(auto).getByText('智能自动防御')).toBeInTheDocument()
     expect(screen.queryByText(/封禁会经节点市场下发到卖家的订阅节点/)).not.toBeInTheDocument()
+  })
+})
+
+// 客户端 IP 筛选按服务端规则先校验、就地报错；服务端拒绝同样记在字段上，
+// 已有结果保留，不报「加载失败」。
+describe('security ban list client IP filter', () => {
+  it('marks an invalid IP on its field, sends nothing and keeps the rows', async () => {
+    authenticate('tenant', ['security_policies.read'])
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      calls.push(String(input).replace(/^https?:\/\/[^/]+/, ''))
+      return json({ items: [ban()], total: 1, page: 1, limit: 20 })
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, ['/site/security-bans'])
+    expect(await screen.findByText('198.51.100.9')).toBeInTheDocument()
+
+    const field = screen.getByRole('textbox', { name: '客户端 IP' })
+    await user.type(field, 'not-an-ip')
+    await user.click(screen.getByRole('button', { name: '查询' }))
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(field).toHaveAccessibleDescription('请输入有效的 IP 地址或网段（IPv4 最大 /8，IPv6 最大 /32）。')
+    await waitFor(() => expect(field).toHaveFocus())
+    expect(screen.getByText('198.51.100.9')).toBeInTheDocument()
+    expect(screen.queryByText('封禁名单加载失败，请重试。')).not.toBeInTheDocument()
+    expect(calls.some((call) => call.includes('client_ip='))).toBe(false)
+
+    await user.clear(field)
+    await user.type(field, '203.0.113.0/24')
+    await user.click(screen.getByRole('button', { name: '查询' }))
+    await waitFor(() => expect(calls.some((call) => call.includes('client_ip=203.0.113.0%2F24'))).toBe(true))
+    expect(field).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('puts a server validation_error on the IP field and returns to the last rows', async () => {
+    authenticate('tenant', ['security_policies.read'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).includes('client_ip=')) return json({ error: { code: 'validation_error', message: 'security ban request is invalid' } }, 400)
+      return json({ items: [ban()], total: 1, page: 1, limit: 20 })
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, ['/site/security-bans'])
+    expect(await screen.findByText('198.51.100.9')).toBeInTheDocument()
+
+    const field = screen.getByRole('textbox', { name: '客户端 IP' })
+    await user.type(field, '127.0.0.1')
+    await user.click(screen.getByRole('button', { name: '查询' }))
+    await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'))
+    expect(await screen.findByText('198.51.100.9')).toBeInTheDocument()
+    expect(screen.queryByText('封禁名单加载失败，请重试。')).not.toBeInTheDocument()
+  })
+
+  // 空提交时焦点移到第一个出错的字段（网站）。
+  it('moves focus to the first invalid field on an empty ban', async () => {
+    authenticate('tenant', ['security_policies.read', 'security_policies.manage'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ items: [], total: 0, page: 1, limit: 20 }))
+    mockSites([{ id: siteID, domain: 'shop.example.com' }, { id: otherSiteID, domain: 'blog.example.com' }])
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, ['/site/security-bans'])
+    expect(await screen.findByText('暂无封禁记录')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /手工封禁/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: '封禁' }))
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: '网站' })).toHaveFocus())
+  })
+
+  // 连续输入只按停顿后的词查一次。
+  it('searches sites once typing pauses', async () => {
+    authenticate('tenant', ['security_policies.read', 'security_policies.manage'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ items: [], total: 0, page: 1, limit: 20 }))
+    const list = mockSites([{ id: siteID, domain: 'shop.example.com' }, { id: otherSiteID, domain: 'blog.example.com' }])
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, ['/site/security-bans'])
+    expect(await screen.findByText('暂无封禁记录')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /手工封禁/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByRole('combobox', { name: '网站' }), 'shop')
+    await waitFor(() => expect(list).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ domain: 'shop' })))
+    const domains = list.mock.calls.map(([, params]) => (params as { domain?: string }).domain)
+    expect(domains.filter((domain) => domain && domain !== 'shop')).toEqual([])
+  })
+
+  it('restores the applied filters from the URL and keeps the table scrolling on its own', async () => {
+    authenticate('tenant', ['security_policies.read', 'security_policies.manage'])
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      calls.push(String(input).replace(/^https?:\/\/[^/]+/, ''))
+      return json({ items: [ban({ state: 'released', released_at: '2026-10-19T01:30:00Z' })], total: 60, page: 2, limit: 50 })
+    })
+    renderWithProviders(<AppRoutes />, ['/site/security-bans?client_ip=198.51.100.9&state=released&page=2&limit=50'])
+    expect(await screen.findByText('198.51.100.9')).toBeInTheDocument()
+    const first = new URL(calls.find((call) => call.startsWith('/v1/security-bans'))!, 'https://cdnca.test').searchParams
+    expect(Object.fromEntries(first)).toEqual({ page: '2', limit: '50', client_ip: '198.51.100.9', state: 'released' })
+    expect(screen.getByRole('textbox', { name: '客户端 IP' })).toHaveValue('198.51.100.9')
+    expect(screen.getByRole('combobox', { name: '状态' }).closest('.ant-select')).toHaveTextContent('已解封')
+    const row = screen.getByText('198.51.100.9').closest('tr') as HTMLElement
+    expect(row.lastElementChild).toHaveClass('ant-table-cell-fix-right')
+  })
+
+  it('falls back to the defaults for an unknown state in the URL', async () => {
+    authenticate('tenant', ['security_policies.read'])
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      calls.push(String(input).replace(/^https?:\/\/[^/]+/, ''))
+      return json({ items: [], total: 0, page: 1, limit: 20 })
+    })
+    renderWithProviders(<AppRoutes />, ['/site/security-bans?state=bogus&page=x'])
+    expect(await screen.findByText('暂无封禁记录')).toBeInTheDocument()
+    expect(calls.find((call) => call.startsWith('/v1/security-bans'))).toBe('/v1/security-bans?page=1&limit=20&state=active')
   })
 })

@@ -14,11 +14,10 @@ import {
   Select,
   Space,
   Spin,
-  Table,
   Tag,
   type TableColumnsType,
 } from 'antd'
-import { useFeedback, useFeedbackMessage, useFormSubmitError, FeedbackWhen, OutcomeUnknown, TimeRangeFilter, type TimeRangeValue, PageSection } from '@cdnca/ui'
+import { useFeedback, useFeedbackMessage, useFormSubmitError, FeedbackWhen, OutcomeUnknown, TimeRangeFilter, type TimeRangeValue, PageSection, Table } from '@cdnca/ui'
 import { Check, ChevronLeft, ChevronRight, Clipboard, Eye, Play, Plus, RefreshCw, RotateCw, Send, ShieldOff } from 'lucide-react'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'

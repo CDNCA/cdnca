@@ -1,0 +1,23 @@
+/* 53 补充：创建后横幅的三项进度（保存 / 节点发布 / DNS 接入），窄屏自动换行。只用共享色值变量。 */
+.site-created-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.site-created-progress > li.is-ok {
+  color: var(--cdnca-color-success);
+}
+
+.site-created-progress > li.is-pending {
+  color: var(--cdnca-color-warning);
+}
+
+.site-created-progress > li.is-failed {
+  color: var(--cdnca-color-error);
+}

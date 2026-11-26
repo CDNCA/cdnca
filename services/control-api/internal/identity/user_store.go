@@ -182,10 +182,10 @@ func (s *Store) CreateManagedUser(ctx context.Context, actor Actor, input create
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO users (
-				id, username, display_name, email, phone, password_hash, created_at, updated_at, remark, qq
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, NULLIF($8,''), NULLIF($9,''))`,
+				id, username, display_name, email, phone, password_hash, created_at, updated_at, remark, qq, status
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, NULLIF($8,''), NULLIF($9,''), COALESCE(NULLIF($10,''),'active'))`,
 			input.UserID, input.Username, input.Fields.DisplayName, nullableString(input.Fields.Email),
-			nullableString(input.Fields.Phone), input.PasswordHash, now, input.Remark, input.QQ,
+			nullableString(input.Fields.Phone), input.PasswordHash, now, input.Remark, input.QQ, input.Status,
 		); err != nil {
 			if isUniqueViolation(err) {
 				return ErrConflict
@@ -229,6 +229,9 @@ func (s *Store) CreateManagedUser(ctx context.Context, actor Actor, input create
 			"tenant_id": input.TenantID.String(), "tenant_scope_id": input.ScopeID.String(),
 			"role": input.Role, "group_id": input.GroupID,
 			"remark_changed": userMetadataChanged(nil, input.Remark), "qq_changed": userMetadataChanged(nil, input.QQ),
+		}
+		if input.Status != "" {
+			payload["status"] = input.Status
 		}
 		if input.ParentScopeID != nil {
 			// 代理商开户：代理商 scope 与客户 scope 各记一条（ADR 0018 §7 审计）。

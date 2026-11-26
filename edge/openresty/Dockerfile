@@ -126,7 +126,7 @@ RUN set -eu; \
 		echo '3df863a8177361103a0deb58cc1a8291f636f5a85c9d4d47f5613dde4f7171f8  /usr/local/share/cdnca/dynroute/cdnca_originauth.lua' | sha256sum -c -; \
 		echo 'bc97c630cf2dab304e8af431bb7c4aebe3f0da78e0d446ef071603a28101e72a  /usr/local/share/cdnca/dynroute/cdnca_origintls.lua' | sha256sum -c -; \
 		echo '728800e18c96655628548037ac827e9fa93c383c2f5ab69e4035436a5998b639  /usr/local/share/cdnca/dynroute/cdnca_cache.lua' | sha256sum -c -; \
-		echo '9cff6e7ec49144f620e3eceea4a721272ec04b43b1102ca6d1360b907d19ce68  /usr/local/share/cdnca/dynroute/cdnca_security.lua' | sha256sum -c -; \
+		echo '8072e2879a14aa7f908d9e032a8bfadef08b998519e75d4d49960465e2204bb8  /usr/local/share/cdnca/dynroute/cdnca_security.lua' | sha256sum -c -; \
 		echo '8526a9029ec4f0438dd4823cb1ac427ec6c5155d2a73927ec38e902522de0d91  /usr/local/share/cdnca/dynroute/cdnca_managed_waf.lua' | sha256sum -c -; \
 		echo '30514f7b4f896d696c48248db0e3674c1c99d0d7ce167b4eb9d92ae8dcfb9afc  /usr/local/share/cdnca/dynroute/cdnca_rule_plan.lua' | sha256sum -c -; \
 		echo '780a3da89e488a77dce21096b6640bb7ac0ebf67bd6675b79519442ad3f83cc6  /usr/local/share/cdnca/dynroute/cdnca_bot.lua' | sha256sum -c -; \
@@ -134,7 +134,7 @@ RUN set -eu; \
 		echo '7442c3f1803bf8d013eb57c436b76e84a01e6a911f3a54b75fce1b1770baf471  /usr/local/share/cdnca/dynroute/cdnca_limits.lua' | sha256sum -c -; \
 		echo '38314497958285c1072e4e1ef7d4c0fbe41e3e03ed148807a008a6cb88e4cb21  /usr/local/share/cdnca/security/cc_adaptive.lua' | sha256sum -c -; \
 		echo 'ce3120c32b8074fbb7ba6999b6b0bfa302bd3b2b69362aff647e6a143e3d6c62  /usr/local/share/cdnca/security/url_auth.lua' | sha256sum -c -; \
-		echo '4b9bb65918b71c73b079e008a1c51af84000e3b431f361a0ea49009216090f47  /usr/local/share/cdnca/httppolicy/engine.lua' | sha256sum -c -; \
+		echo '7ba95b0d2f4ffff7212b9aadfe1c84841df7af649ddd4f17069aebc31cc2d4b9  /usr/local/share/cdnca/httppolicy/engine.lua' | sha256sum -c -; \
 		echo '111498e20ea67dcf063ce61099367c0f914646776ab12f2df9843e3006896468  /usr/local/share/cdnca/firewallaction/engine.lua' | sha256sum -c -; \
 		echo 'd1d4089ff06a88f39f298556cc7acac33ed9a4b1a9295788201ba804bbeaaeaf  /usr/local/share/cdnca/siteaccess/engine.lua' | sha256sum -c -; \
 		echo '1c40f52bed3f85964bfa4c2ff686d11ed12643c08caf0addfb74e3996bf6bd0a  /usr/local/openresty/site/lualib/resty/ipmatcher.lua' | sha256sum -c -; \
@@ -149,7 +149,7 @@ RUN set -eu; \
 		echo '2eca890fb7c2845541cba744cf76b9a2ad880068e3e2f1961377f32ffaa19dad  /opt/cdnca/l4geo/cdnca_l4_geo.lua' | sha256sum -c -; \
 		echo 'a50bfda12abcfac7906c405bd8d7eaf81010c29c840ddce2a4459ce453cebe83  /usr/local/share/cdnca/security/cdnca_iplib.lua' | sha256sum -c -; \
 		echo 'a50bfda12abcfac7906c405bd8d7eaf81010c29c840ddce2a4459ce453cebe83  /opt/cdnca/l4geo/cdnca_iplib.lua' | sha256sum -c -; \
-		echo '6229be063241d0cb4c836b834b560ee191c353f2dd66378d3be12073e980842c  /usr/local/share/cdnca/dynroute/cdnca_dynroute.lua' | sha256sum -c -; \
+		echo 'a7002f699f349a3807adadcc1bef6e64235e4700e56eee5fdd6888a7601619b5  /usr/local/share/cdnca/dynroute/cdnca_dynroute.lua' | sha256sum -c -; \
 		echo '1e9ff22748e05660ca4dc01f2340315c16f965357b880940a1504dd1bcfe9616  /usr/local/share/cdnca/dynroute/cdnca_telemetry.lua' | sha256sum -c -; \
 		echo '8bb4d8252e1d9179024902e3e0718c17f5389306162e0494908fcee7738019ba  /usr/local/share/cdnca/dynroute/cdnca_webp.lua' | sha256sum -c -; \
 		echo '0dca4914a233493be30273245f4a8674c9d24f35ad678d921d583a0817d6fcdb  /usr/local/share/cdnca/dynroute/cdnca_rum.lua' | sha256sum -c -; \

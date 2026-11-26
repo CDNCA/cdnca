@@ -79,12 +79,29 @@ type CategoryDocument struct {
 	Revision       int64  `json:"revision"`
 	Status         string `json:"status"`
 	SnapshotSHA256 string `json:"snapshot_sha256"`
+	// ActiveSnapshotSHA256 is the active revision's snapshot hash (omitted
+	// before any activation). Equal to SnapshotSHA256 when the head carries
+	// no change at all, e.g. a draft restored to the active configuration
+	//.
+	ActiveSnapshotSHA256 string `json:"active_snapshot_sha256,omitempty"`
 	// PendingCategories lists the categories whose head value differs from
 	// the active revision. All categories share one revision stream, so
 	// activating the head makes every listed category effective together.
 	PendingCategories []string `json:"pending_categories"`
-	Value             any      `json:"value"`
-	Replayed          bool     `json:"-"`
+	// Configured: the revision stores this category's own value. Optional
+	// categories (node monitoring, DDoS protection, access log fields) the
+	// platform never saved are served as their project defaults with
+	// Configured false (the node detail shows DDoS protection as not
+	// configured instead of waiting for a first publication).
+	Configured bool `json:"configured"`
+	// ActiveConfigured: the active revision stores this category's own value
+	// (false before any activation). All categories share one revision
+	// stream, so an active revision says nothing by itself about a category
+	// saved after it (DDoS protection first saved
+	// as a draft while other categories are active is not yet published).
+	ActiveConfigured bool `json:"active_configured"`
+	Value            any  `json:"value"`
+	Replayed         bool `json:"-"`
 }
 
 type PreflightRevisionRequest struct {
@@ -171,7 +188,7 @@ func (manager *CategoryManager) GetActiveCategory(
 			if err != nil {
 				return err
 			}
-			document = categoryDocument(revision, category, head, 0, []string{})
+			document = categoryDocument(revision, category, head, 0, []string{}, revision)
 			return nil
 		}
 		activeRevision := int64(0)
@@ -182,11 +199,11 @@ func (manager *CategoryManager) GetActiveCategory(
 		if err != nil {
 			return err
 		}
-		pending, err := pendingCategories(ctx, tx, actor.ScopeID, activeRevision, revision.Configuration)
+		pending, baseline, err := pendingAgainstActive(ctx, tx, actor.ScopeID, activeRevision, revision.Configuration)
 		if err != nil {
 			return err
 		}
-		document = categoryDocument(revision, category, head, activeRevision, pending)
+		document = categoryDocument(revision, category, head, activeRevision, pending, baseline)
 		return nil
 	})
 	if err != nil {
@@ -309,11 +326,11 @@ func (manager *CategoryManager) SaveCategory(
 			}); err != nil {
 			return err
 		}
-		pending, err := pendingCategories(ctx, tx, actor.ScopeID, stream.Active, revision.Configuration)
+		pending, baseline, err := pendingAgainstActive(ctx, tx, actor.ScopeID, stream.Active, revision.Configuration)
 		if err != nil {
 			return err
 		}
-		result = categoryDocument(revision, request.Category, revisionNumber, stream.Active, pending)
+		result = categoryDocument(revision, request.Category, revisionNumber, stream.Active, pending, baseline)
 		return completeCategoryWrite(ctx, tx, actor, request.IdempotencyKey, result, now)
 	})
 	if errors.Is(err, ErrEntitlementDenied) {
@@ -647,12 +664,36 @@ func applyCategoryChange(base Configuration, category string, change CategoryCha
 	return result
 }
 
-func categoryDocument(revision Revision, category string, head, active int64, pending []string) CategoryDocument {
+// categoryDocument: baseline is the active revision (the project defaults
+// before any activation).
+func categoryDocument(revision Revision, category string, head, active int64, pending []string,
+	baseline Revision) CategoryDocument {
 	redacted := redactConfiguration(revision.Configuration)
-	return CategoryDocument{
+	document := CategoryDocument{
 		Schema: canonicalSchema, Category: category, HeadRevision: head, ActiveRevision: active,
 		Revision: revision.Revision, Status: revision.Status, SnapshotSHA256: revision.SnapshotSHA256,
-		PendingCategories: pending, Value: categoryValue(redacted, category),
+		PendingCategories: pending, Configured: categoryConfigured(revision.Configuration, category),
+		ActiveConfigured: active > 0 && categoryConfigured(baseline.Configuration, category),
+		Value:            categoryValue(redacted, category),
+	}
+	if active > 0 {
+		document.ActiveSnapshotSHA256 = baseline.SnapshotSHA256
+	}
+	return document
+}
+
+// categoryConfigured: the optional categories are configured once saved; the
+// others always carry a value.
+func categoryConfigured(configuration Configuration, category string) bool {
+	switch category {
+	case CategoryNodeMonitoring:
+		return configuration.NodeMonitoring != nil
+	case CategoryDDoSProtection:
+		return configuration.DDoSProtection != nil
+	case CategoryAccessLogFields:
+		return configuration.AccessLogFields != nil
+	default:
+		return true
 	}
 }
 
@@ -662,6 +703,15 @@ func categoryDocument(revision Revision, category string, head, active int64, pe
 func pendingCategories(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, active int64,
 	target Configuration,
 ) ([]string, error) {
+	pending, _, err := pendingAgainstActive(ctx, tx, scopeID, active, target)
+	return pending, err
+}
+
+// pendingAgainstActive is pendingCategories with the revision it compared
+// against (the active revision, or the project defaults).
+func pendingAgainstActive(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, active int64,
+	target Configuration,
+) ([]string, Revision, error) {
 	var baseline Revision
 	var err error
 	if active > 0 {
@@ -670,9 +720,9 @@ func pendingCategories(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, active
 		baseline, err = projectBootstrapRevision()
 	}
 	if err != nil {
-		return nil, err
+		return nil, Revision{}, err
 	}
-	return diffCategories(baseline.Configuration, target), nil
+	return diffCategories(baseline.Configuration, target), baseline, nil
 }
 
 func diffCategories(before, after Configuration) []string {

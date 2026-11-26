@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, type TableColumnsType } from 'antd'
+import { Alert, App, Button, Descriptions, Drawer, Input, Select, Space, Tag, Typography, type TableColumnsType } from 'antd'
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { PageSection } from '@cdnca/ui'
+import { PageSection, Table } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import {

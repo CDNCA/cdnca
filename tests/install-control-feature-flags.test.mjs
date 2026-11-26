@@ -29,6 +29,7 @@ function controlEnvironment(extra = {}) {
     const result = spawnSync('bash', ['-c', [
       'set -Eeuo pipefail', block('fail'), block('generate_runtime_secrets'), block('signer_revocation_environment'),
       block('remote_gateway_access'), block('local_gateway_environment'),
+      block('public_https_trust_args'), block('upgrade_download_root_ca_file'), block('upgrade_download_root_env'), block('upgrade_download_origin'),
       'GATEWAY_HOST=gateway.example.test GATEWAY_AGENT_PORT=9444 GATEWAY_ENROLLMENT_PORT=9443', block('write_environment'),
       'generate_runtime_secrets', 'write_environment',
     ].join('\n')], { encoding: 'utf8', env: { ...process.env, CONFIG_DIR: directory, KEY_DIR: directory,
@@ -36,6 +37,7 @@ function controlEnvironment(extra = {}) {
       NATS_URL: 'nats://localhost:4222', LICENSING_SERVER: 'https://auth.example.test',
       INSTALLATION_ID: '11111111-1111-4111-8111-111111111111', INSTALLATION_NAME: 'test', CONTROL_VERSION: '1.0.35',
       DOWNLOAD_DIR: join(directory, 'downloads'), CONTROL_ORIGIN: 'https://control.example.test:8443', DATA_DIR: directory,
+      CONTROL_DOMAIN: 'control.example.test', PUBLIC_CERT_FILE: '',
       UPGRADE_KEY_DIR: join(directory, 'upgrade'), UPGRADE_CONTROL_KEY_ID: 'control-execution-v1', UPGRADE_EDGE_KEY_ID: 'edge-execution-v1',
       SIGNER_REVOCATION_OFFLINE_ROOT_KEY_ID: '', SIGNER_REVOCATION_OFFLINE_ROOT_GENERATION: '',
       SIGNER_REVOCATION_OFFLINE_ROOT_PUBLIC_KEY: '', ...extra } })
@@ -65,7 +67,7 @@ const expectedControl = {
   SYSTEM_SETTINGS_RUNTIME_ENABLED: 'true', HTTP_POLICY_RUNTIME_ENABLED: 'true', CHALLENGE_POLICY_RUNTIME_ENABLED: 'true',
   PACKAGE_MONITOR_HTTP_ENABLED: 'true', PAYMENT_CHANNELS_ENABLED: 'true', IDENTITY_VERIFICATION_RUNTIME_ENABLED: 'true',
   IDENTITY_VERIFICATION_SETTLEMENT_WORKER_ENABLED: 'true', IDENTITY_VERIFICATION_ISSUER_ENABLED: 'false',
-  ACCOUNT_RECOVERY_ENABLED: 'false', ACCOUNT_REGISTRATION_ENABLED: 'false',
+  ACCOUNT_RECOVERY_ENABLED: 'true', ACCOUNT_REGISTRATION_ENABLED: 'false',
   // fix-flags2 E1: needs NATS credentials + CA the local NATS does not have.
   PLUGIN_WEBHOOK_RUNTIME_ENABLED: 'false',
 }

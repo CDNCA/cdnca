@@ -172,6 +172,15 @@
   display: none;
 }
 
+/* 列表进了当前 tabpanel；原来页签下方的 16px 改成面板上边距。 */
+.cc-rule-tabset.cc-rule-tabs {
+  margin-bottom: 0;
+}
+
+.cc-rule-tabset.cc-rule-tabs > .ant-tabs-content-holder {
+  padding-top: 16px;
+}
+
 .cc-rule-table,
 .cc-rule-unavailable {
   min-width: 0;
@@ -2136,4 +2145,34 @@
 .sp-cond-help,
 .sp-ua-result {
   color: var(--cdnca-color-text);
+}
+
+/* a special condition's node capability note, under its row. */
+.sp-editor-cond-capability {
+  margin: -2px 0 8px;
+  padding: 6px 10px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  background: var(--cdnca-color-bg-field, #f7f9fc);
+  border-radius: 4px;
+}
+
+.sp-editor-cond-capability p {
+  margin: 0;
+}
+
+.sp-editor-cond-capability details {
+  margin-top: 2px;
+}
+
+.sp-editor-cond-capability summary {
+  width: fit-content;
+  color: var(--cdnca-color-primary);
+  cursor: pointer;
+}
+
+.sp-editor-cond-capability details p {
+  margin-top: 4px;
+  color: var(--cdnca-color-text-tertiary);
 }

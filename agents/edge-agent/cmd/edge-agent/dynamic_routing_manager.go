@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -48,15 +50,16 @@ type dynamicRoutingManager struct {
 	indexRoots map[string]string
 	siteScopes map[string]string
 
-	// adaptive is the adaptive WAF (ADR 0011 RI-04; nil without the local
+	// adaptive is the adaptive WAF (ADR 0011 ; nil without the local
 	// auto defense runtime): its node exclusion hooks go into the input, the
 	// applied managed WAF sites go to it.
 	adaptive dynamicRoutingAdaptive
 
-	// apply and activeVersion are the runtime's Apply and ScopeVersion
-	// (tests replace them).
+	// apply, activeVersion and serves are the runtime's Apply, ScopeVersion
+	// and ServesGeneration (tests replace them).
 	apply         func(context.Context, dynroute.Input) (dynroute.Result, error)
 	activeVersion func(scopeID string) string
+	serves        func(context.Context, uint64) bool
 }
 
 // dynamicRoutingAdaptive is wafadaptAssembly's side the manager uses.
@@ -72,7 +75,7 @@ type dynamicRoutingScope struct {
 	// Results: the last results by deployment ID (bounded).
 	Results []dynamicRoutingResult `json:"results"`
 	// Accepted is the newest release an apply activated: its source revision
-	// is the scope's high-water mark (DYNROUTE-LATE-APPLY-REVISION-01). An
+	// is the scope's high-water mark . An
 	// explicit rollback runs older content but keeps the mark; an apply below
 	// it, or at it with another root, is refused before activation.
 	Accepted *dynamicRoutingAccepted `json:"accepted,omitempty"`
@@ -81,12 +84,37 @@ type dynamicRoutingScope struct {
 	// newer revision supersedes it.
 	RolledBack string `json:"rolled_back_root,omitempty"`
 	// Pending is an apply's release saved before activation
-	// (DYNROUTE-SCOPE-SAVE-LOSS-01): when the journal after activation cannot
+	// when the journal after activation cannot
 	// be written, the next load settles it against what the runtime serves.
 	Pending *dynamicRoutingPending `json:"pending,omitempty"`
 	// ReferencesOwed: a rollback ran but the object store references of
 	// Current were not committed; the next write of the scope commits them.
 	ReferencesOwed bool `json:"references_owed,omitempty"`
+	// ServingAfterRollbackFailure: Current is the release of this apply,
+	// whose compensation failed while its generation kept serving
+	// (dynroute.Runtime.ServesGeneration). The
+	// scope reports it as current next to the rollback_failed result, so the
+	// control plane can reconcile with what runs (agent_observed); the next
+	// apply or rollback that activates replaces it.
+	ServingAfterRollbackFailure *dynamicRoutingServing `json:"serving_after_rollback_failure,omitempty"`
+	// HeldVersions are configuration versions of applies whose rollback
+	// failed: they may have served (generation 1 kept serving with
+	// no current release), but the control plane has not confirmed them, so
+	// the Gateway's authorization may not carry their telemetry, which waits
+	// (HeldVersion). An activated apply of the
+	// version, or one whose command names it as the previous version (an
+	// operator reconciled the scope with it), releases it; so does any apply
+	// command listing it in released_config_version_ids (an operator
+	// confirmed it, also after a later deployment). nil: a journal from
+	// before the field, derived from its results on read.
+	HeldVersions *[]string `json:"held_versions,omitempty"`
+}
+
+// dynamicRoutingServing names the apply a ServingAfterRollbackFailure
+// release came from.
+type dynamicRoutingServing struct {
+	DeploymentID string `json:"deployment_id"`
+	Attempt      uint32 `json:"attempt"`
 }
 
 type dynamicRoutingAccepted struct {
@@ -114,11 +142,14 @@ const (
 )
 
 type dynamicRoutingRelease struct {
-	ConfigVersionID string            `json:"config_version_id"`
-	RootSHA256      string            `json:"root_sha256"`
-	Sites           []string          `json:"sites"`
-	Referenced      []string          `json:"referenced"`
-	ScopeFiles      map[string]string `json:"scope_files"`
+	ConfigVersionID string `json:"config_version_id"`
+	// PreviousConfigVersionID: its command's previous version (what the
+	// control plane recorded as in effect; "" = none).
+	PreviousConfigVersionID string            `json:"previous_config_version_id,omitempty"`
+	RootSHA256              string            `json:"root_sha256"`
+	Sites                   []string          `json:"sites"`
+	Referenced              []string          `json:"referenced"`
+	ScopeFiles              map[string]string `json:"scope_files"`
 	// System is the release's platform system configuration (nginx base,
 	// DDoS protection); the node runs the highest revision of all scopes.
 	System *edgeconfig.SiteRuntimeSystem `json:"system,omitempty"`
@@ -136,6 +167,10 @@ type dynamicRoutingRelease struct {
 	// NodeStorage: this node's storage settings as the release's key
 	// document gave them (NODE_STORAGE; nil = none).
 	NodeStorage *siteobject.NodeStorage `json:"node_storage,omitempty"`
+	// NodeFactsAt: when control read NodeRegion and NodeStorage for the
+	// release (NODE_STORAGE v2; 0 = a key document without it, or a release
+	// saved before it was kept).
+	NodeFactsAt int64 `json:"node_facts_at,omitempty"`
 	// OldWorkers are the workers the activation's reload replaced (none
 	// without a reload): a drain plan waits for them.
 	OldWorkers []string             `json:"old_workers,omitempty"`
@@ -172,7 +207,8 @@ func newDynamicRoutingManager(runtime *dynroute.Runtime, objects *objectstore.St
 		return nil, fmt.Errorf("dynamic routing manager root: %w", err)
 	}
 	return &dynamicRoutingManager{runtime: runtime, objects: objects, root: root, now: time.Now,
-		remaining: runtime.RemainingWorkers, apply: runtime.Apply, activeVersion: runtime.ScopeVersion}, nil
+		remaining: runtime.RemainingWorkers, apply: runtime.Apply, activeVersion: runtime.ScopeVersion,
+		serves: runtime.ServesGeneration}, nil
 }
 
 func (m *dynamicRoutingManager) scopePath(scopeID string) string {
@@ -203,7 +239,56 @@ func (m *dynamicRoutingManager) read(scopeID string) (dynamicRoutingScope, error
 		// journal from before the high-water mark: its current release
 		scope.Accepted = &dynamicRoutingAccepted{SourceRevision: scope.Current.SourceRevision, RootSHA256: scope.Current.RootSHA256}
 	}
+	if scope.HeldVersions == nil {
+		// journal from before HeldVersions (an agent that left a
+		// rollback_failed result): its rollback_failed applies not followed
+		// by an activated apply of the same version
+		held := []string{}
+		for _, entry := range scope.Results {
+			if entry.Result.Action == deployment.ActionApply && entry.Result.State == deployment.StateRollbackFailed {
+				held = appendVersion(held, entry.Result.ConfigVersionID)
+			} else if entry.Result.Action == deployment.ActionApply && entry.Result.State == deployment.StateHealthy {
+				held = removeVersions(held, entry.Result.ConfigVersionID)
+			}
+		}
+		scope.HeldVersions = &held
+	}
 	return scope, nil
+}
+
+func appendVersion(versions []string, version string) []string {
+	if version == "" || slices.Contains(versions, version) {
+		return versions
+	}
+	return append(versions, version)
+}
+
+func removeVersions(versions []string, remove ...string) []string {
+	return slices.DeleteFunc(versions, func(version string) bool { return slices.Contains(remove, version) })
+}
+
+// hold records the version of an apply whose rollback failed as held.
+func (scope *dynamicRoutingScope) hold(version string) {
+	held := appendVersion(slices.Clone(scope.heldVersions()), version)
+	scope.HeldVersions = &held
+}
+
+// release stops holding versions the control plane confirmed.
+func (scope *dynamicRoutingScope) release(versions ...string) {
+	if len(versions) == 0 || !slices.ContainsFunc(scope.heldVersions(), func(version string) bool {
+		return slices.Contains(versions, version)
+	}) {
+		return
+	}
+	held := removeVersions(slices.Clone(scope.heldVersions()), versions...)
+	scope.HeldVersions = &held
+}
+
+func (scope *dynamicRoutingScope) heldVersions() []string {
+	if scope.HeldVersions == nil {
+		return nil
+	}
+	return *scope.HeldVersions
 }
 
 // settle resolves a pending activation: when the runtime serves its release
@@ -239,6 +324,7 @@ func (m *dynamicRoutingManager) settle(scopeID string, scope *dynamicRoutingScop
 // of the release rolled away from is refused until a newer revision arrives.
 // The object store references are owed until committed.
 func (m *dynamicRoutingManager) rolledBack(scope *dynamicRoutingScope) {
+	scope.ServingAfterRollbackFailure = nil
 	scope.Current, scope.Previous = scope.Previous, scope.Current
 	scope.RolledBack = scope.Previous.RootSHA256
 	scope.ReferencesOwed = true
@@ -276,6 +362,7 @@ func (m *dynamicRoutingManager) loadForWrite(scopeID string) (dynamicRoutingScop
 
 // accept makes release (activated by an apply) current and raises the mark.
 func (m *dynamicRoutingManager) accept(scope *dynamicRoutingScope, release *dynamicRoutingRelease) {
+	scope.ServingAfterRollbackFailure = nil
 	if scope.Current == nil || scope.Current.ConfigVersionID != release.ConfigVersionID {
 		scope.Previous, scope.Current = scope.Current, release
 	}
@@ -283,6 +370,10 @@ func (m *dynamicRoutingManager) accept(scope *dynamicRoutingScope, release *dyna
 		scope.RolledBack = ""
 	}
 	scope.Accepted = &dynamicRoutingAccepted{SourceRevision: release.SourceRevision, RootSHA256: release.RootSHA256}
+	// The control plane has confirmed the version it activated and the one
+	// its command names as in effect before it (HeldVersions).
+	held := removeVersions(slices.Clone(scope.heldVersions()), release.ConfigVersionID, release.PreviousConfigVersionID)
+	scope.HeldVersions = &held
 	// references a rollback owed were for the release replaced here (the
 	// client commits an apply's own)
 	scope.ReferencesOwed = false
@@ -320,23 +411,7 @@ func (m *dynamicRoutingManager) save(scopeID string, scope dynamicRoutingScope) 
 	if err != nil {
 		return err
 	}
-	temp, err := os.CreateTemp(m.root, ".scope-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(temp.Name())
-	if _, err := temp.Write(content); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temp.Name(), m.scopePath(scopeID))
+	return writeFileAtomic(m.root, ".scope-", m.scopePath(scopeID), content)
 }
 
 func (m *dynamicRoutingManager) scopeIDs() ([]string, error) {
@@ -372,6 +447,11 @@ func (m *dynamicRoutingManager) ApplyDynamicRouting(ctx context.Context, deploym
 	if found, ok := scope.result(deploymentID, attempt); ok {
 		return found, nil // redelivery of a finished deployment
 	}
+	// the control plane confirmed these held
+	// versions (an operator reconciliation named them, possibly after a later
+	// deployment of the scope), so the Gateway's authorization carries them;
+	// they go whatever this apply's outcome. Saved with its result.
+	scope.release(release.ReleasedConfigVersionIDs...)
 	if code, summary := scope.refusal(release); code != "" {
 		result := refusedResult(deploymentID, attempt, release.ConfigVersionID, started, code, summary)
 		scope.record(deploymentID, result)
@@ -380,9 +460,11 @@ func (m *dynamicRoutingManager) ApplyDynamicRouting(ctx context.Context, deploym
 		}
 		return result, nil
 	}
-	next := &dynamicRoutingRelease{ConfigVersionID: release.ConfigVersionID, RootSHA256: release.RootSHA256,
+	next := &dynamicRoutingRelease{ConfigVersionID: release.ConfigVersionID, PreviousConfigVersionID: release.PreviousConfigVersionID,
+		RootSHA256: release.RootSHA256,
 		ScopeFiles: map[string]string{}, System: release.System, SourceRevision: release.SourceRevision, Streams: release.Streams,
-		NodePages: release.NodePages, InstallationID: release.InstallationID, NodeRegion: release.NodeRegion, NodeStorage: release.NodeStorage}
+		NodePages: release.NodePages, InstallationID: release.InstallationID, NodeRegion: release.NodeRegion, NodeStorage: release.NodeStorage,
+		NodeFactsAt: release.NodeFactsAt}
 	for digest := range release.Sites {
 		next.Sites = append(next.Sites, digest)
 	}
@@ -410,9 +492,23 @@ func (m *dynamicRoutingManager) ApplyDynamicRouting(ctx context.Context, deploym
 	activated := applyErr == nil || gatewayclient.DynamicRoutingActivated(applyErr)
 	if activated {
 		m.accept(&scope, next)
+		m.keepNodeFacts(next)
+	} else if m.servesAfterRollbackFailure(ctx, applyErr) {
+		// the compensation failed before it
+		// switched anything and the generation still routes every worker, so
+		// this release is what runs. It becomes current (its result stays
+		// rollback_failed) instead of leaving the scope without one.
+		m.accept(&scope, next)
+		m.keepNodeFacts(next)
+		scope.ServingAfterRollbackFailure = &dynamicRoutingServing{DeploymentID: deploymentID, Attempt: attempt}
+		log.Printf("dynamic routing: rollback failed and scope %s still serves release %s; recorded as its current release",
+			scopeID, release.ConfigVersionID)
 	}
 	result := gatewayclient.DynamicRoutingResult(deploymentID, attempt, deployment.ActionApply, release.ConfigVersionID,
 		started, m.now(), applyErr)
+	if result.State == deployment.StateRollbackFailed {
+		scope.hold(release.ConfigVersionID)
+	}
 	scope.record(deploymentID, result)
 	if err := m.save(scopeID, scope); err != nil {
 		if !activated {
@@ -420,7 +516,7 @@ func (m *dynamicRoutingManager) ApplyDynamicRouting(ctx context.Context, deploym
 			// (the runtime does not serve it); the result stays unchanged.
 			return result, nil
 		}
-		// Activated, journal not saved (DYNROUTE-SCOPE-SAVE-LOSS-01): the
+		// Activated, journal not saved : the
 		// node serves the release, so the result says so (healthy with a
 		// failed maintenance check, never "unchanged"); the pending intent
 		// on disk makes it current on the next load.
@@ -428,6 +524,47 @@ func (m *dynamicRoutingManager) ApplyDynamicRouting(ctx context.Context, deploym
 			started, m.now(), &scopeJournalError{err}), nil
 	}
 	return result, nil
+}
+
+// servesAfterRollbackFailure: applyErr is a failed compensation whose
+// generation still serves (dynroute.Runtime.ServesGeneration).
+func (m *dynamicRoutingManager) servesAfterRollbackFailure(ctx context.Context, applyErr error) bool {
+	var failed *dynroute.RollbackFailedError
+	return m.serves != nil && errors.As(applyErr, &failed) && m.serves(context.WithoutCancel(ctx), failed.Generation)
+}
+
+// ServingAfterRollbackFailure reports whether the apply's release is a
+// scope's current one although its rollback failed (gatewayclient reports it
+// as the scope's current identity). Like Lookup it reads the journals without
+// m.mu: a heartbeat must not wait for an apply in progress.
+func (m *dynamicRoutingManager) ServingAfterRollbackFailure(deploymentID string, attempt uint32) bool {
+	ids, err := m.scopeIDs()
+	if err != nil {
+		return false
+	}
+	for _, scopeID := range ids {
+		scope, err := m.load(scopeID)
+		if err != nil {
+			return false
+		}
+		if serving := scope.ServingAfterRollbackFailure; serving != nil && scope.Current != nil &&
+			serving.DeploymentID == deploymentID && serving.Attempt == attempt {
+			return true
+		}
+	}
+	return false
+}
+
+// HeldVersion reports whether the scope holds the telemetry of the
+// configuration version (dynamicRoutingScope.HeldVersions;
+// telemetryclient.Config.HeldVersion). Like Lookup it reads the journal
+// without m.mu; a journal that cannot be read holds.
+func (m *dynamicRoutingManager) HeldVersion(scopeID, configVersionID string) bool {
+	if !scopeIDPattern.MatchString(scopeID) {
+		return true
+	}
+	scope, err := m.load(scopeID)
+	return err != nil || slices.Contains(scope.heldVersions(), configVersionID)
 }
 
 // scopeJournalError: the release was activated, its scope journal not
@@ -475,6 +612,96 @@ func (m *dynamicRoutingManager) Reapply(ctx context.Context) error {
 	return err
 }
 
+// dynamicRoutingNodeFacts is the node's region and storage as the key
+// document control read them for last carried them (At: its NodeFactsAt,
+// NODE_STORAGE v2). The node keeps the latest an activated release brought
+// (node-facts.json), so neither a rollback nor a scope whose newer
+// publications were refused brings back an older value.
+type dynamicRoutingNodeFacts struct {
+	At          int64                   `json:"at"`
+	NodeRegion  string                  `json:"node_region,omitempty"`
+	NodeStorage *siteobject.NodeStorage `json:"node_storage,omitempty"`
+}
+
+func (release *dynamicRoutingRelease) nodeFacts() dynamicRoutingNodeFacts {
+	return dynamicRoutingNodeFacts{At: release.NodeFactsAt, NodeRegion: release.NodeRegion,
+		NodeStorage: release.NodeStorage}
+}
+
+func (m *dynamicRoutingManager) nodeFactsPath() string {
+	return filepath.Join(m.root, "node-facts.json")
+}
+
+// readNodeFacts is the kept node facts (At 0: none kept).
+func (m *dynamicRoutingManager) readNodeFacts() (dynamicRoutingNodeFacts, error) {
+	var facts dynamicRoutingNodeFacts
+	content, err := os.ReadFile(m.nodeFactsPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return facts, nil
+	}
+	if err != nil {
+		return facts, fmt.Errorf("read dynamic routing node facts: %w", err)
+	}
+	if err := json.Unmarshal(content, &facts); err != nil {
+		return dynamicRoutingNodeFacts{}, fmt.Errorf("decode dynamic routing node facts: %w", err)
+	}
+	return facts, nil
+}
+
+// keepNodeFacts records an activated release's node facts when they are
+// later than the kept ones. Best effort: without the file the scopes'
+// releases still decide (nodeFactsOf).
+func (m *dynamicRoutingManager) keepNodeFacts(release *dynamicRoutingRelease) {
+	if release == nil || release.NodeFactsAt <= 0 {
+		return
+	}
+	kept, err := m.readNodeFacts()
+	if err == nil && kept.At >= release.NodeFactsAt {
+		return
+	}
+	content, err := json.Marshal(release.nodeFacts())
+	if err == nil {
+		err = writeFileAtomic(m.root, ".node-facts-", m.nodeFactsPath(), content)
+	}
+	if err != nil {
+		log.Printf("dynamic routing: keep node facts of release %s: %v", release.ConfigVersionID, err)
+	}
+}
+
+// nodeFactsOf is the node's region and storage, the same way for an apply, a
+// reapply and a rollback: the latest of the kept facts and the releases in
+// effect (NodeFactsAt, NODE_STORAGE v2), an absent value (no region, no
+// storage) being that release's value. Without any (key documents from
+// before NODE_STORAGE v2): the release being applied, else the first scope's
+// (in scope order) that names each.
+func nodeFactsOf(kept dynamicRoutingNodeFacts, releases map[string]*dynamicRoutingRelease, ids []string,
+	supplied gatewayclient.DynamicRoutingRelease) (string, *siteobject.NodeStorage) {
+	latest := kept
+	for _, scopeID := range ids {
+		if release := releases[scopeID]; release.NodeFactsAt > latest.At {
+			latest = release.nodeFacts()
+		}
+	}
+	if latest.At > 0 {
+		return latest.NodeRegion, latest.NodeStorage
+	}
+	if supplied.ConfigurationScopeID != "" {
+		return supplied.NodeRegion, supplied.NodeStorage
+	}
+	var region string
+	var storage *siteobject.NodeStorage
+	for _, scopeID := range ids {
+		release := releases[scopeID]
+		if region == "" {
+			region = release.NodeRegion
+		}
+		if storage == nil {
+			storage = release.NodeStorage
+		}
+	}
+	return region, storage
+}
+
 func (m *dynamicRoutingManager) input(override map[string]*dynamicRoutingRelease,
 	supplied gatewayclient.DynamicRoutingRelease) (dynroute.Input, error) {
 	scopes, err := m.scopeIDs()
@@ -512,23 +739,16 @@ func (m *dynamicRoutingManager) input(override map[string]*dynamicRoutingRelease
 		ids = append(ids, scopeID)
 	}
 	sort.Strings(ids)
-	// The node's region (fz-x12): a control plane fact every key document
-	// carries. The release being applied has the latest; a reapply or
-	// rollback takes the first scope's that names one (a region change
-	// republishes every scope).
-	regionSet := supplied.ConfigurationScopeID != ""
-	input.NodeRegion = supplied.NodeRegion
-	// The node's storage settings (NODE_STORAGE) are the same kind of fact:
-	// a change republishes every scope.
-	input.NodeStorage = supplied.NodeStorage
+	// The node's region (fz-x12) and storage settings (NODE_STORAGE) are
+	// control plane facts every key document carries (a change republishes
+	// every scope): taken together from one release.
+	kept, err := m.readNodeFacts()
+	if err != nil {
+		return dynroute.Input{}, err
+	}
+	input.NodeRegion, input.NodeStorage = nodeFactsOf(kept, releases, ids, supplied)
 	for _, scopeID := range ids {
 		release := releases[scopeID]
-		if !regionSet && release.NodeRegion != "" {
-			input.NodeRegion, regionSet = release.NodeRegion, true
-		}
-		if supplied.ConfigurationScopeID == "" && input.NodeStorage == nil && release.NodeStorage != nil {
-			input.NodeStorage = release.NodeStorage
-		}
 		input.ScopeVersions[scopeID] = release.ConfigVersionID
 		if release.InstallationID != "" {
 			input.Installations[scopeID] = release.InstallationID
@@ -670,8 +890,7 @@ func (m *dynamicRoutingManager) Process(ctx context.Context, command deployment.
 	case scope.Previous.ConfigVersionID != command.ConfigVersionID:
 		return refuse(fmt.Errorf("previous release is %s, not %s", scope.Previous.ConfigVersionID, command.ConfigVersionID))
 	}
-	// The intent is on disk before anything switches (DYNROUTE-SCOPE-SAVE-
-	// LOSS-01): a journal that cannot be written stops here with the running
+	// The intent is on disk before anything switches: a journal that cannot be written stops here with the running
 	// configuration unchanged; once written, a journal lost after activation
 	// is settled from what the runtime serves, without switching again.
 	pending := scope
@@ -720,7 +939,7 @@ func (m *dynamicRoutingManager) Pointers() (deployment.Pointers, error) {
 
 // NodePointers is the node's active and last known good configuration for
 // the upgrade receipt: one scope's root digests, or for several scopes the
-// SHA-256 of their sorted "scope root" lines (current roots; previous roots,
+// of their sorted "scope root" lines (current roots; previous roots,
 // a scope without one counting its current), since every scope's release is
 // active at once.
 func (m *dynamicRoutingManager) NodePointers() (deployment.Pointers, error) {
@@ -834,7 +1053,11 @@ func (scope *dynamicRoutingScope) record(deploymentID string, result deployment.
 // ScopeForSite maps a site to the scope whose current release carries it
 // (telemetry scoped_records on a MULTI_TENANT_RUNTIME session). The index
 // is rebuilt from the scope journals and the object store when the set of
-// current roots changes.
+// current roots changes. A release current only because it kept serving
+// after its rollback failed maps no site: the control plane has not
+// confirmed it yet, so the Gateway's authorization may not carry its
+// version, and its records wait (telemetryclient.ErrAttributionUnconfirmed)
+// until a release of the scope is accepted again.
 func (m *dynamicRoutingManager) ScopeForSite(siteID string) (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -849,7 +1072,7 @@ func (m *dynamicRoutingManager) ScopeForSite(siteID string) (string, bool) {
 		if err != nil {
 			return "", false
 		}
-		if scope.Current != nil {
+		if scope.Current != nil && scope.ServingAfterRollbackFailure == nil {
 			roots[scopeID], current[scopeID] = scope.Current.RootSHA256, scope.Current
 		}
 	}
@@ -872,4 +1095,25 @@ func (m *dynamicRoutingManager) ScopeForSite(siteID string) (string, bool) {
 	}
 	scopeID, ok := m.siteScopes[siteID]
 	return scopeID, ok
+}
+
+// writeFileAtomic replaces path with content through a synced temporary file in dir.
+func writeFileAtomic(dir, pattern, path string, content []byte) error {
+	temp, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	if _, err := temp.Write(content); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), path)
 }

@@ -20,10 +20,7 @@ const zhCN = {
     cancel: '取消',
   },
   view: '去查看',
-  scope: {
-    title: '作用范围：全部节点的全局默认值（「区域配置」页签可按区域覆盖）',
-    description: '保存方式：本页全部字段点「保存」一次提交，只生成新草稿，节点仍按已生效版本运行；要生效请到「节点监控」或「连接防护」页检查并启用（各分类共用一个版本，会一并生效）。',
-  },
+  current: { pending: '本分类有已保存、尚未生效的修改。', activate: '去节点监控检查并启用' },
 }
 
 const enUS: typeof zhCN = {
@@ -42,10 +39,7 @@ const enUS: typeof zhCN = {
     cancel: 'Cancel',
   },
   view: 'View',
-  scope: {
-    title: 'Applies to: the global defaults of every node (the region tab overrides them per region)',
-    description: 'Saving: Save submits every field on this page as one new draft; nodes keep running the active revision. To make it effective, check and activate it on the Node monitoring or Connection protection page (all categories share one revision and become effective together).',
-  },
+  current: { pending: 'This category has saved changes that are not active yet.', activate: 'Check and activate in Node monitoring' },
 }
 
 for (const [locale, messages] of Object.entries({ 'zh-CN': zhCN, 'en-US': enUS, 'qps-ploc': zhCN, 'qps-Ploc': zhCN })) {

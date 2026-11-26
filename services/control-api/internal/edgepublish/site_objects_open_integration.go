@@ -49,6 +49,9 @@ type SiteObjectReleaseForTest struct {
 	// NodeStorage: the storage settings this node's key document carries
 	// (NODE_STORAGE, fix-nodesettings).
 	NodeStorage *siteobject.NodeStorage
+	// NodeFactsAt: the node facts time this node's key document carries
+	// (NODE_STORAGE v2).
+	NodeFactsAt int64
 }
 
 // OpenSiteObjectReleaseForTest does what a node does with deploymentID's
@@ -197,7 +200,7 @@ func OpenSiteObjectReleaseForTest(ctx context.Context, pool *pgxpool.Pool, deplo
 	bundle := edgeconfig.Bundle{Files: map[string][]byte{siteobject.DocumentPath: bytes.Clone(canonical)}}
 	return SiteObjectReleaseForTest{Command: command, Root: root, RootSHA256: rootSHA256, Bundle: bundle, Members: memberSet,
 		Scope: scope, Sites: sites, Objects: objects, L4WithheldStreams: key.L4WithheldStreams, WithheldSites: withheldSiteIDsForTest(sites, key.WithheldSites), NodeRegion: key.NodeRegion,
-		NodeStorage: key.NodeStorage}, nil
+		NodeStorage: key.NodeStorage, NodeFactsAt: key.NodeFactsAt}, nil
 }
 
 // withheldSiteIDsForTest decodes a key document's withheld website bitmap

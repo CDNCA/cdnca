@@ -91,6 +91,14 @@ func (s *Server) handleListCCReferences(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
+	var scopeID uuid.UUID
+	if raw := r.URL.Query().Get("scope_id"); raw != "" {
+		scopeID, err = uuid.Parse(raw)
+		if err != nil || scopeID == uuid.Nil || scopeID.String() != raw {
+			s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "scope_id must be a canonical UUID")
+			return
+		}
+	}
 	owner := strings.TrimSpace(r.URL.Query().Get("owner"))
 	if len([]rune(owner)) > 128 {
 		s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "owner is too long")
@@ -111,7 +119,7 @@ func (s *Server) handleListCCReferences(w http.ResponseWriter, r *http.Request, 
 		referenceKind = ccreference.KindFilter
 	}
 	result, err := s.ccReferences.List(r.Context(), securityPolicyCCReferenceActor(principal), referenceKind, ccreference.ListFilter{
-		Page: page, Limit: limit, Status: status, Name: name, ID: id, Owner: owner, Type: requestedType,
+		Page: page, Limit: limit, Status: status, Name: name, ID: id, Owner: owner, Type: requestedType, ScopeID: scopeID,
 	})
 	if err != nil {
 		s.writeError(w, r, err)

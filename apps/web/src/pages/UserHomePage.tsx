@@ -13,6 +13,7 @@ import {
   formatDashboardBytes,
   formatDashboardInteger,
   formatDashboardLoginSource,
+  type DashboardAnalyticsOverview,
   type DashboardFilters,
   type DashboardSection,
   type DashboardUnavailableReason,
@@ -20,7 +21,7 @@ import {
   type TenantDashboardRange,
 } from '../api/dashboard'
 import { useSessionStore } from '../auth/session'
-import { AnalyticsSettlingHint, DashboardAnalyticsView } from '../components/DashboardOverview'
+import { DashboardAnalyticsView } from '../components/DashboardOverview'
 import { DataState } from '../components/DataState'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { businessTimeZone, formatBandwidth, formatDateTime, formatNumber } from '../i18n/formatters'
@@ -78,24 +79,9 @@ function errorMessage(error: unknown, t: TFunction<'userHome'>): string {
   }
 }
 
-function greetingKey(date: Date): string {
-  const hour = date.getHours()
-  if (hour < 6) return 'greeting.lateNight'
-  if (hour < 12) return 'greeting.morning'
-  if (hour < 18) return 'greeting.afternoon'
-  return 'greeting.evening'
-}
-
 function SectionUnavailable({ reason }: { reason: DashboardUnavailableReason }) {
   const { t } = useTranslation('userHome')
   return <div className="user-dashboard-unavailable" role="status">{t(`unavailable.${reason}`)}</div>
-}
-
-function SectionValue<T>({ section, children }: {
-  section: DashboardSection<T>
-  children: (value: T) => ReactNode
-}) {
-  return section.available ? children(section.value) : <SectionUnavailable reason={section.reason} />
 }
 
 function DashboardRangeControl({ value, onChange, ariaLabel }: {
@@ -128,15 +114,16 @@ function DashboardRangeControl({ value, onChange, ariaLabel }: {
   )
 }
 
-function DashboardCard({ title, icon, toolbar, className = '', children }: {
+function DashboardCard({ title, icon, toolbar, className = '', busy = false, children }: {
   title: string
   icon: ReactNode
   toolbar?: ReactNode
   className?: string
+  busy?: boolean
   children: ReactNode
 }) {
   return (
-    <section className={`user-dashboard-card ${className}`.trim()}>
+    <section className={`user-dashboard-card ${className}`.trim()} aria-busy={busy || undefined}>
       <header className="user-dashboard-card-heading">
         <h2>{icon}<span>{title}</span></h2>
         {toolbar ? <div className="user-dashboard-card-extra">{toolbar}</div> : null}
@@ -170,15 +157,18 @@ function UserProfileCard({ principal, data }: { principal: Principal; data?: Ten
       <div className="user-profile-avatar" aria-hidden="true">{title.slice(0, 1).toUpperCase()}</div>
       <div className="user-profile-content">
         <div className="user-profile-title-row">
-          <h1>{title}</h1>
-          <button type="button" aria-label={t('profile.edit')} onClick={() => navigate('/account/user')}>
-            <Pencil size={12} aria-hidden="true" />
-          </button>
-          <p>{t(greetingKey(new Date()))}</p>
+          <div className="user-profile-name">
+            <h1 title={title}>{title}</h1>
+            <button type="button" aria-label={t('profile.edit')} onClick={() => navigate('/account/user')}>
+              <Pencil size={12} aria-hidden="true" />
+            </button>
+          </div>
+          <dl className="user-profile-identity">
+            <div><dt>{t('profile.identity')}:</dt><dd>{verification}</dd></div>
+          </dl>
         </div>
         <dl className="user-profile-facts">
           <div><dt>{t('profile.accountId')}:</dt><dd title={principal.user_id}>{displayID ?? t('values.placeholder')}</dd></div>
-          <div><dt>{t('profile.identity')}:</dt><dd>{verification}</dd></div>
           <div><dt>{t('profile.lastLogin')}:</dt><dd>{lastLogin}</dd></div>
           <div><dt>{t('profile.loginIp')}:</dt><dd>{loginSource}</dd></div>
         </dl>
@@ -206,8 +196,9 @@ function NoticeList({ notices, locale }: {
   )
 }
 
-function NetworkMetrics({ data, locale }: { data: TenantDashboard; locale: string }) {
+function NetworkMetrics({ data, locale, switching }: { data: TenantDashboard; locale: string; switching: boolean }) {
   const { t } = useTranslation('userHome')
+  if (switching) return <DataState status="loading" className="dashboard-page-state" message={t('states.loading')} />
   if (!data.analytics.available) return <SectionUnavailable reason={data.analytics.reason} />
   const analytics = data.analytics.value
   const peak = peakHourlyBandwidth(analytics) ?? (analytics.summary.average_bandwidth_bps === 0 ? 0 : null)
@@ -218,15 +209,12 @@ function NetworkMetrics({ data, locale }: { data: TenantDashboard; locale: strin
     ? t('values.placeholder')
     : `${formatDashboardInteger(analytics.blocked_ip_count, locale)}${locale === 'en-US' ? ' IPs' : '个'}`
   return (
-    <>
-    <AnalyticsSettlingHint minutes={analytics.settling_minutes} />
     <dl className="user-network-metrics">
       <div><dt>{t('metrics.peakBandwidth')}</dt><dd>{bandwidth}</dd></div>
       <div><dt>{t('metrics.requests')}</dt><dd>{requests}</dd></div>
       <div><dt>{t('metrics.totalTraffic')}</dt><dd>{traffic}</dd></div>
       <div><dt>{t('metrics.blockedIps')}</dt><dd>{blockedIPs}</dd></div>
     </dl>
-    </>
   )
 }
 
@@ -298,7 +286,13 @@ function UserHomePageContent({ owner, ownerKey, principal }: {
       }
     },
     placeholderData: (previousData) => previousData,
-    staleTime: 30_000,
+    // A range switch reads at once; the open page re-reads every minute while
+    // it is in the foreground (TanStack pauses the interval when hidden).
+    staleTime: 0,
+    refetchInterval: (query) => query.state.error instanceof ApiError && query.state.error.status === 403 ? false : 60_000,
+    // 补充：长时间在后台后切回，距上次成功数据满 60 秒就立即重读一次（短时切回不重读，403 后不再读）。
+    refetchOnWindowFocus: (query) => !(query.state.error instanceof ApiError && query.state.error.status === 403) && Date.now() - query.state.dataUpdatedAt >= 60_000,
+    refetchIntervalInBackground: false,
   })
 
   // PA-17 layout slot user_home_blocks: which preset blocks show, in order.
@@ -309,6 +303,14 @@ function UserHomePageContent({ owner, ownerKey, principal }: {
   }
 
   const data = dashboardQuery.data
+  // A new period's first read is running and the cards only hold the previous
+  // period (placeholderData): its values must not pass for the new period.
+  const switching = dashboardQuery.isPlaceholderData
+  const periodAnalytics = (section: TenantDashboard['analytics'], render: (analytics: DashboardAnalyticsOverview, loading: boolean) => ReactNode) => (
+    section.available ? render(section.value, switching)
+      : switching ? <DataState status="loading" className="dashboard-page-state" message={t('states.loading')} />
+        : <SectionUnavailable reason={section.reason} />
+  )
   const rangeControl = (ariaLabel: string) => (
     <DashboardRangeControl value={range} onChange={setRange} ariaLabel={ariaLabel} />
   )
@@ -339,8 +341,9 @@ function UserHomePageContent({ owner, ownerKey, principal }: {
         icon={<BarChart3 size={14} aria-hidden="true" />}
         toolbar={rangeControl(t('ranges.networkLabel'))}
         className="user-network-card"
+        busy={switching}
       >
-        <NetworkMetrics data={value} locale={locale} />
+        <NetworkMetrics data={value} locale={locale} switching={switching} />
       </DashboardCard>
     )) },
     { key: 'monitoring', node: () => dataBlock('monitoring', (value) => (
@@ -350,20 +353,22 @@ function UserHomePageContent({ owner, ownerKey, principal }: {
           icon={<Activity size={14} aria-hidden="true" />}
           toolbar={rangeControl(t('ranges.monitorLabel'))}
           className="user-monitor-card"
+          busy={switching}
         >
-          <SectionValue section={value.analytics}>{(analytics) => (
-            <DashboardAnalyticsView analytics={analytics} locale={locale} variant="admin" mode="trend" />
-          )}</SectionValue>
+          {periodAnalytics(value.analytics, (analytics, loading) => (
+            <DashboardAnalyticsView analytics={analytics} locale={locale} variant="admin" mode="trend" loading={loading} />
+          ))}
         </DashboardCard>
         {blocks.includes('top') ? (
           <DashboardCard
             title={t('sections.top')}
             icon={<Activity size={14} aria-hidden="true" />}
             className="user-top-card"
+            busy={switching}
           >
-            <SectionValue section={value.analytics}>{(analytics) => (
-              <DashboardAnalyticsView analytics={analytics} locale={locale} variant="admin" mode="rankings" />
-            )}</SectionValue>
+            {periodAnalytics(value.analytics, (analytics, loading) => (
+              <DashboardAnalyticsView analytics={analytics} locale={locale} variant="admin" mode="rankings" rankingsTitle={t('sections.top')} loading={loading} />
+            ))}
           </DashboardCard>
         ) : null}
       </div>
@@ -375,10 +380,11 @@ function UserHomePageContent({ owner, ownerKey, principal }: {
           title={t('sections.top')}
           icon={<Activity size={14} aria-hidden="true" />}
           className="user-top-card"
+          busy={switching}
         >
-          <SectionValue section={value.analytics}>{(analytics) => (
-            <DashboardAnalyticsView analytics={analytics} locale={locale} variant="admin" mode="rankings" />
-          )}</SectionValue>
+          {periodAnalytics(value.analytics, (analytics, loading) => (
+            <DashboardAnalyticsView analytics={analytics} locale={locale} variant="admin" mode="rankings" rankingsTitle={t('sections.top')} loading={loading} />
+          ))}
         </DashboardCard>
       </div>
     )) },

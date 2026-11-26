@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, Button, Input, Select, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, Select, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -12,7 +13,15 @@ import {
 import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/marketSecurity'
-import { FeedbackWhen, TimeRangeFilter, resolveTimeRangePreset, type TimeRangeValue } from '@cdnca/ui'
+import { DEFAULT_TIME_RANGE_PRESETS, FeedbackWhen, TimeRangeFilter, resolveTimeRangePreset, type TimeRangeValue, Table } from '@cdnca/ui'
+import dayjs from 'dayjs'
+import { filterParam, linkedTimeRange, timeRangeUrlValues, useFilterUrl } from './filterUrl'
+import { FieldErrorText, filterFieldProps, useFieldFocus } from '../components/FilterFieldError'
+import { isIPAddress } from '../api/addressRules'
+import TenantScopeSelect from '../components/TenantScopeSelect'
+
+const tenantFieldID = 'market-security-tenant'
+const clientIpFieldID = 'market-security-client-ip'
 
 const pageSize = 10
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -39,20 +48,67 @@ export default function MarketSecurityLogPanel() {
   const accessToken = useSessionStore((state) => state.accessToken)
   const principal = useSessionStore((state) => state.principal)
   const audience = principal?.scope_kind === 'platform' ? 'admin' : 'tenant'
-  const [draft, setDraft] = useState<Draft>({ tenantId: '', siteId: '', clientIp: '', host: '', action: '' })
-  const [timeRange, setTimeRange] = useState<TimeRangeValue>(() => ({ preset: 'today', range: draftWindow({ preset: 'today', range: null }) }))
+  // 已生效的租户、站点、域名、IP、动作与时间范围写进 URL，
+  // 刷新或打开链接时从 URL 读回并直接按它查询；链接里的租户/站点不是 UUID 时不采用（平台仍等选租户）。
+  const [searchParams] = useSearchParams()
+  const [linked] = useState(() => {
+    const uuid = (key: string) => { const value = filterParam(searchParams, key).toLowerCase(); return uuidPattern.test(value) ? value : '' }
+    const action = filterParam(searchParams, 'action')
+    const range = linkedTimeRange(searchParams, DEFAULT_TIME_RANGE_PRESETS)
+    return {
+      draft: {
+        tenantId: audience === 'admin' ? uuid('tenant_id') : '', siteId: uuid('site_id'), clientIp: filterParam(searchParams, 'addr'),
+        host: filterParam(searchParams, 'host'), action: (marketSecurityActions as readonly string[]).includes(action) ? action as MarketSecurityAction : '',
+      } satisfies Draft,
+      timeRange: range
+        ? { preset: range.preset, range: range.range ? [dayjs(range.range[0]), dayjs(range.range[1])] : draftWindow({ preset: range.preset, range: null }) } as TimeRangeValue
+        : { preset: 'today', range: draftWindow({ preset: 'today', range: null }) } as TimeRangeValue,
+    }
+  })
+  const [draft, setDraft] = useState<Draft>(linked.draft)
+  const [timeRange, setTimeRange] = useState<TimeRangeValue>(linked.timeRange)
+  const [appliedPreset, setAppliedPreset] = useState(linked.timeRange.preset)
   // A tenant sees today's relayed lines at once; a platform admin picks a tenant first.
   const [applied, setApplied] = useState<MarketSecurityFilters | null>(() => {
     const window = draftWindow(timeRange)
-    return audience === 'tenant' && window ? { from: window[0].toISOString(), to: window[1].toISOString() } : null
+    if (!window || (audience === 'admin' && !linked.draft.tenantId)) return null
+    const { tenantId, siteId, host, action } = linked.draft
+    const clientIp = isIPAddress(linked.draft.clientIp.trim()) ? linked.draft.clientIp.trim() : ''
+    return {
+      from: window[0].toISOString(), to: window[1].toISOString(),
+      ...(audience === 'admin' ? { tenantId } : {}),
+      ...(siteId ? { siteId } : {}), ...(clientIp ? { clientIp } : {}), ...(host ? { host: host.toLowerCase() } : {}), ...(action ? { action } : {}),
+    }
   })
+  useFilterUrl(applied ? {
+    tenant_id: applied.tenantId, site_id: applied.siteId, host: applied.host, addr: applied.clientIp, action: applied.action,
+    ...timeRangeUrlValues(appliedPreset, applied.from, applied.to),
+  } : {})
   const [error, setError] = useState<string | null>(null)
+  // 平台按用户名、邮箱或用户编号选租户（值是接口要的 tenant_id，必选）；
+  // 没选就查询时错误挂在租户字段上并给焦点。
+  const [tenantError, setTenantError] = useState<string | null>(null)
+  // 客户端 IP 与本地来源同一判定，非法时就地标错、聚焦、不查询
+  const [clientIpError, setClientIpError] = useState<string | null>(() =>
+    linked.draft.clientIp.trim() !== '' && !isIPAddress(linked.draft.clientIp.trim()) ? t('states.invalidClientIp') : null)
+  const focusField = useFieldFocus()
   const [cursors, setCursors] = useState<Array<string | undefined>>([undefined])
   const [pageIndex, setPageIndex] = useState(0)
   const cursor = cursors[pageIndex]
 
   const apply = () => {
-    if (audience === 'admin' && !draft.tenantId.trim()) return setError(t('states.tenantRequired'))
+    if (audience === 'admin' && !draft.tenantId.trim()) {
+      setTenantError(t('states.tenantRequired'))
+      focusField(tenantFieldID)
+      return
+    }
+    setTenantError(null)
+    if (draft.clientIp.trim() !== '' && !isIPAddress(draft.clientIp.trim())) {
+      setClientIpError(t('states.invalidClientIp'))
+      focusField(clientIpFieldID)
+      return
+    }
+    setClientIpError(null)
     const ids = audience === 'admin' ? [draft.tenantId, draft.siteId] : [draft.siteId]
     if (ids.some((value) => value.trim() !== '' && !uuidPattern.test(value.trim()))) return setError(t('states.invalidUuid'))
     const window = draftWindow(timeRange)
@@ -61,6 +117,7 @@ export default function MarketSecurityLogPanel() {
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from >= to) return setError(t('states.invalidWindow'))
     if (to.getTime() - from.getTime() > maximumWindowMilliseconds) return setError(t('states.rangeTooLong'))
     setError(null)
+    setAppliedPreset(timeRange.preset)
     setApplied({
       from: from.toISOString(), to: to.toISOString(),
       ...(audience === 'admin' ? { tenantId: draft.tenantId.trim() } : {}),
@@ -95,7 +152,11 @@ export default function MarketSecurityLogPanel() {
   const field = (key: keyof Draft, label: string) => (
     <label className="analytics-filter-field">
       <span>{label}</span>
-      <Input aria-label={label} value={draft[key]} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} />
+      {key === 'clientIp' ? <>
+        <Input {...filterFieldProps(clientIpFieldID, clientIpError)} aria-label={label} value={draft.clientIp}
+          onChange={(event) => { setDraft((current) => ({ ...current, clientIp: event.target.value })); setClientIpError(null) }} />
+        <FieldErrorText id={clientIpFieldID} error={clientIpError} />
+      </> : <Input aria-label={label} value={draft[key]} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} />}
     </label>
   )
   return (
@@ -103,7 +164,17 @@ export default function MarketSecurityLogPanel() {
       <Alert type="info" showIcon message={mt('hint')} />
       {/* 时间范围与本地节点页一样带上方标签，整栏底边对齐，按钮与输入框同一条线。 */}
       <div className="analytics-filter-bar market-security-filter-bar">
-        {audience === 'admin' ? field('tenantId', t('filters.tenant')) : null}
+        {audience === 'admin' ? (
+          <label className="analytics-filter-field">
+            <span>{t('filters.tenant')}</span>
+            <TenantScopeSelect {...filterFieldProps(tenantFieldID, tenantError)} accessToken={accessToken} ownerKey={`${principal?.user_id}:${principal?.scope_id}`}
+              canList={Boolean(principal?.permissions.some((code) => code === 'identity.users.manage' || code === 'platform.admin'))}
+              queryKeyPrefix="market-security-tenants" valueKey="tenant_id" lazy className="market-security-tenant"
+              ariaLabel={t('filters.tenant')} placeholder={t('filters.tenantSearchPlaceholder')} emptyText={t('filters.tenantSearchEmpty')}
+              value={draft.tenantId} onChange={(tenantId) => { setDraft((current) => ({ ...current, tenantId })); setTenantError(null) }} />
+            <FieldErrorText id={tenantFieldID} error={tenantError} />
+          </label>
+        ) : null}
         {field('siteId', t('filters.site'))}
         {field('host', t('filters.domain'))}
         {field('clientIp', t('filters.clientIp'))}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Result, Select, Space, Table, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
+import { Button, Result, Select, Space, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
+import { Table } from '@cdnca/ui'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'

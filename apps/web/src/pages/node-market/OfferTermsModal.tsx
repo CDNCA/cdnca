@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Checkbox, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Typography } from 'antd'
+import { Alert, App, Button, Checkbox, Form, Input, InputNumber, Modal, Select, Space, Switch, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
+import { Tabs } from '../../components/Tabs'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'

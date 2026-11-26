@@ -10,7 +10,6 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitybinding"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
-	"github.com/cdnca/cdnca/services/control-api/internal/systemconfig"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -137,7 +136,7 @@ func (defaults siteCreationUserDefaults) createHTTPPolicy(ctx context.Context, t
 	maxUpload := int64(0)
 	if megabytes, err := strconv.Atoi(sizeValue); hasSize && err == nil {
 		maxUpload = int64(megabytes) << 20
-	} else if maxUpload, err = systemMaxUploadBytes(ctx, tx); err != nil {
+	} else if maxUpload, err = httppolicycontrol.SystemMaxUploadBytes(ctx, tx); err != nil {
 		return err
 	}
 	config, err := httppolicycontrol.NewSitePolicyConfig(maxUpload, headers)
@@ -154,26 +153,4 @@ func (defaults siteCreationUserDefaults) createHTTPPolicy(ctx context.Context, t
 		return nil // 租户 HTTP 策略已满（MaxSites）：在写入前拒绝，跳过默认
 	}
 	return err
-}
-
-// systemMaxUploadBytes: without an upload default the policy keeps the
-// node's limit, the system client_max_body_size (nginx's 1m when none is
-// published), capped at what an HTTP policy accepts.
-func systemMaxUploadBytes(ctx context.Context, tx pgx.Tx) (int64, error) {
-	value, err := loadSystemClientMaxBody(ctx, tx)
-	if err != nil {
-		return 0, err
-	}
-	return min(value, httppolicycontrol.MaxUploadBytes), nil
-}
-
-func loadSystemClientMaxBody(ctx context.Context, tx pgx.Tx) (int64, error) {
-	active, found, err := systemconfig.LoadActiveEdgeNginx(ctx, tx)
-	if err != nil {
-		return 0, err
-	}
-	if !found || active.Nginx.ClientMaxBodyBytes < 1 {
-		return 1 << 20, nil // edgeskeleton.DefaultSystemMaxBody
-	}
-	return active.Nginx.ClientMaxBodyBytes, nil
 }

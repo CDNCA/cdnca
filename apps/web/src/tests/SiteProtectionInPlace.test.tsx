@@ -320,15 +320,62 @@ describe('站点 CC/WAF 就地修改', () => {
         const view = vi.mocked(rulePacksApi.view)
         renderWAF()
         const packs = await screen.findByRole('region', { name: '官方系统规则包' })
-        const active = (await within(packs).findByText('扫描器特征')).closest('li')!
-        expect(within(active as HTMLElement).getByText('已生效')).toBeInTheDocument()
-        // 平台层 14/15 个系统包为 inherit（系统默认关闭）：按真实状态显示未生效，不写死已生效。
-        const inactive = within(packs).getByText('未启用的包').closest('li')!
-        expect(within(inactive as HTMLElement).getByText('未生效')).toBeInTheDocument()
-        expect(within(inactive as HTMLElement).queryByText('已生效')).not.toBeInTheDocument()
-        expect(within(packs).getAllByText('已生效')).toHaveLength(1)
+        expect(await within(packs).findByText('对本站生效 1/2')).toBeInTheDocument()
+        await userEvent.click(within(packs).getByRole('button', { name: '查看 2 个规则包' }))
+        expect(within(packs).getByText('扫描器特征')).toBeVisible()
+        // 平台层 14/15 个系统包为 inherit（系统默认关闭）：按真实状态显示未生效，不写死已生效；各半时没有多数，逐条标出。
+        const row = (name: string) => within(packs).getByText(name).closest('.ant-collapse-item') as HTMLElement
+        expect(within(row('扫描器特征')).getByText('已生效')).toBeInTheDocument()
+        expect(within(row('未启用的包')).getByText('未生效')).toBeInTheDocument()
+        expect(within(row('未启用的包')).queryByText('已生效')).not.toBeInTheDocument()
         expect(within(packs).queryByText('租户自己的包')).not.toBeInTheDocument()
         expect(view).toHaveBeenCalledWith('token', 'site', siteID)
+      })
+
+      describe('官方系统规则包紧凑列表', () => {
+        const longText = '同一 IP 60 秒内 404 达 10 次后记录其请求（fixed_window 判定），可改为 429 拒绝或挑战。思路来源 bunkerity/bunkerweb badbehavior（AGPL-3.0，未复制代码）'
+        const pack = (id: string, name: string, enabled: boolean, extra: Record<string, unknown> = {}) => ({ pack_id: id, layer: 'system', name, description: `${name}说明`,
+          engine: 'waf_v2', defaults: { action: 'log' }, effect: { enabled, enabled_at: { level: 'platform' }, adjustable: [], priority: 500, params: {}, rule_states: {},
+            rule_source: {}, ignored_overrides: 0 }, ...extra })
+        const mockPacks = (packs: unknown[]) => vi.mocked(rulePacksApi.view).mockResolvedValue({ level: { level: 'site', object_id: siteID }, overrides: [], packs } as never)
+
+        it('shows one line per pack with its current action and keeps the full description behind the expand control', async () => {
+          mockPacks([pack('system/cc-404-burst', '404 扫描行为', true, { description: longText }),
+            pack('system/waf-php-vpatch', 'PHP 虚拟补丁', true, { defaults: { action: 'block' } }),
+            pack('system/bot-bad-ua', '恶意 UA', true, { effect: { enabled: true, enabled_at: { level: 'site' }, adjustable: [], priority: 500, params: { action: 'challenge' },
+              rule_states: {}, rule_source: {}, ignored_overrides: 0 } })])
+          renderWAF()
+          const packs = await screen.findByRole('region', { name: '官方系统规则包' })
+          await userEvent.click(await within(packs).findByRole('button', { name: '查看 3 个规则包' }))
+          await within(packs).findByText('404 扫描行为')
+          expect(within(packs).queryByText(longText)).not.toBeInTheDocument()
+          expect(within(packs).getAllByText('动作：仅记录')).toHaveLength(1)
+          expect(within(packs).getByText('动作：拦截')).toBeInTheDocument()
+          expect(within(packs).getByText('动作：挑战')).toBeInTheDocument()
+          await userEvent.click(within(packs).getByText('404 扫描行为'))
+          expect(await within(packs).findByText(longText)).toBeVisible()
+        })
+
+        it('all packs active: only the group head says 3/3 已生效, no row repeats it', async () => {
+          mockPacks([pack('system/a', '包甲', true), pack('system/b', '包乙', true), pack('system/c', '包丙', true)])
+          renderWAF()
+          const packs = await screen.findByRole('region', { name: '官方系统规则包' })
+          await within(packs).findByText('包甲')
+          expect(within(packs).getByText('对本站生效 3/3')).toBeInTheDocument()
+          expect(within(packs).queryByText('已生效')).not.toBeInTheDocument()
+          expect(within(packs).queryByText('未生效')).not.toBeInTheDocument()
+        })
+
+        it('one pack differs from the rest: only that pack shows its state', async () => {
+          mockPacks([pack('system/a', '包甲', true), pack('system/b', '包乙', false), pack('system/c', '包丙', true)])
+          renderWAF()
+          const packs = await screen.findByRole('region', { name: '官方系统规则包' })
+          await within(packs).findByText('包甲')
+          expect(within(packs).getByText('对本站生效 2/3')).toBeInTheDocument()
+          expect(within(packs).getAllByText('未生效')).toHaveLength(1)
+          expect(within(within(packs).getByText('包乙').closest('.ant-collapse-item') as HTMLElement).getByText('未生效')).toBeInTheDocument()
+          expect(within(packs).queryByText('已生效')).not.toBeInTheDocument()
+        })
       })
     })
 

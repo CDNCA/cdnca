@@ -70,8 +70,7 @@ func ExpandCCRuleGroup(items map[string]rulecatalog.Item, groupKey string) ([]Ru
 		var trigger *rulecatalog.CCFilterBody
 		if entry.Filter2Key != "" {
 			rate, second := *filter.Body.CCFilter, items[entry.Filter2Key]
-			if second.Body.CCFilter == nil || second.Body.CCFilter.Type == "req_rate" || rate.Type != "req_rate" || rate.MaxReqPerURI != 0 || rate.MaxReq < 1 ||
-				rate.WithinSecond > 3600 {
+			if second.Body.CCFilter == nil || !validCCFilterPair(rate, *second.Body.CCFilter) {
 				return nil, fmt.Errorf("%w: %s entry %d filter pair", ErrCatalogUnsupported, groupKey, index+1)
 			}
 			trigger = &rate
@@ -96,46 +95,67 @@ func ExpandCCRuleGroup(items map[string]rulecatalog.Item, groupKey string) ([]Ru
 		if !known && config.Params == nil || !rulecatalog.ValidCCFilterParams(config.Type, params) {
 			return nil, fmt.Errorf("%w: %s has no enforcement parameters", ErrCatalogUnsupported, filter.SystemKey)
 		}
-		if config.Type == "req_rate" {
-			limit := &RateLimitConfig{Algorithm: "fixed_window", WindowSeconds: config.WithinSecond,
-				MaxRequests: config.MaxReq, MaxPerURI: config.MaxReqPerURI}
-			switch entry.Action {
-			case "block":
-				limit.ResponseAction, limit.BanSeconds, rule.Flow = "temporary_ban", params.BanSeconds, FlowStop
-			case "log":
-				limit.ResponseAction = "log"
-			default:
-				return nil, fmt.Errorf("%w: %s action %s", ErrCatalogUnsupported, groupKey, entry.Action)
-			}
-			rule.Action, rule.ActionConfig.RateLimit = ActionRateLimit, limit
-		} else {
-			challengeType, known := catalogChallengeTypes[config.Type]
-			if !known || entry.Action != "block" && entry.Action != "log" {
-				return nil, fmt.Errorf("%w: %s filter %s", ErrCatalogUnsupported, groupKey, config.Type)
-			}
-			challenge := &ChallengeConfig{Type: challengeType, FailureWindowSeconds: config.WithinSecond,
-				MaxFailures: config.MaxReq, PassSeconds: params.PassSeconds, LogOnly: entry.Action == "log",
-				PowBits: params.PowBits, DelaySeconds: params.DelaySeconds, ChallengeSeconds: params.ChallengeSeconds,
-				BindIPv4Prefix: params.BindIPv4Prefix, BindIPv6Prefix: params.BindIPv6Prefix,
-				KeyRotateSeconds: params.KeyRotateSeconds}
-			if !challenge.LogOnly {
-				challenge.BanSeconds = params.BanSeconds
-			}
-			if config.MaxReq == 0 {
-				challenge.MaxFailures = 1
-			}
-			if passLimit != nil {
-				challenge.PassWindowSeconds, challenge.PassMaxRequests = passLimit.WithinSecond, passLimit.MaxReq
-				challenge.PassMaxRequestsPerURI = passLimit.MaxReqPerURI
-			}
-			if trigger != nil {
-				challenge.TriggerWindowSeconds, challenge.TriggerMaxRequests = trigger.WithinSecond, trigger.MaxReq
-			}
-			rule.Action, rule.ActionConfig.Challenge, rule.Flow = ActionChallenge, challenge, FlowStop
+		if err := applyCCFilter(&rule, config, params, entry.Action, trigger, passLimit); err != nil {
+			return nil, fmt.Errorf("%w: %s filter %s action %s", err, groupKey, config.Type, entry.Action)
 		}
 		rules = append(rules, rule)
 	}
 	return rules, nil
+}
+
+// validCCFilterPair reports whether filter 1 and filter 2 of an entry make
+// one rule: filter 1 a req_rate without a per-URI budget (the trigger),
+// filter 2 a verification filter.
+func validCCFilterPair(rate, second rulecatalog.CCFilterBody) bool {
+	return second.Type != "req_rate" && rate.Type == "req_rate" && rate.MaxReqPerURI == 0 && rate.MaxReq >= 1 &&
+		rate.WithinSecond <= 3600
+}
+
+// applyCCFilter sets rule's action, action config and flow to run filter
+// config with its enforcement params (ExpandCCRuleGroup semantics). action
+// is block or log; trigger (filter 1 of a pair) gates a verification filter;
+// passLimit (nil: none) limits clients that passed. A type or action the node
+// cannot run is ErrCatalogUnsupported.
+func applyCCFilter(rule *Rule, config rulecatalog.CCFilterBody, params rulecatalog.CCFilterParams, action string,
+	trigger, passLimit *rulecatalog.CCFilterBody) error {
+	if config.Type == "req_rate" {
+		limit := &RateLimitConfig{Algorithm: "fixed_window", WindowSeconds: config.WithinSecond,
+			MaxRequests: config.MaxReq, MaxPerURI: config.MaxReqPerURI}
+		switch action {
+		case "block":
+			limit.ResponseAction, limit.BanSeconds, rule.Flow = "temporary_ban", params.BanSeconds, FlowStop
+		case "log":
+			limit.ResponseAction = "log"
+		default:
+			return ErrCatalogUnsupported
+		}
+		rule.Action, rule.ActionConfig = ActionRateLimit, ActionConfig{RateLimit: limit}
+		return nil
+	}
+	challengeType, known := catalogChallengeTypes[config.Type]
+	if !known || action != "block" && action != "log" {
+		return ErrCatalogUnsupported
+	}
+	challenge := &ChallengeConfig{Type: challengeType, FailureWindowSeconds: config.WithinSecond,
+		MaxFailures: config.MaxReq, PassSeconds: params.PassSeconds, LogOnly: action == "log",
+		PowBits: params.PowBits, DelaySeconds: params.DelaySeconds, ChallengeSeconds: params.ChallengeSeconds,
+		BindIPv4Prefix: params.BindIPv4Prefix, BindIPv6Prefix: params.BindIPv6Prefix,
+		KeyRotateSeconds: params.KeyRotateSeconds}
+	if !challenge.LogOnly {
+		challenge.BanSeconds = params.BanSeconds
+	}
+	if config.MaxReq == 0 {
+		challenge.MaxFailures = 1
+	}
+	if passLimit != nil {
+		challenge.PassWindowSeconds, challenge.PassMaxRequests = passLimit.WithinSecond, passLimit.MaxReq
+		challenge.PassMaxRequestsPerURI = passLimit.MaxReqPerURI
+	}
+	if trigger != nil {
+		challenge.TriggerWindowSeconds, challenge.TriggerMaxRequests = trigger.WithinSecond, trigger.MaxReq
+	}
+	rule.Action, rule.ActionConfig, rule.Flow = ActionChallenge, ActionConfig{Challenge: challenge}, FlowStop
+	return nil
 }
 
 // catalogWAFDetectors binds node semantic detectors to catalog rule sets: the

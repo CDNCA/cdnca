@@ -551,7 +551,7 @@ describe('StreamListPage', () => {
 
     expect(await screen.findByText('TCP gateway')).toBeInTheDocument()
     await chooseRowAction(user, '停用')
-    await user.click(await screen.findByRole('button', { name: '确认' }))
+    await user.click(within(await screen.findByRole('dialog', { name: '停用 TCP 18100' })).getByRole('button', { name: '停用' }))
 
     await waitFor(() => expect(fetchSpy.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(true))
     await waitFor(() => expect(reads).toBe(2))
@@ -690,8 +690,8 @@ describe('StreamListPage', () => {
     renderStreamsWithQueryClient(queryClient)
     expect(await screen.findByText('TCP gateway')).toBeInTheDocument()
     await chooseRowAction(user, '停用')
-    const confirmation = await screen.findByRole('dialog', { name: '停用转发' })
-    const confirm = within(confirmation).getByRole('button', { name: '确认' })
+    const confirmation = await screen.findByRole('dialog', { name: '停用 TCP 18100' })
+    const confirm = within(confirmation).getByRole('button', { name: '停用' })
 
     const refetch = queryClient.refetchQueries({ type: 'active' })
     await waitFor(() => expect(reads).toBe(2))
@@ -1028,7 +1028,11 @@ describe('StreamListPage', () => {
     const drawer = screen.getByRole('dialog', { name: '添加转发' })
     await showAdvancedFields(user, drawer)
     const notice = /服务端先发数据的协议在共享端口上会被断开/
+    // 共享端口限制按需在“详情”里看，不常驻、不进开关描述。
+    expect(within(drawer).queryByText(notice)).not.toBeInTheDocument()
+    await user.click(within(drawer).getByRole('button', { name: 'TLS 透传（按 SNI 分流）详情' }))
     expect(within(drawer).getByText(notice)).toBeInTheDocument()
+    expect(within(drawer).getByRole('switch', { name: 'TLS 透传（按 SNI 分流）' })).not.toHaveAccessibleDescription(notice)
     await user.type(within(drawer).getByLabelText('监听端口'), '443/udp')
     await waitFor(() => expect(within(drawer).queryByText(notice)).not.toBeInTheDocument())
     await user.clear(within(drawer).getByLabelText('监听端口'))

@@ -62,7 +62,7 @@ func consumeProofs(
 		}
 		proof, err := authority.VerifyAndConsume(ctx, RegistrationProofRequest{
 			Reference: reference, Channel: channel, Destination: destination,
-			Source: input.Source, IdempotencyKey: input.IdempotencyKey, SubjectDigest: subjectDigest,
+			IdempotencyKey: input.IdempotencyKey, SubjectDigest: subjectDigest,
 		})
 		if err != nil {
 			if errors.Is(err, ErrProofInvalid) {

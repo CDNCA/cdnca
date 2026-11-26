@@ -2,6 +2,7 @@ package dnsmaintenance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -164,6 +165,22 @@ func (store *Store) ClaimedHostnames(ctx context.Context, zoneIDs []uuid.UUID) (
 		result[canonicalOwner(name)] = true
 	}
 	return result, nil
+}
+
+// CleanupPlanRecord loads the record stored with a 清除CDN无关解析 item
+// (migration 686); ok is false when the item has none (planned before 696).
+func (store *Store) CleanupPlanRecord(ctx context.Context, tenantID, jobID uuid.UUID, itemID string) (CleanupRecord, bool, error) {
+	var record CleanupRecord
+	err := store.pool.QueryRow(ctx, `SELECT zone_id, owner_name, record_type, record_value, provider_record_id
+		FROM dns_cleanup_plan_records WHERE tenant_id=$1 AND job_id=$2 AND item_id=$3`, tenantID, jobID, itemID).
+		Scan(&record.ZoneID, &record.Name, &record.Type, &record.Value, &record.RecordID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CleanupRecord{}, false, nil
+	}
+	if err != nil {
+		return CleanupRecord{}, false, fmt.Errorf("load DNS cleanup plan record: %w", err)
+	}
+	return record, true, nil
 }
 
 func canonicalOwner(name string) string {

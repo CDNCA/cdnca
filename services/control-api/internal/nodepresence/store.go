@@ -623,6 +623,10 @@ func validateHeartbeatIdentityBindings(ctx context.Context, tx pgx.Tx, nodeID uu
 	return nil
 }
 
+// Without a deployment the identity is the node's current or previous one: an
+// apply of that version and artifact delivered to this node that activated
+// (activated, healthy, or rollback_failed: a
+// generation whose compensation failed and that still serves).
 func requireBoundIdentityArtifact(ctx context.Context, tx pgx.Tx, nodeID, scopeID uuid.UUID,
 	identity *normalizedActiveConfigIdentity, deploymentID *uuid.UUID, attempt uint32,
 	state agentv1.NodeDeploymentState,
@@ -640,7 +644,7 @@ func requireBoundIdentityArtifact(ctx context.Context, tx pgx.Tx, nodeID, scopeI
 		JOIN config_versions version ON version.id=artifact.config_version_id
 		 AND version.configuration_scope_id=$3
 		WHERE deployment.node_id=$1 AND deployment.config_version_id=$2
-		 AND deployment.action='apply' AND deployment.state IN ('activated','healthy')
+		 AND deployment.action='apply' AND deployment.state IN ('activated','healthy','rollback_failed')
 		 AND deployment.command_sha256=sha256(deployment.command_bytes)
 		 AND artifact.kind='configuration' AND artifact.sha256=$4`
 	args := []any{nodeID, identity.ConfigID, scopeID, identity.Digest}

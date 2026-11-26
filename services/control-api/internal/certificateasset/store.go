@@ -525,6 +525,9 @@ func (s *Store) advanceActivatedACMEOrder(ctx context.Context, tx pgx.Tx, actor 
 	return nil
 }
 
+// appendCertificatePublicationIntent records the intent only while the actor's session passes the rule of
+// identity.Store.PrincipalForSession: a session the console's token refresh replaced still counts until it
+// expires; logout, refresh token replay and suspension revoke the whole family. Trigger 699 checks the same.
 func appendCertificatePublicationIntent(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -551,7 +554,7 @@ func appendCertificatePublicationIntent(
 	JOIN access_scopes target_scope ON target_scope.id=$1 AND target_scope.kind='tenant'
 	JOIN tenants target_tenant ON target_tenant.id=target_scope.tenant_id AND target_tenant.status='active'
 	WHERE session_row.id=$11 AND session_row.scope_id=$9 AND session_row.user_id=$10
-	  AND session_row.revoked_at IS NULL AND session_row.replaced_by_id IS NULL
+	  AND session_row.revoked_at IS NULL
 	  AND session_row.expires_at>transaction_timestamp() AND actor_scope.kind=$12`,
 		binding.TenantScopeID, binding.SiteID, binding.Revision, operation,
 		binding.AssetID, binding.VersionID, binding.Default, requestID, actor.ScopeID, actor.UserID,
@@ -774,7 +777,7 @@ func (s *Store) bindTx(ctx context.Context, tx pgx.Tx, actor Actor, request Bind
 	if err != nil {
 		return err
 	}
-	if version.Status != StatusActive {
+	if version.Status != StatusActive && version.Status != StatusDefault {
 		return ErrInvalidTransition
 	}
 	if err := RequireCoverage(version.SANs, domains); err != nil {
@@ -790,6 +793,35 @@ func (s *Store) bindTx(ctx context.Context, tx pgx.Tx, actor Actor, request Bind
 	}
 	if currentRevision != request.ExpectedRevision {
 		return ErrRevisionConflict
+	}
+	if version.Status == StatusDefault {
+		// the first version of a never-activated asset (an ACME
+		// order's issued certificate, a fresh upload) is activated by its
+		// first binding, in this transaction. Once any version of the asset
+		// was activated, a default version stays refused.
+		var activated bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM certificate_asset_activation_facts
+			WHERE tenant_scope_id=$1 AND asset_id=$2)`, request.TenantScopeID, request.AssetID).Scan(&activated); err != nil {
+			return err
+		}
+		if activated {
+			return ErrInvalidTransition
+		}
+		activate := ActivateRequest{TenantScopeID: request.TenantScopeID, AssetID: request.AssetID,
+			VersionID: request.VersionID, ExpectedRevision: asset.Revision,
+			IdempotencyKey: request.IdempotencyKey, RequestID: request.RequestID}
+		activateDigest, _ := digestRequest(struct {
+			TenantScopeID    uuid.UUID `json:"tenant_scope_id"`
+			AssetID          uuid.UUID `json:"asset_id"`
+			VersionID        uuid.UUID `json:"version_id"`
+			ExpectedRevision int64     `json:"expected_revision"`
+		}{activate.TenantScopeID, activate.AssetID, activate.VersionID, activate.ExpectedRevision})
+		if err := s.activateTx(ctx, tx, actor, activate, activateDigest, false, &version); err != nil {
+			return err
+		}
+		if version.Status != StatusActive {
+			return ErrInvalidTransition
+		}
 	}
 	if err := s.supersedeRenewalDeliveriesTx(ctx, tx, actor, request.TenantScopeID, request.SiteID,
 		request.RequestID); err != nil {

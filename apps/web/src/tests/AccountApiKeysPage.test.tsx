@@ -127,7 +127,7 @@ async function fillCreateForm(
   directAllowlistInput = false,
 ) {
   await openAdvanced()
-  await user.click(screen.getByRole('button', { name: '创建密钥' }))
+  await user.click(within(screen.getByTestId('api-key-advanced')).getByRole('button', { name: '创建密钥' }))
   const dialog = screen.getByRole('dialog', { name: '创建API密钥' })
   await user.type(within(dialog).getByLabelText('名称'), 'new reader')
   const scopes = within(dialog).getByRole('combobox', { name: '最小权限范围' })
@@ -181,7 +181,7 @@ describe('AccountApiKeysPage', () => {
     const header = await screen.findByRole('button', { name: /高级密钥管理/ })
     expect(header).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByTestId('api-key-table-scroll')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '创建密钥' })).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('api-key-advanced')).queryByRole('button', { name: '创建密钥' })).not.toBeInTheDocument()
 
     fireEvent.click(header)
     expect(await screen.findByTestId('api-key-table-scroll')).toBeInTheDocument()
@@ -189,7 +189,7 @@ describe('AccountApiKeysPage', () => {
     expect(header).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('creates an all-permission, non-expiring default key from the switch and shows api_secret once', async () => {
+  it('creates the all-permission, non-expiring compatibility key only after its own confirmation and shows api_secret once', async () => {
     authenticate({
       permissions: ['identity.self.read', 'api_keys.self.manage', 'sites.read', 'sites.manage', 'dns.read'],
     })
@@ -209,13 +209,21 @@ describe('AccountApiKeysPage', () => {
 
     const compatibility = await screen.findByTestId('api-key-compatibility')
     expect(await within(compatibility).findByText('未开启')).toBeInTheDocument()
-    expect(within(compatibility).getByText('开启 API 后可配置 IP 白名单。')).toBeInTheDocument()
-    expect(within(compatibility).getByText('API 未开启，暂无可用密钥。')).toBeInTheDocument()
+    // 未开启时不铺白名单/密钥空态与用途复述
+    expect(within(compatibility).queryByTestId('api-key-compatibility-allowlist')).not.toBeInTheDocument()
+    expect(within(compatibility).queryByTestId('api-key-compatibility-key-info')).not.toBeInTheDocument()
+    expect(within(compatibility).queryByText('IP 白名单')).not.toBeInTheDocument()
+    expect(within(compatibility).queryByText('密钥信息')).not.toBeInTheDocument()
+    expect(compatibility.textContent).not.toMatch(/管理账号 API|只在开启或重置|显示一次|未开启，暂无|开启 API 后可配置/)
+    expect(screen.getByTestId('api-key-advanced')).not.toHaveTextContent('管理多个密钥、最小权限')
     expect(list).toHaveBeenCalledWith(expect.any(String), { limit: 2, status: 'active', usable: true }, expect.any(AbortSignal))
-    const toggle = within(compatibility).getByRole('switch', { name: 'API 密钥状态' })
-    expect(toggle).not.toBeChecked()
-
-    await user.click(toggle)
+    expect(within(compatibility).queryByRole('switch', { name: 'API 密钥状态' })).not.toBeInTheDocument()
+    await user.click(within(compatibility).getByRole('button', { name: '创建兼容密钥' }))
+    const confirm = await screen.findByRole('tooltip')
+    expect(within(confirm).getByText('创建兼容密钥？')).toBeInTheDocument()
+    expect(within(confirm).getByText('兼容密钥拥有当前账号可授予的全部 3 项权限，且永不过期，用于旧接入。')).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+    await user.click(within(confirm).getByRole('button', { name: '创建兼容密钥' }))
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
     expect(create).toHaveBeenCalledWith(
@@ -238,10 +246,35 @@ describe('AccountApiKeysPage', () => {
     expect(document.body.textContent).not.toContain(issued.secret)
     expect(await within(compatibility).findByText('已开启')).toBeInTheDocument()
     expect(within(compatibility).getByText(simpleIssued.key.key_id)).toBeInTheDocument()
-    expect(within(compatibility).getByText('已隐藏，仅在开启或重置时显示一次')).toBeInTheDocument()
+    expect(within(compatibility).getByText('已隐藏')).toBeInTheDocument()
+    expect(within(compatibility).getByTestId('api-key-compatibility-allowlist')).toBeInTheDocument()
+    // 一次性 secret 提醒只在签发结果弹窗里出现，常驻区不再重复
+    expect(compatibility.textContent).not.toMatch(/只在开启或重置|显示一次/)
   })
 
-  it('disables the switch when the session has no grantable permission', async () => {
+  it('makes 创建密钥 the first action without a key and opens the scope form with a limited lifetime', async () => {
+    authenticate({ permissions: ['identity.self.read', 'api_keys.self.manage', 'sites.read', 'sites.manage'] })
+    vi.spyOn(apiKeysApi, 'list').mockResolvedValue(apiPage([]))
+    const create = vi.spyOn(apiKeysApi, 'create').mockResolvedValue(issued)
+    const user = userEvent.setup()
+    renderWithProviders(<AccountApiKeysPage />, ['/account/api-key'])
+
+    const compatibility = await screen.findByTestId('api-key-compatibility')
+    const first = await within(compatibility).findByRole('button', { name: '创建密钥' })
+    await waitFor(() => expect(first).toBeEnabled())
+    expect(first).toHaveClass('ant-btn-primary')
+    expect(within(compatibility).getByRole('button', { name: '创建兼容密钥' })).not.toHaveClass('ant-btn-primary')
+    await user.click(first)
+    const dialog = await findDialogTitled('创建API密钥')
+    expect(within(dialog).getByRole('combobox', { name: '最小权限范围' })).toBeInTheDocument()
+    expect(within(dialog).queryAllByText('管理网站', { selector: '.ant-select-selection-item-content' })).toHaveLength(0)
+    const expires = within(dialog).getByLabelText('到期时间') as HTMLInputElement
+    expect(expires.value).not.toBe('')
+    expect(Date.parse(expires.value)).toBeGreaterThan(Date.now() + 80 * 24 * 60 * 60 * 1000)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('disables key creation when the session has no grantable permission', async () => {
     authenticate({ permissions: ['identity.self.read', 'api_keys.self.manage'] })
     vi.spyOn(apiKeysApi, 'list').mockResolvedValue(apiPage([]))
     const create = vi.spyOn(apiKeysApi, 'create')
@@ -249,8 +282,9 @@ describe('AccountApiKeysPage', () => {
     renderWithProviders(<AccountApiKeysPage />, ['/account/api-key'])
 
     const compatibility = await screen.findByTestId('api-key-compatibility')
-    expect(await within(compatibility).findByText('当前账号没有可授予 API 的权限，无法开启。')).toBeInTheDocument()
-    expect(within(compatibility).getByRole('switch', { name: 'API 密钥状态' })).toBeDisabled()
+    expect(await within(compatibility).findByText('当前账号没有可授予 API 的权限，无法创建密钥。')).toBeInTheDocument()
+    expect(within(compatibility).getByRole('button', { name: '创建密钥' })).toBeDisabled()
+    expect(within(compatibility).getByRole('button', { name: '创建兼容密钥' })).toBeDisabled()
     expect(create).not.toHaveBeenCalled()
   })
 
@@ -892,7 +926,7 @@ describe('AccountApiKeysPage', () => {
     await user.type(allowlist, '203.0.113.0/24')
     await user.click(within(editor).getByRole('button', { name: '保存' }))
     await waitFor(() => expect(writes).toHaveLength(1))
-    await waitFor(() => expect(screen.getByRole('button', { name: '创建密钥' })).toBeEnabled())
+    await waitFor(() => expect(within(screen.getByTestId('api-key-advanced')).getByRole('button', { name: '创建密钥' })).toBeEnabled())
 
     expect(new URL(writes[0].url, 'http://localhost').pathname).toBe(`/v1/account/api-keys/${activeKey.id}`)
     expect(writes[0].init?.method).toBe('PATCH')
@@ -1130,7 +1164,7 @@ describe('AccountApiKeysPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountApiKeysPage />, ['/account/api-key'])
     await openAdvanced()
-    await user.click(screen.getByRole('button', { name: '创建密钥' }))
+    await user.click(within(screen.getByTestId('api-key-advanced')).getByRole('button', { name: '创建密钥' }))
     const dialog = screen.getByRole('dialog', { name: '创建API密钥' })
     await user.type(within(dialog).getByLabelText('名称'), 'stale writer')
     await user.click(within(dialog).getByRole('combobox', { name: '最小权限范围' }))
@@ -1207,7 +1241,7 @@ describe('AccountApiKeysPage during impersonation', () => {
     expect(allowlist).toBeDisabled()
     expect(screen.getAllByText('代登录期间仅可查看密钥，创建、修改、轮换或撤销请由用户本人登录后操作。').length).toBeGreaterThan(0)
     await openAdvanced()
-    expect(screen.getByRole('button', { name: '创建密钥' })).toBeDisabled()
+    expect(within(screen.getByTestId('api-key-advanced')).getByRole('button', { name: '创建密钥' })).toBeDisabled()
     for (const name of ['编辑production reader', '轮换production reader', '撤销production reader', '激活pending reader']) {
       expect(screen.getByRole('button', { name }), name).toBeDisabled()
     }

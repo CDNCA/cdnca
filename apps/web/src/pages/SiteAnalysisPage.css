@@ -274,19 +274,9 @@
     overflow: hidden;
   }
 
-  .analytics-analysis-page .analytics-rank-tabs .ant-tabs-nav-wrap {
-    max-width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-  }
-
-  .analytics-analysis-page .analytics-rank-tabs .ant-tabs-nav-wrap::-webkit-scrollbar,
+  /* 十个排行页签放不下时交回 rc-tabs（自动平移、「更多」可达后半项），
+     不再隐藏「更多」和滚动条去做看不出入口的原生横滚。 */
   .analytics-analysis-page .analytics-table-scroll .ant-table-content::-webkit-scrollbar {
-    display: none;
-  }
-
-  .analytics-analysis-page .analytics-rank-tabs .ant-tabs-nav-operations {
     display: none;
   }
 

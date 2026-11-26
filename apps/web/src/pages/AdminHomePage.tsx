@@ -14,6 +14,7 @@ import { installationLockQueryKey, useInstallationLockCheck } from '../component
 import { DashboardAnalyticsView } from '../components/DashboardOverview'
 import { useChartTheme } from '../components/useChartTheme'
 import { ResourceID } from '../components/ResourceID'
+import ControlOriginAuthNotice from '../components/ControlOriginAuthNotice'
 import {
   dashboardApi,
   formatDashboardBytes,
@@ -837,6 +838,7 @@ function AdminHomePageContent({ owner, ownerKey, principal }: { owner: AdminDash
         />
       ) : dashboardQuery.isSuccess ? (
         <div className="dashboard-content">
+          <ControlOriginAuthNotice />
           <div className="dashboard-reference-layout">
             <div className="dashboard-reference-main">
               <DashboardBlock title={t('title')} icon={<DashboardPodiumIcon />} className="dashboard-reference-operations" toolbar={

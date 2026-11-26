@@ -191,11 +191,11 @@ func TestProductionResumeKeepsStateWhenPlatformPausedOrUnreachable(t *testing.T)
 		fail                   bool
 		want                   error
 	}{
-		"operator pause":       {StatusDisabled, PausedByOperator, false, ErrPlatformPaused},
-		"market delist":        {StatusDisabled, PausedByService, false, ErrPlatformPaused},
-		"pause without owner":  {StatusDisabled, "", false, ErrPlatformPaused},
-		"license unreachable":  {StatusDisabled, PausedByInstallation, true, ErrFactUnavailable},
-		"remote already moved": {StatusEnabled, "", false, ErrFactDenied},
+		"operator pause":      {StatusDisabled, PausedByOperator, false, ErrPlatformPaused},
+		"market delist":       {StatusDisabled, PausedByService, false, ErrPlatformPaused},
+		"pause without owner": {StatusDisabled, "", false, ErrPlatformPaused},
+		"license unreachable": {StatusDisabled, PausedByInstallation, true, ErrFactUnavailable},
+		"remote uninstalled":  {StatusUninstalled, "", false, ErrFactDenied},
 	} {
 		t.Run(name, func(t *testing.T) {
 			domain, repository, resolver, actor := productionResumeFixture(setup.remoteStatus, setup.pausedBy)
@@ -216,6 +216,57 @@ func TestProductionResumeKeepsStateWhenPlatformPausedOrUnreachable(t *testing.T)
 	}
 	if len(repository.applied) != 0 {
 		t.Fatal("drifted authorization resumed")
+	}
+}
+
+// 运营端先暂停、主控再暂停（授权端 already_disabled 签收）、运营端随后恢复：授权端
+// enabled、本机仍是自己的暂停。列表与详情把它显示为本主控暂停（恢复按钮据此出现），恢复照常写本机并上报
+// （授权端按 already_enabled 签收）；原样重试只回放。授权已换版本或有新权限待批时仍拒绝，与按钮一致。
+func TestProductionResumesOwnPauseAfterOperatorLiftedItsPause(t *testing.T) {
+	domain, repository, resolver, actor := productionResumeFixture(StatusEnabled, "")
+	page, err := domain.List(context.Background(), actor, ListRequest{TenantID: actor.TenantID, Limit: 50})
+	if err != nil || len(page.Items) != 1 || page.Items[0].AuthorizationStatus != StatusDisabled ||
+		page.Items[0].PausedBy != PausedByInstallation {
+		t.Fatalf("list=%+v err=%v", page.Items, err)
+	}
+	detail, err := domain.Get(context.Background(), actor, repository.head.Installation.AuthorizationID)
+	if err != nil || detail.AuthorizationStatus != StatusDisabled || detail.PausedBy != PausedByInstallation {
+		t.Fatalf("detail status=%s paused_by=%s err=%v", detail.AuthorizationStatus, detail.PausedBy, err)
+	}
+	request := resumeRequest(actor, repository.head)
+	view, err := domain.Mutate(context.Background(), actor, request)
+	if err != nil || view.Installation.Status != StatusEnabled || len(repository.applied) != 1 ||
+		len(resolver.reported) != 1 || resolver.reported[0].Result != ReceiptResumed {
+		t.Fatalf("resume view=%+v applied=%d reported=%d err=%v", view.Installation, len(repository.applied),
+			len(resolver.reported), err)
+	}
+
+	for name, drift := range map[string]func(*InstallationView){
+		"new version": func(remote *InstallationView) { remote.Installation.VerificationID = uuid.New() },
+		"new scope":   func(remote *InstallationView) { remote.NewScopes = []string{"plugin.write"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			domain, repository, resolver, actor := productionResumeFixture(StatusEnabled, "")
+			drift(&resolver.remote[0])
+			page, err := domain.List(context.Background(), actor, ListRequest{TenantID: actor.TenantID, Limit: 50})
+			if err != nil || len(page.Items) != 1 || page.Items[0].PausedBy == PausedByInstallation {
+				t.Fatalf("drifted list=%+v err=%v", page.Items, err)
+			}
+			if _, err := domain.Mutate(context.Background(), actor, resumeRequest(actor, repository.head)); !errors.Is(err,
+				ErrFactDenied) || len(repository.applied) != 0 {
+				t.Fatalf("drifted resume err=%v applied=%d", err, len(repository.applied))
+			}
+		})
+	}
+	// The operator pause is still in force: shown as the operator's, resume refused.
+	domain, repository, _, actor = productionResumeFixture(StatusDisabled, PausedByOperator)
+	page, err = domain.List(context.Background(), actor, ListRequest{TenantID: actor.TenantID, Limit: 50})
+	if err != nil || len(page.Items) != 1 || page.Items[0].PausedBy != PausedByOperator {
+		t.Fatalf("operator pause list=%+v err=%v", page.Items, err)
+	}
+	if _, err := domain.Mutate(context.Background(), actor, resumeRequest(actor, repository.head)); !errors.Is(err,
+		ErrPlatformPaused) || len(repository.applied) != 0 {
+		t.Fatalf("resume under an operator pause err=%v", err)
 	}
 }
 
@@ -306,7 +357,7 @@ func (resolver *flakyResumeResolver) ReportLifecycle(_ context.Context, request 
 	if resolver.failReport {
 		return LifecycleReportResult{}, ErrFactUnavailable
 	}
-	return LifecycleReportResult{}, nil
+	return LifecycleReportResult{AuthorizationID: request.Receipt.AuthorizationID, LifecycleRevision: 1}, nil
 }
 
 func replayResumeFixture(t *testing.T) (*ProductionDomain, *replayResumeRepository, *flakyResumeResolver, Actor) {
@@ -322,15 +373,17 @@ func replayResumeFixture(t *testing.T) (*ProductionDomain, *replayResumeReposito
 	return domain, repository, flaky, actor
 }
 
-// 报告 B-补1：恢复成功（或上报结果未知）后，同 key 同请求重试回放原回执并补投上报，不再新建回执、不再换身份代际。
+// 报告 B-补1：恢复成功（或上报未达）后，同 key 同请求重试回放原回执并补投上报，不再新建回执、不再换身份代际。
+// 本机已提交即成功；上报未达只把 license_sync 标为 pending，不再回 503。
 func TestProductionResumeExactRetryReplaysPersistedReceipt(t *testing.T) {
 	for _, failReport := range []bool{false, true} {
 		domain, repository, resolver, actor := replayResumeFixture(t)
 		resolver.failReport = failReport
 		request := resumeRequest(actor, repository.head)
 		first, err := domain.Mutate(context.Background(), actor, request)
-		if failReport != errors.Is(err, ErrResultUnknown) || !failReport && (err != nil || first.Installation.Status != StatusEnabled) {
-			t.Fatalf("failReport=%v first=%+v err=%v", failReport, first.Installation.Status, err)
+		wantSync := map[bool]string{false: LicenseSyncSynced, true: LicenseSyncPending}[failReport]
+		if err != nil || first.Installation.Status != StatusEnabled || first.LicenseSync != wantSync {
+			t.Fatalf("failReport=%v first=%+v sync=%s err=%v", failReport, first.Installation.Status, first.LicenseSync, err)
 		}
 		generation := repository.head.Installation.IdentityGeneration
 		// 授权端快照此时已是 enabled（上报成功）或仍 disabled（上报未达），回放都不依赖它。
@@ -339,8 +392,9 @@ func TestProductionResumeExactRetryReplaysPersistedReceipt(t *testing.T) {
 		}
 		resolver.failReport = false
 		second, err := domain.Mutate(context.Background(), actor, request)
-		if err != nil || second.Installation.Status != StatusEnabled {
-			t.Fatalf("failReport=%v exact retry status=%s err=%v", failReport, second.Installation.Status, err)
+		if err != nil || second.Installation.Status != StatusEnabled || second.LicenseSync != LicenseSyncSynced {
+			t.Fatalf("failReport=%v exact retry status=%s sync=%s err=%v", failReport, second.Installation.Status,
+				second.LicenseSync, err)
 		}
 		if len(repository.applied) != 1 || len(repository.receipts) != 1 ||
 			repository.head.Installation.IdentityGeneration != generation || len(resolver.reported) != 2 ||

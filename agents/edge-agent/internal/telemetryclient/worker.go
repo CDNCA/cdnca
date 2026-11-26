@@ -117,7 +117,11 @@ func (w *Worker) Run(ctx context.Context) error {
 			// tail stopped after its first batch, silently (N11). Retry at
 			// the maximum backoff instead; the gateway re-reads the node's
 			// authorization on every session.
-			w.logFailure("telemetry upload", code, permanent, err)
+			what := "telemetry upload"
+			if errors.Is(err, ErrAttributionUnconfirmed) {
+				what = "telemetry upload held: queued records wait for their site's configuration scope"
+			}
+			w.logFailure(what, code, permanent, err)
 			delay := w.jitter(backoff)
 			if permanent || delay < 0 || delay > w.config.MaximumBackoff {
 				delay = w.config.MaximumBackoff
@@ -281,6 +285,8 @@ func (w *Worker) setSnapshot(change func(*WorkerSnapshot)) {
 
 func safeWorkerError(err error) string {
 	switch {
+	case errors.Is(err, ErrAttributionUnconfirmed):
+		return "TELEMETRY_ATTRIBUTION_UNCONFIRMED"
 	case errors.Is(err, ErrPermanentProtocol):
 		return "TELEMETRY_PROTOCOL_REJECTED"
 	case errors.Is(err, ErrInvalidPublication):

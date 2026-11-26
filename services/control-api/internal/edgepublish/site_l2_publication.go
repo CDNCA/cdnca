@@ -213,8 +213,9 @@ func loadSiteL2LineGroups(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sit
 		FROM sites site
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id=COALESCE(site.node_group_id,
-		     (subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 		JOIN node_line_group_revisions revision ON revision.tenant_scope_id=line_group.tenant_scope_id
 		 AND revision.line_group_id=line_group.id AND revision.revision=line_group.current_revision
 		WHERE site.scope_id=$1 AND site.id=ANY($2::uuid[]) AND site.deleted_at IS NULL

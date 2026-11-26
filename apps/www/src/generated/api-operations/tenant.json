@@ -128,6 +128,21 @@
      "description": "Revoked (audited identity.tenant_member.invitation.revoke)."
     },
     {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
      "status": "404",
      "description": "tenant_member_invitation_not_found."
     }
@@ -302,6 +317,21 @@
      "description": "Deleted."
     },
     {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
      "status": "404",
      "description": "tenant_member_not_found."
     },
@@ -398,6 +428,21 @@
      ]
     },
     {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
      "status": "404",
      "description": "tenant_member_not_found."
     },
@@ -466,6 +511,16 @@
     {
      "status": "400",
      "description": "validation_error (Idempotency-Key missing or invalid)."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
     },
     {
      "status": "410",
@@ -554,8 +609,27 @@
      ]
     },
     {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
      "status": "404",
      "description": "tenant_member_not_found."
+    },
+    {
+     "status": "409",
+     "description": "tenant_member_protected (the owner or yourself) or tenant_member_status_conflict."
     }
    ]
   },
@@ -635,12 +709,31 @@
      ]
     },
     {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
      "status": "404",
      "description": "tenant_member_not_found."
     },
     {
      "status": "409",
-     "description": "tenant_member_protected (the owner or yourself) or tenant_member_status_conflict."
+     "description": "tenant_member_protected (the owner or yourself), tenant_member_status_conflict, or with transfer_to tenant_member_owns_resources (with the counts of what cannot change owner)."
+    },
+    {
+     "status": "422",
+     "description": "tenant_member_transfer_target_invalid (transfer_to is not another active member of the scope)."
     }
    ]
   }

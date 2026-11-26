@@ -2,8 +2,8 @@ package audit
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"context"
+	"crypto/sha256"
 	"strings"
 	"testing"
 	"unicode/utf8"

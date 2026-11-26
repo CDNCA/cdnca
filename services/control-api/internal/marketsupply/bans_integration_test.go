@@ -29,8 +29,8 @@ func (*banCarrier) NextReceipt(context.Context) (securityban.ReceiptDelivery, er
 type banReceipt struct{ report *agentv1.SecurityBanStatus }
 
 func (r banReceipt) Status() *agentv1.SecurityBanStatus { return r.report }
-func (banReceipt) Ack(context.Context) error             { return nil }
-func (banReceipt) Nak(context.Context) error             { return nil }
+func (banReceipt) Ack(context.Context) error            { return nil }
+func (banReceipt) Nak(context.Context) error            { return nil }
 
 // TestHandleBanSyncToLeafNodes: the subscriber's snapshot for its
 // market site lands on the grant's own leaf site, goes to the platform node
@@ -93,7 +93,7 @@ func TestHandleBanSyncToLeafNodes(t *testing.T) {
 	}
 	carrier := &banCarrier{}
 	distributor, err := securityban.NewDistributor(securityban.DistributorConfig{Pool: pool, Transport: carrier, KeyID: "k",
-		Sign: func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(private, payload), nil },
+		Sign:     func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(private, payload), nil },
 		Interval: time.Minute, Now: clock})
 	if err != nil {
 		t.Fatal(err)

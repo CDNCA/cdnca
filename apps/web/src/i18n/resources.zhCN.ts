@@ -2,6 +2,7 @@
 import { zhCNNodeScheduling } from '../pages/node-scheduling/messages'
 import { systemGlobalSettingsZh } from './systemGlobalSettings'
 import { coreZhCN } from './coreResources'
+import { addMissingCopy, communityCopyZhCN } from './communityCopy'
 
 type TranslationTree = { [key: string]: string | TranslationTree }
 
@@ -13,6 +14,8 @@ export const zhCN = {
     overview: '服务概览',
     analytics: '统计分析',
     realtime: '实时监控',
+    nodeRealtime: '节点实时监控',
+    siteRealtime: '网站实时监控',
     dataAnalysis: '数据分析',
     rum: '真实用户体验',
     contentRewrite: '内容改写',
@@ -91,6 +94,7 @@ export const zhCN = {
     packageMonitorAlerts: '套餐告警',
     buyPackages: '套餐购买',
     accountCenter: '账户中心',
+    teamManagement: '团队管理',
     resellerConsole: '代理商',
     resellerPackages: '套餐管理',
     resellerCustomers: '我的客户',
@@ -340,7 +344,6 @@ export const zhCN = {
       searchType: '统计维度',
       serverPort: '服务器端口',
       serverPortPlaceholder: '输入端口，如 80 或 443',
-      attackRequest: '攻击请求',
       customRange: '自定义时间范围',
       from: '开始时间',
       to: '结束时间',
@@ -365,6 +368,7 @@ export const zhCN = {
       retry: '重试',
       clear: '清除',
       viewLogs: '查看日志',
+      search: '搜索',
       showOverview: '显示概览',
       hideOverview: '隐藏概览',
       previous: '上一页',
@@ -433,7 +437,6 @@ export const zhCN = {
       storageUnavailable: '分析存储暂不可用，请稍后重试。',
       queryTimeout: '查询超时，请缩小时间范围后重试。',
       unsupportedDimension: '当前版本不支持此排行维度。',
-      filterUnsupported: '当前版本不支持此筛选条件。',
       invalidPort: '端口必须是 1 到 65535 的整数。',
       multipleDomainsUnsupported: '当前版本暂不支持同时筛选多个域名。',
       requestFailed: '监控数据加载失败，请稍后重试。',
@@ -443,7 +446,9 @@ export const zhCN = {
     title: { access: '访问日志', block: '拉黑日志', blockEvents: '原始拦截事件', coordination: '跨节点 CC' },
     actions: { query: '查询', reset: '重置', retry: '重试', previous: '上一页', next: '下一页', details: '详情' },
     filters: {
-      tenant: '租户 ID', site: '站点 ID', node: '节点 ID', clientIp: '客户端 IP', status: '状态码',
+      tenant: '租户', tenantId: '租户 ID', tenantSearchPlaceholder: '输入用户名、邮箱或用户编号搜索租户', tenantSearchEmpty: '没有匹配的租户',
+      siteName: '站点', siteSearchPlaceholder: '输入域名搜索站点', siteSearchEmpty: '没有匹配的站点',
+      site: '站点 ID', node: '节点 ID', clientIp: '客户端 IP', status: '状态码',
       country: '地区代码', carrier: '运营商', action: '动作', actionAll: '全部', actionBlock: '拦截', actionChallenge: '人机验证', actionLog: '观察', actionTemporaryBan: '自动封禁', method: '请求方法', protocol: '协议', cache: '缓存状态',
       from: '开始时间', to: '结束时间',
     },
@@ -465,21 +470,25 @@ export const zhCN = {
       microseconds: '{{value}} 微秒', unknown: '未知', notToOrigin: '未回源',
       eventType: { waf: 'Web 应用防火墙', cc: 'CC 防护', acl: '访问控制' },
       action: { block: '拦截', deny: '拒绝', log: '观察', challenge: '人机验证', temporary_ban: '自动封禁' },
-      severity: { low: '低', medium: '中', high: '高', critical: '严重' },
+      severity: { info: '信息', low: '低', medium: '中', high: '高', critical: '严重' },
     },
     states: {
-      loading: '正在加载日志', empty: '当前筛选范围内暂无日志', selectTenant: '请先选择租户再查询。', tenantRequired: '平台查询必须填写租户 ID。',
+      loading: '正在加载日志', empty: '当前筛选范围内暂无日志', selectTenant: '请先选择租户再查询。', tenantRequired: '请先选择租户。',
       invalidUuid: '请输入有效的非零小写 UUID。', invalidWindow: '结束时间必须晚于开始时间。',
       rangeTooLong: '时间范围最长为 31 天。', invalidAccessStatus: '状态码必须是 100 到 599 的整数。',
       invalidStatus: '状态码必须是 0 或 100 到 599 的整数。',
       permissionTitle: '无权查看日志', permissionDescription: '当前账户没有此范围的日志读取权限。',
       invalidRequest: '筛选条件或分页游标无效。', notFound: '日志查询接口不存在。',
+      invalidClientIp: '请输入有效的 IP 地址（IPv4 或 IPv6）。',
+      invalidBytes: '请输入不小于 0 的整数字节数。', invalidBytesRange: '上限不能小于下限。',
+      scopeForbidden: '无权查看所选对象的日志，请更换或清除该条件。',
       unsupported: '当前日志能力不可用。', storageUnavailable: '日志存储暂不可用，请稍后重试。',
       queryTimeout: '查询超时，请缩小时间范围后重试。', requestFailed: '日志加载失败，请稍后重试。',
     },
     blockState: {
       tabs: { events: '原始拦截事件', current: '当前拉黑', count: '拉黑统计', history: '历史拉黑', coordination: '跨节点 CC' },
       snapshot: '状态快照：{{time}}',
+      selectionScope: '拉黑记录',
       actions: {
         unlock: '解锁', unlockIp: '解锁IP', unlockSite: '解锁网站', exportBlacklist: '导出黑名单',
         refresh: '刷新', clear: '清除', viewLog: '查看日志',
@@ -515,7 +524,7 @@ export const zhCN = {
         superseded: '已忽略旧发布 {{n}}',
       },
       states: {
-        tenantRequired: '平台查询必须填写有效的租户 ID。', invalidSite: '请输入有效的非零小写站点 UUID。',
+        invalidSite: '请输入有效的非零小写站点 UUID。',
         invalidFilter: '请输入有效的非零小写过滤器 UUID。',
         invalidRequest: '查询或解锁参数无效。', permissionDenied: '当前账户没有此操作权限。',
         notFound: '该拉黑记录已不存在。', conflict: '策略或边缘版本已变化，请刷新后重试。',
@@ -532,7 +541,7 @@ export const zhCN = {
       },
       unlock: {
         title: '确认解锁', description: '将从下一版 ACL 策略中移除 {{cidr}}，并通过边缘灰度发布生效。',
-        siteDescription: '将解锁站点 {{site}} 当前全部可解锁的拉黑记录。', siteTitle: '解锁指定网站黑名单',
+        siteDescription: '将解锁站点 {{site}} 当前全部可解锁的拉黑记录。', siteTitle: '解锁指定网站黑名单', site: '网站', sitePlaceholder: '输入域名搜索网站', siteEmpty: '没有匹配的网站',
         reason: '解锁原因固定记录为“已确认误报”，操作将写入审计日志。', confirm: '确认解锁', cancel: '取消',
       },
       coordination: {
@@ -550,7 +559,8 @@ export const zhCN = {
         },
         values: { hits: '{{hits}} 次 / {{nodes}} 节点', policyVersions: '{{current}} / {{lkg}}' },
         states: {
-          siteRequired: '请输入有效的非零小写站点 UUID。',
+          tenantInvalid: '链接里的租户无效，请重新选择租户。', siteInvalid: '链接里的站点无效，请重新选择站点。',
+          siteNotInTenant: '该站点不属于所选租户，请重新选择站点。',
           invalidRequest: '跨节点 CC 查询或解除参数无效。', permissionDenied: '当前账户没有此操作权限。',
           conflict: '协调代次或策略版本已变化，请刷新后重试。', unavailable: '跨节点 CC 协调暂不可用；边缘继续使用本地保护与最近有效策略。',
           timeout: '协调请求超时，请稍后重试。', requestFailed: '跨节点 CC 状态加载失败，请稍后重试。',
@@ -565,6 +575,7 @@ export const zhCN = {
     },
   },
   siteGroups: {
+    selectionScope: '网站分组',
     subnav: {
       label: '网站设置导航', previous: '上一个网站设置页面', next: '下一个网站设置页面',
       list: '网站列表', groups: '分组管理', defaults: '默认设置', dnsApi: 'DNS API', dnsCheck: 'DNS 解析检查',
@@ -580,7 +591,7 @@ export const zhCN = {
     },
     actions: { create: '新增分组', rename: '编辑', delete: '删除', save: '确定', cancel: '取消', refresh: '刷新', retry: '重试', retryWrite: '再试一次', retryRead: '重新加载', continueBatch: '继续删除剩下的' },
     columns: { id: 'ID', user: '用户', name: '名称', remark: '备注', revision: '版本', updatedAt: '更新时间', actions: '操作' },
-    messages: { saved: '网站分组已保存', superseded: '已保存。这个分组随后又被别人改过，页面显示的是最新内容，你的修改没有覆盖别人的。' },
+    messages: { created: '网站分组已创建', saved: '网站分组已保存', deleted: '网站分组已删除', superseded: '已保存。这个分组随后又被别人改过，页面显示的是最新内容，你的修改没有覆盖别人的。' },
     errors: {
       forbiddenTitle: '无权查看网站分组', forbiddenDescription: '当前账号缺少网站读取权限，或平台账号缺少用户目录读取权限。',
       scopeRequiredTitle: '请先选择租户作用域', scopeRequiredDescription: '平台会话需要指定目标租户作用域后才能读取网站分组。',
@@ -600,6 +611,7 @@ export const zhCN = {
   },
   sites: {
     title: '网站列表',
+    selectionScope: '网站',
     actions: {
       add: '添加网站',
       batchModify: '批量修改',
@@ -668,7 +680,15 @@ export const zhCN = {
       locked: '已锁定',
       trafficSuspended: '流量超限已停用',
       noPackage: '未绑定套餐，暂不可用',
+      packageState: { no_package: '待分配套餐', package_disabled: '套餐已停用', package_deleted: '套餐已删除', package_suspended: '订阅已暂停', package_cancelled: '订阅已终止' },
       accessReady: '接入已就绪',
+      headline: { accessBlocked: '接入受阻', accessPending: '待配置', originUnhealthy: '源站异常' },
+      configSynced: '配置已同步',
+      siteSwitch: { enabled: '站点已启用', disabled: '站点已停用' },
+      originHealthy: '源站正常',
+      originUnhealthy: '源站异常',
+      originUnhealthyReason: '源站异常：{{reason}}',
+      viewOriginSettings: '查看源站设置',
       accessGap: {
         line: '接入未就绪：缺可用线路',
         cname: '接入未就绪：CNAME 未生成',
@@ -681,6 +701,8 @@ export const zhCN = {
       },
       packageDisabled: '所绑套餐已停用，暂不可用',
       packageDeleted: '所绑套餐已删除，暂不可用',
+      packageSuspended: '订阅已暂停，恢复后生效',
+      packageCancelled: '所绑订阅已终止，暂不可用',
       trafficRecovered: '流量已恢复',
       syncing: '同步中',
       syncPendingCountdown: '待同步 · {{seconds}}秒后刷新',
@@ -723,6 +745,7 @@ export const zhCN = {
     },
     search: {
       quickFieldLabel: '快速搜索字段',
+      regionPlaceholder: '输入区域ID',
       quickContentLabel: '快速搜索内容',
       domain: '域名',
       originIp: '源IP',
@@ -740,13 +763,11 @@ export const zhCN = {
       ownerPlaceholder: '输入ID、邮箱、用户名、手机号搜索',
       basePackage: '基础套餐',
       sitePackage: '网站套餐',
-      packagePlaceholder: '输入套餐ID',
+      packagePlaceholder: '输入套餐名称或ID',
       siteGroup: '网站分组',
       groupPlaceholder: '输入分组ID',
       region: '区域',
-      regionPlaceholder: '输入区域ID',
       nodeGroup: '线路分组',
-      nodeGroupPlaceholder: '输入线路分组ID',
       cnameDomain: 'CNAME域名',
       cnameDomainPlaceholder: '输入CNAME域名',
       cnameHostname: 'CNAME主机名',
@@ -799,6 +820,7 @@ export const zhCN = {
       currentReason: '当前锁定原因',
       outcomeUnknown: '操作结果待确认',
       versionChanged: '网站版本已变化',
+      reasonInvalid: '请输入 1-500 个字符的锁定原因',
       stateChanged: '网站锁定状态已变化',
       retryDescription: '表单已锁定。重试会复用原始版本、原因和幂等键。',
       closeForLatest: '请关闭弹窗，根据列表最新状态重新选择操作。',
@@ -839,6 +861,7 @@ export const zhCN = {
       package_resource_quota_exceeded: '网站配置超出套餐额度，请释放资源或增加升级包后再启用',
       package_feature_denied: '网站使用了套餐未包含的功能，请开通对应升级包后再启用',
       validation_error: '请输入 1-500 个字符的锁定原因',
+      filterInvalid: '筛选条件有误，请检查后重试',
       site_not_found: '网站不存在',
       retry_lock_corrupted: '待确认操作记录损坏，网站管理保持只读',
       unknownCode: '操作失败（{{code}}），请稍后重试',
@@ -898,6 +921,7 @@ export const zhCN = {
       },
       feedback: {
         originRecoveryFailed: '待确认源站请求无法恢复，网站设置保持只读',
+        permissionChanged: '你的权限已变化，当前无法修改',
         originOutcomeUnknown: '上次源站保存结果待确认，请使用同一请求重试',
         originSaved: '源站设置已保存，正在下发到节点',
         basicSaved: '基本配置已保存，正在下发到节点',
@@ -942,6 +966,7 @@ export const zhCN = {
           http_listen_ports: 'HTTP 端口不正确：端口需在 1-65535 之间',
           https_listen_ports: 'HTTPS 端口不正确：需填写 1-65535 之间的端口（留空默认 443），且不能与 HTTP 端口重复',
           https_redirect_port: '跳转端口必须是已配置的 HTTPS 端口之一',
+          http3_enabled: '当前套餐不含 HTTP/3',
           origins: '源站地址不正确：需填写 1-32 个合法的 IP 或域名（可带端口），且不能重复',
         },
         forbiddenTitle: '无权查看网站详情',
@@ -1122,66 +1147,33 @@ export const zhCN = {
         groupEmptyOwner: '该用户（{{name}}）还没有网站分组', groupEmptySelf: '你还没有网站分组', groupCreate: '去新建分组',
       },
       locked: {
-        notice: '当前设置暂不可编辑',
-        unavailable: '暂不可用',
-        switch: '开关',
-        seconds: '秒',
-        columns: {
-          condition: '匹配条件', action: '执行过滤', mode: '匹配模式', remark: '备注',
-          status: '状态', operation: '操作', type: '类型', content: '内容', ttl: '有效期',
-          ignoreQuery: '忽略参数', forceCache: '强制缓存',
-        },
-        origin: {
-          protocolSection: '回源协议与端口', protocol: '回源协议', followProtocol: '跟随协议',
-          followPortProtocol: '跟随端口和协议', domainSection: '回源域名', domain: '回源域名',
-          visitDomain: '访问域名', visitDomainPort: '访问域名:访问端口', custom: '自定义',
-          timeoutSection: '回源超时', timeout: '回源超时', connectTimeout: '连接超时', auth: '回源鉴权',
-        },
-        httpsCertificate: 'HTTPS证书',
-        security: {
-          cc: 'CC防护', defaultProtection: '默认防护', off: '关闭', loose: '宽松', js: 'JS验证',
-          fiveSecond: '5秒盾', click: '点击验证', slider: '滑块验证', captcha: '验证码',
-          rotate: '旋转图片', simpleClick: '点击验证(简单)', simpleSlider: '滑块验证(简单)', custom: '自定义',
-          autoSwitch: '自动切换', customRules: '自定义规则', addRule: '新增规则', enableAll: '启用所有规则',
-          disableAll: '关闭所有规则', crawler: '搜索引擎爬虫', notSet: '不设置', allow: '放行', block: '拦截',
-          more: '更多设置', blacklistTime: '黑名单时间', whitelistTime: '白名单时间', cookieDomain: 'Cookie域名',
-          blacklist: '黑名单', whitelist: '白名单', blockProxy: '屏蔽透明代理', regionBlock: '区域屏蔽',
-          abroadWith: '国外含港澳台', abroadWithout: '国外不含港澳台', chinaWith: '中国含港澳台', chinaWithout: '中国不含港澳台',
-        },
-        cache: { addRule: '新增规则', quick: '快速设置缓存' },
-        access: {
-          aclSettings: 'ACL设置', aclSelect: 'ACL选择', aclHelp: '请先在 ACL 规则管理中创建，再在此应用。',
-          hotlink: '防盗链设置', cors: '跨域访问设置', allow: '允许', deny: '不允许',
-        },
-        advanced: {
-          upload: '上传大小限制', sizeLimit: '大小限制', unlimited: '不限制', custom: '自定义',
-          compression: '压缩设置', gzip: 'Gzip压缩', websocket: 'Websocket配置', searchOrigin: '搜索引擎回源配置',
-          errorPages: '错误页面配置', addPage: '新增页面', redirects: 'URL转向设置', addRedirect: '新增转向',
-          originHeaders: '源站请求头', addRequestHeader: '新增请求头', responseHeaders: 'CDN响应头', addResponseHeader: '新增响应头',
-          other: '其它设置', originCertificate: '源申请证书', realtimeReturn: '数据实时返回', realtimeSend: '数据实时发送',
-          admin: '管理员设置', requestHeaders: '记录请求头', responseHeadersLog: '记录响应头', requestBody: '记录请求体',
-          requestBodyLimit: '请求体大小限制', defaultSite: '默认站点', l2: 'L2配置', package: '套餐', off: '关闭',
-        },
+        advanced: { requestHeaders: '记录请求头', responseHeadersLog: '记录响应头', requestBody: '记录请求体' },
       },
     },
   },
   packages: {
     title: '基础套餐',
+    selectionScope: '套餐',
     tabs: { products: '基础套餐', groups: '套餐分组' },
     bill01: {
       sections: { commercialTerms: '商业条款' },
       fields: {
-        siteLimit: '网站上限（-1 为不限）', nodeLimit: '节点上限（-1 为不限）', timezone: '计费时区',
+        siteLimit: '网站上限（-1 为不限）', timezone: '计费时区',
         cycleKind: '流量周期', customCycleDays: '自定义周期天数', factorNumerator: 'TCP 流量系数分子',
         factorDenominator: 'TCP 流量系数分母',
       },
       cycles: { daily: '每日', monthly: '每月', custom_days: '自定义天数' },
     },
     actions: {
-      addProduct: '添加套餐', addGroup: '添加分组', sync: '同步数据', more: '更多操作', rowMore: '更多', manage: '管理', copyProduct: '复制套餐', copy: '复制', advancedFilters: '高级筛选', clearFilters: '清除筛选', edit: '编辑', save: '保存', add: '添加',
+      addProduct: '添加套餐', addGroup: '添加分组', refresh: '刷新', more: '更多操作', rowMore: '更多', rowMoreFor: '{{name}} 的更多操作', manage: '管理', copyProduct: '复制套餐', copy: '复制', advancedFilters: '高级筛选', clearFilters: '清除筛选', edit: '编辑', save: '保存', add: '添加',
       publish: '发布', withdraw: '撤回', enable: '启用', disable: '禁用', delete: '删除', cancel: '取消', retry: '重试', retrySameRequest: '使用同一请求重试',
-      publishDisabledHint: '先启用套餐',
+      publishDisabledHint: '先启用套餐', publishUnlicensedHint: '未获授权', viewEntitlement: '查看授权',
     },
+    license: {
+      missing: '当前主控未获得套餐管理授权', unusable: '当前主控的授权已过期或停用',
+      unknown: '无法读取主控授权状态', retry: '重新读取授权',
+    },
+    diagnostics: { title: '诊断详情', code: '错误码：{{code}}', requestId: '请求 ID：{{id}}' },
     filters: {
       productSearchLabel: '搜索基础套餐', productSearchPlaceholder: '套餐名称或备注', productSearchAction: '查询基础套餐',
       groupLabel: '套餐分组筛选', allGroups: '所有套餐分组', statusLabel: '套餐状态筛选', allStatuses: '全部状态',
@@ -1191,19 +1183,21 @@ export const zhCN = {
       id: 'ID', name: '名称', package: '套餐', regionLines: '区域 / 线路', resourceLimits: '资源限制', capabilities: '能力', groups: '套餐分组', sort: '排序', region: '区域', nodeGroup: '线路组',
       coreLimits: '流量 / 带宽 / 连接数', domainLimits: '域名数 / 主域名数', httpPorts: 'HTTP端口数', streamPorts: '转发端口数',
       websocket: 'Websocket', http3: 'HTTP3', l2: 'L2节点', cc: 'CC防护', ddos: 'DDOS防护',
-      prices: '月价 / 季价 / 年价', enabled: '启用', status: '状态', version: '版本', ports: 'HTTP / 四层端口', actions: '操作', groupName: '分组名称',
+      prices: '月价 / 季价 / 年价', enabled: '启用', publication: '发布状态', status: '状态', version: '版本', ports: 'HTTP / 四层端口', actions: '操作', groupName: '分组名称',
       visible: '在售可见', updatedAt: '更新时间',
     },
     values: {
       unlimited: '不限', allowed: '允许', denied: '禁止', enabled: '启用', disabled: '禁用', visible: '显示', hidden: '隐藏',
       empty: '-', noProducts: '暂无套餐', noGroups: '暂无套餐分组', total: '共 {{count}} 条', listSeparator: '、',
+      publication: { draft: '草稿', published: '已上架', withdrawn: '已下架' }, noCapabilities: '未开启能力',
       productMeta: 'ID: {{id}} / 排序: {{sort}}', regionValue: '区域: {{value}}', lineValue: '线路: {{value}}', backupLineValue: '备用: {{value}}',
       trafficLimit: '流量: {{value}}', bandwidthLimit: '带宽: {{value}}', coreLimit: '流量/带宽/连接: {{traffic}} / {{bandwidth}} / {{connections}}', domainLimit: '域名/主域名: {{domains}} / {{roots}}',
       portLimit: 'HTTP端口: {{http}} / 四层: {{stream}}', ccValue: 'CC: {{value}}', ddosValue: 'DDoS: {{value}}',
       priceTriplet: '{{monthly}} / {{quarterly}} / {{yearly}}',
     },
+    deps: { title: '添加套餐需要', group: '套餐分组', region: '区域', lineGroup: '线路分组', cname: 'CNAME 域名' },
     notices: {
-      addGroupFirst: '请先在“套餐分组”中添加至少一个分组', groupUpdated: '套餐分组已更新', productUpdated: '基础套餐已更新', productCopied: '套餐已复制（默认未启用，可在“管理”里调整后启用）',
+      groupUpdated: '套餐分组已更新', productUpdated: '基础套餐已更新', productCopied: '套餐已复制（默认未启用，可在“管理”里调整后启用）',
       conflictRefreshed: '数据已被其他操作修改，列表已刷新',
     },
     cnameSync: {
@@ -1252,6 +1246,8 @@ export const zhCN = {
       package_offer_state_already_published: '套餐的当前版本已经发布，无需重复发布',
       package_offer_state_not_published: '套餐尚未发布，无需撤回',
       package_offer_state_stale: '已发布的版本已变化，请刷新后再撤回',
+      entitlement_feature_denied: '当前主控未获得套餐管理授权',
+      entitlement_state_denied: '当前主控的授权已过期或停用',
       forbiddenTitle: '无权管理套餐', productLoadFailed: '基础套餐加载失败', groupLoadFailed: '套餐分组加载失败',
       detailLoadFailed: '套餐详情加载失败',
     },
@@ -1288,7 +1284,7 @@ export const zhCN = {
       cnameModes: { perSite: '按网站生成（推荐）', shared: '共享 CNAME' },
       validation: {
         requiredField: '请输入{{label}}', nameRequired: '请输入套餐名称', groupsRequired: '请选择套餐分组',
-        regionRequired: '请输入区域 ID', nodeGroupRequired: '请输入线路组 ID', uuid: '请输入有效的 UUID',
+        regionRequired: '请选择区域', nodeGroupRequired: '请选择主线路组', uuid: '请输入有效的 UUID',
         money: '请输入最多两位小数的非负金额', dateTime: '请输入有效时间', descriptionMax: '备注不能超过 1000 个字符',
         cnameRequired: '请选择 CNAME 域名',
         cnameNotConfigured: '{{domain}} 不在 DNS 配置的 CNAME 域名里，网站将无法生成 CNAME。请选择已配置的域名，或先到 节点管理 → DNS配置 → CNAME域名 添加。',
@@ -1299,6 +1295,7 @@ export const zhCN = {
   },
   jobs: {
     title: '后台任务',
+    selectionScope: '任务',
     actions: {
       query: '查询', details: '详情', retry: '重试', previous: '上一页', next: '下一页',
 		cancel: '取消任务', cancelShort: '取消', retryFailed: '重试失败任务', retrySame: '使用同一请求重试', refresh: '刷新任务', confirm: '确认', close: '关闭',
@@ -1317,16 +1314,16 @@ export const zhCN = {
       cancelled: '已取消', lease_expired: '租约已过期', pending: '等待中', canceling: '取消中', retrying: '重试中',
     },
     columns: {
-      id: 'ID', priority: '优先级', name: '名称', kind: '类型', resource: '资源 ID', dependency: '依赖', tenant: '租户 ID', createdAt: '创建时间',
+      id: 'ID', priority: '优先级', kind: '类型', resource: '资源 ID', dependency: '依赖', tenant: '租户 ID', createdAt: '创建时间',
       startedAt: '开始时间', duration: '耗时', progress: '进度', status: '状态', failureCount: '失败次数', attempt: '尝试次数',
       failureCode: '失败代码', actions: '操作',
     },
     duration: { seconds: '{{count}}秒', minutes: '{{count}}分钟', hours: '{{count}}小时' },
-    values: { noFact: '暂无事实', empty: '暂无后台任务', endedAt: '结束 {{value}}', notStarted: '未开始', notRecorded: '未记录' },
+    values: { placeholder: '—', empty: '暂无后台任务', endedAt: '结束 {{value}}', notStarted: '未开始', notRecorded: '未记录' },
     pagination: { label: '任务分页', page: '第 {{page}} 页', totalUnknown: '总数暂无事实', pageSize: '每页条数', perPage: '{{count}} 条/页' },
     confirm: {
       cancelTitle: '确认取消任务', cancelDescription: '取消后不会再派发新的执行步骤。',
-      retryTitle: '确认重试任务', retryDescription: '同一任务将重新进入队列。',
+      retryTitleNamed: '重试任务「{{kind}}」？', retryConfirmNamed: '确认重试 {{kind}}', retryDescription: '同一任务将重新进入队列。',
     },
     notices: {
       cancelSucceeded: '任务取消请求已提交', retrySucceeded: '任务已重新入队',
@@ -1381,6 +1378,7 @@ export const zhCN = {
   },
   users: {
     title: '用户列表',
+    selectionScope: '用户',
     tabs: { users: '用户列表', groups: '用户分组' },
     actions: {
       add: '新增用户', search: '查询', confirm: '确定', cancel: '取消', close: '关闭', switch: '切换', edit: '编辑', editUser: '编辑用户 {{name}}', disable: '禁用',
@@ -1412,9 +1410,11 @@ export const zhCN = {
     },
     values: {
       placeholder: '—', empty: '暂无数据', total: '共 {{count}} 条', notProvided: '未提供',
-      emailMissing: '未填写邮箱', phoneMissing: '未填写手机号', qqMissing: '未填写QQ',
-      remarkMissing: '未填写备注', userID: 'ID {{id}}', self: '我',
-      balanceAmount: '{{amount}}元', balanceLoading: '加载中', balanceUnavailable: '余额暂时无法读取，请重试。',
+      emailMissing: '未填写邮箱',
+      phoneMissing: '未填写手机号',
+      qqMissing: '未填写QQ',
+      userID: 'ID {{id}}', self: '我',
+      balanceAmount: '{{amount}}元', balanceLoading: '加载中', balanceReadFailed: '读取失败', balanceRetry: '读取失败，重试',
     },
     form: {
       addTitle: '新增用户', editTitle: '编辑用户', username: '用户名', initialPassword: '初始密码', password: '密码',
@@ -1425,8 +1425,6 @@ export const zhCN = {
       verificationExpiry: '认证过期', verificationStatus: '认证状态', loginVerification: '登录验证码',
       loginAllowlist: '登录白名单', secondaryVerificationHelp: '开启后，用户必须使用首次实名认证的身份证进行二次实名认证；将自动向用户发送邮件和手机短信通知',
       verificationStatusHelp: '只读：用户在开启后完成二次实名并审核通过即显示为已完成。逾期且选择“锁定网站”时，系统会停用并锁定该用户的全部网站并立即从节点下线；用户完成复核后自动解锁并恢复服务（因其它原因停用或锁定的网站不受影响）。',
-      unsupportedTitle: '这些资料暂不能保存',
-      unsupportedDescription: '当前用户契约尚未支持改用户名或创建为禁用状态；修改密码不能与其他资料同时保存。请清空这些改动后重试，已支持字段不会被静默丢弃。',
       identityReadOnlyTitle: '实名认证结论（只读）',
       identityReadOnlyDescription: '实名资料由用户本人在「账户 → 实名认证」提交，经认证审核通过后才会显示为已实名；姓名、证件号等资料不在用户管理中编辑或覆盖。下方为服务端认证结论。',
       identityNotLoaded: '未读取到该用户的认证结论，请关闭后刷新列表重试。',
@@ -1444,6 +1442,7 @@ export const zhCN = {
       validation: {
         usernameRequired: '请输入用户名', usernameLength: '用户名长度应为 3 到 128 位',
         usernamePattern: '仅支持小写字母、数字、点、横线和下划线', passwordRequired: '请输入初始密码',
+        passwordSeparate: '修改密码请单独保存，不要同时修改其他资料',
         passwordLength: '密码须为 8–1024 位，至少包含大写字母、小写字母、数字、符号中的两种', displayNameRequired: '请输入显示名称',
         deadlineFormat: '截止时间格式应为 2026-01-01 12:00:00', deadlineRequired: '选择“锁定网站”时必须填写截止时间',
         displayNameLength: '显示名称不能超过 128 个字符', emailRequired: '请输入邮箱', email: '邮箱格式不正确',
@@ -1483,7 +1482,7 @@ export const zhCN = {
     },
     groups: {
       add: '添加用户组', addTitle: '添加用户组', editTitle: '编辑用户组', delete: '删除',
-      deleteTitle: '删除用户组', deleteDescription: '删除后不可恢复。', confirmDelete: '确认删除',
+      deleteTitle: '删除用户组 {{name}}？', deleteNamed: '删除用户组 {{name}}', deleteDescription: '删除后不可恢复。', confirmDelete: '确认删除',
       name: '用户组名称', nameRequired: '请输入用户组名称', members: '成员数', searchLabel: '搜索用户组', searchPlaceholder: '用户组名称',
       empty: '暂无用户组', loadFailed: '用户组加载失败', uncertain: '请使用同一请求重试，或关闭并刷新列表确认结果。',
     },
@@ -1554,10 +1553,6 @@ export const zhCN = {
       permissionCount: '权限数量: {{count}}', edit: '编辑账户资料', balance: '余额', identity: '实名认证',
       verified: '已认证', unverified: '未认证', lastLogin: '最近登录', loginIp: '登录IP地址',
     },
-    greeting: {
-      lateNight: '夜深了，注意休息', morning: '早上好，新的一天开始了',
-      afternoon: '下午好，祝您工作顺利', evening: '晚上好，放松一下，为自己倒杯茶吧',
-    },
     scopes: { tenant: '租户' },
     roles: { tenantOwner: '租户管理员', tenantViewer: '只读用户', unknown: '其他角色' },
     ranges: {
@@ -1567,7 +1562,7 @@ export const zhCN = {
     sections: {
       resources: '资源与账户', sites: '网站', certificates: '证书', billing: '余额', subscriptions: '当前套餐',
       trafficPackages: '流量包', operations: '任务状态', notices: '公告', network: '网络概览',
-      monitoring: '监控趋势', top: 'TOP10 数据 (近30分钟)', systemNotices: '系统公告', packageTraffic: '套餐流量', usage: '使用统计',
+      monitoring: '监控趋势', top: 'TOP10 数据', systemNotices: '系统公告', packageTraffic: '套餐流量', usage: '使用统计',
     },
     metrics: {
       bandwidth: '平均带宽', peakBandwidth: '带宽峰值', requests: '请求数', totalTraffic: '总流量', blockedIps: '拉黑IP数', securityEvents: '安全事件',
@@ -1582,10 +1577,6 @@ export const zhCN = {
     usage: { domains: '域名数', forwards: '转发数', certificates: '证书', packages: '已购套餐' },
     unavailable: {
       dependency_unavailable: '依赖服务暂不可用', dependency_timeout: '依赖服务响应超时', authoritative_fact_missing: '权威数据尚未就绪',
-    },
-    subscriptions: {
-      active: '生效套餐 {{count}} 个', empty: '暂无生效套餐',
-      columns: { name: '套餐', endsAt: '有效期至', siteLimit: '网站上限', domainLimit: '域名上限', nodeLimit: '节点上限', trafficLimit: '流量上限' },
     },
     notices: {
       unreadCount: '未读公告 {{count}} 条', read: '已读', unread: '未读', empty: '暂无公告',
@@ -1644,7 +1635,7 @@ export const zhCN = {
     form: {
       ownerUserId: '目标用户 ID', productId: '套餐产品 ID', targetProductId: '目标套餐产品 ID', targetProduct: '目标套餐', targetProductPlaceholder: '选择目标套餐', targetProductRequired: '请选择目标套餐', targetsFailed: '可选套餐加载失败，请关闭后重试', noTargets: { upgrade: '当前没有价格更高的可升级套餐', downgrade: '当前没有价格更低的可降配套餐' }, productRevision: '产品版本', period: '计费周期',
       validityMode: '有效期方式', duration: '固定周期', endAt: '指定到期时间',
-      siteLimit: '网站上限（-1 为不限）', nodeLimit: '节点上限（-1 为不限）', timezone: '计费时区', cycleKind: '流量周期',
+      siteLimit: '网站上限（-1 为不限）', timezone: '计费时区', cycleKind: '流量周期',
       customCycleDays: '自定义周期天数', factorNumerator: 'TCP 流量系数分子', factorDenominator: 'TCP 流量系数分母',
       effectiveMode: '生效时间', payment: '支付方式', trafficSnapshotId: '流量包产品快照 ID',
     },
@@ -1660,10 +1651,10 @@ export const zhCN = {
     orderStates: {
       created: '已创建', paid: '已支付', fulfilled: '已生效', cancelled: '已取消', refund_applied: '已退款', void_applied: '已作废', failed: '失败',
     },
-    subscriptionStates: { active: '生效中', cancelled: '已取消' },
+    subscriptionStates: { active: '生效中', suspended: '已暂停', expired: '已过期', cancelled: '已取消' },
     columns: {
       packageName: '套餐', subscriptionId: '订阅 ID', orderId: '订单 ID', productId: '产品 ID', productKind: '产品类型', operation: '操作类型',
-      period: '周期', price: '周期价格', sites: '网站数', domains: '域名数', nodes: '节点数', traffic: '周期流量',
+      period: '周期', price: '周期价格', sites: '网站数', domains: '域名数', traffic: '周期流量',
       originalAmount: '原价', discountAmount: '优惠', payableAmount: '实付', payment: '支付方式', status: '状态',
       startedAt: '开始时间', endsAt: '结束时间', createdAt: '创建时间', revision: '版本', actions: '操作',
     },
@@ -1698,13 +1689,14 @@ export const zhCN = {
     },
     columns: {
       id: 'ID', type: '类型', note: '备注', originalAmount: '原价', paidAmount: '实际支付',
-      details: '更多', paymentMethod: '支付方式', orderNumber: '订单号', createdAt: '创建时间', paid: '已付款',
+      details: '更多', paymentMethod: '支付方式', orderNumber: '订单号', createdAt: '创建时间', paid: '状态',
     },
     types: {
       purchase: '购买', renewal: '续费', recharge: '充值', deduction: '扣款', upgrade: '升级',
       package_change: '更换套餐', traffic_package: '流量包', refund: '退款', income: '收入',
     },
-    statuses: { paid: '已付款', unpaid: '未付款' },
+    statuses: { paid: '已付款', unpaid: '未付款', posted: '已入账' },
+    ledger: { delta: '余额变动', number: '流水编号' },
     sources: { manual: '人工补录', manualHint: '管理员补录的订单记录，不代表余额已变动' },
     paymentMethods: {
       balance: '余额', alipay: '支付宝', wechat: '微信', transfer: '转账汇款', manual: '管理员调整', migrate_import: '迁移导入', provider: '在线支付',
@@ -1715,9 +1707,9 @@ export const zhCN = {
   },
   accountMessages: {
     title: '消息查询',
-    filters: { status: '消息状态', all: '全部消息', category: '消息分类', announcements: '公告', events: '事件提醒', type: '事件类型', allTypes: '全部类型', siteID: '网站ID', packageID: '用户套餐ID', search: '查询', sitePlaceholder: '域名或网站ID', packagePlaceholder: '套餐名或用户套餐ID', invalidKeyword: '最多 128 个字符，不能含控制字符' },
+    filters: { status: '消息状态', all: '全部消息', category: '消息分类', announcements: '公告', events: '事件提醒', type: '事件类型', allTypes: '全部类型', site: '网站', package: '套餐', search: '查询', sitePlaceholder: '域名或网站ID', packagePlaceholder: '套餐名或用户套餐ID', invalidKeyword: '最多 128 个字符，不能含控制字符' },
     columns: { title: '标题', createdAt: '创建时间', action: '操作', type: '类型', packageID: '用户套餐ID', siteID: '网站ID' },
-    events: { noTitle: '（无标题）', noContent: '该事件没有可显示的正文。', none: '—', hint: '事件提醒不区分已读未读；网站与套餐 ID 是事件发生时记录的，资源删除后仍保留。' },
+    events: { noTitle: '（无标题）', noContent: '该事件没有可显示的正文。', none: '—' },
     states: { read: '已读', unread: '未读' },
     actions: { view: '查看', markRead: '标记已读', refresh: '刷新', retry: '重试', retrySameRequest: '使用同一请求重试', closeAndRefresh: '关闭并刷新', close: '关闭' },
     errors: { forbiddenTitle: '无权查看消息', permissionDenied: '当前账号没有站内消息读取权限', invalidSession: '登录已失效，请重新登录', requestFailed: '消息加载失败，请稍后重试' },
@@ -1726,21 +1718,27 @@ export const zhCN = {
   },
   announcements: {
     title: '公告管理',
+    selectionScope: '公告',
     editorConfirm: '确定',
     popup: { acknowledge: '我已阅读，不再显示', later: '稍后再看', acknowledgeFailed: '标记已读失败，本次登录不再弹出，下次登录仍会提示' },
     global: {
       title: '全局公告管理',
-      actions: { create: '新建全局公告', show: '显示', hide: '隐藏', delete: '删除', deleteSelected: '批量删除' },
+      actions: { create: '新建全局公告', show: '显示', hide: '隐藏', delete: '删除', deleteSelected: '批量删除', more: '更多', publishConfirm: '发布公告' },
       columns: { recipients: '收件人数' },
       form: {
         editTitle: '编辑全局公告草稿', createTitle: '新建全局公告', allTenants: '所有租户的全部活跃用户',
         selectedTargets: '指定租户、角色或用户', tenants: '整个租户', tenantsHint: '所选租户的全部活跃用户', searchTenants: '输入租户名称或编号搜索',
-        targetTenant: '在租户中选择', targetTenantHint: '先选一个租户，再在下方按名称选它的角色或用户', roles: '租户角色', users: '租户用户', pickTenantFirst: '请先在上方选择租户',
+        members: '指定成员', targetTenant: '在租户中选择', searchMemberTenant: '选择成员所在租户', roles: '租户角色', users: '租户用户', targetTenantHint: '先选一个租户，再在下方按名称选它的角色或用户', pickTenantFirst: '请先在上方选择租户',
       },
-      confirm: { publishDescription: '发布后将冻结各租户收件人，确认继续？', deleteTitle: '确认删除公告', deleteDescription: '删除后公告进入归档，可恢复。已发布消息及已读历史仍保留；撤回已发布消息需另行操作。确认继续？' },
+      confirm: {
+        publishDescription: '发布后将冻结各租户收件人，确认继续？', linkHost: '跳转域名', bodyPreview: '内容预览',
+        scopeAll: '整个平台', scopeTenants: '租户：{{names}}', scopeTenantCount: '{{count}} 个租户', scopeTenantsLoading: '租户读取中…',
+        scopeMembers: '指定成员：{{items}}', roleCount: '角色 {{count}} 个', userCount: '用户 {{count}} 个', nameSeparator: '、', partSeparator: '；',
+        deleteTitle: '确认删除公告', deleteDescription: '删除后公告进入归档，可恢复。已发布消息及已读历史仍保留；撤回已发布消息需另行操作。确认继续？',
+      },
       notices: { saved: '全局公告已保存', deleted: '公告已删除，可从已归档列表恢复', batchProgress: '已完成 {{completed}} / {{total}} 条' },
       errors: { targetScope: '目标用户或角色不属于指定租户' },
-      values: { empty: '暂无全局公告' },
+      values: { empty: '暂无全局公告', visibleAfterPublish: '发布后显示', hiddenAfterPublish: '发布后隐藏' },
     },
     filters: { status: '公告状态', all: '全部状态' },
     columns: { id: 'ID', title: '标题', status: '状态', version: '版本/修订', changedAt: '状态变更时间', jump: '跳转', popup: '弹窗', style: '样式', visible: '显示', sort: '排序', createdAt: '添加时间', updatedAt: '更新时间', action: '操作' },
@@ -1756,10 +1754,8 @@ export const zhCN = {
   accountSubscriptions: {
     title: '消息订阅',
     subtitle: '选择重要事件的通知方式，切换后自动保存。',
-    columns: { type: '提醒类型', sms: '手机提醒', email: '邮件提醒', inbox: '站内信' },
+    columns: { type: '提醒类型', sms: '手机提醒', email: '邮件提醒', inbox: '站内信', smsShort: '短信', emailShort: '邮件', inboxShort: '站内信' },
     events: { announcementPublished: '公告发布' },
-    hints: { announcementPublished: '平台发布新公告时通知。' },
-    stats: { items: '提醒项', sms: '手机开启', email: '邮件开启' },
     loading: '正在加载消息订阅',
     actions: { retrySame: '使用同一请求重试', closeAndRefresh: '关闭并刷新' },
     uncertainty: { title: '保存结果待确认', description: '请求结果未知，只能使用完全相同的设置和版本重试。' },
@@ -1783,9 +1779,9 @@ export const zhCN = {
       reasons: { config_incomplete: '发信配置不完整', settings_unreadable: '系统设置读取失败', channel_switched_off: '渠道开关已关闭', worker_not_running: '发送队列未运行' },
       lastRebuild: '最近一次应用配置：{{time}}', lastRebuildError: '最近一次应用配置失败：{{code}}',
     },
-    templates: { name: '名称', id: '模板 ID', version: '版本', channel: '渠道', variables: '变量' },
+    templates: { jump: '转到通知模板', name: '名称', id: '模板 ID', version: '版本', channel: '渠道', variables: '变量', search: '搜索名称或模板 ID', channelFilter: '按渠道筛选', allChannels: '全部渠道', total: '共 {{count}} 条', actions: '操作', viewLabel: '查看 {{name}} 版本 {{version}}（{{channel}}）', detailTitle: '{{name}}（版本 {{version}}）' },
     form: { title: '新建通知模板版本', channel: '通知渠道', subject: '邮件主题', body: '邮件正文', smsBody: '短信正文', variablesPlaceholder: '多个变量用英文逗号分隔' },
-    actions: { save: '保存', newTemplate: '新建模板版本', createTemplate: '创建模板版本', cancel: '取消', retrySame: '使用同一请求重试', closeAndRefresh: '关闭并刷新' },
+    actions: { save: '保存', newTemplate: '新建模板版本', view: '查看', newFromVersion: '以此版本新建', createTemplate: '创建模板版本', cancel: '取消', retrySame: '使用同一请求重试', closeAndRefresh: '关闭并刷新' },
     validation: { required: '此字段为必填项', templateId: '请输入有效的模板 ID', version: '版本必须为正整数', subject: '邮件主题不能超过 2048 个 UTF-8 字节', body: '邮件正文不能超过 131072 个 UTF-8 字节', smsBody: '短信正文不能超过 8192 个 UTF-8 字节', variables: '变量名必须以小写字母开头，并用英文逗号分隔' },
     uncertainty: { title: '保存结果待确认', description: '请求结果未知，只能使用完全相同的设置和版本重试。' },
     errors: {
@@ -1794,7 +1790,7 @@ export const zhCN = {
       unsupported: '该通知渠道暂不支持', versionConflict: '通知设置版本已变化，请刷新后重试',
       templateVersionConflict: '该模板版本已存在且内容不同，请使用新版本号', validation: '模板字段校验失败，请检查后重试', rateLimited: '请求过于频繁，请稍后重试', writeFailed: '通知设置保存失败',
     },
-    values: { unsupported: '暂不支持', senderNotConfigured: '发信未配置', openSenderSettings: '前往发信配置', emptyTemplates: '暂无通知模板', unknownRequest: '未知' },
+    values: { unsupported: '暂不支持', senderNotConfigured: '发信未配置', openSenderSettings: '前往发信配置', emailSenderNotConfigured: '邮件发信未配置', smsSenderNotConfigured: '短信未配置', openEmailSettings: '前往 SMTP 设置', openSmsSettings: '前往短信设置', emptyTemplates: '暂无通知模板', noMatchingTemplates: '没有匹配的通知模板', unknownRequest: '未知' },
     deliveries: {
       title: '通知发送日志', empty: '暂无发送记录', page: '第 {{page}} 页',
       actions: { open: '查看发送日志', attempts: '查看投递尝试', retry: '重试', previous: '上一页', next: '下一页' },
@@ -1825,12 +1821,13 @@ export const zhCN = {
       sectionTitle: '基本信息', username: '用户名', displayName: '显示名称', email: '邮箱', phone: '手机号',
       // 2026-09-19 竞品 /dashboard/account/user 实测逐字文案（状态徽章 + 说明 + 按钮）。
       compatibility: {
-        qq: 'QQ', registration: '注册时间', balance: '余额', loginSecurity: '安全设置', unavailable: '未提供',
-        sessionsItem: '登录会话', sessionsDescription: '查看当前账号已登录的设备，可退出其他设备上的登录', sessionsOpen: '查看',
+        registration: '注册时间', balance: '余额', loginSecurity: '安全设置',
+        sessionsItem: '登录会话', sessionsDescription: '查看当前账号已登录的设备，可退出其他设备上的登录', sessionsOpen: '查看', actionFor: '{{item}}：{{action}}',
         realName: '实名认证', realNameDescription: '请尽快完成实名认证，否则可能会影响部分功能使用。', verify: '立即认证',
         phoneBinding: '手机绑定', phoneDescription: '绑定的手机可用于找回账号及接收通知', bind: '立即绑定',
         emailBinding: '邮箱绑定', emailDescription: '您已绑定安全邮箱', emailUnboundDescription: '绑定的邮箱可用于找回账号及接收通知', emailRebind: '更换绑定',
-        loginSecurityItem: '登录安全设置', loginSecurityDescription: '可设置登录白名单，开启登录验证码', setup: '立即设置',
+        loginSecurityItem: '两步验证', loginSecurityDescription: '敏感操作需要输入身份验证器生成的动态口令', setup: '立即设置',
+        mfaImpersonating: '代登录期间不能查看或设置该账号的两步验证，请由账号本人登录后设置。',
         statusUnverified: '未认证', statusUnbound: '未绑定', statusBound: '已绑定', statusUnset: '未设置', statusSet: '已设置',
         statusVerified: '已认证', statusPending: '审核中', statusRejected: '被驳回',
         realNameVerifiedDescription: '您已完成实名认证',
@@ -1929,7 +1926,7 @@ export const zhCN = {
     columns: { owner: '用户', name: '名称', kind: '类型', defaultAction: '默认动作', rules: '规则数', status: '状态', version: '版本', updatedAt: '更新时间', actions: '操作' },
     filters: { name: '搜索名称', status: '筛选状态', owner: '搜索用户' },
     editor: {
-      createTitle: '添加安全规则集', editTitle: '编辑安全规则集', targetScope: '目标租户作用域', owner: '所属用户',
+      createTitle: '添加安全规则集', editTitle: '编辑安全规则集', targetScope: '目标用户或角色不属于指定租户', owner: '所属用户',
       basicInfo: '基本信息', ruleMore: '规则 {{index}} 的更多操作', conditionCell: '{{label}}（条件 {{index}}）',
       kind: '规则类型', name: '名称', description: '说明', defaultAction: '未命中动作', enabled: '启用', rules: '匹配规则',
       ruleName: '规则名称', priority: '优先级', action: '动作', flow: '后续处理', field: '匹配字段', operator: '运算符',
@@ -1944,6 +1941,8 @@ export const zhCN = {
       allowFirstHint: '新增的放行规则已排在本规则库其它规则之前（规则按优先级从小到大执行，命中“停止”即结束），这样不会被后面的拦截规则遮住；其它规则顺序不变，可用上下箭头调整。',
       matchAllClients: '全部客户端', matchAllClientsHelp: '打开后本规则对所有请求生效，不用填写条件（不必再填 0.0.0.0/0）；按上面的统计对象分别计数。',
       ccConditionHint: '客户端IP 可填 CIDR、单个 IP、点分掩码（10.0.0.1/255.255.255.0）或区间（10.0.0.1-10.0.0.50），多个值任一命中；客户端IP 和请求头 / User-Agent / Referer 可添加多条，需全部满足（例如「属于 IP/网段」填一段、「不属于 IP/网段」排除其中几个）。请求头类条件需要节点支持 CC v6。',
+      ruleSource: '规则来源', ruleSources: { conditions: '条件', reference: '匹配器与过滤器' },
+      ccReference: { unavailable: '该匹配器或过滤器已停用、已删除或不属于本规则组的用户', unsupported: '节点不支持该匹配器或过滤器的设置' },
     },
     allowIntent: { loadFailed: '未能读取本站的 WAF 规则库，暂未打开放行规则编辑。可重试；不会新建规则库，也不会下发。' },
     evaluate: {
@@ -1959,6 +1958,7 @@ export const zhCN = {
       validation_error: '规则内容校验失败，请检查字段组合', permission_denied: '当前账号缺少安全策略权限',
       version_conflict: '规则集版本已变化，请刷新后重试', idempotency_conflict: '请求内容与原幂等请求不一致',
       security_policy_name_conflict: '同类型规则集名称已存在', request_failed: '请求失败，请稍后重试',
+      cc_reference_in_use: '仍被规则组「{{names}}」使用，不能删除或禁用',
       security_policy_in_use: '规则集仍在站点上生效，不能删除',
       inUseSites: '以下站点仍在使用本规则集（点击域名打开该站点的安全发布面板）：',
       inUseNextStep: '请先在这些站点「换用其他规则库」或「撤下」，生效后再删除。',
@@ -2070,7 +2070,7 @@ export const zhCN = {
     },
   },
   billing: {
-    title: '人工余额调整',
+    title: '人工余额调整', reviewTitle: '调整审批',
     actions: {
       search: '查询', viewLedger: '查看流水', adjust: '调整余额', confirm: '确认调整', cancel: '取消',
       retry: '重试', retrySameRequest: '使用同一请求重试', closeAndRefresh: '关闭并刷新',
@@ -2094,6 +2094,9 @@ export const zhCN = {
         reasonRequired: '请输入调整原因', reasonMax: '调整原因不能超过 500 个字符',
       },
     },
+    review: {
+      credit: '充值', debit: '扣款', approveCredit: '批准充值', approveDebit: '批准扣款', reject: '驳回申请', rejected: '申请已驳回',
+    },
     notices: { adjusted: '人工余额调整已记入账本', conflictRefreshed: '余额已被其他操作修改，账户列表已刷新' },
     uncertainty: {
       title: '调整结果待确认',
@@ -2109,6 +2112,7 @@ export const zhCN = {
     },
   },
   streams: {
+    selectionScope: { streams: '转发规则', groups: '转发分组', defaults: '默认设置' },
     detail: {
       title: '转发详情', portTitle: '端口 {{port}}', back: '返回转发列表', tabs: '转发配置栏目', basic: '基本配置', access: '访问控制',
       loading: '加载转发配置', loadFailed: '转发配置加载失败，请刷新重试', notFound: '转发规则不存在',
@@ -2154,21 +2158,30 @@ export const zhCN = {
       forbiddenTitle: '无权查看分组管理',
       listFailed: '分组列表加载失败',
       writeFailed: '分组操作失败',
-      deleteTitle: '删除分组',
-      deleteDescription: '删除后引用该分组的转发会失去分组归属，请确认后继续。',
+      deleteTitle: '删除分组 {{name}}？',
+      deleteTitleMany: '删除 {{count}} 个分组？',
+      deleteReferences: '{{count}} 条转发引用此分组，删除后这些转发会失去分组归属。',
+      deleteReferencesMany: '所选分组共被 {{count}} 条转发引用，删除后这些转发会失去分组归属。',
+      deleteNoReferences: '没有转发引用此分组。',
+      deleteNoReferencesMany: '所选分组没有被转发引用。',
+      deleteConfirmNamed: '确认删除分组 {{name}}',
+      deleteConfirmMany: '确认删除 {{count}} 个分组',
       version_conflict: '分组已被其他操作修改，请刷新后重试',
+      edit: '编辑', editNamed: '编辑分组 {{name}}', editTitle: '编辑分组', updated: '分组已保存',
+      editConflict: '分组已被其他操作修改，已刷新列表，请重新编辑',
     },
     defaults: {
       add: '新增设置',
       delete: '删除',
       addTitle: '新增设置',
-      description: '配置新增四层转发时自动带入的监听协议、负载方式与 Proxy Protocol。',
       user: '用户',
       settingName: '设置项',
       settingValue: '设置值',
       scope: '范围',
-      scopeGlobal: '全局',
-      scopeGroup: '转发分组',
+      scopeGlobal: '本账号全部新建转发',
+      scopeGroup: '指定分组的新建转发',
+      scopeGlobalUser: '{{name}} 的全部新建转发',
+      scopeGroupUser: '{{name}} 指定分组的新建转发',
       group: '转发分组',
       groupRequired: '请选择转发分组',
       settingRequired: '请选择设置项与设置值',
@@ -2187,8 +2200,14 @@ export const zhCN = {
       forbiddenTitle: '无权查看默认设置',
       listFailed: '默认设置加载失败',
       writeFailed: '默认设置操作失败',
-      deleteTitle: '删除默认设置',
-      deleteDescription: '删除后新增转发不再自动带入该设置，请确认后继续。',
+      deleteTitle: '删除默认设置「{{name}}」？',
+      deleteTitleMany: '删除 {{count}} 项默认设置？',
+      deleteValue: '设置值：{{value}}',
+      deleteScope: '范围：{{scope}}',
+      deleteItem: '{{name}}：{{value}}（{{scope}}）',
+      deleteConfirmNamed: '确认删除默认设置 {{name}}',
+      deleteConfirmMany: '确认删除 {{count}} 项默认设置',
+      deleteDescription: '删除后新增转发不再自动带入该设置。',
     },
     actions: {
       add: '添加转发',
@@ -2425,7 +2444,9 @@ export const zhCN = {
       newConnectionBan: '超限拉黑（秒）',
       newConnectionBanHelp: '0 只拒绝超出的连接；大于 0 时超限 IP 在此时长内对本转发的新连接一律拒绝（节点本地）。',
       sessionLog: '会话日志',
-      sessionLogHelp: '记录每个连接的客户端 IP、上游、流量、时长和结束原因（含被拒绝的连接），在“四层实时监控 > 访问日志”查看，保留 30 天；开启后“实时连接”可显示 TCP 连接的真实客户端和开始时间。所有节点需升级到支持会话日志的版本，否则发布会被拒绝并列出节点。',
+      sessionLogHelp: '记录每个连接，在“四层实时监控 > 访问日志”查看。',
+      sessionLogDetails: '每条记录含客户端 IP、上游、流量、时长和结束原因（含被拒绝的连接），保留 30 天；开启后“实时连接”可显示 TCP 连接的真实客户端和开始时间。所有节点需为支持会话日志的版本，发布时会列出待升级的节点。',
+      details: '详情', detailsOf: '{{label}}详情',
       newConnectionBanRange: '拉黑时长必须为 0 到 86400 秒的整数',
       dnsPositiveMin: 'DNS 最小正缓存 TTL（秒）',
       dnsPositiveMinRequired: '请输入 DNS 最小正缓存 TTL',
@@ -2513,17 +2534,21 @@ export const zhCN = {
       },
     },
     confirm: {
-      disableTitle: '停用转发',
-      enableTitle: '启用转发',
-      stateDescription: '保存后会生成新的发布意图，下发状态需另行确认。',
-      deleteTitle: '删除转发',
-      deleteDescription: '删除后端口会释放，并生成停止意图。',
+      disableTitle: '停用 {{name}}',
+      enableTitle: '启用 {{name}}',
+      deleteTitle: '删除 {{name}}',
+      modifyTitle: '修改 {{name}}',
+      disableDescription: '停用后，节点上对应的监听端口不再接受新连接，已建立的连接不会立即断开；端口仍归这条转发使用，之后可以重新启用。',
+      enableDescription: '启用后，配置下发到节点，对应的监听端口开始接受新连接。',
+      deleteDescription: '删除后无法恢复：节点上对应的监听端口不再接受新连接，已建立的连接不会立即断开；端口释放后可以分配给其他转发。',
+      targets: '选中的转发：{{list}}',
+      targetsMore: '选中的转发：{{list}} 等 {{count}} 条',
+      separator: '、',
       batch: {
         enableTitle: '启用选中的 {{count}} 条转发',
-        disableTitle: '禁用选中的 {{count}} 条转发',
+        disableTitle: '停用选中的 {{count}} 条转发',
         deleteTitle: '删除选中的 {{count}} 条转发',
         modifyTitle: '批量修改选中的 {{count}} 条转发',
-        description: '系统会逐条使用当前修订提交，并保留每条请求的幂等身份。',
       },
     },
     notices: {
@@ -2532,7 +2557,7 @@ export const zhCN = {
       deleted: '转发规则已删除，停止意图下发状态待确认',
       batch: {
         enable: '已提交 {{count}} 条启用操作，下发状态需另行确认',
-        disable: '已提交 {{count}} 条禁用操作，下发状态需另行确认',
+        disable: '已提交 {{count}} 条停用操作，下发状态需另行确认',
         delete: '已提交 {{count}} 条删除操作，下发状态需另行确认',
         modify: '已提交 {{count}} 条批量修改，下发状态需另行确认',
         status: '已设置 {{count}} 条转发的状态，下发状态需另行确认',
@@ -2785,6 +2810,7 @@ export const zhCN = {
       provider_credentials_rejected: '服务商拒绝了该凭据',
       provider_verification_rate_limited: '验证请求过于频繁，请稍后重试',
       provider_verification_unavailable: '服务商验证接口暂不可用',
+      provider_proxy_unavailable: '无法通过 http代理 连接服务商，请检查系统设置「其它配置 → 访问与网络」的 http代理',
       provider_verification_invalid_response: '服务商返回了无效的验证响应',
       provider_verification_timeout: '服务商凭据验证超时',
     },
@@ -2803,6 +2829,7 @@ export const zhCN = {
     },
     dnsApi: {
       title: 'DNS API',
+      selectionScope: 'DNS API',
       description: '展示当前租户已配置的 DNS 服务商，供 DNS-01 证书验证使用。凭据不会在此处回显。',
       actions: { create: '新增 DNS API', deleteSelected: '删除选中', delete: '删除', cancel: '取消' },
       columns: { user: '用户', name: '名称', type: '类型', remark: '备注', actions: '操作' },
@@ -2873,7 +2900,7 @@ export const zhCN = {
     },
     issuers: { lets_encrypt: "Let's Encrypt", zerossl: 'ZeroSSL', google_trust: 'Google Trust Services' },
     batch: {
-      single: '单个', tab: '批量申请', type: '证书类型', typeHint: '选择证书来源，自动申请需要后续完成域名验证。',
+      single: '单个', tab: '批量申请', type: '证书类型',
       uploadType: '自己上传', uploadTypeHint: '粘贴或上传已有 PEM 证书和私钥。',
       zerosslUnconfigured: '平台尚未配置 EAB，暂不可用。', zerosslUnconfiguredAdmin: 'ZeroSSL 需要 EAB 凭据：在“全局配置 → 默认配置 → 证书”填写 EAB 或账户邮箱后即可使用。', zerosslConfigure: '去配置',
       issuerHints: { zerossl: '推荐使用，适合自动签发和续签。', lets_encrypt: '免费证书，适合常规自动申请。', google_trust: '适合自动签发和续签。' },
@@ -2929,7 +2956,6 @@ export const zhCN = {
       http01Hint: '域名需已解析到本平台（CNAME 到站点线路组），所有节点都写入验证文件后才会请求签发机构验证。',
       autoRenew: '自动续期',
       acceptedTitle: '证书申请已提交',
-      acceptedDescription: '系统已受理申请并进入待签发流程，请在列表中查看后续状态。',
       wildcardSwitched: '通配符证书只能用 DNS 验证，已切换为 DNS 验证',
       dnsWarningTitle: '以下域名的解析还没有指向本平台：{{domains}}',
       dnsWarningDescription: '申请已提交，但解析改好之前 HTTP 验证会失败。请先把这些域名的 CNAME 指向网站的接入地址。',
@@ -2987,6 +3013,7 @@ export const zhCN = {
   },
   cacheOperations: {
     title: '刷新预热',
+    selectionScope: '操作记录',
     actions: {
       query: '查询',
       refresh: '刷新',
@@ -3319,6 +3346,7 @@ export const zhCN = {
   },
   nodes: {
     title: '节点列表',
+    selectionScope: { nodes: '节点', regions: '区域' },
     heading: '节点管理',
     tabs: { list: '节点列表', pending: '待初始化', syncFailed: '同步失败已禁用', regions: '区域管理', ssh: 'SSH 连接' },
     actions: {
@@ -3494,3 +3522,5 @@ export const zhCN = {
   },
   nodeScheduling: zhCNNodeScheduling,
 } satisfies Record<string, TranslationTree>
+
+addMissingCopy(zhCN, communityCopyZhCN)

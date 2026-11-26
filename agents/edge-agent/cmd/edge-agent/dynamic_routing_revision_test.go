@@ -139,6 +139,9 @@ func TestDynamicRoutingRollbackKeepsTheMark(t *testing.T) {
 // maintenance check, not "unchanged"); once the journal is writable the next
 // load makes it current without activating again.
 func TestDynamicRoutingJournalLossAfterActivation(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the read-only directory")
+	}
 	manager, runtime := revisionTestManager(t)
 	applyRevision(t, manager, "d2000000-0000-4000-8000-000000000001", revisionRelease(versionR1, 1, rootR1))
 	realApply := runtime.apply
@@ -154,9 +157,6 @@ func TestDynamicRoutingJournalLossAfterActivation(t *testing.T) {
 	if err != nil || result.State != deployment.StateHealthy || result.RunningConfigUnchanged ||
 		result.Transitions[len(result.Transitions)-1].MaintenanceFailure == "" {
 		t.Fatalf("journal loss = %+v %v", result, err)
-	}
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores the read-only directory")
 	}
 	// What runs is what the pointers say, before the journal is repaired.
 	if pointers, err := manager.ScopePointers(revisionTestScope); err != nil || pointers.Current != versionR2 {

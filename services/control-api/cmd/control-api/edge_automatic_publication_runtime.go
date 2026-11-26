@@ -211,6 +211,10 @@ func openEdgeAutomaticPublicationProductionRuntime(
 	if err != nil {
 		return nil, errors.New("initialize system edge republication worker")
 	}
+	// Node settings of a scope that turned automatic go to its policy (G8).
+	if err := republisher.WithAutomaticHandoff(edgeautopublish.HandOffSystemRepublicationTx); err != nil {
+		return nil, errors.New("initialize system edge republication hand-off")
+	}
 	if !nilRuntimeDependency(dependencies.ErrorPageSource) {
 		errorPages, err := edgepublish.NewErrorPagePublisher(systemService, dependencies.ErrorPageSource)
 		if err == nil {

@@ -13,9 +13,15 @@ import (
 // the lease is valid, so the menu agrees with the API entry and publication
 // gates (ADR 0007 §3.1).
 type modulesResponse struct {
-	Status      string   `json:"status"`
-	LeaseSerial uint64   `json:"lease_serial"`
-	Modules     []string `json:"modules"`
+	Status      string `json:"status"`
+	LeaseSerial uint64 `json:"lease_serial"`
+	// Modules is what the control plane acts on: the lease's codes plus the publication-gated modules an
+	// earlier lease keeps (entitlement.WithLegacyPublicationModules), so a page agrees with publication.
+	Modules []string `json:"modules"`
+	// LeaseModules is the lease's literal module codes.
+	LeaseModules []string `json:"lease_modules"`
+	// Features is the lease's other feature codes (packages.manage, ...), empty under the same rule.
+	Features []string `json:"features"`
 }
 
 func (s *Server) moduleGuard() *entitlementguard.Guard {

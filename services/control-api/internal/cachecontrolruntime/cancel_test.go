@@ -27,7 +27,10 @@ func (store *fakeCancelStore) MarkCancelPublished(_ context.Context, id uuid.UUI
 	store.published = append(store.published, id)
 	return nil
 }
-func (store *fakeCancelStore) ExpireCancels(context.Context) (int, error) { store.expired++; return 0, nil }
+func (store *fakeCancelStore) ExpireCancels(context.Context) (int, error) {
+	store.expired++
+	return 0, nil
+}
 func (store *fakeCancelStore) SettleCancel(_ context.Context, receipt cachecontrol.CancelReceipt) (bool, error) {
 	store.settled = append(store.settled, receipt)
 	return true, nil

@@ -21,6 +21,14 @@ func RequestPackageSuspensionRepublicationTx(ctx context.Context, tx pgx.Tx, sco
 	if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, scopeID); err != nil {
 		return err
 	}
+	if !suspend {
+		// This republication carries the entitlement in effect, a package
+		// change made while suspended included: the change sweep must not
+		// publish it a second time.
+		if err := markCurrentPackageEntitlementTx(ctx, tx, scopeID, subscriptionID); err != nil {
+			return err
+		}
+	}
 	operation := "site.batch.enable"
 	if suspend {
 		operation = "site.batch.disable"

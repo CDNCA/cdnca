@@ -27,6 +27,9 @@ var (
 	ErrPermissionDenied    = errors.New("dns reconciliation permission denied")
 	ErrEntitlementDenied   = errors.New("dns reconciliation entitlement denied")
 	ErrUnavailable         = errors.New("dns reconciliation dependency unavailable")
+	// ErrZoneNotHosted: no hosted domain of the site's own DNS account covers
+	// the name (修复域名解析 resolves the zone itself when the request names none).
+	ErrZoneNotHosted = errors.New("dns reconciliation zone is not hosted by the site DNS account")
 )
 
 type Action string

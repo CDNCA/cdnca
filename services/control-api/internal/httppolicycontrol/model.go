@@ -239,6 +239,9 @@ type ListFilter struct {
 type ListResult struct {
 	Items      []Policy `json:"items"`
 	NextCursor string   `json:"next_cursor,omitempty"`
+	// SystemMaxUploadBytes: the upload limit of a site without a policy
+	// (SystemMaxUploadBytes), the starting value of a new policy.
+	SystemMaxUploadBytes int64 `json:"system_max_upload_bytes"`
 }
 
 type WriteResult struct {

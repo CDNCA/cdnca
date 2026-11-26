@@ -2,11 +2,16 @@ import i18n from './index'
 
 const zhCN = {
   title: '实名认证',
-  introduction: '创建认证草稿需要由可信服务签发的一次性证据令牌；页面只展示脱敏案件状态。',
+  status: { title: '认证状态', latest: '最近一次申请：{{kind}} · {{state}} · {{time}}', loadFailed: '认证状态加载失败' },
+  selfStatus: { unverified: '未认证', pending: '审核中', verified: '已认证', rejected: '未通过' },
+  start: {
+    title: '发起认证', kind: '认证类型', personal: '个人认证', enterprise: '企业认证', submit: '开始认证',
+    notConfigured: '平台尚未开通实名认证服务，请联系平台管理员', loadFailed: '认证方式加载失败',
+  },
+  advanced: { title: '高级' },
   lookup: { title: '查询本人案件', caseId: '案件 ID', placeholder: '输入案件 UUID' },
   create: { title: '创建认证草稿', kind: '认证类型', evidenceToken: '可信证据令牌', evidencePlaceholder: '输入可信服务签发的令牌' },
   provider: {
-    title: '认证服务与私有材料', kind: '服务认证类型', provider: '认证服务', start: '启动认证服务',
     pending: '认证服务结果待确认', retrySameRequest: '使用同一服务请求重试', succeeded: '认证服务已完成',
     createDraft: '使用服务结果创建草稿', waiting: '等待认证服务处理', failed: '认证服务未完成，请重新发起。',
     states: {
@@ -22,7 +27,6 @@ const zhCN = {
       erase_pending: '私有材料等待清理', erased: '私有材料已清理',
     },
   },
-  empty: { description: '尚未选择实名认证案件' },
   details: {
     title: '实名认证案件状态', id: '案件 ID', kind: '认证类型', status: '状态',
     createdAt: '创建时间', changedAt: '状态更新时间', expiresAt: '审核截止时间',
@@ -75,9 +79,9 @@ const zhCN = {
     description: '写入结果未知。只能使用完全相同的请求和幂等键重试，或放弃并刷新确认当前状态。',
   },
   validation: {
-    caseIdRequired: '请输入案件 ID', caseIdFormat: '案件 ID 必须是规范 UUID',
+    caseIdRequired: '请输入案件 ID', caseIdFormat: '请输入有效的案件编号',
     evidenceRequired: '请输入可信证据令牌', evidenceFormat: '证据令牌格式无效',
-    providerRequired: '请输入认证服务标识', providerFormat: '认证服务标识格式无效',
+    kindRequired: '请选择认证类型',
   },
   forbidden: { title: '无权管理实名认证', description: '当前身份缺少本人实名认证管理权限。' },
   unauthorized: { title: '会话已失效', description: '请重新登录后管理实名认证。' },
@@ -114,11 +118,16 @@ type MessageShape<T> = { [K in keyof T]: T[K] extends string ? string : MessageS
 
 const enUS: MessageShape<typeof zhCN> = {
   title: 'Identity verification',
-  introduction: 'Creating a draft requires a one-time evidence handle issued by a trusted service. Only sanitized case state is displayed.',
+  status: { title: 'Verification status', latest: 'Latest request: {{kind}} · {{state}} · {{time}}', loadFailed: 'Could not load the verification status' },
+  selfStatus: { unverified: 'Not verified', pending: 'Under review', verified: 'Verified', rejected: 'Not approved' },
+  start: {
+    title: 'Start verification', kind: 'Verification type', personal: 'Personal verification', enterprise: 'Enterprise verification', submit: 'Start verification',
+    notConfigured: 'The platform has not opened identity verification yet. Contact the platform administrator.', loadFailed: 'Could not load the verification methods',
+  },
+  advanced: { title: 'Advanced' },
   lookup: { title: 'Find my case', caseId: 'Case ID', placeholder: 'Enter a case UUID' },
   create: { title: 'Create verification draft', kind: 'Verification type', evidenceToken: 'Trusted evidence handle', evidencePlaceholder: 'Enter the handle issued by the trusted service' },
   provider: {
-    title: 'Verification service and private material', kind: 'Service verification type', provider: 'Verification service', start: 'Start verification service',
     pending: 'Verification service outcome is unknown', retrySameRequest: 'Retry the same service request', succeeded: 'Verification service completed',
     createDraft: 'Create a draft from the service result', waiting: 'Waiting for verification service', failed: 'Verification service did not complete. Start again.',
     states: {
@@ -134,7 +143,6 @@ const enUS: MessageShape<typeof zhCN> = {
       erase_pending: 'Private material is awaiting erasure', erased: 'Private material was erased',
     },
   },
-  empty: { description: 'No identity verification case selected' },
   details: {
     title: 'Identity verification case status', id: 'Case ID', kind: 'Verification type', status: 'Status',
     createdAt: 'Created at', changedAt: 'State updated at', expiresAt: 'Review deadline',
@@ -187,9 +195,9 @@ const enUS: MessageShape<typeof zhCN> = {
     description: 'Retry only with the exact same request and idempotency key, or abandon it and refresh the current state.',
   },
   validation: {
-    caseIdRequired: 'Enter a case ID', caseIdFormat: 'The case ID must be a canonical UUID',
+    caseIdRequired: 'Enter a case ID', caseIdFormat: 'Enter a valid case ID',
     evidenceRequired: 'Enter a trusted evidence handle', evidenceFormat: 'The evidence handle format is invalid',
-    providerRequired: 'Enter a verification service identifier', providerFormat: 'The verification service identifier is invalid',
+    kindRequired: 'Select a verification type',
   },
   forbidden: { title: 'Identity verification unavailable', description: 'This account cannot manage its identity verification.' },
   unauthorized: { title: 'Session expired', description: 'Sign in again to manage identity verification.' },

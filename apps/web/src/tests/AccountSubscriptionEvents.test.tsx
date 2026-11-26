@@ -44,7 +44,9 @@ describe('AccountSubscriptionsPage event rows', () => {
     expect(screen.getAllByRole('row')).toHaveLength(1 + 6)
     expect(fetchMock.mock.calls.filter(([, i]) => !i?.method)).toHaveLength(22)
     expect(screen.queryByText('套餐与工单通知')).not.toBeInTheDocument()
-    expect(screen.getByText('提醒项').parentElement).toHaveTextContent('提醒项 6')
+    // 顶部「提醒项 / 邮件开启」计数胶囊已删。
+    expect(document.querySelector('.account-subscriptions-stats')).toBeNull()
+    expect(screen.queryByText('提醒项')).not.toBeInTheDocument()
     const more = await openMore()
     for (const label of ['公告发布', '工单已提交', '工单状态变化', '自动续费失败', '自动续费成功', 'WAF 自动排除已生效', 'WAF 自动排除已撤销', 'WAF 自动排除已到期']) {
       expect(within(more).getByText(label)).toBeInTheDocument()
@@ -59,8 +61,7 @@ describe('AccountSubscriptionsPage event rows', () => {
     expect(JSON.parse(init!.body as string)).toEqual({ sms_enabled: false, email_enabled: true })
     expect(new Headers(init!.headers).get('If-Match')).toBe('"0"')
     await waitFor(() => expect(email).toBeChecked())
-    // 计数胶囊只统计主表的 6 个消息类型。
-    expect(screen.getByText('邮件开启').parentElement).toHaveTextContent('邮件开启 0')
+    expect(screen.queryByText('邮件开启')).not.toBeInTheDocument()
   })
 
   // fix-ticket2（546）：服务端为工单事件给出 inbox_enabled 时多一列站内信；只有工单行有开关，

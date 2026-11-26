@@ -197,7 +197,7 @@ describe('NodeInventoryDetailPage', () => {
   it.each([
     [{ state: 'applied' }, ['已生效'], []],
     [{ state: 'off' }, ['未开启'], []],
-    [{ state: 'pending' }, ['等待首次发布'], []],
+    [{ state: 'pending' }, ['防护配置尚未应用'], ['等待首次发布', '前往连接与 DDoS 防护']],
     [{ state: 'failed', detail: 'nft: table busy' }, ['防护异常', 'nft: table busy', /应用失败/], []],
     [{ state: 'unavailable', reason: 'nft_missing' }, ['防护不可用', /没有安装 nftables/], ['节点说明']],
   ] as const)('shows the DDoS protection block for %o', async (protection, expected, absent) => {

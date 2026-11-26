@@ -631,6 +631,12 @@
        "required": true
       },
       {
+       "name": "ineligible_reason",
+       "type": "string: package_suspended / package_cancelled",
+       "description": "With eligibility_state ineligible, package_cancelled when the package subscription is cancelled (terminated; it ranks before an earlier suspension) and package_suspended when it is suspended (the stream is not published until it is resumed), as a site's package_unavailable_reason of the same names. Omitted otherwise.",
+       "description_zh": "套餐订阅已终止时为 package_cancelled（先于之前的暂停），已暂停时为 package_suspended（恢复前不下发），与网站一致；其他情况省略。"
+      },
+      {
        "name": "admin_status",
        "type": "string: normal / locked / traffic_exceeded / package_expired",
        "required": true,
@@ -699,7 +705,7 @@
     },
     {
      "status": "409",
-     "description": "Revision, idempotency, name, or listener-port conflict."
+     "description": "Revision, idempotency, name, listener-port or package quota conflict."
     },
     {
      "status": "415",
@@ -818,7 +824,7 @@
     },
     {
      "status": "409",
-     "description": "Revision, idempotency, name, or listener-port conflict."
+     "description": "Revision, idempotency, name, listener-port or package quota conflict."
     },
     {
      "status": "415",
@@ -941,7 +947,7 @@
     },
     {
      "status": "409",
-     "description": "Revision, idempotency, name, or listener-port conflict."
+     "description": "Revision, idempotency, name, listener-port or package quota conflict."
     },
     {
      "status": "415",
@@ -1206,6 +1212,12 @@
        "name": "eligibility_state",
        "type": "string: eligible / ineligible",
        "required": true
+      },
+      {
+       "name": "ineligible_reason",
+       "type": "string: package_suspended / package_cancelled",
+       "description": "With eligibility_state ineligible, package_cancelled when the package subscription is cancelled (terminated; it ranks before an earlier suspension) and package_suspended when it is suspended (the stream is not published until it is resumed), as a site's package_unavailable_reason of the same names. Omitted otherwise.",
+       "description_zh": "套餐订阅已终止时为 package_cancelled（先于之前的暂停），已暂停时为 package_suspended（恢复前不下发），与网站一致；其他情况省略。"
       },
       {
        "name": "admin_status",
@@ -1734,6 +1746,12 @@
        "required": true
       },
       {
+       "name": "ineligible_reason",
+       "type": "string: package_suspended / package_cancelled",
+       "description": "With eligibility_state ineligible, package_cancelled when the package subscription is cancelled (terminated; it ranks before an earlier suspension) and package_suspended when it is suspended (the stream is not published until it is resumed), as a site's package_unavailable_reason of the same names. Omitted otherwise.",
+       "description_zh": "套餐订阅已终止时为 package_cancelled（先于之前的暂停），已暂停时为 package_suspended（恢复前不下发），与网站一致；其他情况省略。"
+      },
+      {
        "name": "admin_status",
        "type": "string: normal / locked / traffic_exceeded / package_expired",
        "required": true,
@@ -1806,7 +1824,7 @@
     },
     {
      "status": "409",
-     "description": "Revision, idempotency, name, or listener-port conflict."
+     "description": "Revision, idempotency, name, listener-port or package quota conflict."
     },
     {
      "status": "415",
@@ -1883,7 +1901,7 @@
     },
     {
      "status": "409",
-     "description": "Revision, idempotency, name, or listener-port conflict."
+     "description": "Revision, idempotency, name, listener-port or package quota conflict."
     },
     {
      "status": "500",

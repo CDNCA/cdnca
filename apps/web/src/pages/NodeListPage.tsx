@@ -13,15 +13,14 @@ import {
   Result,
   Select,
   Switch,
-  Table,
   Tag,
-  Tabs,
   Tooltip,
   Typography,
   type MenuProps,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, submitErrorFields, useFormSubmitError, type FormErrorMap } from '@cdnca/ui'
+import { Tabs } from '../components/Tabs'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, submitErrorFields, useFormSubmitError, type FormErrorMap, Table } from '@cdnca/ui'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Copy, Plus, RefreshCw, RotateCcw, Search } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -50,11 +49,12 @@ import {
   type UpdateNodeRequest,
 } from '../api/nodes'
 import { nodeIPLocationFields, type NodeIPLocationField } from '../api/nodes'
-import { nodeSchedulingApi } from '../api/nodeScheduling'
+import { nodeSchedulingApi, type NodeLineGroup } from '../api/nodeScheduling'
 import { supplyInUse } from '../api/marketSupplier'
 import { nodeMonitoringApi, type NodeMonitoringLatest, type NodeMonitoringLatestBatch } from '../api/nodeMonitoring'
 import { nodeInstallationTicketsApi } from '../api/nodeInstallationTickets'
 import { NodeFrozenTag } from '../components/NodeFrozenTag'
+import { NodeJoinProgress } from '../components/NodeJoinProgress'
 import { NodeStaleConfigurationTag } from '../components/NodeStaleConfigurationTag'
 import { useSessionStore } from '../auth/session'
 import { controlUpgradesReadPermission } from '../routes/routePolicy'
@@ -80,6 +80,9 @@ import {
   clearNodeUpdateRetry, persistNodeUpdateRetry, restoreNodeUpdateRetry,
   type NodeUpdateRequestAttempt, type NodeUpdateRetryOwner, type NodeUpdateRetryRecord,
 } from './nodeUpdateRetryRecord'
+import { useNamedRowSelection } from '../components/namedRowSelection'
+
+type NodeLineGroupRef = Pick<NodeLineGroup, 'id' | 'name' | 'region'>
 
 interface NodeFormValues {
   name: string
@@ -502,6 +505,7 @@ function NodeEditModal({
   readOnly,
   regionNames,
   regionsLoading,
+  lineGroups,
   onCancel,
   onSubmit,
 }: {
@@ -515,11 +519,15 @@ function NodeEditModal({
   readOnly: boolean
   regionNames: string[]
   regionsLoading: boolean
+  /** The general line groups listing this node: a group keeps the node in its own region (node_region_in_use). */
+  lineGroups: NodeLineGroupRef[]
   onCancel: () => void
   onSubmit: (input: UpdateNodeRequest) => void
 }) {
   const { t } = useTranslation('nodes')
   const [basicFormInstance] = Form.useForm<NodeEditFormValues>()
+  const watchedRegion = Form.useWatch('region', basicFormInstance) as string | undefined
+  const regionLocks = lineGroups.filter((group) => group.region !== (watchedRegion ?? item.region))
   const [nodeFormInstance] = Form.useForm<NodeEditFormValues>()
   const [ipLocationFormInstance] = Form.useForm<NodeEditFormValues>()
   const [autoDisableFormInstance] = Form.useForm<NodeEditFormValues>()
@@ -718,7 +726,13 @@ function NodeEditModal({
       <Form.Item name="description" label={t('editModal.fields.description')} rules={[{ max: 1024 }]}>
         <Input placeholder={t('editModal.placeholders.description')} />
       </Form.Item>
-      <Form.Item name="region" label={t('region.label')} extra={t('region.initializeHelp')}>
+      <Form.Item name="region" label={t('region.label')} validateStatus={regionLocks.length ? 'warning' : undefined}
+        extra={regionLocks.length ? (
+          <span className="node-region-locks" data-testid="node-region-locks">
+            {t('region.lockedBy')}
+            {regionLocks.map((group) => <Link key={group.id} to={`/node/line-group/line/${encodeURIComponent(group.id)}`}>{group.name}</Link>)}
+          </span>
+        ) : t('region.initializeHelp')}>
         <NodeRegionSelect names={regionNames} loading={regionsLoading} />
       </Form.Item>
       <Form.Item name="sort" label={t('editModal.fields.sort')} rules={[{ required: true, type: 'integer', min: 0, max: 999999, message: t('updateRetry.sortInteger') }]}>
@@ -1095,6 +1109,7 @@ function NodeFormModal({
   readOnly,
   regionNames,
   regionsLoading,
+  lineGroups,
   onCancel,
   onSubmit,
   onUpdate,
@@ -1109,6 +1124,7 @@ function NodeFormModal({
   readOnly: boolean
   regionNames: string[]
   regionsLoading: boolean
+  lineGroups: NodeLineGroupRef[]
   onCancel: () => void
   onSubmit: (values: NodeFormValues) => void
   onUpdate: (input: UpdateNodeRequest) => void
@@ -1159,6 +1175,7 @@ function NodeFormModal({
         readOnly={readOnly}
         regionNames={regionNames}
         regionsLoading={regionsLoading}
+        lineGroups={lineGroups}
         onCancel={onCancel}
         onSubmit={onUpdate}
       />
@@ -1796,6 +1813,7 @@ function NodeListContent({
   canViewLineGroups: boolean
 }) {
   const { t, i18n } = useTranslation('nodes')
+  const namedRows = useNamedRowSelection()
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = useFeedbackMessage()
   const feedback = useFeedback()
@@ -1810,9 +1828,10 @@ function NodeListContent({
   const updateReading = useRef(false)
   const [readingUpdate, setReadingUpdate] = useState(false)
   const [status, setStatus] = useState<NodeAdminState>()
-  const [nodeTab, setNodeTab] = useState<NodeListTab>('list')
-  const [presence, setPresence] = useState<NodePresenceStatus>()
   const [searchParams] = useSearchParams()
+  // ?tab=regions (添加套餐缺区域 → 区域) opens 区域管理.
+  const [nodeTab, setNodeTab] = useState<NodeListTab>(() => searchParams.get('tab') === 'regions' ? 'regions' : 'list')
+  const [presence, setPresence] = useState<NodePresenceStatus>()
   // ?region=unset (the line-resolution "去设置" link) lists nodes without a region.
   const [region, setRegion] = useState(() => searchParams.get('region') === 'unset' ? unsetRegionFilter : '')
   const [limit, setLimit] = useState(10)
@@ -1850,6 +1869,10 @@ function NodeListContent({
   const [retryAttempt, setRetryAttempt] = useState<RetryAttempt | null>(() => restoredUpdate.record?.phase === 'unknown'
     ? { kind: 'update', request: restoredUpdate.record.attempt, replay: true, ownerKey } : null)
   const [terminalForbidden, setTerminalForbidden] = useState(false)
+  // The node an initialize confirmation was sent for, and once read back the
+  // node itself: its join progress (connected / line group / DNS) is shown.
+  const initializingRef = useRef<string | null>(null)
+  const [initialized, setInitialized] = useState<NodeInventoryItem | null>(null)
   const createResultsRef = useRef(new WeakMap<CreateAttempt, Awaited<ReturnType<typeof nodesApi.create>>>())
   const tokenResultsRef = useRef(new WeakMap<TokenAttempt, IssuedEnrollmentToken>())
   const writeLocked = retryAttempt !== null || updateRecord !== null || updateStorageBlocked
@@ -2207,6 +2230,13 @@ function NodeListContent({
       setUpdateRecord(null)
       setRetryAttempt(null)
       setWriteError(null)
+      // Without line group access only the state change is reported.
+      if (record.attempt.input.admin_state === 'active' && initializingRef.current === saved.id && canViewLineGroups) {
+        initializingRef.current = null
+        setInitialized(saved)
+        void lineGroupsQuery.refetch()
+        return
+      }
       messageApi.success(record.attempt.input.admin_state
           ? t('notices.stateUpdated', { state: t(`states.${record.attempt.input.admin_state}`) })
           : t('notices.updated'))
@@ -2508,6 +2538,7 @@ function NodeListContent({
       okButtonProps: { danger: target === 'retired' },
       onOk: () => {
         if (writeLocked || !currentSessionAccess('manage')) return
+        initializingRef.current = initializing ? item.id : null
         beginNodeUpdate({
           item: { id: item.id, revision: item.revision },
           input: chooseRegion && chosenRegion ? { admin_state: target, region: chosenRegion } : { admin_state: target },
@@ -2704,23 +2735,15 @@ function NodeListContent({
       render: (_, item) => formatNumber(item.management_settings.sort, i18n.resolvedLanguage ?? i18n.language),
     },
     {
-      title: t('columns.actions'), key: 'actions', width: 120, align: 'center',
+      // 操作列固定在右侧；节点名打开编辑，这里只放只读高级详情一个主入口
+      title: t('columns.actions'), key: 'actions', width: 140, align: 'center', fixed: 'right',
       render: (_, item) => {
-        const manageButton = (
-          <Button
-            type="link"
-            size="small"
-            onClick={() => { setWriteError(null); setEditing(item); setFormOpen(true) }}
-          >
-            {t('actions.manage')}
-          </Button>
-        )
         const advancedLink = (
           <Link className="ant-btn ant-btn-link ant-btn-sm" to={`/node/list/${item.id}`}>
             <span>{t('editModal.advancedDetails')}</span>
           </Link>
         )
-        if (!canManage) return <div className="node-row-actions">{manageButton}{advancedLink}</div>
+        if (!canManage) return <div className="node-row-actions">{advancedLink}</div>
         // Deleting has its own menu entry; the status submenu only changes state.
         const statusTargets = allowedTargets(item.admin_state).filter((target) => target !== 'retired')
         const rowMenu: MenuProps = {
@@ -2744,10 +2767,6 @@ function NodeListContent({
               onClick: () => openTokenIssue(item, 're_enrollment', true),
             },
             {
-              key: 'advanced',
-              label: <Link to={`/node/list/${item.id}`}>{t('editModal.advancedDetails')}</Link>,
-            },
-            {
               key: 'delete',
               label: t('actions.delete'),
               danger: true,
@@ -2761,12 +2780,12 @@ function NodeListContent({
           ].filter((entry): entry is NonNullable<typeof entry> => entry !== null),
           onClick: ({ key }) => {
             if (key === 'delete') changeState(item, 'retired')
-            else if (key !== 'edit' && key !== 'token' && key !== 'reinstall' && key !== 'status' && key !== 'advanced') changeState(item, key as ManagedNodeAdminState)
+            else if (key !== 'edit' && key !== 'token' && key !== 'reinstall' && key !== 'status') changeState(item, key as ManagedNodeAdminState)
           },
         }
         return (
           <div className="node-row-actions">
-            {manageButton}
+            {advancedLink}
             <Dropdown menu={rowMenu} trigger={['click']} placement="bottomLeft" align={{ offset: [-5, 10] }} overlayClassName="node-dropdown-popup node-row-dropdown-popup">
               <Button type="link" size="small" disabled={writeLocked}>{t('actions.moreRow')}<ChevronDown size={14} /></Button>
             </Dropdown>
@@ -2840,35 +2859,9 @@ function NodeListContent({
   const retryPending = updateMutation.isPending || batchMutation.isPending || readingUpdate
   const failedBatchCount = batchResults?.filter((result) => result.status === 'failed').length ?? 0
 
-  return (
-    <section className="node-page" aria-labelledby="node-list-title">
-      {messageContext}
-      {confirmContext}
-      <h1 id="node-list-title" className="visually-hidden">{t('title')}</h1>
-      <h3 className="node-page-heading">{t('heading')}</h3>
-      <Tabs
-        className="node-tabs"
-        activeKey={nodeTab}
-        onChange={(key) => {
-          const next = key as NodeListTab
-          setNodeTab(next)
-          setSearchDraft('')
-          setSearch('')
-          setPresence(undefined)
-          setRegion('')
-          resetPagination()
-          if (next === 'list' || next === 'regions' || next === 'ssh') setStatus(undefined)
-          if (next === 'pending') setStatus('pending')
-          if (next === 'failed') setStatus('disabled')
-        }}
-        items={[
-          { key: 'list', label: t('tabs.list') },
-          { key: 'pending', label: t('tabs.pending') },
-          { key: 'failed', label: t('tabs.syncFailed') },
-          { key: 'regions', label: t('tabs.regions') },
-          ...(canManage || canTerminal ? [{ key: 'ssh', label: t('tabs.ssh') }] : []),
-        ]}
-      />
+  // 工具栏、提示、列表/区域/SSH 与分页放进当前页签自己的 tabpanel，其余页签不挂载。
+  const activeContent = (
+    <>
       <div className="node-toolbar">
         <div className="node-toolbar-actions">
           {canManage && nodeTab === 'list' ? (
@@ -3094,14 +3087,11 @@ function NodeListContent({
                       : t('empty.nodes'),
             }}
             scroll={{ x: nodeTab === 'list' ? 1330 : nodeTab === 'pending' ? 630 : 580 }}
-            rowSelection={canManage ? {
+            rowSelection={canManage ? namedRows<NodeInventoryItem>({
               selectedRowKeys: selectedKeys,
               onChange: setSelectedKeys,
-              getCheckboxProps: (item) => ({
-                disabled: writeLocked,
-                'aria-label': item.name,
-              }),
-            } : undefined}
+              getCheckboxProps: () => ({ disabled: writeLocked }),
+            }, (item) => item.name, t('selectionScope.nodes')) : undefined}
           />
       </div>
       )}
@@ -3142,7 +3132,38 @@ function NodeListContent({
         />
       </div>
       )}
+    </>
+  )
 
+  return (
+    <section className="node-page" aria-labelledby="node-list-title">
+      {messageContext}
+      {confirmContext}
+      <h1 id="node-list-title" className="visually-hidden">{t('title')}</h1>
+      <h3 className="node-page-heading">{t('heading')}</h3>
+      <Tabs
+        className="node-tabs node-tabset"
+        activeKey={nodeTab}
+        onChange={(key) => {
+          const next = key as NodeListTab
+          setNodeTab(next)
+          setSearchDraft('')
+          setSearch('')
+          setPresence(undefined)
+          setRegion('')
+          resetPagination()
+          if (next === 'list' || next === 'regions' || next === 'ssh') setStatus(undefined)
+          if (next === 'pending') setStatus('pending')
+          if (next === 'failed') setStatus('disabled')
+        }}
+        items={[
+          { key: 'list', label: t('tabs.list') },
+          { key: 'pending', label: t('tabs.pending') },
+          { key: 'failed', label: t('tabs.syncFailed') },
+          { key: 'regions', label: t('tabs.regions') },
+          ...(canManage || canTerminal ? [{ key: 'ssh', label: t('tabs.ssh') }] : []),
+        ].map((item) => ({ ...item, children: item.key === nodeTab ? activeContent : null }))}
+      />
       {canManage && installOpen && <InstallNodeModal onClose={() => setInstallOpen(false)} getAccessToken={() => currentSessionAccess('manage')} />}
 
       {monitorModal?.kind === 'config' ? <NodeMonitorConfigModal key={monitorModal.nodeID} nodeID={monitorModal.nodeID} open
@@ -3165,6 +3186,8 @@ function NodeListContent({
         readOnly={!canManage || updateStorageBlocked || updateRecord !== null}
         regionNames={regionNames}
         regionsLoading={regionCatalog.isFetching}
+        lineGroups={editing ? (lineGroupsQuery.data?.items ?? []).filter((group) =>
+          group.endpoints.some((endpoint) => endpoint.node_id === editing.id)) : []}
         onCancel={() => {
           if (createMutation.isPending || updateMutation.isPending) return
           // The marked refusal belongs to the form: closing it drops the refusal too.
@@ -3199,6 +3222,11 @@ function NodeListContent({
         }}
       />
       <TokenResultModal token={issuedToken} onClose={() => setIssuedToken(null)} />
+      <Modal className="node-modal" open={initialized !== null} title={initialized ? t('join.initializedTitle', { name: initialized.name }) : undefined}
+        onCancel={() => setInitialized(null)}
+        footer={<Button type="primary" onClick={() => setInitialized(null)}>{t('join.close')}</Button>}>
+        {initialized ? <NodeJoinProgress node={initialized} groups={lineGroupsQuery.data?.items ?? []} /> : null}
+      </Modal>
       <ReinstallResultModal result={reinstallResult} onClose={() => setReinstallResult(null)} />
       <NodeGatewayPortBatchModal open={portBatch !== null} accessToken={portBatch?.token ?? ''} nodes={portBatch?.nodes ?? []}
         onClose={() => { setPortBatch(null); void query.refetch() }} />

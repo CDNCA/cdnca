@@ -33,7 +33,7 @@ func TestAccountRecoveryProductionContextNotificationAndConfirmationPostgreSQL17
 	seedAccountRecoveryProcessHost(t, pool, "recovery.example.test", tenantID, scopeID, userID)
 	seedAccountRecoveryProcessSession(t, pool, userID, scopeID)
 
-	template := notification.TemplateRef{ID: "account_recovery_email", Version: 1, Channel: notification.ChannelEmail}
+	template := notification.TemplateRef{ID: "account_recovery_email_itest", Version: 1, Channel: notification.ChannelEmail}
 	store, err := notification.NewStore(pool)
 	if err != nil {
 		t.Fatal(err)
@@ -71,6 +71,8 @@ func TestAccountRecoveryProductionContextNotificationAndConfirmationPostgreSQL17
 		t.Fatal(err)
 	}
 	recoveryConfig := validAccountRecoveryRuntimeConfig(t)
+	// 迁移 681 已预置 account_recovery_email；本测试用自己的模板 ID 验证缺模板/建模板两种情形。
+	recoveryConfig.Templates = map[notification.Channel]notification.TemplateRef{notification.ChannelEmail: {ID: "account_recovery_email_itest", Version: 1, Channel: notification.ChannelEmail}}
 	recoveryRuntime, err := openAccountRecoveryRuntime(
 		t.Context(), recoveryConfig, pool, nil, accountRecoveryRuntimeDependencies{
 			TrustedContext: resolver.Resolve, Notifications: notificationRuntime,

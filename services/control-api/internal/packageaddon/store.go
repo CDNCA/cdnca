@@ -84,7 +84,12 @@ func (s *Store) Assignments(ctx context.Context, page, limit int, user string, a
 	if err = tx.QueryRow(ctx, `SELECT count(*)`+from, user, addonID).Scan(&result.Total); err != nil {
 		return result, err
 	}
-	rows, err := tx.Query(ctx, `SELECT a.id,a.display_id::text,a.addon_id,a.tenant_scope_id,a.owner_user_id,u.display_id::text,u.username,a.subscription_id,s.product_snapshot->>'name',a.kind,a.amount,a.snapshot,a.charged_minor,a.revision,a.created_at,a.updated_at`+from+` ORDER BY a.display_id DESC LIMIT $3 OFFSET $4`, user, addonID, limit, (page-1)*limit)
+	now := time.Now().UTC()
+	if s.Now != nil {
+		now = s.Now().UTC()
+	}
+	// The package name is the entitlement in effect (701), not the purchase snapshot.
+	rows, err := tx.Query(ctx, `SELECT a.id,a.display_id::text,a.addon_id,a.tenant_scope_id,a.owner_user_id,u.display_id::text,u.username,a.subscription_id,package_subscription_current_product_snapshot(s.id,$5)->>'name',a.kind,a.amount,a.snapshot,a.charged_minor,a.revision,a.created_at,a.updated_at`+from+` ORDER BY a.display_id DESC LIMIT $3 OFFSET $4`, user, addonID, limit, (page-1)*limit, now)
 	if err != nil {
 		return result, err
 	}

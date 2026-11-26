@@ -11,10 +11,10 @@ import {
   Radio,
   Select,
   Space,
-  Table,
   Tag,
   type FormInstance,
 } from 'antd'
+import { Table } from '@cdnca/ui'
 import { Plus, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
 
@@ -34,6 +34,8 @@ import {
   parseDuration,
   parseHeaderBuffers,
 } from './nginxDirectiveValues'
+import { useNamedRowSelection } from '../../components/namedRowSelection'
+import { FieldErrorText, filterFieldProps, useFieldFocus } from '../../components/FilterFieldError'
 
 export type SystemConfigurationFormValues = {
   nginx?: NginxConfiguration
@@ -97,7 +99,6 @@ type OverridesEditorProps = {
   form: FormInstance<SystemConfigurationFormValues>
   t: TFunction<'systemSettings'>
   editable: boolean
-  onChange: () => void
 }
 
 const proxyNextUpstreamOptions = [
@@ -352,20 +353,24 @@ function SettingsValues({ category, values, t }: { category: EditableCategory; v
   return <div className="configuration-overrides-values">{definitions.map((definition) => <span key={definition.key}>{settingValueText(definition, getPath(values, definition.overridePath), t)}</span>)}</div>
 }
 
-function SettingValueControl({ definition, value, onChange, onRemove, t }: {
+function SettingValueControl({ definition, value, onChange, onRemove, t, fieldId, error }: {
   definition: SettingDefinition
   value: unknown
   onChange: (value: unknown) => void
   onRemove: () => void
   t: TFunction<'systemSettings'>
+  // 这一项的值无效时，错误挂在它的输入上
+  fieldId: string
+  error?: string
 }) {
+  const field = filterFieldProps(fieldId, error)
   const label = settingLabel(definition, t)
   const help = settingHelp(definition, t)
   const options = definition.options?.map((item) => ({ value: item, label: item })) ?? []
   let control
   switch (definition.kind) {
     case 'number':
-      control = <Input aria-label={label} inputMode="numeric" value={typeof value === 'string' || typeof value === 'number' ? value : ''} onChange={(event) => onChange(event.target.value)} />
+      control = <Input {...field} aria-label={label} inputMode="numeric" value={typeof value === 'string' || typeof value === 'number' ? value : ''} onChange={(event) => onChange(event.target.value)} />
       break
     case 'boolean': {
       const labels = definition.booleanLabels === 'onOff'
@@ -378,17 +383,18 @@ function SettingValueControl({ definition, value, onChange, onRemove, t }: {
       if (definition.presentation === 'radio') {
         control = <Radio.Group aria-label={label} value={value} options={options} onChange={(event) => onChange(event.target.value)} />
       } else {
-        control = <Select aria-label={label} value={typeof value === 'string' ? value : undefined} options={options} virtual={false} classNames={{ popup: { root: 'configuration-select-popup' } }} onChange={onChange} />
+        control = <Select {...field} aria-label={label} value={typeof value === 'string' ? value : undefined} options={options} virtual={false} classNames={{ popup: { root: 'configuration-select-popup' } }} onChange={onChange} />
       }
       break
     case 'multi':
       control = definition.presentation === 'checkboxes'
         ? <Checkbox.Group aria-label={label} value={Array.isArray(value) ? value as string[] : []} options={options} onChange={onChange} />
-        : <Select aria-label={label} mode="multiple" value={Array.isArray(value) ? value as string[] : []} options={options} virtual={false} tokenSeparators={[',', ' ']} classNames={{ popup: { root: 'configuration-select-popup' } }} onChange={onChange} />
+        : <Select {...field} aria-label={label} mode="multiple" value={Array.isArray(value) ? value as string[] : []} options={options} virtual={false} tokenSeparators={[',', ' ']} classNames={{ popup: { root: 'configuration-select-popup' } }} onChange={onChange} />
       break
     default:
-      control = <Input aria-label={label} value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} />
+      control = <Input {...field} aria-label={label} value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} />
   }
+  control = <>{control}<FieldErrorText id={fieldId} error={error ?? null} /></>
   return <div className="configuration-override-value-field configuration-override-modal-row">
     <label>
       <span>{t(definition.labelKey)}：</span>
@@ -401,10 +407,20 @@ function SettingValueControl({ definition, value, onChange, onRemove, t }: {
     <Button className="configuration-override-remove" type="text" danger icon={<Trash2 size={15} />} aria-label={t('parity.overrides.removeSetting', { setting: label })} onClick={onRemove} />
   </div>
 }
-export default function ConfigurationOverridesEditor({ category, form, t, editable, onChange }: OverridesEditorProps) {
+export default function ConfigurationOverridesEditor({ category, form, t, editable }: OverridesEditorProps) {
+  const namedRows = useNamedRowSelection()
   const settings = settingsByCategory[category]
   const [draft, setDraft] = useState<EditorDraft | null>(null)
   const [editorError, setEditorError] = useState('')
+  // 目标无效的错误挂在当前类型（节点/区域）的选择器上，并把焦点移过去。
+  const [targetError, setTargetError] = useState('')
+  // 一项都没选时，错误挂在「配置项」选择器上并聚焦它
+  const [settingError, setSettingError] = useState('')
+  const focusField = useFieldFocus()
+  const targetFieldID = `configuration-override-target-${category}`
+  const settingFieldID = `configuration-override-setting-${category}`
+  const valueFieldID = (key: string) => `configuration-override-value-${category}-${key.replace(/[^A-Za-z0-9_-]/g, '-')}`
+  const [valueError, setValueError] = useState<{ key: string; message: string } | null>(null)
   const [targetQuery, setTargetQuery] = useState('')
   const watched = Form.useWatch([category, 'overrides'], { form, preserve: true }) as AnyOverride[] | undefined
   const rows = useMemo<OverrideTableRow[]>(() => (watched ?? []).map((item, index) => ({ key: item.id, index, item })), [watched])
@@ -423,6 +439,9 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
       setDraft({ index: null, scope: category === 'nginx' ? 'node' : 'region', scopeId: '', settingKeys: [], values: {} })
       setTargetQuery('')
       setEditorError('')
+      setTargetError('')
+      setSettingError('')
+      setValueError(null)
       return
     }
     const selected = settingDefinitionsForOverride(category, row.item.values)
@@ -438,6 +457,9 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
     })
     setTargetQuery('')
     setEditorError('')
+    setTargetError('')
+    setSettingError('')
+    setValueError(null)
   }
 
   const updateSettingKeys = (settingKeys: string[]) => {
@@ -452,17 +474,22 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
     }
     setDraft({ ...draft, settingKeys, values })
     setEditorError('')
+    if (settingKeys.length > 0) setSettingError('')
   }
 
   const commit = () => {
     if (!draft) return
     const scopeId = draft.scopeId.trim()
     if (!scopeId || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$/u.test(scopeId)) {
-      setEditorError(t('parity.overrides.validation.target'))
+      setEditorError('')
+      setTargetError(t('parity.overrides.validation.target'))
+      focusField(targetFieldID)
       return
     }
     if (draft.settingKeys.length === 0) {
-      setEditorError(t('parity.overrides.validation.setting'))
+      setEditorError('')
+      setSettingError(t('parity.overrides.validation.setting'))
+      focusField(settingFieldID)
       return
     }
     const definitions = draft.settingKeys.map((key) => settings.find((item) => item.key === key)).filter((item): item is SettingDefinition => Boolean(item))
@@ -473,19 +500,23 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
     }
     const source = form.getFieldValue(category)
     const values: Record<string, unknown> = {}
-    try {
-      for (const definition of definitions) {
-        if (definition.seed && getPath(values, definition.seed.overridePath) === undefined) {
-          setPath(values, definition.seed.overridePath, cloneValue(getPath(source, definition.seed.sourcePath)))
-        }
-        const parsed = parseDraftValue(definition, draft.values[definition.key])
-        if (definition.accept && !definition.accept(parsed)) throw new Error('invalid')
-        setPath(values, definition.overridePath, parsed)
+    for (const definition of definitions) {
+      if (definition.seed && getPath(values, definition.seed.overridePath) === undefined) {
+        setPath(values, definition.seed.overridePath, cloneValue(getPath(source, definition.seed.sourcePath)))
       }
-    } catch {
-      setEditorError(t('parity.overrides.validation.value'))
-      return
+      let parsed: unknown
+      try {
+        parsed = parseDraftValue(definition, draft.values[definition.key])
+        if (definition.accept && !definition.accept(parsed)) throw new Error('invalid')
+      } catch {
+        setEditorError('')
+        setValueError({ key: definition.key, message: t('parity.overrides.validation.value') })
+        focusField(valueFieldID(definition.key))
+        return
+      }
+      setPath(values, definition.overridePath, parsed)
     }
+    setValueError(null)
     const current = [...(form.getFieldValue([category, 'overrides']) as AnyOverride[] | undefined ?? [])]
     const item = {
       id: draft.index === null ? `${category.slice(0, 7)}_${Date.now().toString(36)}` : current[draft.index].id,
@@ -496,7 +527,6 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
     if (draft.index === null) current.push(item)
     else current[draft.index] = item
     form.setFieldValue([category, 'overrides'], current)
-    onChange()
     setDraft(null)
     setTargetQuery('')
     setEditorError('')
@@ -506,7 +536,6 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
     const current = [...(form.getFieldValue([category, 'overrides']) as AnyOverride[] | undefined ?? [])]
     current.splice(row.index, 1)
     form.setFieldValue([category, 'overrides'], current)
-    onChange()
   }
 
   const actionsColumn = {
@@ -554,7 +583,9 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
       className="configuration-overrides-table"
       size="small"
       rowKey="key"
-      rowSelection={{ columnWidth: 70 }}
+      rowSelection={namedRows<OverrideTableRow>({ columnWidth: 70 }, (row) => category === 'nginx'
+        ? `${t(`parity.overrides.${row.item.scope}`)} ${targetName(row.item.scope, row.item.scope_id) ?? row.item.scope_id}`
+        : targetName('region', row.item.scope_id) ?? row.item.scope_id, t('parity.overrides.selectionScope'))}
       pagination={false}
       dataSource={rows}
       columns={columns}
@@ -574,6 +605,9 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
         setDraft(null)
         setTargetQuery('')
         setEditorError('')
+        setTargetError('')
+        setSettingError('')
+        setValueError(null)
       }}
       destroyOnHidden
     >
@@ -589,6 +623,7 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
                 setDraft({ ...draft, scope: event.target.value as ScopeKind, scopeId: '' })
                 setTargetQuery('')
                 setEditorError('')
+                setTargetError('')
               }}
             />
           </div>
@@ -597,6 +632,7 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
           <label>{t(draft.scope === 'node' ? 'parity.overrides.nodeSelect' : 'parity.overrides.regionSelect')}</label>
           <div className="configuration-override-modal-control">
             <Select
+              {...filterFieldProps(targetFieldID, targetError)}
               aria-label={t(draft.scope === 'node' ? 'parity.overrides.nodeSelect' : 'parity.overrides.regionSelect')}
               value={draft.scopeId || undefined}
               showSearch
@@ -621,14 +657,17 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
                 setDraft({ ...draft, scopeId: value ?? '' })
                 setTargetQuery('')
                 setEditorError('')
+                setTargetError('')
               }}
             />
+            <FieldErrorText id={targetFieldID} error={targetError} />
           </div>
         </div>
         <div className="configuration-override-modal-row">
           <label>{t(category === 'nginx' ? 'parity.overrides.settings' : 'parity.overrides.settingItem')}</label>
           <div className="configuration-override-modal-control">
             <Select
+              {...filterFieldProps(settingFieldID, settingError)}
               aria-label={t(category === 'nginx' ? 'parity.overrides.settings' : 'parity.overrides.settingItem')}
               // 追加模式：每选一项后按已选数量重挂载，下拉框回到占位文字
               key={`append-${draft.settingKeys.length}`}
@@ -641,6 +680,7 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
               classNames={{ popup: { root: 'configuration-select-popup' } }}
               onChange={(value) => updateSettingKeys(value ? [...draft.settingKeys, value] : draft.settingKeys)}
             />
+            <FieldErrorText id={settingFieldID} error={settingError} />
           </div>
         </div>
         {draft.settingKeys.map((key) => {
@@ -650,9 +690,12 @@ export default function ConfigurationOverridesEditor({ category, form, t, editab
             definition={definition}
             value={draft.values[key]}
             t={t}
+            fieldId={valueFieldID(key)}
+            error={valueError?.key === key ? valueError.message : undefined}
             onChange={(value) => {
               setDraft({ ...draft, values: { ...draft.values, [key]: value } })
               setEditorError('')
+              if (valueError?.key === key) setValueError(null)
             }}
             onRemove={() => updateSettingKeys(draft.settingKeys.filter((item) => item !== key))}
           /> : null

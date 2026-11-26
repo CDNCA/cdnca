@@ -19,7 +19,15 @@ const (
 	upgradeOptionsProofDomain   = "cdnca-upgrade-options-request-proof/v1"
 )
 
-var upgradeTargetReasonPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+var (
+	upgradeTargetReasonPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	artifactDigestPattern      = regexp.MustCompile(`^[0-9a-f]{64}$`)
+)
+
+// CurrentSchemaReasonArtifactUnverified: the master listed options without a
+// runner-verified digest of its installed release, so License cannot identify the
+// build and current_schema_head stays null.
+const CurrentSchemaReasonArtifactUnverified = "current_artifact_unverified"
 
 // UpgradeTargetBlockedError is the license schema gate's readable refusal.
 type UpgradeTargetBlockedError struct{ Reason string }
@@ -39,8 +47,19 @@ type LicenseRefusalError struct {
 func (err *LicenseRefusalError) Error() string { return "license refused: " + err.Code }
 func (err *LicenseRefusalError) Unwrap() error { return mapLicenseStatus(err.Status) }
 
+// LicenseStatusRefusalError is a codeless License refusal (400/401/403/422):
+// it keeps the HTTP status so a create preparation can say License refused,
+// while errors.Is still sees the mapLicenseStatus sentinel (ErrGrantInvalid).
+type LicenseStatusRefusalError struct{ Status int }
+
+func (err *LicenseStatusRefusalError) Error() string {
+	return fmt.Sprintf("license refused with HTTP %d: %v", err.Status, mapLicenseStatus(err.Status))
+}
+func (err *LicenseStatusRefusalError) Unwrap() error { return mapLicenseStatus(err.Status) }
+
 // licenseIssueError maps a non-200 License answer of an issue call. 5xx,
-// timeouts and codeless bodies keep mapLicenseStatus (the caller answers 503).
+// timeouts and codeless bodies keep mapLicenseStatus (the caller answers 503);
+// a codeless refusal carries its status (LicenseStatusRefusalError).
 func licenseIssueError(status int, body []byte) error {
 	if reason := upgradeTargetBlockedReason(status, body); reason != "" {
 		return &UpgradeTargetBlockedError{Reason: reason}
@@ -52,6 +71,10 @@ func licenseIssueError(status int, body []byte) error {
 		if json.Unmarshal(body, &wire) == nil && upgradeTargetReasonPattern.MatchString(wire.Code) {
 			return &LicenseRefusalError{Status: status, Code: wire.Code}
 		}
+	}
+	switch status {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity:
+		return &LicenseStatusRefusalError{Status: status}
 	}
 	return mapLicenseStatus(status)
 }
@@ -71,11 +94,15 @@ func upgradeTargetBlockedReason(status int, body []byte) string {
 	return wire.Reason
 }
 
+// UpgradeOptionsRequest.CurrentArtifactSHA256 is the runner-verified lowercase hex
+// SHA-256 of the installed signed release ("" = not verified). License takes the
+// schema head of that exact build; builds of one SemVer differ (1.0.35: 692 / 697).
 type UpgradeOptionsRequest struct {
-	IdempotencyKey  string
-	Component       string
-	CurrentVersion  string
-	ProtocolVersion int
+	IdempotencyKey        string
+	Component             string
+	CurrentVersion        string
+	ProtocolVersion       int
+	CurrentArtifactSHA256 string
 }
 
 type UpgradeOption struct {
@@ -91,27 +118,32 @@ type UpgradeOption struct {
 	Reason            string `json:"reason"`
 }
 
+// UpgradeOptions.CurrentSchemaHead is the installed build's schema head, null when
+// unconfirmed; CurrentSchemaHeadReason then says why.
 type UpgradeOptions struct {
-	Schema            string          `json:"schema"`
-	InstallationID    string          `json:"installation_id"`
-	Component         string          `json:"component"`
-	CurrentVersion    string          `json:"current_version"`
-	CurrentSchemaHead *int            `json:"current_schema_head"`
-	TargetMode        string          `json:"target_mode"`
-	Items             []UpgradeOption `json:"items"`
+	Schema                  string          `json:"schema"`
+	InstallationID          string          `json:"installation_id"`
+	Component               string          `json:"component"`
+	CurrentVersion          string          `json:"current_version"`
+	CurrentSchemaHead       *int            `json:"current_schema_head"`
+	CurrentSchemaHeadReason string          `json:"current_schema_head_reason,omitempty"`
+	TargetMode              string          `json:"target_mode"`
+	Items                   []UpgradeOption `json:"items"`
 }
 
 func (client *LicenseClient) ListUpgradeOptions(ctx context.Context, input UpgradeOptionsRequest) (UpgradeOptions, error) {
 	if client == nil || !writeMetadataPattern.MatchString(input.IdempotencyKey) || !codePattern.MatchString(input.Component) ||
-		!validCanonicalVersion(input.CurrentVersion) || input.ProtocolVersion <= 0 {
+		!validCanonicalVersion(input.CurrentVersion) || input.ProtocolVersion <= 0 ||
+		(input.CurrentArtifactSHA256 != "" && !artifactDigestPattern.MatchString(input.CurrentArtifactSHA256)) {
 		return UpgradeOptions{}, ErrInvalidInput
 	}
 	body, err := json.Marshal(struct {
-		Schema          string `json:"schema"`
-		Component       string `json:"component"`
-		CurrentVersion  string `json:"current_version"`
-		ProtocolVersion int    `json:"protocol_version"`
-	}{upgradeOptionsRequestSchema, input.Component, input.CurrentVersion, input.ProtocolVersion})
+		Schema                string `json:"schema"`
+		Component             string `json:"component"`
+		CurrentVersion        string `json:"current_version"`
+		ProtocolVersion       int    `json:"protocol_version"`
+		CurrentArtifactSHA256 string `json:"current_artifact_sha256,omitempty"`
+	}{upgradeOptionsRequestSchema, input.Component, input.CurrentVersion, input.ProtocolVersion, input.CurrentArtifactSHA256})
 	if err != nil {
 		return UpgradeOptions{}, ErrInvalidInput
 	}
@@ -145,6 +177,14 @@ func (client *LicenseClient) ListUpgradeOptions(ctx context.Context, input Upgra
 	if decodeCanonicalLicenseJSON(encoded, &options) != nil || options.Schema != upgradeOptionsSchema ||
 		options.InstallationID != client.installationID.String() || options.Component != input.Component ||
 		options.CurrentVersion != input.CurrentVersion || len(options.Items) > 200 {
+		return UpgradeOptions{}, ErrLicenseUnavailable
+	}
+	if input.CurrentArtifactSHA256 == "" {
+		// Without the installed build's identity no head License names is this database's.
+		options.CurrentSchemaHead, options.CurrentSchemaHeadReason = nil, CurrentSchemaReasonArtifactUnverified
+	} else if (options.CurrentSchemaHead != nil) == (options.CurrentSchemaHeadReason != "") ||
+		(options.CurrentSchemaHead != nil && *options.CurrentSchemaHead < 1) ||
+		(options.CurrentSchemaHeadReason != "" && !upgradeTargetReasonPattern.MatchString(options.CurrentSchemaHeadReason)) {
 		return UpgradeOptions{}, ErrLicenseUnavailable
 	}
 	for _, item := range options.Items {

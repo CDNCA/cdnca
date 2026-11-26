@@ -12,6 +12,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/impersonationhttp"
+	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/google/uuid"
 )
 
@@ -114,6 +115,7 @@ func (s *Server) handleUpdateManagedUserLoginSecurity(w http.ResponseWriter, r *
 }
 
 func (s *Server) writeLoginSecurityError(w http.ResponseWriter, r *http.Request, err error) bool {
+	refusalreason.Record(r.Context(), refusalreason.Of(err))
 	var throttled *identity.LoginThrottled
 	if errors.As(err, &throttled) {
 		w.Header().Set("Retry-After", strconv.FormatInt(int64(throttled.RetryAfter/time.Second), 10))

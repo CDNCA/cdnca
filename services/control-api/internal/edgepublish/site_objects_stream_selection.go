@@ -44,9 +44,10 @@ func streamServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, strea
 		FROM l4_forwards forward
 		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=forward.scope_id
 		 AND subscription.id=forward.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
-		     COALESCE(forward.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid),
-		     COALESCE(forward.backup_node_group_id, (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
+		     COALESCE(forward.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid),
+		     COALESCE(forward.backup_node_group_id, (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid),
 		     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND forward.node_group_id IS NULL AND subscription.id IS NULL))
 		LEFT JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision

@@ -19,6 +19,6 @@ describe('sign-in page sign-up link', () => {
   it('shows the link when registration is open', async () => {
     vi.mocked(registrationAvailable).mockResolvedValue(true)
     renderWithProviders(<LoginPage />, ['/login'])
-    expect(await screen.findByRole('link', { name: '注册账号' })).toHaveAttribute('href', '/register')
+    expect(await screen.findByRole('link', { name: '注册账号' })).toHaveAttribute('href', '/register/')
   })
 })

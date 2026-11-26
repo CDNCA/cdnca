@@ -268,7 +268,9 @@ func TestSecurityBanListLifecycle(t *testing.T) {
 	}
 }
 
-type events struct{ items []analyticslog.TemporaryBanEvent }
+type events struct {
+	items []analyticslog.TemporaryBanEvent
+}
 
 func (source *events) ListTemporaryBans(_ context.Context, after, through time.Time, _ uint16) ([]analyticslog.TemporaryBanEvent, error) {
 	result := []analyticslog.TemporaryBanEvent{}
@@ -398,8 +400,8 @@ type receipt struct {
 }
 
 func (value *receipt) Status() *agentv1.SecurityBanStatus { return value.report }
-func (value *receipt) Ack(context.Context) error           { value.acked++; return nil }
-func (value *receipt) Nak(context.Context) error           { value.naks++; return nil }
+func (value *receipt) Ack(context.Context) error          { value.acked++; return nil }
+func (value *receipt) Nak(context.Context) error          { value.naks++; return nil }
 
 // TestSecurityBanDistributionAndReceipts: the node serving a site gets a
 // signed snapshot of its bans; unchanged content is not republished; a
@@ -418,7 +420,7 @@ func TestSecurityBanDistributionAndReceipts(t *testing.T) {
 	}
 	carrier := &transport{}
 	distributor, err := securityban.NewDistributor(securityban.DistributorConfig{Pool: pool, Transport: carrier, KeyID: "test-key",
-		Sign: func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(private, payload), nil },
+		Sign:     func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(private, payload), nil },
 		Interval: time.Minute, Now: func() time.Time { return now }})
 	if err != nil {
 		t.Fatal(err)

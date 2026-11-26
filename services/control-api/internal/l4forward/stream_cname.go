@@ -23,6 +23,15 @@ func hasCNAMEOverride(overrides Overrides) bool {
 	return overrides.CNAMEDomain != nil || overrides.CNAMEMode != nil
 }
 
+// streamCNAMESQL ($1 scope, $2 subscription, $3 / $4 the stream's own domain /
+// mode or NULL): the stream's CNAME domain and mode, the package's as in force
+// now where the stream has none (701: a changed package brings its own).
+const streamCNAMESQL = `SELECT COALESCE($3::text, NULLIF(subscription_current.product_snapshot#>>'{spec,cname,domain}',''), ''),
+		COALESCE($4::text, CASE subscription_current.product_snapshot#>>'{spec,cname,mode}' WHEN 'shared' THEN 'package' ELSE 'site' END)
+	FROM package_subscriptions subscription
+	CROSS JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current
+	WHERE subscription.tenant_scope_id=$1 AND subscription.id=$2`
+
 // syncStreamCNAME runs after a stream's CNAME override changed (or on
 // regenerate): an override that remains queues an intent; one that was
 // removed retires the stream's hostname.

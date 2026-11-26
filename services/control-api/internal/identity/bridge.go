@@ -66,7 +66,7 @@ func (s *Service) CreateBridgeCustomer(ctx context.Context, actor Actor, input C
 		return s.CreateResellerCustomer(ctx, actor, input)
 	}
 	input.Username = strings.ToLower(strings.TrimSpace(input.Username))
-	input.Role, input.GroupID = UserRoleOwner, nil
+	input.Role, input.GroupID, input.Status = UserRoleOwner, nil, ""
 	if !validUsername(input.Username) || !validWriteMetadata(input.IdempotencyKey, input.RequestID) ||
 		normalizeUserMetadata(input.Remark, input.QQ) != nil {
 		return ManagedUser{}, ErrInvalidUserInput

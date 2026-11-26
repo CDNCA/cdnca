@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App as AntApp, Button, Collapse, Form, Input, Radio, Select, Space, Table, Tag, Typography } from 'antd'
+import { Alert, App as AntApp, Button, Collapse, Form, Input, Radio, Select, Space, Tag, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../api/auth'
@@ -16,6 +17,7 @@ import {
   gatewayAddressErrorMessage, gatewayAddressRequestMessage, gatewayAddressStateMessage, maintenanceUpgradeFormat,
   maintenanceUpgradeMessage,
 } from '../i18n/maintenanceUpgrade'
+import { useBackupWait } from './controlBackupPending'
 
 interface FormValues {
   address: string
@@ -54,12 +56,15 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
   const [retryCodes, setRetryCodes] = useState<Record<string, string>>({})
   // 未启用 MFA：不要验证码。
   const requireMfaCode = useMfaActive() !== false
+  // A manual backup has control-api down: no address writes, no polling, and
+  // its expected read failures are not shown.
+  const { waiting: backupBusy } = useBackupWait()
 
   const changesQuery = useQuery({
     queryKey: ['node-gateway-address-changes', accessToken],
     queryFn: () => nodeGatewayAddressApi.list(accessToken),
     enabled: canRead,
-    refetchInterval: 15000,
+    refetchInterval: backupBusy ? false : 15000,
     retry: false,
   })
   const nodesQuery = useInfiniteQuery({
@@ -113,7 +118,7 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
     {open
       ? <Alert type="warning" showIcon message={mt('gatewayAddressKeepOld')} />
       : latest && <Alert type="success" showIcon message={mt('gatewayAddressAllDone')} />}
-    {canManage ? <Form<FormValues> form={form} layout="vertical" className="maintenance-gateway-address-form" requiredMark={false}
+    {canManage ? <Form<FormValues> form={form} layout="vertical" className="maintenance-gateway-address-form" requiredMark={false} disabled={backupBusy} scrollToFirstError={{ focus: true }}
       initialValues={{ target_kind: 'all', address: '', server_name: '', code: '' }}
       onFinish={(values) => create.mutate(values)}>
       <div className="maintenance-gateway-address-fields">
@@ -152,13 +157,13 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
     </Form> : <Typography.Paragraph type="secondary">{mt('gatewayAddressReadOnly')}</Typography.Paragraph>}
 
     <h4 className="maintenance-gateway-address-history-title">{mt('gatewayAddressHistory')}</h4>
-    {changesQuery.isError ? <Alert type="error" showIcon message={requestError(changesQuery.error, language)} />
+    {changesQuery.isError && !backupBusy ? <Alert type="error" showIcon message={requestError(changesQuery.error, language)} />
       : changes.length === 0 ? <Typography.Paragraph type="secondary">{mt('gatewayAddressEmpty')}</Typography.Paragraph>
         : <Collapse className="maintenance-gateway-address-history" items={changes.map((change) => ({
           key: change.id,
           label: <ChangeSummary change={change} language={language} />,
           children: <ChangeNodes accessToken={accessToken} change={change} language={language} canManage={canManage} requireMfaCode={requireMfaCode}
-            code={retryCodes[change.id] ?? ''} onCode={(code) => setRetryCodes((codes) => ({ ...codes, [change.id]: code }))}
+            backupBusy={backupBusy} code={retryCodes[change.id] ?? ''} onCode={(code) => setRetryCodes((codes) => ({ ...codes, [change.id]: code }))}
             retrying={retry.isPending && retry.variables?.id === change.id}
             onRetry={() => retry.mutate({ id: change.id, code: retryCodes[change.id] ?? '' })} />,
         }))} />}
@@ -181,8 +186,9 @@ function ChangeSummary({ change, language }: { change: GatewayAddressChange; lan
   </span>
 }
 
-function ChangeNodes({ accessToken, change, language, canManage, requireMfaCode, code, onCode, retrying, onRetry }: {
+function ChangeNodes({ accessToken, change, language, canManage, requireMfaCode, backupBusy, code, onCode, retrying, onRetry }: {
   accessToken: string
+  backupBusy: boolean
   requireMfaCode: boolean
   change: GatewayAddressChange
   language: string
@@ -196,15 +202,15 @@ function ChangeNodes({ accessToken, change, language, canManage, requireMfaCode,
   const detail = useQuery({
     queryKey: ['node-gateway-address-change', change.id],
     queryFn: () => nodeGatewayAddressApi.get(accessToken, change.id),
-    refetchInterval: gatewayAddressChangeComplete(change.counts) ? false : 10000,
+    refetchInterval: backupBusy || gatewayAddressChangeComplete(change.counts) ? false : 10000,
     retry: false,
   })
-  if (detail.isError) return <Alert type="error" showIcon message={requestError(detail.error, language)} />
+  if (detail.isError && !backupBusy) return <Alert type="error" showIcon message={requestError(detail.error, language)} />
   return <>
     {canManage && change.counts.failed > 0 && <Space className="maintenance-gateway-address-retry" wrap>
       {requireMfaCode && <Input aria-label={mt('gatewayAddressRetryCode')} placeholder={mt('gatewayAddressRetryCode')} inputMode="numeric"
         autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => onCode(event.target.value)} />}
-      <Button onClick={onRetry} loading={retrying} disabled={requireMfaCode && !totpPattern.test(code)}>{mt('gatewayAddressRetry')}</Button>
+      <Button onClick={onRetry} loading={retrying} disabled={backupBusy || (requireMfaCode && !totpPattern.test(code))}>{mt('gatewayAddressRetry')}</Button>
     </Space>}
     <Table<GatewayAddressNodeStatus> size="small" rowKey="node_id" scroll={{ x: 720 }} loading={detail.isLoading} pagination={{ pageSize: 20, hideOnSinglePage: true }}
       dataSource={detail.data?.nodes ?? []} columns={[

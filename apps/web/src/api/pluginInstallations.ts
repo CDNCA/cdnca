@@ -68,7 +68,15 @@ export interface PluginInstallation {
   managed_by?: PluginInstallationManagedBy
   /** Tenants a platform-confirmed tenant plugin is installed for (platform view only). */
   targets?: PluginInstallationTargetsView
+  /**
+   * whether the license service has acknowledged this installed plugin's last change. A write
+   * is answered once it is in force on this controller; pending means its license record is still being caught up
+   * (replayed automatically, and when the details are read). Omitted on candidates not installed yet.
+   */
+  license_sync?: PluginInstallationLicenseSync
 }
+
+export type PluginInstallationLicenseSync = 'pending' | 'synced'
 
 export type PluginInstallationManagedBy = 'platform' | 'tenant'
 
@@ -130,6 +138,11 @@ const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const digestPattern = /^[0-9a-f]{64}$/
 const pluginFilterPattern = /^[a-z0-9][a-z0-9.-]{0,127}$/
+
+/** A plugin_id the installation list accepts as its filter. */
+export function isPluginFilterID(value: string): boolean {
+  return pluginFilterPattern.test(value)
+}
 const pluginIDPattern = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/
 const versionPattern = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 const scopePattern = /^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)+$/
@@ -222,7 +235,8 @@ function parseInstallation(value: unknown, expected: ScopeTarget): PluginInstall
     typeof value.entrypoint_type !== 'string' || !Object.hasOwn(entrypointScopes, value.entrypoint_type) ||
     entrypointScopes[value.entrypoint_type as PluginInstallationEntrypointType] !== value.resource_scope ||
     !exactKeys(value, [...installationKeys, 'authorization_status', 'available_upgrade',
-    'paused_by', 'paused_reason', 'managed_by', 'targets'], installationKeys) || !validPause(value) ||
+    'paused_by', 'paused_reason', 'managed_by', 'targets', 'license_sync'], installationKeys) || !validPause(value) ||
+    (value.license_sync !== undefined && value.license_sync !== 'pending' && value.license_sync !== 'synced') ||
     (value.authorization_status !== undefined && !authorizationStatuses.has(value.authorization_status as string)) ||
     (value.available_upgrade !== undefined && !validUpgrade(value.available_upgrade)) || value.schema !== 'cdnca.control.plugin-installation/v1' || !uuid(value.tenant_scope_id) ||
     !uuid(value.authorization_id) ||

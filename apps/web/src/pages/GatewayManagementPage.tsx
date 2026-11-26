@@ -1,18 +1,19 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Card, Form, Input, Modal, Popconfirm, Result, Space, Table, Tag, Typography } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, PageSection } from '@cdnca/ui'
+import { Alert, Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Result, Space, Tag, Typography } from 'antd'
+import { useFeedbackMessage, FeedbackWhen, PageSection, Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
+import type { TextAreaRef } from 'antd/es/input/TextArea'
 
 import { ApiError, type Principal } from '../api/auth'
-import { dashboardApi } from '../api/dashboard'
 import { DataState } from '../components/DataState'
 import {
-  buildEnableGatewayAccessCommand, buildGatewayInstallCommand, gatewaysApi, isIPAddress, parseEntrypoints, parseTrustedProxies,
-  type Gateway, type GatewayCreated, type GatewaySettings, type GatewayStatus,
+  buildEnableGatewayAccessCommand, buildGatewayInstallCommand, gatewaysApi, firstInvalidLine, isIPAddress, parseEntrypoints, parseTrustedProxies,
+  type Gateway, type GatewayCreated, type GatewaySettings, type GatewayStatus, type LocalGateway,
 } from '../api/gateways'
 import { useSessionStore } from '../auth/session'
-import { businessTimeZone, formatDateTime } from '../i18n/formatters'
+import { formatDateTime } from '../i18n/formatters'
 import '../i18n/gatewayManagement'
 
 export const gatewayManagePermission = 'system.gateway.manage'
@@ -120,6 +121,7 @@ function GatewayManagementContent() {
     { title: t('columns.ports'), key: 'ports', render: (_: unknown, row: Gateway) => (row.enrollment_port ? `${row.enrollment_port} / ${row.agent_port}` : '-') },
     { title: t('columns.status'), key: 'status', render: (_: unknown, row: Gateway) => <Tag color={statusColor[row.status]}>{t(`status.${row.status}`)}</Tag> },
     { title: t('columns.version'), key: 'version', render: (_: unknown, row: Gateway) => row.version || '-' },
+    { title: t('columns.nodes'), key: 'nodes', render: (_: unknown, row: Gateway) => row.nodes_online ?? 0 },
     {
       title: t('columns.certificates'), key: 'certificates', render: (_: unknown, row: Gateway) => (row.client_certificate_expires_at
         ? <Space direction="vertical" size={0}>
@@ -156,6 +158,7 @@ function GatewayManagementContent() {
   </Space>}>
     {messageContext}
     {query.data && <LocalGatewayNote open={open} installer={installer} />}
+    {query.data?.local && <LocalGatewayFacts local={query.data.local} date={date} />}
     {open && <Typography.Paragraph type="secondary" className="density-note">{t('description')}</Typography.Paragraph>}
     {query.isError && <FeedbackWhen title={errorText(t, query.error) === t('errors.failed') ? t('errors.load') : errorText(t, query.error)} />}
     {failure && <FeedbackWhen title={failure} />}
@@ -205,27 +208,18 @@ function GatewayManagementContent() {
 
 // Fixed note above the list: the co-located Gateway is what nodes use; standalone
 // Gateways are optional. When access is closed it shows how to open it instead
-// of an "Add Gateway" that would be refused. The node count comes from the
-// admin dashboard and is left out when that is unavailable.
+// of an "Add Gateway" that would be refused.
 function LocalGatewayNote({ open, installer }: { open: boolean; installer: string }) {
   const { t, i18n } = useTranslation('gatewayManagement')
   // Chinese sentences join without a space; English ones with one.
   const sep = (i18n.resolvedLanguage ?? 'zh-CN').startsWith('en') ? ' ' : ''
   const [copied, setCopied] = useState(false)
-  const nodes = useQuery({
-    queryKey: ['gateway-local-node-count'],
-    queryFn: ({ signal }) => dashboardApi.admin(useSessionStore.getState().accessToken ?? '', 'seven_days', businessTimeZone, signal),
-    select: (result) => (result.node_health.available ? result.node_health.value.total : null),
-    retry: false,
-  })
   const command = buildEnableGatewayAccessCommand(installer, i18n.resolvedLanguage)
   const copy = async () => {
     try { await navigator.clipboard.writeText(command); setCopied(true) } catch { setCopied(false) }
   }
   return <Alert type="info" showIcon style={{ marginBottom: 12 }} message={<>
-    {t('local.current')}
-    {typeof nodes.data === 'number' && <>{sep}{t('local.nodes', { count: nodes.data })}</>}
-    {sep}{t('local.optional')}
+    {t('local.current')}{sep}{t('local.optional')}
   </>} description={open ? undefined : <>
     <Typography.Paragraph style={{ marginBottom: 8 }}>{t('local.closed')}</Typography.Paragraph>
     <Input.TextArea aria-label={t('local.command')} value={command} readOnly autoSize={{ minRows: 1, maxRows: 6 }} />
@@ -236,6 +230,26 @@ function LocalGatewayNote({ open, installer }: { open: boolean; installer: strin
   </>} />
 }
 
+const localStatusColor: Record<LocalGateway['status'], string> = { online: 'green', offline: 'red', not_reported: 'default' }
+
+// the co-located Gateway as the
+// control plane last saw it; what it has not reported says so.
+function LocalGatewayFacts({ local, date }: { local: LocalGateway; date: (value: string | null) => string }) {
+  const { t } = useTranslation('gatewayManagement')
+  const missing = t('local.notReported')
+  const shown = (value: string | null) => (value ? date(value) : missing)
+  return <Descriptions size="small" bordered column={{ xs: 1, md: 2, xl: 3 }} title={t('local.title')} style={{ marginBottom: 16 }} items={[
+    { key: 'status', label: t('columns.status'), children: <Tag color={localStatusColor[local.status]}>{t(`local.status.${local.status}`)}</Tag> },
+    { key: 'address', label: t('local.address'), children: local.address || missing },
+    { key: 'version', label: t('columns.version'), children: local.version || missing },
+    { key: 'certificate', label: t('local.certificate'), children: shown(local.certificate_expires_at) },
+    { key: 'last_seen', label: t('local.lastSeen'), children: shown(local.last_seen_at) },
+    { key: 'nodes', label: t('columns.nodes'), children: <Space size={8}>
+      {local.nodes_online}<Link to="/node/list">{t('local.viewNodes')}</Link>
+    </Space> },
+  ]} />
+}
+
 function GatewaySettingsCard() {
   const { t } = useTranslation('gatewayManagement')
   const queryClient = useQueryClient()
@@ -243,6 +257,10 @@ function GatewaySettingsCard() {
   const [proxies, setProxies] = useState<string | null>(null)
   const [entrypoints, setEntrypoints] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  // Which text box the format error belongs to: shown under it and focused.
+  const [invalid, setInvalid] = useState<{ field: 'proxies' | 'entrypoints'; line: number } | null>(null)
+  const proxiesRef = useRef<TextAreaRef>(null)
+  const entrypointsRef = useRef<TextAreaRef>(null)
   // W4: publishing reaches every Gateway and node, so it is confirmed first.
   const [pending, setPending] = useState<GatewaySettings | null>(null)
   // 卡 8：草稿基于哪份设置编辑，就用那份的 ETag 做 CAS；后台重取到的新 ETag 不能借给旧草稿。
@@ -255,9 +273,13 @@ function GatewaySettingsCard() {
     if (draftETag === null && query.data) setDraftETag(query.data.etag)
     set(value)
   }
-  const proxyText = proxies ?? (loaded?.trusted_proxies ?? []).map((item) => (item.header ? `${item.cidr}=${item.header}` : item.cidr)).join('\n')
-  const entryText = entrypoints ?? (loaded?.entrypoints ?? [])
+  const savedProxyText = (loaded?.trusted_proxies ?? []).map((item) => (item.header ? `${item.cidr}=${item.header}` : item.cidr)).join('\n')
+  const savedEntryText = (loaded?.entrypoints ?? [])
     .map((item) => [item.address, item.server_name, item.transport, item.tunnel_host].filter(Boolean).join(' ')).join('\n')
+  const proxyText = proxies ?? savedProxyText
+  const entryText = entrypoints ?? savedEntryText
+  // Publishing reaches every Gateway and node: nothing to publish until the text differs from what is saved.
+  const changed = proxyText.trim() !== savedProxyText.trim() || entryText.trim() !== savedEntryText.trim()
   const save = useMutation({
     mutationFn: ({ settings, etag }: { settings: GatewaySettings; etag: string }) => gatewaysApi.updateSettings(token(), settings, etag),
     onSuccess: (saved) => {
@@ -278,12 +300,12 @@ function GatewaySettingsCard() {
   const submit = () => {
     const parsedProxies = parseTrustedProxies(proxyText)
     const parsedEntrypoints = parseEntrypoints(entryText)
-    if (!parsedProxies) { setFailure(t('settings.invalidProxies')); return }
-    if (!parsedEntrypoints) { setFailure(t('settings.invalidEntrypoints')); return }
-    setFailure(null)
+    if (!parsedProxies) { setFailure(null); setInvalid({ field: 'proxies', line: firstInvalidLine(proxyText, parseTrustedProxies) }); proxiesRef.current?.focus(); return }
+    if (!parsedEntrypoints) { setFailure(null); setInvalid({ field: 'entrypoints', line: firstInvalidLine(entryText, parseEntrypoints) }); entrypointsRef.current?.focus(); return }
+    setFailure(null); setInvalid(null)
     setPending({ trusted_proxies: parsedProxies, entrypoints: parsedEntrypoints })
   }
-  return <Card title={t('settings.title')} extra={<Button type="primary" disabled={!loaded || save.isPending} onClick={submit}>{t('settings.save')}</Button>}>
+  return <Card title={t('settings.title')} extra={<Button type="primary" disabled={!loaded || !changed || save.isPending} onClick={submit}>{t('settings.save')}</Button>}>
     {messageContext}
     <Modal open={!!pending} title={t('settings.confirmTitle')} okText={t('settings.confirmOk')} cancelText={t('settings.confirmCancel')}
       onCancel={() => setPending(null)} onOk={() => { if (pending && query.data) save.mutate({ settings: pending, etag: draftETag ?? query.data.etag }); setPending(null) }}>
@@ -292,14 +314,20 @@ function GatewaySettingsCard() {
     {failure && <FeedbackWhen title={failure} />}
     {query.isError && !loaded ? <DataState status="error" message={t('settings.loadFailed')} onRetry={() => void query.refetch()} /> : <div className="density-split">
       <div>
-        <Typography.Paragraph type="secondary">{t('settings.proxiesHint')}</Typography.Paragraph>
-        <Input.TextArea aria-label={t('settings.proxies')} value={proxyText} disabled={!loaded}
-          onChange={(event) => edit(setProxies)(event.target.value)} autoSize={{ minRows: 4, maxRows: 12 }} />
+        <Typography.Paragraph type="secondary" id="gateway-proxies-hint">{t('settings.proxiesHint')}</Typography.Paragraph>
+        <Input.TextArea ref={proxiesRef} aria-label={t('settings.proxies')} value={proxyText} disabled={!loaded}
+          status={invalid?.field === 'proxies' ? 'error' : undefined} aria-invalid={invalid?.field === 'proxies' || undefined}
+          aria-describedby={invalid?.field === 'proxies' ? 'gateway-proxies-error gateway-proxies-hint' : 'gateway-proxies-hint'}
+          onChange={(event) => { if (invalid?.field === 'proxies') setInvalid(null); edit(setProxies)(event.target.value) }} autoSize={{ minRows: 4, maxRows: 12 }} />
+        {invalid?.field === 'proxies' && <Typography.Text type="danger" id="gateway-proxies-error">{t('settings.invalidProxies', { line: invalid.line })}</Typography.Text>}
       </div>
       <div>
-        <Typography.Paragraph type="secondary">{t('settings.entrypointsHint')}</Typography.Paragraph>
-        <Input.TextArea aria-label={t('settings.entrypoints')} value={entryText} disabled={!loaded}
-          onChange={(event) => edit(setEntrypoints)(event.target.value)} autoSize={{ minRows: 4, maxRows: 12 }} />
+        <Typography.Paragraph type="secondary" id="gateway-entrypoints-hint">{t('settings.entrypointsHint')}</Typography.Paragraph>
+        <Input.TextArea ref={entrypointsRef} aria-label={t('settings.entrypoints')} value={entryText} disabled={!loaded}
+          status={invalid?.field === 'entrypoints' ? 'error' : undefined} aria-invalid={invalid?.field === 'entrypoints' || undefined}
+          aria-describedby={invalid?.field === 'entrypoints' ? 'gateway-entrypoints-error gateway-entrypoints-hint' : 'gateway-entrypoints-hint'}
+          onChange={(event) => { if (invalid?.field === 'entrypoints') setInvalid(null); edit(setEntrypoints)(event.target.value) }} autoSize={{ minRows: 4, maxRows: 12 }} />
+        {invalid?.field === 'entrypoints' && <Typography.Text type="danger" id="gateway-entrypoints-error">{t('settings.invalidEntrypoints', { line: invalid.line })}</Typography.Text>}
       </div>
     </div>}
   </Card>

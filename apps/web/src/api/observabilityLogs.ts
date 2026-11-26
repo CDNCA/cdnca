@@ -57,6 +57,8 @@ export interface ObservabilityLogFilters {
   to?: string
   limit?: number
   cursor?: string
+  /** Leave out successful auth.refresh rows (renewal failures stay). */
+  hideSessionRefresh?: boolean
 }
 
 export interface FrontendEventInput {
@@ -135,6 +137,7 @@ function query(filters: ObservabilityLogFilters): string {
   if (filters.from && filters.to && filters.from > filters.to) invalid()
   if (filters.limit !== undefined) { if (!Number.isInteger(filters.limit) || filters.limit < 1 || filters.limit > 300) invalid(); params.set('limit', String(filters.limit)) }
   if (filters.cursor !== undefined) { if (!filters.cursor || filters.cursor.length > 4096) invalid(); params.set('cursor', filters.cursor) }
+  if (filters.hideSessionRefresh) params.set('hide_session_refresh', 'true')
   const encoded = params.toString()
   return encoded ? `?${encoded}` : ''
 }

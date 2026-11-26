@@ -51,8 +51,28 @@ it('explains a refused save that would lock the administrator out', async () => 
 it('does not save when the lockout confirmation is cancelled (W4)', async () => {
   const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(policy()))
   renderPage()
-  fireEvent.click(await screen.findByRole('button', { name: '保存' }))
-  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '取消' }))
+  fireEvent.click(await screen.findByRole('switch', { name: '启用白名单' }))
+  fireEvent.change(screen.getByLabelText('允许的 IP 或网段'), { target: { value: '203.0.113.5' } })
+  fireEvent.click(screen.getByRole('button', { name: '保存' }))
+  const dialog = await screen.findByRole('dialog')
+  // 危险确认默认聚焦「取消」
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: '取消' })).toHaveFocus())
+  fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(fetchSpy).toHaveBeenCalledTimes(1)
+})
+
+// 没有改动不能保存；无效条目就地标在输入框并聚焦，不进入确认。
+it('keeps save disabled without changes and marks an invalid entry on the field', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(policy()))
+  renderPage()
+  expect(await screen.findByRole('button', { name: '保存' })).toBeDisabled()
+  const field = screen.getByLabelText('允许的 IP 或网段')
+  fireEvent.change(field, { target: { value: 'not-a-cidr' } })
+  fireEvent.click(screen.getByRole('button', { name: '保存' }))
+  expect(await screen.findByText('「not-a-cidr」不是有效的 IP 或网段')).toHaveAttribute('role', 'alert')
+  expect(field).toHaveAttribute('aria-invalid', 'true')
+  expect(field).toHaveFocus()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(fetchSpy).toHaveBeenCalledTimes(1)
 })

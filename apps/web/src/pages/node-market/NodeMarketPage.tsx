@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Collapse, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
-import type { CheckboxProps } from 'antd'
+import { Alert, App, Button, Collapse, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tag, Tooltip, Typography } from 'antd'
+import { Tabs } from '../../components/Tabs'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -45,12 +45,13 @@ import { SubscriberHoldsTab, SupplierTab } from './supplier/SupplierTab'
 import { CursorPager, LoadFailure, NotOpen, useCursorPages } from './supplier/shared'
 import { sellingFeatures } from './supplier/model'
 import '../../i18n/marketSupplier'
-import { AdvancedFilters, PageSection, useFeedback, useLiveApply, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { AdvancedFilters, PageSection, useFeedback, useLiveApply, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import { closeReason, marketReason } from '@cdnca/ui/market-reasons'
 import { outcomeUnknown, useIdempotencyKey } from '../market/idempotency'
 import { clearPending, loadPending, pendingAccount, savePending } from './pendingPurchase'
 import { SubscriptionCode } from './MarketLabel'
 import { formatYuan, minorToYuan, yuanToMinor } from '@cdnca/ui/offer-terms'
+import { useNamedRowSelection } from '../../components/namedRowSelection'
 
 function useToken() {
   return useSessionStore((state) => state.accessToken) ?? ''
@@ -367,6 +368,7 @@ function ProbeNotice() {
 
 function SellTab() {
   const { t } = useTranslation('nodeMarket')
+  const namedRows = useNamedRowSelection()
   const token = useToken()
   const { message, modal } = App.useApp()
   const feedback = useFeedback()
@@ -411,9 +413,8 @@ function SellTab() {
       <OfferBulkActions offers={checkedOffers} floor={floor} onDone={() => setChecked([])} />
       <Table<MarketOfferListing> rowKey="id" size="small" loading={mine.isLoading} dataSource={mine.data ?? []} pagination={{ pageSize: 20 }}
         locale={{ emptyText: t('sell.mineEmpty') }}
-        rowSelection={{ selectedRowKeys: checked, onChange: (keys) => setChecked(keys.map(String)),
-          // antd forwards aria-* to the checkbox input; its CheckboxProps type omits them.
-          getCheckboxProps: (o) => ({ 'aria-label': o.name }) as CheckboxProps }}
+        rowSelection={namedRows<MarketOfferListing>({ selectedRowKeys: checked, onChange: (keys) => setChecked(keys.map(String)) },
+          (o) => o.name, t('sell.selectionScope'))}
         columns={[
           { title: t('offers.name'), dataIndex: 'name' },
           { title: t('sell.status'), dataIndex: 'status', render: (v: string, o) => <LifecycleTag offer={o} fallback={<State value={v} />} /> },

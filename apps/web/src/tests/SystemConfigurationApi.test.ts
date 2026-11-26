@@ -88,6 +88,16 @@ describe('systemConfigurationApi', () => {
     expect(init?.method).toBeUndefined()
   })
 
+  // active_configured 可选，有则必须是布尔值。
+  it('accepts the optional configured and active_configured flags and rejects a non-boolean one', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch')
+    const flagged = { ...document, configured: true, active_configured: false }
+    fetch.mockImplementationOnce(() => jsonResponse(flagged))
+    await expect(systemConfigurationApi.get('token', 'nginx')).resolves.toEqual(flagged)
+    fetch.mockImplementationOnce(() => jsonResponse({ ...document, active_configured: 'yes' }))
+    await expect(systemConfigurationApi.get('token', 'nginx')).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
   it('puts the exact body with quoted CAS and caller-owned request metadata', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => jsonResponse(document))
 

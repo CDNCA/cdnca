@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { notificationsApi } from '../api/notifications'
 import { pluginProvidersApi } from '../api/pluginProviders'
 import { systemMailSettingsApi, type PlatformSystemMailSettingsDocument } from '../api/systemMailSettings'
 import { systemUserSettingsApi, type PlatformSystemUserSettingsDocument } from '../api/systemUserSettings'
@@ -97,9 +98,15 @@ describe('CAPTCHA secrets', () => {
   })
 })
 
+// 实名认证服务在选了实名方式（或开启企业认证）后才展开；材料存储与证据签发在默认收起的「高级集成设置」里。
+const kycDocument: PlatformSystemUserSettingsDocument = { ...userDocument, value: { ...userDocument.value, identity_verification_method: 'alipay' } }
+async function openAdvanced(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: /高级集成设置/ }))
+}
+
 describe('KYC provider credentials and identity policy', () => {
   it('sends only the KYC credentials from the payment tab and marks the identity policy saved', async () => {
-    const put = setupUser('payment')
+    const put = setupUser('payment', kycDocument)
     const user = userEvent.setup()
     const apiKey = await screen.findByLabelText('KYC API Key')
     expect(apiKey).toHaveAttribute('type', 'password')
@@ -113,14 +120,15 @@ describe('KYC provider credentials and identity policy', () => {
   })
 
   it('saves the KYC service and object store fields; the object store keys are write-only', async () => {
-    const put = setupUser('payment')
+    const put = setupUser('payment', kycDocument)
     const user = userEvent.setup()
-    expect(await screen.findByText('未填写的项使用运行环境中对应的 IDENTITY_VERIFICATION_* 配置')).toBeInTheDocument()
+    expect(await screen.findByText('部分项使用运行环境配置')).toBeInTheDocument()
     const endpoint = screen.getByRole('textbox', { name: '服务地址' })
     await user.type(endpoint, 'https://kyc.example.com/')
     await user.tab()
     expect(endpoint).toHaveValue('https://kyc.example.com')
-    await user.type(screen.getByRole('textbox', { name: '存储桶' }), 'kyc-bucket')
+    await openAdvanced(user)
+    await user.type(await screen.findByRole('textbox', { name: '存储桶' }), 'kyc-bucket')
     const secretKey = screen.getByLabelText('Secret Access Key')
     expect(secretKey).toHaveAttribute('type', 'password')
     await user.type(secretKey, 'plain-object-secret')
@@ -135,15 +143,16 @@ describe('KYC provider credentials and identity policy', () => {
   it('shows the KYC service as configured when the page holds every required value', async () => {
     const saved = Object.fromEntries(['kyc_api_key', 'kyc_callback_hmac_key', 'kyc_object_access_key_id', 'kyc_object_secret_access_key']
       .flatMap((name) => [[`${name}_configured`, true], [`${name}_fingerprint`, '0123456789abcdef']]))
-    setupUser('payment', { ...userDocument, ...saved, value: { ...userDocument.value, kyc_provider_name: 'trusted-kyc', kyc_endpoint: 'https://kyc.example.com',
+    setupUser('payment', { ...userDocument, ...saved, value: { ...userDocument.value, identity_verification_method: 'alipay', kyc_provider_name: 'trusted-kyc', kyc_endpoint: 'https://kyc.example.com',
       kyc_callback_key_id: 'callback-1', kyc_object_endpoint: 'https://s3.example.com', kyc_object_region: 'us-east-1', kyc_object_bucket: 'kyc-bucket',
       kyc_object_kms_key_id: 'kms-1' } })
     expect(await screen.findByText('页面已配置齐全')).toBeInTheDocument()
   })
 
   it('saves the evidence issuer fields; its private key is write-only', async () => {
-    const put = setupUser('payment')
+    const put = setupUser('payment', kycDocument)
     const user = userEvent.setup()
+    await openAdvanced(user)
     expect(await screen.findByText('证据签发')).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: '启用证据签发' }))
     await user.type(screen.getByRole('textbox', { name: '监听地址' }), '0.0.0.0:19443')
@@ -167,11 +176,12 @@ describe('KYC provider credentials and identity policy', () => {
 
   // 监听地址旁的中性说明，改端口后要在主控服务器放行。
   it('reminds to allow the evidence issuer listen port on the control server', async () => {
-    setupUser('payment')
+    setupUser('payment', kycDocument)
+    await openAdvanced(userEvent.setup())
     const listen = await screen.findByRole('textbox', { name: '监听地址' })
     const item = listen.closest('.ant-form-item') as HTMLElement
     expect(within(item).getByText(/修改监听端口后，请确保主控服务器放行该端口。$/)).toBeInTheDocument()
-    expect(systemGlobalSettingsEn.kycEnv.kyc_issuer_listen_address).toMatch(/After changing the listen port, make sure the control server allows that port\.$/)
+    expect(systemGlobalSettingsEn.kycHints.kyc_issuer_listen_address).toMatch(/After changing the listen port, make sure the control server allows that port\.$/)
   })
 
   it('does not mark the identity policy saved from the account tab', async () => {
@@ -198,13 +208,16 @@ describe('HTTPS SMS gateway token', () => {
     signIn()
     vi.spyOn(systemMailSettingsApi, 'get').mockResolvedValue(mailDocument)
     vi.spyOn(pluginProvidersApi, 'list').mockResolvedValue([])
+    // the gateway is saved once its endpoints are confirmed deployed
+    vi.spyOn(notificationsApi, 'getRuntimeHealth').mockResolvedValue({ enabled: true, state: 'ready', ready: true, worker_running: true, enabled_channels: 1,
+      mode: 'explicit', channels: { sms: { state: 'ready' } } })
     const put = vi.spyOn(systemMailSettingsApi, 'put').mockImplementation(async (_token, revision, value, _request, _key, secrets) => ({
       ...mailDocument, revision: revision + 1, value,
       ...(secrets?.smsAuthToken ? { sms_auth_token_configured: true, sms_auth_token_fingerprint: '0123456789abcdef' } : {}),
     }))
     renderWithProviders(<SystemGlobalSettingsPage initialTab="mail" />)
     const user = userEvent.setup()
-    const token = await screen.findByLabelText('AccessKey Secret')
+    const token = await screen.findByLabelText('网关访问令牌')
     expect(token).toHaveAttribute('type', 'password')
     await user.type(token, 'plain-gateway-token')
     await user.click(screen.getByRole('button', { name: '保存短信设置' }))

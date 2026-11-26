@@ -23,7 +23,7 @@ http {
     listen 127.0.0.1:8080;
     set \$cdnca_security_emit "0"; set \$cdnca_security_type ""; set \$cdnca_security_action ""; set \$cdnca_security_severity ""; set \$cdnca_security_rule_id ""; set \$cdnca_security_block_page "0"; set \$cdnca_security_path "";
     ${NP_SERVER_EXTRA:-}
-    location / { content_by_lua_block { dofile("/mb/$(basename "${script}")"); ngx.say("done") } }
+    location / { content_by_lua_block { assert(loadfile("/mb/$(basename "${script}")"))(); ngx.say("done") } }
   }
 }
 CONF

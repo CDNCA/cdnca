@@ -107,8 +107,10 @@ type publicationOverlay struct {
 	restoreStreams      []edgeconfig.L4StreamRuntimeV2
 	restoreStreamTenant string
 	restoreStreamCaps   []siteRuntimeV2Capability
-	actor               Actor
-	lastNodes           []uuid.UUID
+	// restoreStreamConfigs: the publications restoreStreams came from.
+	restoreStreamConfigs []uuid.UUID
+	actor                Actor
+	lastNodes            []uuid.UUID
 }
 
 // loadPublicationOverlay builds the overlay for the scope's latest
@@ -162,26 +164,8 @@ func loadPublicationOverlay(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (
 	for id := range present {
 		baseIDs = append(baseIDs, id)
 	}
-	// Taken out: published sites a system stop holds now (traffic over limit,
-	// domain claim, overdue secondary verification that disabled the site, a
-	// suspended package subscription: bb03, migration 555).
-	// A published site whose bound package is no longer valid is taken out
-	// too; a site without a package needs none (community).
-	rows, err = tx.Query(ctx, `SELECT site.id FROM sites site WHERE site.scope_id=$1 AND site.id=ANY($2::uuid[]) AND (
-		site.package_subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM package_subscriptions package_subscription
-		  WHERE package_subscription.tenant_scope_id=site.scope_id AND package_subscription.id=site.package_subscription_id
-		    AND package_subscription.admin_enabled=true AND package_subscription.deleted_at IS NULL) OR
-		EXISTS(SELECT 1 FROM package_traffic_site_suspensions open WHERE open.site_id=site.id AND open.recovered_at IS NULL) OR
-		EXISTS(SELECT 1 FROM domain_claim_suspensions claim WHERE claim.site_id=site.id AND claim.released_at IS NULL) OR
-		EXISTS(SELECT 1 FROM identity_secondary_verification_site_holds hold WHERE hold.site_id=site.id
-		  AND hold.released_at IS NULL AND hold.disabled_site) OR
-		EXISTS(SELECT 1 FROM package_subscriptions suspended WHERE suspended.id=site.package_subscription_id
-		  AND suspended.tenant_scope_id=site.scope_id AND suspended.suspended_at IS NOT NULL))
-		ORDER BY site.id`, scopeID, baseIDs)
-	if err != nil {
-		return nil, false, err
-	}
-	if overlay.drop, err = pgx.CollectRows(rows, pgx.RowTo[uuid.UUID]); err != nil {
+	// Taken out: published sites a system stop holds now (stoppedSiteIDs).
+	if overlay.drop, err = stoppedSiteIDs(ctx, tx, scopeID, baseIDs); err != nil {
 		return nil, false, err
 	}
 	// Put back: unpublished-now sites a traffic stop or a secondary
@@ -197,7 +181,7 @@ func loadPublicationOverlay(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (
 		WHERE site.scope_id=$1 AND NOT site.id=ANY($2::uuid[])
 		AND site.deleted_at IS NULL AND site.enabled AND site.status='active'
 		AND (site.package_subscription_id IS NULL OR (package_subscription.id IS NOT NULL
-		AND package_subscription.admin_enabled=true AND package_subscription.deleted_at IS NULL))
+		AND `+packageInEffectSQL("package_subscription")+`))
 		AND (EXISTS(SELECT 1 FROM package_traffic_site_suspensions closed WHERE closed.site_id=site.id AND closed.recovered_at IS NOT NULL)
 		  OR EXISTS(SELECT 1 FROM identity_secondary_verification_site_holds closed WHERE closed.site_id=site.id
 		    AND closed.released_at IS NOT NULL AND closed.disabled_site)
@@ -207,8 +191,6 @@ func loadPublicationOverlay(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (
 		AND NOT EXISTS(SELECT 1 FROM domain_claim_suspensions claim WHERE claim.site_id=site.id AND claim.released_at IS NULL)
 		AND NOT EXISTS(SELECT 1 FROM identity_secondary_verification_site_holds hold WHERE hold.site_id=site.id
 		  AND hold.released_at IS NULL AND hold.disabled_site)
-		AND NOT EXISTS(SELECT 1 FROM package_subscriptions suspended WHERE suspended.id=site.package_subscription_id
-		  AND suspended.tenant_scope_id=site.scope_id AND suspended.suspended_at IS NOT NULL)
 		ORDER BY site.id`, scopeID, baseIDs)
 	if err != nil {
 		return nil, false, err
@@ -240,16 +222,7 @@ func loadPublicationOverlay(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (
 				published = append(published, id)
 			}
 		}
-		rows, err = tx.Query(ctx, `SELECT suspension.stream_id FROM package_traffic_stream_suspensions suspension
-			WHERE suspension.tenant_scope_id=$1 AND suspension.stream_id=ANY($2::uuid[]) AND suspension.recovered_at IS NULL
-			UNION SELECT forward.id FROM l4_forwards forward JOIN package_subscriptions suspended
-			  ON suspended.id=forward.package_subscription_id AND suspended.tenant_scope_id=forward.scope_id
-			WHERE forward.scope_id=$1 AND forward.id=ANY($2::uuid[]) AND suspended.suspended_at IS NOT NULL
-			ORDER BY 1`, scopeID, published)
-		if err != nil {
-			return nil, false, err
-		}
-		if overlay.dropStreams, err = pgx.CollectRows(rows, pgx.RowTo[uuid.UUID]); err != nil {
+		if overlay.dropStreams, err = stoppedStreamIDs(ctx, tx, scopeID, published); err != nil {
 			return nil, false, err
 		}
 	}
@@ -279,8 +252,7 @@ func (overlay *publicationOverlay) loadRestoredStreams(ctx context.Context, tx p
 		WHERE forward.scope_id=$1 AND NOT forward.id=ANY($2::uuid[])
 		  AND forward.deleted_at IS NULL AND forward.enabled AND forward.admin_status='normal'
 		  AND (forward.package_subscription_id IS NULL OR (package_subscription.id IS NOT NULL
-		  AND package_subscription.admin_enabled=true AND package_subscription.deleted_at IS NULL
-		  AND package_subscription.suspended_at IS NULL))
+		  AND `+packageInEffectSQL("package_subscription")+`))
 		  AND (EXISTS(SELECT 1 FROM package_traffic_stream_suspensions closed WHERE closed.stream_id=forward.id
 		    AND closed.recovered_at IS NOT NULL AND closed.recovered_stream_status='normal')
 		    OR EXISTS(SELECT 1 FROM package_subscription_versions resumed WHERE resumed.subscription_id=forward.package_subscription_id
@@ -319,6 +291,7 @@ func (overlay *publicationOverlay) loadRestoredStreams(ctx context.Context, tx p
 			}
 		}
 		overlay.restoreStreamTenant = streams.TenantID
+		overlay.restoreStreamConfigs = append(overlay.restoreStreamConfigs, source.configID)
 		overlay.restoreStreamCaps = append(overlay.restoreStreamCaps, source.v2.Document.RequiredCapabilities...)
 	}
 	return nil
@@ -329,6 +302,17 @@ func mustLatestPublicationRevision(ctx context.Context, tx pgx.Tx, scopeID uuid.
 	_ = tx.QueryRow(ctx, `SELECT COALESCE(max(source_revision),0) FROM edge_config_publications
 		WHERE configuration_scope_id=$1 AND contract_version=1`, scopeID).Scan(&revision)
 	return revision
+}
+
+// servingSources are the publications the overlay's content comes from, in
+// the order their recorded serving nodes apply (releaseServingNodes): its
+// base, then those of the sites and forwards it puts back.
+func (overlay *publicationOverlay) servingSources() []uuid.UUID {
+	sources := []uuid.UUID{overlay.base.configID}
+	for _, source := range overlay.restore {
+		sources = append(sources, source.configID)
+	}
+	return append(sources, overlay.restoreStreamConfigs...)
 }
 
 func (overlay *publicationOverlay) changesSites() bool {

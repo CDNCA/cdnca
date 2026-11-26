@@ -3,6 +3,7 @@
 package edgepublish
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -22,12 +23,19 @@ func TestSoldPackageWebSocketIgnoredForMarketSupply(t *testing.T) {
 			if _, err := tx.Exec(t.Context(), `SET LOCAL session_replication_role = replica`); err != nil {
 				return err
 			}
-			_, err := tx.Exec(t.Context(), `UPDATE package_subscriptions SET product_snapshot=jsonb_set(product_snapshot, '{spec}',
+			// The current entitlement (701) reads the entitlement version when one exists: both copies change.
+			for _, target := range []string{"package_subscriptions WHERE id=$1",
+				"package_subscription_entitlement_versions WHERE subscription_id=$1"} {
+				table, where, _ := strings.Cut(target, " WHERE ")
+				if _, err := tx.Exec(t.Context(), `UPDATE `+table+` SET product_snapshot=jsonb_set(product_snapshot, '{spec}',
 				((product_snapshot->'spec') - 'market')
 				|| jsonb_build_object('limits', COALESCE(product_snapshot#>'{spec,limits}', '{}'::jsonb) || '{"websocket":false}'::jsonb)
 				|| CASE WHEN $2::boolean THEN '{"market":{"node_pool_ref":"x"}}'::jsonb ELSE '{}'::jsonb END)
-				WHERE id=$1`, fixture.subscriptionID, market)
-			return err
+				WHERE `+where, fixture.subscriptionID, market); err != nil {
+					return err
+				}
+			}
+			return nil
 		}); err != nil {
 			t.Fatal(err)
 		}

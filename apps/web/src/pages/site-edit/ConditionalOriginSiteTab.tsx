@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type HTMLAttributes } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, InputNumber, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Alert, Button, InputNumber, Popconfirm, Select, Space, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -20,7 +20,7 @@ import { useSessionStore } from '../../auth/session'
 import '../../i18n/siteOriginRouting'
 import { SettingRow, SettingSection } from './SiteEditFields'
 import ConditionalOriginRouteDialog from './ConditionalOriginRouteDialog'
-import { OutcomeUnknown, FeedbackWhen } from '@cdnca/ui'
+import { OutcomeUnknown, FeedbackWhen, Table } from '@cdnca/ui'
 import SiteEditState from './SiteEditState'
 import { useCommitRequest, useInstantFeedback } from './instantSave'
 

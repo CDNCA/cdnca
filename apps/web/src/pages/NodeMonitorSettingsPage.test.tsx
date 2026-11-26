@@ -72,8 +72,10 @@ function mockNotificationReads(
   return { channelsSpy, policySpy }
 }
 
+// The server sends the active revision's snapshot hash once something is active; by default it differs from the
+// head's, as after a real change.
 function configDocument(overrides: Partial<SystemConfigurationDocument<'node_monitoring'>> = {}) {
-  return {
+  const document: SystemConfigurationDocument<'node_monitoring'> = {
     schema: 'cdnca.system-configuration/v2',
     category: 'node_monitoring',
     head_revision: 4,
@@ -81,10 +83,13 @@ function configDocument(overrides: Partial<SystemConfigurationDocument<'node_mon
     revision: 4,
     status: 'active',
     snapshot_sha256: 'a'.repeat(64),
+    active_snapshot_sha256: 'f'.repeat(64),
     pending_categories: [],
     value,
     ...overrides,
-  } satisfies SystemConfigurationDocument<'node_monitoring'>
+  }
+  if (document.active_revision === 0) delete document.active_snapshot_sha256
+  return document
 }
 
 function configurationResponse(document: SystemConfigurationDocument<'node_monitoring'>) {
@@ -267,6 +272,11 @@ describe('NodeMonitorSettingsPage', () => {
     const statusSpy = vi.spyOn(dnspupNodeMonitoringApi, 'status')
     const first = renderPage()
     const help = await screen.findByTestId('node-monitor-policy-help')
+    // 完整判定规则收在「探测判定详情」里按需展开；间隔字段写明它管的是节点本机自检。
+    expect(help.closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('探测判定详情')).toBeInTheDocument()
+    expect(screen.getByText('节点本机自检的间隔；主控与互拨节点的外部探测固定每 30 秒一轮。')).toBeInTheDocument()
+    expect(screen.queryByText(/配置节点默认探测方式和请求参数/)).toBeNull()
     // nodeprobe.Decide: controller failed AND peers' overall failure ratio; one side missing → the other decides; no vote → keep.
     expect(help).toHaveTextContent('主控失败且互拨节点整体失败比例达到“监控点失败比率”')
     expect(help).toHaveTextContent('没有互拨节点投票时只看主控')
@@ -595,7 +605,9 @@ describe('NodeMonitorSettingsPage', () => {
     expect(screen.getByText(/带宽超限（摘除\/恢复）、备用 IP 启用\/恢复主 IP 已发送通知/)).toBeInTheDocument()
     expect(screen.getByText(/备用默认解析、备用线路组切换暂无通知事件/)).toBeInTheDocument()
     expect(screen.queryByText(/带宽超限、备用 IP、备用默认解析、备用线路组切换暂无通知事件/)).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '在通知设置中管理这些事件' })).toHaveAttribute('href', '/sys/setting?tab=notification')
+    // 事件说明是普通文字（不播报），通知设置页只留模板一个入口。
+    expect(screen.getByText(/备用默认解析、备用线路组切换暂无通知事件/).closest('[role="alert"]')).toBeNull()
+    expect(screen.getAllByRole('link').filter((link) => link.getAttribute('href') === '/sys/setting?tab=notification')).toHaveLength(1)
     expect(screen.queryByPlaceholderText('输入邮箱地址')).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('输入手机号码')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '前往用户管理' })).toHaveAttribute('href', '/sys/user')
@@ -749,6 +761,70 @@ describe('NodeMonitorSettingsPage', () => {
     expect(screen.getByRole('button', { name: '保存设置' })).toBeEnabled()
   })
 
+  // 内容已精确恢复为生效版本（快照相同、无待生效分类）时，
+  // 不再说「另有未激活修改」，也不给无意义的预检、激活或放弃草稿。
+  it('reads a head restored to the active snapshot as active without pending changes', async () => {
+    authenticate(admin({ permissions: ['system_configuration.read', 'system_configuration.manage'] }))
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(configDocument({
+      head_revision: 3, active_revision: 1, revision: 3, status: 'draft',
+      snapshot_sha256: 'd'.repeat(64), active_snapshot_sha256: 'd'.repeat(64), pending_categories: [],
+    }))
+
+    renderPage()
+
+    expect(await screen.findByText('主控已激活，节点执行待确认')).toBeInTheDocument()
+    expect(screen.queryByText('主控已有激活版本，另有未激活修改')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '预检配置' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '放弃草稿，恢复当前生效配置' })).not.toBeInTheDocument()
+    // the publication card says the head matches the active configuration; the draft status is the revision's own
+    const lifecycle = screen.getByLabelText('发布与生效')
+    expect(within(lifecycle).getByText('与主控生效配置一致')).toBeInTheDocument()
+    expect(within(lifecycle).getByText('当前版本：3（修订状态：草稿）')).toBeInTheDocument()
+    expect(within(lifecycle).queryByText('草稿')).not.toBeInTheDocument()
+  })
+
+  // 初始激活版本 1 下也能放弃已保存草稿：确认列出待生效分类，
+  // 用服务端回滚把激活版本复制为新草稿，不预检、不激活。
+  it('discards an unactivated draft by copying the active revision into a new draft without activating', async () => {
+    authenticate(admin({ permissions: ['system_configuration.read', 'system_configuration.manage'] }))
+    const dirty = configDocument({
+      head_revision: 5, active_revision: 1, revision: 5, status: 'validated',
+      snapshot_sha256: 'b'.repeat(64), active_snapshot_sha256: 'd'.repeat(64), pending_categories: ['access_log_fields'],
+    })
+    const restored = configDocument({
+      head_revision: 6, active_revision: 1, revision: 6, status: 'draft',
+      snapshot_sha256: 'd'.repeat(64), active_snapshot_sha256: 'd'.repeat(64), pending_categories: [],
+    })
+    const getSpy = vi.spyOn(systemConfigurationApi, 'get').mockResolvedValueOnce(dirty).mockResolvedValue(restored)
+    const rollbackSpy = vi.spyOn(systemConfigurationApi, 'rollback').mockResolvedValue({
+      revision: 6, status: 'draft', snapshot_sha256: 'd'.repeat(64), source_revision: 1, replayed: false,
+    })
+    const preflightSpy = vi.spyOn(systemConfigurationApi, 'preflight')
+    const activateSpy = vi.spyOn(systemConfigurationApi, 'activate')
+    const user = userEvent.setup()
+
+    renderPage()
+    expect(await screen.findByText('主控已有激活版本，另有未激活修改')).toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: '目标回滚版本' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '放弃草稿，恢复当前生效配置' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('访问日志字段')
+    expect(dialog).toHaveTextContent('不会激活或下发')
+    await user.click(within(dialog).getByRole('button', { name: '放弃草稿，恢复当前生效配置' }))
+
+    await waitFor(() => expect(rollbackSpy).toHaveBeenCalledWith(
+      'node-monitor-token', 1, 5, 1, expect.any(String), expect.any(String),
+    ))
+    expect(await screen.findByText('已恢复为当前生效配置')).toBeInTheDocument()
+    await waitFor(() => expect(getSpy).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('主控已激活，节点执行待确认')).toBeInTheDocument()
+    expect(screen.queryByText(/创建回滚草稿 6/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '预检配置' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存设置' })).toBeEnabled()
+    expect(preflightSpy).not.toHaveBeenCalled()
+    expect(activateSpy).not.toHaveBeenCalled()
+  })
+
   it('localizes a rejected rollback transition without exposing the server detail', async () => {
     authenticate()
     vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(configDocument({
@@ -863,6 +939,20 @@ describe('NodeMonitorSettingsPage', () => {
     )
   })
 
+  // 全天时只写生效时段，不显示带示例值的禁用输入
+  it('shows the active all-day window as text without a window input', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(configDocument())
+    mockNotificationReads(notificationChannels(), notificationPolicy({ window_mode: 'all_day', window_start: '00:00', window_end: '23:59' }))
+    const user = userEvent.setup()
+
+    renderPage()
+    await user.click(await screen.findByRole('tab', { name: '通知配置' }))
+    expect(await screen.findByText('00:00–23:59')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '通知时间段' })).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue('8-22')).not.toBeInTheDocument()
+  })
+
   it('auto-saves a valid custom notification window', async () => {
     authenticate()
     vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(configDocument())
@@ -877,7 +967,8 @@ describe('NodeMonitorSettingsPage', () => {
 
     renderPage()
     await user.click(await screen.findByRole('tab', { name: '通知配置' }))
-    const input = await screen.findByRole('textbox', { name: '格式8-22' })
+    const input = await screen.findByRole('textbox', { name: '通知时间段' })
+    expect(input).toHaveAccessibleDescription('格式：8-22 或 08:30-22:30')
     await user.clear(input)
     await user.type(input, '9:30-23{Enter}')
 

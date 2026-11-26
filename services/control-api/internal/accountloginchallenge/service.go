@@ -47,22 +47,22 @@ var (
 )
 
 type Service struct {
-	pool                *pgxpool.Pool
-	policy              PolicyReader
-	templates           TemplateReader
-	human               HumanVerifier
-	issuer              SessionIssuer
-	contacts            ContactSender
-	digestKey           []byte
-	now                 func() time.Time
-	entropy             io.Reader
-	challengeTTL        time.Duration
-	rateWindow          time.Duration
-	sourceLimit         int
-	subjectLimit        int
-	maxAttempts         int
-	availableChannels   []notification.Channel
-	registrationMounted bool
+	pool              *pgxpool.Pool
+	policy            PolicyReader
+	templates         TemplateReader
+	human             HumanVerifier
+	issuer            SessionIssuer
+	contacts          ContactSender
+	digestKey         []byte
+	now               func() time.Time
+	entropy           io.Reader
+	challengeTTL      time.Duration
+	rateWindow        time.Duration
+	sourceLimit       int
+	subjectLimit      int
+	maxAttempts       int
+	availableChannels []notification.Channel
+	registration      RegistrationSource
 }
 
 type normalizedCreate struct {
@@ -114,7 +114,7 @@ func NewService(pool *pgxpool.Pool, config Config) (*Service, error) {
 		now: config.Clock, entropy: config.Entropy, challengeTTL: config.ChallengeTTL,
 		rateWindow: config.RateWindow, sourceLimit: config.SourceLimit,
 		subjectLimit: config.SubjectLimit, maxAttempts: config.MaxAttempts, availableChannels: append([]notification.Channel(nil), config.AvailableChannels...),
-		registrationMounted: config.RegistrationMounted,
+		registration: config.Registration,
 	}, nil
 }
 
@@ -129,14 +129,18 @@ func (service *Service) Methods(ctx context.Context, scopeID uuid.UUID) (Methods
 	policy.EmailAntiAbuseMode = service.effectiveMode(ctx, policy.EmailAntiAbuseMode)
 	policy.SMSAntiAbuseMode = service.effectiveMode(ctx, policy.SMSAntiAbuseMode)
 	methods := publicMethods(policy)
-	methods.RegistrationEnabled = methods.RegistrationEnabled && service.registrationMounted
+	if service.registration != nil {
+		methods.RegistrationEnabled, methods.RegistrationMode, err = service.registration.Registration(ctx)
+		if err != nil {
+			return Methods{}, ErrUnavailable
+		}
+	}
 	return methods, nil
 }
 
 func publicMethods(policy systemusersettings.PublicSettings) Methods {
 	methods := Methods{
-		RegistrationEnabled: policy.RegistrationEnabled,
-		EmailEnabled:        policy.EmailCodeLoginEnabled, SMSEnabled: policy.SMSCodeLoginEnabled,
+		EmailEnabled: policy.EmailCodeLoginEnabled, SMSEnabled: policy.SMSCodeLoginEnabled,
 		EmailAntiAbuseMode: policy.EmailAntiAbuseMode, SMSAntiAbuseMode: policy.SMSAntiAbuseMode,
 	}
 	if externalHumanMode(policy.EmailAntiAbuseMode) || externalHumanMode(policy.SMSAntiAbuseMode) {

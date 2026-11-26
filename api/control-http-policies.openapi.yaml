@@ -770,13 +770,19 @@ components:
     HTTPPolicyPage:
       type: object
       additionalProperties: false
-      required: [items]
+      required: [items, system_max_upload_bytes]
       properties:
         items:
           type: array
           maxItems: 100
           items: {$ref: '#/components/schemas/HTTPPolicy'}
         next_cursor: {type: string, maxLength: 1024}
+        system_max_upload_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1073741824
+          description: Upload limit of a site without an HTTP policy (the active system client_max_body_size, capped at 1 GiB); a new policy starts from it.
     EdgeSitePolicy:
       allOf:
         - $ref: '#/components/schemas/HTTPPolicyConfigFields'

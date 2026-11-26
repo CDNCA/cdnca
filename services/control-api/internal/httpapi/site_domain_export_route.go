@@ -143,7 +143,7 @@ func siteDomainExportWhere(targetScopeID uuid.UUID, filter site.ListFilter) (str
 		format string
 		value  *uuid.UUID
 	}{
-		{"site.package_id = $%d", filter.PackageID},
+		{site.CurrentPackageIDSQL("site") + " = $%d", filter.PackageID},
 		{"site.group_id = $%d", filter.GroupID},
 		{"site.region_id = $%d", filter.RegionID},
 		{"site.node_group_id = $%d", filter.NodeGroupID},

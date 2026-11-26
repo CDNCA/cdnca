@@ -3167,6 +3167,12 @@
       {
        "name": "next_cursor",
        "type": "string"
+      },
+      {
+       "name": "system_max_upload_bytes",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Upload limit of a site without an HTTP policy (the active system client_max_body_size, capped at 1 GiB); a new policy starts from it."
       }
      ]
     },
@@ -7757,6 +7763,11 @@
        "name": "authorization_status",
        "type": "string: pending_confirmation / authorized / enabled / disabled",
        "description": "Platform authorization state reported by the license service. Omitted when the license service was not reachable. A locally enabled plugin whose authorization is disabled is paused by the platform. pending_confirmation marks a purchased market plugin waiting for this controller's administrator: confirm sends the confirmation to the license service and then installs it."
+      },
+      {
+       "name": "license_sync",
+       "type": "string: pending / synced",
+       "description": "Whether the license service acknowledged every lifecycle receipt of this local head. A write (confirm, upgrade, disable, resume, uninstall) is answered 200 once it is committed on this controller and is in force here at once; if its report to the license service did not go through, the answer carries pending and the same receipt is replayed unchanged (in the background, and when the details are read), never applied twice. synced once acknowledged. Omitted on candidates not installed here."
       },
       {
        "name": "paused_by",

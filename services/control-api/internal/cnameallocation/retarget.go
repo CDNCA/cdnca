@@ -110,7 +110,7 @@ func (store *Store) PlanRetargets(ctx context.Context) (int, error) {
 		 AND route.tenant_scope_id=allocation.tenant_scope_id AND route.site_id=frozen.site_id
 		-- 保底链 (561): the default line on the package's backup line group
 		-- (below an attack escalation line group override, which wins).
-		LEFT JOIN LATERAL (SELECT NULLIF(subscription.product_snapshot#>>'{spec,backup_node_group_id}','')::uuid AS group_id
+		LEFT JOIN LATERAL (SELECT NULLIF(package_subscription_current_product_snapshot(subscription.id,now())#>>'{spec,backup_node_group_id}','')::uuid AS group_id
 			FROM aggregated_edge_line_targets chain_line
 			JOIN sites chain_site ON chain_site.id=chain_line.site_id AND chain_site.deleted_at IS NULL
 			JOIN package_subscriptions subscription ON subscription.tenant_scope_id=chain_site.scope_id

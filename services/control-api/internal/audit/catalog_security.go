@@ -133,6 +133,7 @@ func init() {
 		e("dns.hub.record.delete", CategoryDNS, "在 DNS 账号「{provider_name}」删除解析记录 {resource}（{record_type}）{changes}", "deleted DNS record {resource} ({record_type}) at DNS account {provider_name}{changes}").f("provider_name", "record_type", "apex", "state"),
 		e("dns.hub.domain.refresh", CategoryDNS, "刷新 DNS 账号「{provider_name}」的域名清单（{domain_count} 个域名）", "refreshed the domain list of DNS account {provider_name} ({domain_count} domains)").f("provider_name", "domain_count"),
 		e("dns.platform.config.update", CategoryDNS, "修改平台 DNS 设置{changes}", "updated platform DNS settings{changes}"),
+		e("dns.platform.config.disconnect", CategoryDNS, "断开平台 DNS 账号", "disconnected the platform DNS account"),
 		e("dns.platform.zone.create", CategoryDNS, "新增平台解析域名 {resource}", "added platform DNS zone {resource}"),
 		e("dns.platform.zone.update", CategoryDNS, "修改平台解析域名 {resource}", "updated platform DNS zone {resource}"),
 		e("dns.platform.zone.delete", CategoryDNS, "删除平台解析域名 {resource}", "deleted platform DNS zone {resource}"),

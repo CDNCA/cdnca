@@ -31,9 +31,7 @@ type DNSComProviderVerifier struct {
 }
 
 func NewDNSComProviderVerifier() *DNSComProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newDNSComProviderVerifier("", &http.Client{Transport: transport}, dnscomVerifyTimeout, time.Now)
+	return newDNSComProviderVerifier("", providerAPIClient(), dnscomVerifyTimeout, time.Now)
 }
 
 func newDNSComProviderVerifier(

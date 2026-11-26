@@ -6,10 +6,12 @@ import { nodeSchedulingApi } from '../api/nodeScheduling'
 import { useSessionStore } from '../auth/session'
 
 // 转发列表筛选「区域」「线路分组」（平台）：区域目录与平台线路组，值为 ID，筛选在服务端按转发的线路做。
-export default function StreamLineFilterSelect({ kind, value, onChange, enabled = true }: {
+// 网站列表的同名筛选也用它（label 换成网站列表的字段名，onChange 带回选项名称给条件标签）。
+export default function StreamLineFilterSelect({ kind, value, onChange, enabled = true, label }: {
   kind: 'region' | 'line_group'
   value?: string
-  onChange: (value?: string) => void
+  onChange: (value?: string, name?: string) => void
+  label?: string
   /** fix-advfilter2：放在收起的高级筛选面板里时，展开前不读选项。 */
   enabled?: boolean
 }) {
@@ -33,7 +35,8 @@ export default function StreamLineFilterSelect({ kind, value, onChange, enabled 
     enabled: enabled && Boolean(principal),
     retry: false,
   })
-  return <Select aria-label={t(kind === 'region' ? 'filters.region' : 'filters.lineGroup')} allowClear showSearch optionFilterProp="label"
-    placeholder={t('filters.unlimited')} loading={query.isFetching} options={query.data ?? []} value={value} onChange={onChange}
+  return <Select aria-label={label ?? t(kind === 'region' ? 'filters.region' : 'filters.lineGroup')} allowClear showSearch optionFilterProp="label"
+    placeholder={t('filters.unlimited')} loading={query.isFetching} options={query.data ?? []} value={value}
+    onChange={(next?: string) => onChange(next, query.data?.find((option) => option.value === next)?.label)}
     notFoundContent={query.isError ? t('errors.requestFailed') : undefined} />
 }

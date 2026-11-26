@@ -11,13 +11,11 @@ const zhCN = {
     count: '{{count}} 条',
     cache: { unsaved: '策略有未保存修改' },
     waf: { modulesOn: '{{on}}/{{total}} 开启' },
-    advanced: { uploadValue: '{{mb}} MB' },
     https: {
       bound: '已绑定', unbound: '未绑定',
       protocolSection: 'TLS 与加密套件', versionsSection: 'HTTP 协议与客户端证书',
       offWarning: '保存后本站 HTTPS 入口立即停用：HTTPS 访问失败，强制 HTTPS 跳转一并失效。',
     },
-    basic: { cnameFailed: '生成失败', origins: '主 {{primary}} · 备 {{backup}}' },
     origin: {
       protocol: '回源协议',
       host: '回源 Host',
@@ -46,13 +44,11 @@ const enUS: Messages = {
     count: '{{count}}',
     cache: { unsaved: 'Unsaved policy changes' },
     waf: { modulesOn: '{{on}} of {{total}} on' },
-    advanced: { uploadValue: '{{mb}} MB' },
     https: {
       bound: 'Bound', unbound: 'Not bound',
       protocolSection: 'TLS and cipher suites', versionsSection: 'HTTP versions and client certificates',
       offWarning: 'Saving turns HTTPS off for this site right away: HTTPS requests fail and the forced HTTPS redirect stops.',
     },
-    basic: { cnameFailed: 'Failed', origins: '{{primary}} primary · {{backup}} backup' },
     origin: {
       protocol: 'Origin protocol',
       host: 'Origin Host',

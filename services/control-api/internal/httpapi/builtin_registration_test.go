@@ -13,12 +13,9 @@ import (
 )
 
 type builtInRegistrationStub struct {
-	open   bool
 	err    error
 	inputs []accountregistration.BuiltInInput
 }
-
-func (stub *builtInRegistrationStub) Available(context.Context) (bool, error) { return stub.open, nil }
 
 func (stub *builtInRegistrationStub) Register(_ context.Context, input accountregistration.BuiltInInput) (accountregistration.RegisterResult, error) {
 	stub.inputs = append(stub.inputs, input)
@@ -48,20 +45,21 @@ func loginMethods(t *testing.T, api http.Handler) map[string]any {
 // sign-up link used to stay hidden and /register could never succeed. With
 // 开放注册 on the built-in CAPTCHA registration is advertised and mounted.
 func TestFreshInstallAdvertisesBuiltInRegistration(t *testing.T) {
-	stub := &builtInRegistrationStub{open: true}
-	api := New(nil, nil, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), BuiltInRegistration: stub}).Handler()
+	config := &RegistrationConfig{RegistrationEnabled: true, Mode: "builtin"}
+	api := New(nil, nil, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), BuiltInRegistration: &builtInRegistrationStub{},
+		RegistrationConfig: switchableRegistrationConfig{config: config}}).Handler()
 	data := loginMethods(t, api)
 	if data["registration_enabled"] != true || data["registration_mode"] != "builtin" || data["email_enabled"] != false {
 		t.Fatalf("login methods=%v", data)
 	}
-	stub.open = false
+	*config = RegistrationConfig{Mode: "closed"}
 	if data := loginMethods(t, api); data["registration_enabled"] != false {
 		t.Fatalf("closed switch still advertises registration: %v", data)
 	}
 }
 
 func TestBuiltInRegisterRoute(t *testing.T) {
-	stub := &builtInRegistrationStub{open: true}
+	stub := &builtInRegistrationStub{}
 	api := New(nil, nil, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), BuiltInRegistration: stub}).Handler()
 	post := func(body string, key string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, "/v1/auth/register", strings.NewReader(body))
@@ -74,14 +72,14 @@ func TestBuiltInRegisterRoute(t *testing.T) {
 		api.ServeHTTP(response, request)
 		return response
 	}
-	valid := `{"username":"builtin registration-a","password":"Correct-horse-1","display_name":"A","email":"a@example.com","phone":"",` +
+	valid := `{"username":"builtin registration-a","password":"Correct-horse-1","display_name":"A","email":"a@example.com","phone":"","qq":"123456",` +
 		`"terms_accepted":true,"terms_version":"terms-2026-08","verification_channel":"email",` +
 		`"captcha":{"id":"22222222-2222-4222-8222-222222222222","answer":"AB2CD"}}`
 	if response := post(valid, "registration-key-1"); response.Code != http.StatusAccepted ||
 		!strings.Contains(response.Body.String(), `"accepted":true`) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body)
 	}
-	if len(stub.inputs) != 1 || stub.inputs[0].Captcha.Answer != "AB2CD" || stub.inputs[0].Source != "203.0.113.9" ||
+	if len(stub.inputs) != 1 || stub.inputs[0].Captcha.Answer != "AB2CD" || stub.inputs[0].QQ != "123456" || stub.inputs[0].Source != "203.0.113.9" ||
 		stub.inputs[0].IdempotencyKey != "registration-key-1" {
 		t.Fatalf("inputs=%#v", stub.inputs)
 	}
@@ -101,6 +99,8 @@ func TestBuiltInRegisterRoute(t *testing.T) {
 		{accountregistration.ErrRegistrationDisabled, http.StatusForbidden, "account_registration_disabled"},
 		{accountregistration.ErrContactVerificationUnavailable, http.StatusServiceUnavailable, "account_registration_verification_unavailable"},
 		{accountregistration.ErrIdempotencyConflict, http.StatusConflict, "account_registration_idempotency_conflict"},
+		// an outdated terms version is the terms error the pages read the config again for
+		{accountregistration.ErrTermsOutdated, http.StatusUnprocessableEntity, "account_registration_terms_required"},
 	} {
 		stub.err = item.err
 		if response := post(valid, "registration-key-3"); response.Code != item.status || !strings.Contains(response.Body.String(), item.code) {
@@ -111,7 +111,7 @@ func TestBuiltInRegisterRoute(t *testing.T) {
 
 // With the Turnstile runtime mounted the built-in route is not used.
 func TestBuiltInRegistrationYieldsToMountedRuntime(t *testing.T) {
-	stub := &builtInRegistrationStub{open: true}
+	stub := &builtInRegistrationStub{}
 	called := false
 	probe := http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		called = true
@@ -164,5 +164,15 @@ func TestRegistrationConfigEndpoint(t *testing.T) {
 	}
 	if recovery := open["recovery"].(map[string]any); recovery["channels"] == nil {
 		t.Fatalf("recovery channels must be a list: %v", recovery)
+	}
+	// terms_published is always sent; unpublished terms keep sign-up open and ready
+	if open["terms_published"] != false || open["terms_required"] != false || open["ready"] != true || closed["terms_published"] != false {
+		t.Fatalf("terms_published: open=%v closed=%v", open["terms_published"], closed["terms_published"])
+	}
+	published := read(New(nil, nil, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), RegistrationConfig: registrationConfigStub{RegistrationConfig{
+		RegistrationEnabled: true, Mode: "builtin", HumanCheck: "builtin_captcha", Ready: true, TermsPublished: true, TermsRequired: true,
+	}}}).Handler())
+	if published["terms_published"] != true || published["terms_required"] != true {
+		t.Fatalf("published=%v", published)
 	}
 }

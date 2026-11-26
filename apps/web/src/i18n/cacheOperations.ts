@@ -2,7 +2,7 @@ import i18n from './index'
 
 const zhCN = {
   title: '刷新预热',
-  tabs: { label: '缓存操作页签', purge: '刷新预热', history: '操作记录' },
+  tabs: { label: '缓存操作', purge: '刷新预热', history: '操作记录' },
   history: {
     title: '操作记录',
     filter: '搜索 URL 或域名',
@@ -26,11 +26,10 @@ const zhCN = {
   baseline: {
     title: '刷新预热', operationType: '操作类型', operationDescription: '刷新 URL、刷新目录（含整站）、预热次数按账号每天分别计算，主账号和成员共用、账号下所有网站共用，超出时提交会被拒绝；平台管理员代提交不计入。',
     modes: { url: '刷新 URL', directory: '刷新目录', prewarm: '预热', site: '刷新整站' },
-    current: '当前：{{value}}',
     lists: {
-      url: { title: 'URL 列表', description: '每行一个完整 URL，适合清理已缓存资源。' },
-      directory: { title: '目录 URL', description: '每行一个目录 URL，目录地址以 / 结尾。' },
-      prewarm: { title: '预热 URL', description: '每行一个完整 URL，提交后提前拉取资源。' },
+      url: { title: 'URL 列表' },
+      directory: { title: '目录 URL', description: '目录地址以 / 结尾。' },
+      prewarm: { title: '预热 URL' },
     },
     url: 'URL 列表', urlPlaceholder: 'https://www.example.com/static/app.js', directoryPlaceholder: 'https://www.example.com/static/',
     enteredPrefix: '已输入 ', enteredUnit: ' 条', errorPrefix: '，错误 ',
@@ -41,7 +40,6 @@ const zhCN = {
     statusPanel: '任务额度与提交状态', dailyQuota: '今日额度', unavailable: '—',
     submitStatus: '提交状态',
     status: { pending: '待输入', ready: '待提交', fix: '需修正', submitting: '提交中', submitted: '已提交', unknown: '结果待确认' },
-    statusDescription: '提交成功后可在操作记录里查看进度。',
     sitesEmpty: '没有匹配的网站', sitesFailed: '网站列表加载失败，请重试', sitePlaceholder: '搜索并选择网站',
     remainingOf: '剩余 / {{total}}', used: '已用 {{count}} 条', total: '总量 {{count}}',
     quotaFailed: '额度读取失败', quotaLoading: '读取中…', quotaScope: '主账号和成员共用，本账号所有网站共用，{{time}} 重置（北京时间 0 点）',
@@ -186,7 +184,7 @@ const zhCN = {
 
 const enUS = {
   title: 'Purge and prewarm',
-  tabs: { label: 'Cache operation tabs', purge: 'Purge and prewarm', history: 'Operation history' },
+  tabs: { label: 'Cache operations', purge: 'Purge and prewarm', history: 'Operation history' },
   history: {
     title: 'Operation history',
     filter: 'Search URL or domain',
@@ -210,11 +208,10 @@ const enUS = {
   baseline: {
     title: 'Purge and prewarm', operationType: 'Operation type', operationDescription: 'URL purges, directory (and whole-site) purges and prewarms each have a daily quota per account, shared by the owner, its members and all its sites; a submission over the quota is refused. Submissions by a platform administrator on its behalf do not count.',
     modes: { url: 'Purge URL', directory: 'Purge directory', prewarm: 'Prewarm', site: 'Purge site' },
-    current: 'Current: {{value}}',
     lists: {
-      url: { title: 'URL list', description: 'One full URL per line to remove cached resources.' },
-      directory: { title: 'Directory URLs', description: 'One directory URL per line, ending with /.' },
-      prewarm: { title: 'Prewarm URLs', description: 'One full URL per line to fetch resources ahead of requests.' },
+      url: { title: 'URL list' },
+      directory: { title: 'Directory URLs', description: 'Directory URLs end with /.' },
+      prewarm: { title: 'Prewarm URLs' },
     },
     url: 'URL list', urlPlaceholder: 'https://www.example.com/static/app.js', directoryPlaceholder: 'https://www.example.com/static/',
     enteredPrefix: 'Entered ', enteredUnit: '', errorPrefix: ', errors ',
@@ -225,7 +222,6 @@ const enUS = {
     statusPanel: 'Task quota and submission state', dailyQuota: 'Daily quota', unavailable: '—',
     submitStatus: 'Submission state',
     status: { pending: 'Waiting for input', ready: 'Ready to submit', fix: 'Needs fixing', submitting: 'Submitting', submitted: 'Submitted', unknown: 'Outcome unknown' },
-    statusDescription: 'After submission, open operation history to view progress.',
     sitesEmpty: 'No matching sites', sitesFailed: 'Could not load sites; try again', sitePlaceholder: 'Search and pick a site',
     remainingOf: 'remaining / {{total}}', used: 'Used {{count}}', total: 'Total {{count}}',
     quotaFailed: 'Could not read the quota', quotaLoading: 'Loading…', quotaScope: 'Shared by the owner, members and all sites of this account; resets at {{time}} (UTC+8 midnight)',

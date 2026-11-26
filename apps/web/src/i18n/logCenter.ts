@@ -2,7 +2,6 @@ import i18n from './index'
 
 const zhCN = {
   title: '日志中心',
-  subtitle: '所有改变配置和数据的操作都会记录在这里：谁、什么时候、从哪个 IP、改了什么。',
   tabs: { all: '全部', operation: '操作', backup: '备份', sent: '发送记录', attack: '攻击日志', access: '访问日志' },
   categories: {
     admin: '管理员操作', user: '用户操作', auth: '登录与安全', site: '网站配置', security: '防御策略', rule: '规则',
@@ -34,7 +33,6 @@ type Messages = MessageShape<typeof zhCN>
 
 const enUS: Messages = {
   title: 'Log center',
-  subtitle: 'Every change to configuration and data is recorded here: who, when, from which IP, and what changed.',
   tabs: { all: 'All', operation: 'Operations', backup: 'Backups', sent: 'Sent messages', attack: 'Attack log', access: 'Access log' },
   categories: {
     admin: 'Administration', user: 'User account', auth: 'Sign-in & security', site: 'Site configuration', security: 'Protection policies',

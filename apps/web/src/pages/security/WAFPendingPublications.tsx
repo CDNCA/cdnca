@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Table, Tag, type TableColumnsType } from 'antd'
-import { FeedbackWhen } from '@cdnca/ui'
+import { Alert, Button, Tag, type TableColumnsType } from 'antd'
+import { FeedbackWhen, Table } from '@cdnca/ui'
 import { Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'

@@ -56,7 +56,7 @@ type Worker struct {
 	// platformSeen: the platform scope's firewall configs and nodes
 	// (auto switch layers, fix-fwregion).
 	platformSeen time.Time
-	swept       bool
+	swept        bool
 	// retry holds scopes whose last pass failed (an owner without the custom
 	// CC feature, a revision race): retried each pass on their own.
 	retry map[uuid.UUID]struct{}

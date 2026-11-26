@@ -25,6 +25,11 @@
       "name": "plugin_id",
       "type": "string",
       "required": true
+     },
+     {
+      "name": "reinstall",
+      "type": "boolean",
+      "description": "The plugin was uninstalled here and the licence is still held. The market pushes the licence's purchase record to the license service again, which creates a new pending_confirmation authorization only when this installation has none of the plugin that is not uninstalled (repeat calls add nothing). The administrator then confirms it under My plugins."
      }
     ]
    },

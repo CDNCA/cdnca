@@ -74,13 +74,13 @@ func TestIPLocationDue(t *testing.T) {
 	}{
 		"never resolved (existing node after upgrade)": {nil, nil, nil, true, true},
 		"same addresses and library":                   {addresses, &revision, &resolved, true, false},
-		"unresolved with same library: not retried":     {addresses, &revision, &unresolved, true, false},
-		"address changed":                               {[]string{"192.0.2.11"}, &revision, &resolved, true, true},
-		"secondary IP added":                            {nil, &revision, &resolved, true, true},
-		"library updated":                               {addresses, &other, &resolved, true, true},
-		"library arrived":                               {addresses, &revision, &noLibrary, true, true},
-		"still no library":                              {addresses, &revision, &noLibrary, false, false},
-		"library gone":                                  {addresses, &revision, &resolved, false, true},
+		"unresolved with same library: not retried":    {addresses, &revision, &unresolved, true, false},
+		"address changed":                              {[]string{"192.0.2.11"}, &revision, &resolved, true, true},
+		"secondary IP added":                           {nil, &revision, &resolved, true, true},
+		"library updated":                              {addresses, &other, &resolved, true, true},
+		"library arrived":                              {addresses, &revision, &noLibrary, true, true},
+		"still no library":                             {addresses, &revision, &noLibrary, false, false},
+		"library gone":                                 {addresses, &revision, &resolved, false, true},
 	} {
 		got := ipLocationDue(addresses, test.resolved, test.revision, test.outcome, library, test.hasLibrary)
 		if got != test.want {

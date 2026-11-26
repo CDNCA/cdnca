@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Alert, Form, Input, InputNumber, Modal, Radio, Select, Table, Tag } from 'antd'
+import { Alert, Form, Input, InputNumber, Modal, Radio, Select, Tag } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { dnsHubApi, dnsHubRecordTypes, maxBatchItems, recordValue, validRecordName, validRecordValue, type DNSHubBatchItem, type DNSHubBatchItemResult, type DNSHubDomain, type DNSHubRecordType } from '../../api/dnsHub'

@@ -8,7 +8,6 @@ import {
   Result,
   Space,
   Spin,
-  Table,
   Tag,
   type TableColumnsType,
 } from 'antd'
@@ -16,6 +15,7 @@ import { ChevronLeft, ChevronRight, Eye, RefreshCw, Search, X } from 'lucide-rea
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
+import { Table } from '@cdnca/ui'
 
 import { ApiError, type Principal } from '../api/auth'
 import { cachePoliciesApi, type CachePolicyView } from '../api/cachePolicies'

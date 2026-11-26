@@ -77,6 +77,17 @@ func TestPackageUnavailableReasonPostgres(t *testing.T) {
 	expect("deleted", PackageUnavailableDeleted)
 	exec(`UPDATE package_subscriptions SET admin_enabled=true,deleted_at=NULL WHERE id=$1`, subscription)
 	expect("restored", "")
+	// a billing host suspends, then
+	// terminates (cancels) the service; the terminated one is not "suspended"
+	// (which would promise a recovery on renewal).
+	exec(`UPDATE package_subscriptions SET suspended_at=$2,suspend_reason='host suspended' WHERE id=$1`, subscription, now)
+	expect("suspended", PackageUnavailableSuspended)
+	exec(`UPDATE package_subscriptions SET lifecycle_status='cancelled',cancelled_at=$2 WHERE id=$1`, subscription, now)
+	expect("terminated after suspension", PackageUnavailableCancelled)
+	exec(`UPDATE package_subscriptions SET suspended_at=NULL,suspend_reason=NULL WHERE id=$1`, subscription)
+	expect("cancelled", PackageUnavailableCancelled)
+	exec(`UPDATE package_subscriptions SET lifecycle_status='active',cancelled_at=NULL WHERE id=$1`, subscription)
+	expect("active again", "")
 	exec(`UPDATE sites SET package_subscription_id=NULL,package_id=NULL WHERE id=$1`, siteID)
 	// Community edition: a site without a package is served (no reason).
 	expect("unbound", "")

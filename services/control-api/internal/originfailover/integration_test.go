@@ -3,6 +3,7 @@ package originfailover_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -262,5 +263,106 @@ func TestOriginStatusOfDisabledAndDeletedSites(t *testing.T) {
 	}
 	if pools, err := value.store.DuePools(t.Context(), 10); err != nil || len(pools) != 0 {
 		t.Fatalf("deleted site still probed %+v %v", pools, err)
+	}
+}
+
+// a real switch names both
+// levels; every level down keeps the level and says so (706 template), never
+// "from X to X". The all-down notice keeps its event type and dedup key.
+func TestOriginFailoverHoldNoticeIsNotASwitch(t *testing.T) {
+	value := newFixture(t, "auto")
+	if _, err := value.pool.Exec(t.Context(), `UPDATE notification_channel_settings SET email_enabled=true, sms_enabled=true WHERE singleton`); err != nil {
+		t.Fatal(err)
+	}
+	value.rounds(t, 2, true, true, true)
+	value.rounds(t, 3, false, true, true)
+	value.rounds(t, 3, false, false, false)
+	if status := value.status(t); status.ActiveLevel != 1 || status.Overall != "unhealthy" {
+		t.Fatalf("all down %+v", status)
+	}
+	mail := func(prefix string) (string, string, string) {
+		t.Helper()
+		var templateID, subject, body string
+		if err := value.pool.QueryRow(t.Context(), `SELECT o.template_id,o.subject,o.body FROM notification_outbox o
+			JOIN notification_events e ON e.id=o.event_id
+			WHERE e.scope_id=$1 AND e.event_type=$2 AND e.source_event_id LIKE $3 AND o.channel='email'`,
+			value.scope, originfailover.EventFailover, prefix+"/%").Scan(&templateID, &subject, &body); err != nil {
+			t.Fatalf("%s email: %v", prefix, err)
+		}
+		return templateID, subject, body
+	}
+	templateID, subject, body := mail("origin-failover")
+	if templateID != "site.origin.failover.zh-cn" || subject != "回源切换：failover.example.test" ||
+		!strings.Contains(body, "回源从 主源 切换到 备用源 1") {
+		t.Fatalf("switch email %q %q %q", templateID, subject, body)
+	}
+	templateID, subject, body = mail("origin-all-down")
+	if templateID != "site.origin.failover.hold.zh-cn" || subject != "全部源站不可用，保持当前回源级别：failover.example.test" ||
+		!strings.Contains(body, "全部源站不可用，保持当前回源级别 备用源 1") || strings.Contains(body, "切换到") {
+		t.Fatalf("hold email %q %q %q", templateID, subject, body)
+	}
+	// one switch audit; the hold is a notice only
+	if value.audits(t, originfailover.AuditFailover) != 1 || value.notices(t, originfailover.EventFailover) != 2 {
+		t.Fatalf("audits %d notices %d", value.audits(t, originfailover.AuditFailover), value.notices(t, originfailover.EventFailover))
+	}
+}
+
+// the all-down notice was re-sent every round with a new occurred_at
+// under the same source event and refused as a conflicting replay (a warning every 30 seconds). Staying
+// all down enqueues once and warns nothing; leaving all down and entering it again without a switch (same
+// sequence) enqueues a second notice. The manual recovered notice behaves the same way.
+func TestOriginFailoverAlertsOncePerEntry(t *testing.T) {
+	var logs strings.Builder
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	allDown := func(value *fixture) []string {
+		t.Helper()
+		rows, err := value.pool.Query(t.Context(), `SELECT source_event_id FROM notification_events
+			WHERE scope_id=$1 AND source_event_id LIKE 'origin-all-down/%' ORDER BY created_at`, value.scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ids
+	}
+
+	value := newFixture(t, "auto")
+	value.rounds(t, 2, true, true, true)
+	value.rounds(t, 3, false, true, true) // level 1, sequence 1
+	value.rounds(t, 6, false, false, false)
+	if ids := allDown(value); len(ids) != 1 {
+		t.Fatalf("all-down notices while staying down %v, want 1", ids)
+	}
+	// backup 1 is back (level 1 kept, no switch), then everything is down again: a new notice.
+	value.rounds(t, 2, false, true, false)
+	if status := value.status(t); status.ActiveLevel != 1 || status.Overall == "unhealthy" {
+		t.Fatalf("backup 1 back %+v", status)
+	}
+	value.rounds(t, 5, false, false, false)
+	if ids := allDown(value); len(ids) != 2 || ids[0] == ids[1] {
+		t.Fatalf("all-down notices after a second entry %v, want 2 distinct", ids)
+	}
+	if value.audits(t, originfailover.AuditFailover) != 1 {
+		t.Fatalf("failover audits %d, want 1", value.audits(t, originfailover.AuditFailover))
+	}
+
+	manual := newFixture(t, "manual")
+	manual.rounds(t, 3, false, true, true) // level 1
+	manual.rounds(t, 4, true, true, true)  // primary ready: one notice
+	manual.rounds(t, 4, true, true, true)
+	if got := manual.notices(t, originfailover.EventRecovered); got != 1 {
+		t.Fatalf("recovered notices while staying ready %d, want 1", got)
+	}
+	manual.rounds(t, 3, false, true, true) // primary down again, level 1 kept
+	manual.rounds(t, 2, true, true, true)  // ready again
+	if got := manual.notices(t, originfailover.EventRecovered); got != 2 {
+		t.Fatalf("recovered notices after a second entry %d, want 2", got)
+	}
+	if strings.Contains(logs.String(), "not enqueued") {
+		t.Fatalf("notification not enqueued:\n%s", logs.String())
 	}
 }

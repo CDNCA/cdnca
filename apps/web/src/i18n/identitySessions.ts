@@ -6,13 +6,13 @@ const zhCN = {
   loading: '正在加载登录设备',
   empty: '暂无登录设备',
   columns: {
-    device: '设备', network: '登录网络', lastActive: '最近活跃', sessions: '会话数', status: '状态', actions: '操作',
+    device: '设备', network: '登录网络', lastActive: '最近活跃', status: '状态', actions: '操作',
   },
   values: {
-    current: '当前设备', active: '活跃', expired: '已过期', revoked: '已撤销', unknownNetwork: '未知网络', count: '{{count}} 个',
+    current: '当前设备', active: '活跃', expired: '已过期', revoked: '已撤销', unknownNetwork: '未知网络',
   },
   actions: {
-    refresh: '刷新', retry: '重试', previous: '上一页', next: '下一页', revoke: '撤销设备',
+    refresh: '刷新', retry: '重试', previous: '上一页', next: '下一页', revoke: '撤销设备', revokeNamed: '撤销设备 {{device}}',
     confirmRevoke: '确认撤销', cancel: '取消', retrySame: '使用同一请求重试', abandonRefresh: '放弃并刷新',
   },
   confirmation: {
@@ -35,13 +35,13 @@ const enUS = {
   loading: 'Loading signed-in devices',
   empty: 'No signed-in devices',
   columns: {
-    device: 'Device', network: 'Sign-in network', lastActive: 'Last active', sessions: 'Sessions', status: 'Status', actions: 'Actions',
+    device: 'Device', network: 'Sign-in network', lastActive: 'Last active', status: 'Status', actions: 'Actions',
   },
   values: {
-    current: 'Current device', active: 'Active', expired: 'Expired', revoked: 'Revoked', unknownNetwork: 'Unknown network', count: '{{count}}',
+    current: 'Current device', active: 'Active', expired: 'Expired', revoked: 'Revoked', unknownNetwork: 'Unknown network',
   },
   actions: {
-    refresh: 'Refresh', retry: 'Retry', previous: 'Previous', next: 'Next', revoke: 'Revoke device',
+    refresh: 'Refresh', retry: 'Retry', previous: 'Previous', next: 'Next', revoke: 'Revoke device', revokeNamed: 'Revoke device {{device}}',
     confirmRevoke: 'Confirm revoke', cancel: 'Cancel', retrySame: 'Retry the same request', abandonRefresh: 'Abandon and refresh',
   },
   confirmation: {

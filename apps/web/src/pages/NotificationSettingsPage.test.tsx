@@ -158,6 +158,30 @@ describe('NotificationSettingsPage', () => {
     expect(within(unknown).getByText('未识别的失败原因（代码 smtp_mystery）')).toBeInTheDocument()
   })
 
+  // 模板区在上百个事件之后，首屏操作组的入口直接到模板搜索。
+  it('reaches the template search from the first-screen action group', async () => {
+    await changeLocale('zh-CN')
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    mockAdminReads({ items: [template] })
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: scrollIntoView })
+    try {
+      const user = userEvent.setup()
+      renderWithProviders(<NotificationSettingsPage mode="admin" />)
+      const jump = await screen.findByRole('button', { name: '转到通知模板' })
+      const channelsCard = screen.getByRole('region', { name: '发送渠道' })
+      expect(channelsCard).toContainElement(jump)
+      await user.click(jump)
+      const templates = screen.getByRole('region', { name: '通知模板' })
+      expect(scrollIntoView).toHaveBeenCalled()
+      expect(scrollIntoView.mock.contexts[0]).toBe(templates)
+      expect(screen.getByRole('textbox', { name: '搜索名称或模板 ID' })).toHaveFocus()
+      expect(within(templates).getByText(template.template_id)).toBeInTheDocument()
+    } finally {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    }
+  })
+
   it('names templates and variables in Chinese (W2)', async () => {
     await changeLocale('zh-CN')
     authenticate(['system_configuration.read', 'system_configuration.manage'])
@@ -168,6 +192,58 @@ describe('NotificationSettingsPage', () => {
     expect(screen.getByText('公告发布')).toBeInTheDocument()
     expect(screen.getByText('币种（currency）、当前值（observed）')).toBeInTheDocument()
     expect(screen.getByText('标题（title）、正文（body）')).toBeInTheDocument()
+  })
+
+  // 新建模板没有名称字段，「名称」列按已有中文名 → 邮件主题 → 模板 ID 兜底，不再显示「—」。
+  it('names a template created here by its mail subject, then by its template ID', async () => {
+    await changeLocale('zh-CN')
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    mockAdminReads({ items: [
+      template,
+      { ...template, template_id: 'operator_welcome', subject: '欢迎使用 {{.title}}' },
+      { ...template, template_id: 'operator_sms_code', channel: 'sms', subject: '' },
+    ] })
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    const row = async (id: string) => (await screen.findAllByText(id)).at(-1)!.closest('tr')!
+    expect((await row('announcement_published')).querySelector('td')).toHaveTextContent('公告发布')
+    expect((await row('operator_welcome')).querySelector('td')).toHaveTextContent('欢迎使用 {{.title}}')
+    expect(within(await row('operator_sms_code')).getAllByText('operator_sms_code')).toHaveLength(2)
+    expect(document.querySelector('.ant-table-tbody')?.textContent).not.toContain('—')
+  })
+
+  it('searches templates by name or ID, filters by channel and paginates 236 templates', async () => {
+    await changeLocale('zh-CN')
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    const items: NotificationTemplate[] = [
+      template, { ...template, channel: 'sms', subject: '' },
+      ...Array.from({ length: 234 }, (_, i) => ({ ...template, template_id: `bulk.event.${i}`, channel: i % 2 === 0 ? 'email' as const : 'sms' as const })),
+    ]
+    mockAdminReads({ items })
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    const rows = () => Array.from(document.querySelectorAll('.ant-table-tbody tr.ant-table-row'))
+    expect(await screen.findByText('共 236 条')).toBeInTheDocument()
+    expect(rows()).toHaveLength(20)
+
+    const search = screen.getByRole('textbox', { name: '搜索名称或模板 ID' })
+    fireEvent.change(search, { target: { value: '公告' } })
+    expect(rows()).toHaveLength(2)
+    expect(rows().every((row) => row.textContent?.includes('announcement_published'))).toBe(true)
+    fireEvent.change(search, { target: { value: 'BULK.EVENT.233' } })
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0]).toHaveTextContent('bulk.event.233')
+    fireEvent.change(search, { target: { value: 'no-such-template' } })
+    expect(screen.getByText('没有匹配的通知模板')).toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: '' } })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '按渠道筛选' }))
+    fireEvent.click(await screen.findByText('短信通知', { selector: '.ant-select-item-option-content' }))
+    expect(screen.getByText('共 118 条')).toBeInTheDocument()
+    expect(rows()).toHaveLength(20)
+    expect(rows().every((row) => within(row as HTMLElement).queryByText('短信通知') !== null)).toBe(true)
+
+    fireEvent.change(search, { target: { value: 'announcement' } })
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0]).toHaveTextContent('短信通知')
   })
 
   it('opens redacted delivery logs, paginates by cursor, and loads attempt facts on demand', async () => {
@@ -254,12 +330,53 @@ describe('NotificationSettingsPage', () => {
       channels: { email: { state: 'degraded', reason: 'config_incomplete' }, sms: { state: 'not_configured' } },
     })
     renderWithProviders(<NotificationSettingsPage mode="admin" />)
-    expect(await screen.findByTestId('notification-channel-unconfigured-email')).toHaveTextContent('发信未配置')
-    expect(screen.getByTestId('notification-channel-unconfigured-sms')).toHaveTextContent('发信未配置')
-    const links = screen.getAllByRole('link', { name: '前往发信配置' })
-    expect(links).toHaveLength(2)
-    expect(links[0]).toHaveAttribute('href', '/sys/setting?tab=mail')
+    // 每个渠道用自己的文案与入口，邮件到 SMTP 小节，短信到短信小节。
+    expect(await screen.findByTestId('notification-channel-unconfigured-email')).toHaveTextContent('邮件发信未配置')
+    expect(screen.getByTestId('notification-channel-unconfigured-sms')).toHaveTextContent('短信未配置')
+    expect(screen.getByRole('link', { name: '前往 SMTP 设置' })).toHaveAttribute('href', '/sys/setting?tab=mail&section=smtp')
+    expect(screen.getByRole('link', { name: '前往短信设置' })).toHaveAttribute('href', '/sys/setting?tab=mail&section=sms')
     expect(screen.queryByText('暂不支持')).not.toBeInTheDocument()
+  })
+
+  it('邮件可用、短信未配置时短信旁只写短信未配置', async () => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    vi.spyOn(notificationsApi, 'getChannels').mockResolvedValue({
+      revision: 1, sms_enabled: false, email_enabled: true,
+      sms_supported: false, email_supported: true, changed: false,
+    })
+    vi.spyOn(notificationsApi, 'listTemplates').mockResolvedValue({ items: [] })
+    vi.spyOn(notificationsApi, 'getRuntimeHealth').mockResolvedValue({
+      enabled: true, state: 'ready', ready: true, worker_running: true, enabled_channels: 1, mode: 'auto',
+      channels: { email: { state: 'ready' }, sms: { state: 'not_configured' } },
+    })
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    expect(await screen.findByTestId('notification-channel-unconfigured-sms')).toHaveTextContent('短信未配置')
+    expect(screen.queryByTestId('notification-channel-unconfigured-email')).not.toBeInTheDocument()
+    expect(screen.queryByText(/发信未配置/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '前往短信设置' })).toHaveAttribute('href', '/sys/setting?tab=mail&section=sms')
+  })
+
+  // 事件摘要区分已选渠道的不可投递原因（未配置 / 全局停用）。
+  it.each([
+    ['not configured', { sms_supported: false, sms_enabled: false }, { state: 'not_configured' as const }, /^流量已超限邮件 · 短信未配置$/],
+    ['turned off', { sms_supported: true, sms_enabled: false }, { state: 'ready' as const }, /^流量已超限邮件 · 短信已停用$/],
+  ])('summarises a selected SMS channel that is %s on the event heading', async (_name, sms, smsHealth, summary) => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    vi.spyOn(notificationsApi, 'getChannels').mockResolvedValue({
+      revision: 1, email_enabled: true, email_supported: true, changed: false, ...sms,
+    })
+    vi.spyOn(notificationsApi, 'listTemplates').mockResolvedValue({ items: [] })
+    vi.spyOn(notificationsApi, 'getRuntimeHealth').mockResolvedValue({
+      enabled: true, state: 'ready', ready: true, worker_running: true, enabled_channels: 1, mode: 'auto',
+      channels: { email: { state: 'ready' }, sms: smsHealth },
+    })
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({
+      schema: 'cdnca.notification-delivery-policy/v1', window_mode: 'all_day',
+      window_start: '00:00', window_end: '23:59', timezone: 'Asia/Shanghai', revision: 1, changed: false,
+      events: [{ event_type: 'package.monitor.traffic.triggered', enabled: true, sms_enabled: true, email_enabled: true, repeat_count: 1, interval_hours: 24, supported: true }],
+    })
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    expect(await screen.findByRole('button', { name: /^流量已超限/ })).toHaveTextContent(summary)
   })
 
   it('keeps "unsupported" for a channel the runtime reports nothing about', async () => {
@@ -272,7 +389,7 @@ describe('NotificationSettingsPage', () => {
     vi.spyOn(notificationsApi, 'getRuntimeHealth').mockResolvedValue(runtimeHealth)
     renderWithProviders(<NotificationSettingsPage mode="admin" />)
     expect(await screen.findByText('暂不支持')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '前往发信配置' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /前往(SMTP |短信)?设置/ })).not.toBeInTheDocument()
   })
 
   it('fails closed before network calls without read permission', () => {
@@ -650,6 +767,85 @@ describe('NotificationSettingsPage', () => {
 	    expect(putTemplate).toHaveBeenCalledWith('memory-only-access-token', 'announcement_published', 1, 'email', {
 	      subject: '[公告] {{.title}}', body: '{{.body}}', variables: ['title', 'body'],
 	    }, expect.any(String))
+  })
+
+  // 每行「查看」打开只读抽屉，内容与服务端返回一致；正文按文本显示，不解释标记。
+  it('views a saved email version read-only with subject, text body and variables', async () => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    const htmlish: NotificationTemplate = { ...template, template_id: 'custom_mail', version: 3, subject: '主题 {{.title}}', body: '<b>粗体</b>\n<script>window.__pwned = true</script>' }
+    mockAdminReads({ items: [htmlish] })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    const view = await screen.findByRole('button', { name: '查看 主题 {{.title}} 版本 3（邮件通知）' })
+    view.focus()
+    await user.keyboard('{Enter}')
+
+    const drawer = await screen.findByRole('dialog', { name: '主题 {{.title}}（版本 3）' })
+    const detail = within(drawer).getByTestId('notification-template-detail')
+    expect(within(detail).getByText('custom_mail')).toBeInTheDocument()
+    expect(within(detail).getByText('邮件主题')).toBeInTheDocument()
+    expect(within(detail).getByText('主题 {{.title}}')).toBeInTheDocument()
+    expect(detail.querySelector('pre')?.textContent).toBe(htmlish.body)
+    expect(detail.querySelector('script, b')).toBeNull()
+    expect((window as unknown as { __pwned?: boolean }).__pwned).toBeUndefined()
+    expect(within(detail).getByText('标题（title）')).toBeInTheDocument()
+    expect(within(drawer).getByRole('button', { name: '以此版本新建' })).toBeEnabled()
+  })
+
+  it('views an SMS version without a subject row', async () => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    mockAdminReads({ items: [{ ...template, channel: 'sms', subject: '', body: '验证码 {{.code}}', variables: ['code'] }] })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    await user.click(await screen.findByRole('button', { name: /版本 1（短信通知）/ }))
+    const detail = await screen.findByTestId('notification-template-detail')
+    expect(within(detail).queryByText('邮件主题')).toBeNull()
+    expect(within(detail).getByText('短信正文')).toBeInTheDocument()
+    expect(detail.querySelector('pre')?.textContent).toBe('验证码 {{.code}}')
+  })
+
+  it('lets a reader view a version but not create from it', async () => {
+    authenticate(['system_configuration.read'])
+    mockAdminReads({ items: [template] })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    await user.click(await screen.findByRole('button', { name: /^查看 .*版本 1（邮件通知）$/ }))
+    await screen.findByTestId('notification-template-detail')
+    expect(screen.queryByRole('button', { name: '以此版本新建' })).toBeNull()
+  })
+
+  it('prefills a new version from a saved one, asks for the version and keeps the conflict refusal', async () => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    mockAdminReads({ items: [template] })
+    const putTemplate = vi.spyOn(notificationsApi, 'putTemplate').mockRejectedValue(
+      new ApiError('conflict', 409, 'template_version_conflict', 'request-409'),
+    )
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    await user.click(await screen.findByRole('button', { name: /^查看 .*版本 1（邮件通知）$/ }))
+    await user.click(await screen.findByRole('button', { name: '以此版本新建' }))
+
+    const modal = await screen.findByRole('dialog', { name: '新建通知模板版本' })
+    expect(within(modal).getByLabelText('模板 ID')).toHaveValue(template.template_id)
+    expect(within(modal).getByLabelText('版本')).toHaveValue('')
+    expect(within(modal).getByLabelText('邮件主题')).toHaveValue(template.subject)
+    expect(within(modal).getByLabelText('邮件正文')).toHaveValue(template.body)
+    expect(within(modal).getByLabelText('变量')).toHaveValue('title, body')
+
+    await user.click(within(modal).getByRole('button', { name: '创建模板版本' }))
+    expect(await within(modal).findByText('版本必须为正整数')).toBeInTheDocument()
+    expect(putTemplate).not.toHaveBeenCalled()
+
+    await user.type(within(modal).getByLabelText('版本'), '1')
+    await user.click(within(modal).getByRole('button', { name: '创建模板版本' }))
+    expect(putTemplate).toHaveBeenCalledWith(expect.any(String), template.template_id, 1, 'email', {
+      subject: template.subject, body: template.body, variables: ['title', 'body'],
+    }, expect.any(String))
+    expect(await within(modal).findByText('该模板版本已存在且内容不同，请使用新版本号')).toBeInTheDocument()
   })
 
   // fix-fielderr-be5：服务端拒绝模板某个变量时标在变量输入框下并写出是哪一个，弹窗不关、无错误条

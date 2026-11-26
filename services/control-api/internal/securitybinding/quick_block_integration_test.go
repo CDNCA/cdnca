@@ -102,6 +102,10 @@ func TestWAFQuickBlockPersistGateAndPublish(t *testing.T) {
 	if !bytes.Equal(onJSON, updatedJSON) || updated.Policy.QuickBlock == nil {
 		t.Fatalf("editor changed system rules:\nbefore %s\nafter  %s", onJSON, updatedJSON)
 	}
+	// The rules came back as stored, so the save is a no-op: no new revision.
+	if updated.Policy.Revision != on.Policy.Revision {
+		t.Fatalf("equal edit revision = %d, want %d (no-op)", updated.Policy.Revision, on.Policy.Revision)
+	}
 	// While on, the policy stays default-allow.
 	if _, err := service.Update(t.Context(), actor, securitypolicy.UpdateRequest{ID: policy.ID, ExpectedRevision: updated.Policy.Revision,
 		Fields: securitypolicy.PolicyFields{Kind: securitypolicy.KindWAF, Name: "site waf", Enabled: true,
@@ -127,7 +131,7 @@ func TestWAFQuickBlockPersistGateAndPublish(t *testing.T) {
 	}
 
 	// Off: only the user rule remains; a stale version is refused.
-	off := securitypolicy.QuickBlockRequest{ID: policy.ID, ExpectedRevision: on.Policy.Revision, IdempotencyKey: "qb-off-stale", RequestID: "qb-off"}
+	off := securitypolicy.QuickBlockRequest{ID: policy.ID, ExpectedRevision: on.Policy.Revision - 1, IdempotencyKey: "qb-off-stale", RequestID: "qb-off"}
 	if _, err := service.SetQuickBlock(t.Context(), actor, off); !errors.Is(err, securitypolicy.ErrRevisionConflict) {
 		t.Fatalf("stale off: %v", err)
 	}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
+  App,
   Button,
   Checkbox,
   Form,
@@ -12,13 +13,12 @@ import {
   Space,
   Spin,
   Switch,
-  Table,
-  Tabs,
   Tag,
   Typography,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { Tabs } from '../components/Tabs'
+import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import { RefreshCw, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -32,6 +32,7 @@ import {
   type SwitchWrite,
 } from '../api/notifications'
 import {
+  hasUnactivatedChanges,
   newSystemConfigurationIdempotencyKey,
   newSystemConfigurationRequestId,
   systemConfigurationApi,
@@ -48,6 +49,7 @@ import { useSessionStore } from '../auth/session'
 import { formatNumber } from '../i18n/formatters'
 import NodeServingSwitchLog from './NodeServingSwitchLog'
 import '../i18n/nodeMonitorSettings'
+import { systemConfigurationPendingNamespace } from '../i18n/systemConfigurationPending'
 import './NodeMonitorSettingsPage.css'
 import { PendingCategoriesNotice, usePendingActivationConfirm } from './system-settings/PendingCategories'
 
@@ -231,7 +233,7 @@ function formValues(values: NodeMonitoringConfiguration): NodeMonitoringConfigur
 function monitoringConfigurationState(configuration: SystemConfigurationDocument<'node_monitoring'>) {
   if (configuration.head_revision === 0) return 'initialDraft'
   if (configuration.active_revision === 0) return configuration.status === 'validated' ? 'validated' : 'saved'
-  if (configuration.head_revision > configuration.active_revision) return 'newerDraft'
+  if (hasUnactivatedChanges(configuration)) return 'newerDraft'
   return 'activePending'
 }
 
@@ -271,6 +273,8 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
   const [form] = Form.useForm<NodeMonitoringConfiguration>()
   const queryClient = useQueryClient()
   const confirmPending = usePendingActivationConfirm('node_monitoring')
+  const { t: tPending } = useTranslation(systemConfigurationPendingNamespace)
+  const { modal } = App.useApp()
   const [messageApi, messageContext] = useFeedbackMessage()
   const [attempt, setAttempt] = useState<SaveAttempt | null>(null)
   const [writeError, setWriteError] = useState<unknown>(null)
@@ -471,6 +475,14 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
     onSuccess: (result) => {
       setLifecycleAttempt(null)
       setLifecycleError(null)
+      if (result.status === 'draft' && result.source_revision === configQuery.data?.active_revision) {
+        // the head is now a copy of the active revision; nothing to
+        // preflight or activate, the form shows the active values again.
+        setRollbackTargetRevision(null)
+        void configQuery.refetch()
+        messageApi.success(t('lifecycle.notices.discarded'))
+        return
+      }
       if (result.status === 'draft') {
         setRollbackSourceRevision(result.source_revision)
         setRollbackTargetRevision(null)
@@ -605,6 +617,34 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
     })
   }
 
+  // copy the active revision into a new draft (the server's rollback
+  // accepts the active revision as its source), after confirming what is discarded; it activates nothing.
+  const runDiscard = () => {
+    const current = configQuery.data
+    if (!current || !canManage || lifecycleAttempt || lifecycleMutation.isPending || !hasUnactivatedChanges(current) ||
+      current.active_revision < 1) return
+    const categories = current.pending_categories.map((category) => tPending(`categories.${category}`)).join('、')
+    modal.confirm({
+      title: t('lifecycle.discardTitle'),
+      content: categories
+        ? t('lifecycle.discardChanges', { revision: current.active_revision, categories })
+        : t('lifecycle.discardSourceOnly', { revision: current.active_revision }),
+      okText: t('lifecycle.actions.discard'),
+      onOk: () => {
+        setLifecycleError(null)
+        lifecycleMutation.mutate({
+          kind: 'rollback',
+          ownerKey,
+          targetRevision: current.active_revision,
+          expectedHeadRevision: current.head_revision,
+          expectedActiveRevision: current.active_revision,
+          idempotencyKey: newSystemConfigurationIdempotencyKey('node_monitoring'),
+          requestId: newSystemConfigurationRequestId('node_monitoring'),
+        })
+      },
+    })
+  }
+
   const abandonLifecycle = () => {
     setLifecycleAttempt(null)
     setLifecycleError(null)
@@ -688,6 +728,8 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
   }
 
   const configuration = configQuery.data
+  // a newer head restored to the active configuration carries nothing to activate
+  const matchesActive = configuration.revision !== 0 && configuration.status !== 'active' && !hasUnactivatedChanges(configuration)
   const configurationLocked = attempt !== null || mutation.isPending
   const notificationLocked = notificationAttempt !== null || notificationMutation.isPending
   const lifecycleLocked = lifecycleAttempt !== null || lifecycleMutation.isPending
@@ -763,7 +805,6 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
             <div className="node-monitor-setting-section-head">
               <div>
                 <div className="node-monitor-setting-section-title">{t('lineGroups.probeSectionTitle')}</div>
-                <p className="node-monitor-setting-section-desc">{t('lineGroups.probeSectionDescription')}</p>
               </div>
               <div className="node-monitor-setting-status">
                 {t(`monitoringState.${monitoringConfigurationState(configuration)}`)}
@@ -800,7 +841,6 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
             <div className="node-monitor-setting-section-head">
               <div>
                 <div className="node-monitor-setting-section-title">{t('lineGroups.policySectionTitle')}</div>
-                <p className="node-monitor-setting-section-desc">{t('lineGroups.policySectionDescription')}</p>
               </div>
             </div>
             <div className="node-monitor-compatibility-fields">
@@ -812,19 +852,23 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
                     options={monitorGroupValues.map((value) => ({ value, label: t(`values.${value}`) }))}
                   />
                 </Form.Item>
-                <div className="node-monitor-setting-policy-help" data-testid="node-monitor-policy-help">{t('lineGroups.policyHelp')}</div>
+                {/* the effective source stays in view; the full decision rule opens on demand. */}
                 {effectiveSource ? (
                   <div className="node-monitor-setting-policy-help" data-testid="node-monitor-effective-source">
                     {t('lineGroups.effectiveSource', { source: t(`lineGroups.effectiveSources.${effectiveSource}`) })}
                   </div>
                 ) : null}
+                <details className="node-monitor-decision-details">
+                  <summary>{t('lineGroups.decisionDetails')}</summary>
+                  <div className="node-monitor-setting-policy-help" data-testid="node-monitor-policy-help">{t('lineGroups.policyHelp')}</div>
+                </details>
               </div>
             </Form.Item>
             <Form.Item name="monitor_action" label={t('fields.legacyAction')} rules={[{ required: true, message: t('validation.required') }]}
               extra={<span className="node-monitor-setting-policy-help">{t('lineGroups.actionHelp')}</span>}>
               <Radio.Group optionType="button" options={(['none', 'pause'] as const).map((value) => ({ value, label: t(value === 'none' ? 'values.noAction' : 'values.pause') }))} />
             </Form.Item>
-            <Form.Item label={t('fields.legacyInterval')} required>
+            <Form.Item label={t('fields.legacyInterval')} required extra={<span className="node-monitor-setting-policy-help">{t('lineGroups.intervalScope')}</span>}>
               <div className="node-monitor-setting-interval">
                 <Form.Item name="probe_interval_ms" noStyle rules={[{
                   required: true, type: 'integer', min: 1_000, max: 300_000, message: t('validation.probeInterval'),
@@ -897,7 +941,6 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
                           <div className="node-monitor-setting-section-head">
                             <div>
                               <div className="node-monitor-setting-section-title">{t('notifications.channelsTitle')}</div>
-                              <p className="node-monitor-setting-section-desc">{t('notifications.channelsDescription')}</p>
                             </div>
                           </div>
                           <Form.Item label={t('notifications.window')} validateStatus={notificationWindowInvalid ? 'error' : undefined} help={notificationWindowInvalid ? t('notifications.errors.window') : undefined}>
@@ -930,18 +973,27 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
                                   }))
                                 }}
                               />
-                              <Input
-                                value={notificationWindowDraft}
-                                aria-label={t('notifications.windowFormat')}
-                                status={notificationWindowInvalid ? 'error' : undefined}
-                                disabled={notificationQuery.data.policy.window_mode !== 'custom'}
-                                onChange={(event) => {
-                                  setNotificationWindowDraft(event.target.value)
-                                  if (notificationWindowInvalid) setNotificationWindowInvalid(false)
-                                }}
-                                onBlur={saveNotificationWindow}
-                                onPressEnter={saveNotificationWindow}
-                              />
+                              {/* 全天直接写生效时段；时段输入只在自定义时出现 */}
+                              {notificationQuery.data.policy.window_mode === 'custom' ? <>
+                                <Input
+                                  value={notificationWindowDraft}
+                                  aria-label={t('notifications.window')}
+                                  aria-describedby="node-monitor-notification-window-format"
+                                  aria-invalid={notificationWindowInvalid || undefined}
+                                  status={notificationWindowInvalid ? 'error' : undefined}
+                                  onChange={(event) => {
+                                    setNotificationWindowDraft(event.target.value)
+                                    if (notificationWindowInvalid) setNotificationWindowInvalid(false)
+                                  }}
+                                  onBlur={saveNotificationWindow}
+                                  onPressEnter={saveNotificationWindow}
+                                />
+                                <Typography.Text type="secondary" id="node-monitor-notification-window-format">{t('notifications.windowFormat')}</Typography.Text>
+                              </> : (
+                                <Typography.Text>{t('notifications.allDayRange', {
+                                  start: notificationQuery.data.policy.window_start, end: notificationQuery.data.policy.window_end,
+                                })}</Typography.Text>
+                              )}
                               <Typography.Text type="secondary" data-testid="node-monitor-notification-timezone">
                                 {t('notifications.timezone', { timezone: notificationQuery.data.policy.timezone })}
                               </Typography.Text>
@@ -978,24 +1030,20 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
                               }}
                             />
                           </Form.Item>
-                          <Alert className="node-monitor-notification-scope" type="info" showIcon
-                            message={<span>{t('notifications.unwiredEvents')} <Link to="/sys/setting?tab=notification">{t('notifications.openEvents')}</Link></span>} />
+                          {/* which events notify is plain text (not announced); recipients and templates
+                              are their real values with one entry each. */}
+                          <p className="node-monitor-setting-section-desc node-monitor-notification-events">{t('notifications.unwiredEvents')}</p>
                           <Form.Item label={t('notifications.recipients')}>
                             <span className="node-monitor-setting-section-desc">
                               {t('notifications.recipientsDescription')} <Link to="/sys/user">{t('notifications.openMembers')}</Link>
                             </span>
                           </Form.Item>
+                          <Form.Item label={t('notifications.templatesTitle')} className="node-monitor-template-section">
+                            <span className="node-monitor-setting-section-desc">
+                              {t('notifications.templatesDescription')} <Link to="/sys/setting?tab=notification">{t('notifications.openTemplates')}</Link>
+                            </span>
+                          </Form.Item>
                           <Form.Item name="recovery_notification_enabled" hidden valuePropName="checked"><Switch /></Form.Item>
-                        </div>
-                        <div className="node-monitor-setting-section node-monitor-template-section">
-                          <div className="node-monitor-setting-section-head">
-                            <div>
-                              <div className="node-monitor-setting-section-title">{t('notifications.templatesTitle')}</div>
-                              <p className="node-monitor-setting-section-desc">
-                                {t('notifications.templatesDescription')} <Link to="/sys/setting?tab=notification">{t('notifications.openTemplates')}</Link>
-                              </p>
-                            </div>
-                          </div>
                         </div>
                       </>
                     ) : null}
@@ -1014,14 +1062,18 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
               <div className="node-monitor-lifecycle-head">
                 <div>
                   <div className="node-monitor-setting-section-title">{t('lifecycle.title')}</div>
-                  <p className="node-monitor-setting-section-desc">{t(configuration.revision === 0 ? 'lifecycle.saveFirst' : 'lifecycle.description')}</p>
+                  {configuration.revision === 0 ? <p className="node-monitor-setting-section-desc">{t('lifecycle.saveFirst')}</p> : null}
                 </div>
-                <Tag color={configuration.status === 'active' ? 'success' : configuration.status === 'validated' ? 'processing' : 'default'}>
-                  {t(`lifecycle.statuses.${configuration.status}`)}
+                {/* 头修订与主控生效配置等值时，状态写「一致」，
+                    头修订自己的状态（如草稿）只作为修订记录的状态跟在「当前版本」后面 */}
+                <Tag color={configuration.status === 'active' || matchesActive ? 'success' : configuration.status === 'validated' ? 'processing' : 'default'}>
+                  {matchesActive ? t('lifecycle.matchesActive') : t(`lifecycle.statuses.${configuration.status}`)}
                 </Tag>
               </div>
               <div className="node-monitor-lifecycle-meta">
-                <span>{t('lifecycle.revision', { revision: configuration.revision })}</span>
+                <span>{matchesActive
+                  ? t('lifecycle.revisionWithStatus', { revision: configuration.revision, status: t(`lifecycle.statuses.${configuration.status}`) })
+                  : t('lifecycle.revision', { revision: configuration.revision })}</span>
                 <span>{t('lifecycle.activeRevision', { revision: configuration.active_revision })}</span>
               </div>
               {rollbackSourceRevision !== null ? (
@@ -1033,14 +1085,19 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
                 />
               ) : null}
               <Space wrap>
-                {configuration.status === 'draft' ? (
+                {configuration.status === 'draft' && hasUnactivatedChanges(configuration) ? (
                   <Button type="primary" loading={lifecycleMutation.isPending} disabled={!canManage || locked || configuration.revision < 1} onClick={() => runLifecycle('preflight')}>
                     {t('lifecycle.actions.preflight')}
                   </Button>
                 ) : null}
-                {configuration.status === 'validated' ? (
+                {configuration.status === 'validated' && hasUnactivatedChanges(configuration) ? (
                   <Button type="primary" loading={lifecycleMutation.isPending} disabled={!canManage || locked} onClick={() => runLifecycle('activate')}>
                     {t('lifecycle.actions.activate')}
+                  </Button>
+                ) : null}
+                {configuration.active_revision > 0 && hasUnactivatedChanges(configuration) && rollbackSourceRevision === null ? (
+                  <Button disabled={!canManage || locked} loading={lifecycleMutation.isPending} onClick={runDiscard}>
+                    {t('lifecycle.actions.discard')}
                   </Button>
                 ) : null}
                 {configuration.active_revision > 1 ? (

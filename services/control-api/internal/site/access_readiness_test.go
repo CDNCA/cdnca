@@ -34,12 +34,12 @@ func TestBuildAccessReadiness(t *testing.T) {
 		ok     bool
 		detail string
 	}{
-		"all checks pass":          {mutate: func(*accessFacts) {}, state: AccessReady, code: AccessCheckDNS, ok: true},
+		"all checks pass": {mutate: func(*accessFacts) {}, state: AccessReady, code: AccessCheckDNS, ok: true},
 		// fix-readiness2 ④：无有效套餐不下发，接入受阻（与 package_unavailable_reason 同一口径）。
-		"valid package":    {mutate: func(*accessFacts) {}, state: AccessReady, code: AccessCheckPackage, ok: true},
-		"no package":       {mutate: func(f *accessFacts) { f.PackageUnavailable = &noPackage }, state: AccessBlocked, code: AccessCheckPackage, detail: PackageUnavailableNoPackage},
-		"package disabled": {mutate: func(f *accessFacts) { f.PackageUnavailable = &disabled }, state: AccessBlocked, code: AccessCheckPackage, detail: PackageUnavailableDisabled},
-		"package deleted":  {mutate: func(f *accessFacts) { f.PackageUnavailable = &deleted }, state: AccessBlocked, code: AccessCheckPackage, detail: PackageUnavailableDeleted},
+		"valid package":            {mutate: func(*accessFacts) {}, state: AccessReady, code: AccessCheckPackage, ok: true},
+		"no package":               {mutate: func(f *accessFacts) { f.PackageUnavailable = &noPackage }, state: AccessBlocked, code: AccessCheckPackage, detail: PackageUnavailableNoPackage},
+		"package disabled":         {mutate: func(f *accessFacts) { f.PackageUnavailable = &disabled }, state: AccessBlocked, code: AccessCheckPackage, detail: PackageUnavailableDisabled},
+		"package deleted":          {mutate: func(f *accessFacts) { f.PackageUnavailable = &deleted }, state: AccessBlocked, code: AccessCheckPackage, detail: PackageUnavailableDeleted},
 		"no line group":            {mutate: func(f *accessFacts) { f.LineGroupFound = false }, state: AccessBlocked, code: AccessCheckLineGroup, detail: "no_line_group"},
 		"no online node":           {mutate: func(f *accessFacts) { f.OnlineNodes = 0 }, state: AccessBlocked, code: AccessCheckLineGroup, detail: "no_online_nodes"},
 		"cname failed":             {mutate: func(f *accessFacts) { f.CNAMEState, f.CNAMEFailureCode = &failed, &lineCode }, state: AccessBlocked, code: AccessCheckCNAME, detail: lineCode},

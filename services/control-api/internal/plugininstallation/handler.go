@@ -86,6 +86,8 @@ type InstallationView struct {
 	AuthorizationStatus string
 	// PausedBy/PausedReason say who stopped a disabled authorization on the platform (license paused_by):
 	// installation is this controller's own pause; operator/service is a platform pause it cannot resume.
+	// A local pause the license holds enabled (no platform pause in force, ownPauseResumable) reads as
+	// AuthorizationStatus disabled, PausedBy installation: the pause in force is this controller's own.
 	PausedBy     string
 	PausedReason string
 	// AvailableUpgrade is a newer version the platform has already authorized for this installation.
@@ -95,7 +97,15 @@ type InstallationView struct {
 	ManagedBy string
 	// Targets: the tenants a platform-held tenant plugin is installed for (platform view only).
 	Targets *TargetsView
+	// LicenseSync says whether the license service acknowledged every lifecycle receipt of this local head
+	// (LicenseSyncSynced) or one still waits for delivery (LicenseSyncPending). Empty when not tracked (candidates).
+	LicenseSync string
 }
+
+const (
+	LicenseSyncPending = "pending"
+	LicenseSyncSynced  = "synced"
+)
 
 type AvailableUpgrade struct {
 	VerificationID  uuid.UUID
@@ -575,6 +585,7 @@ type installationWire struct {
 	AvailableUpgrade          *upgradeWire `json:"available_upgrade,omitempty"`
 	ManagedBy                 string       `json:"managed_by,omitempty"`
 	Targets                   *targetsView `json:"targets,omitempty"`
+	LicenseSync               string       `json:"license_sync,omitempty"`
 }
 
 type targetsView struct {
@@ -633,6 +644,7 @@ func installationToWire(view InstallationView) installationWire {
 		}
 	}
 	wire.AuthorizationStatus = view.AuthorizationStatus
+	wire.LicenseSync = view.LicenseSync
 	wire.PausedBy, wire.PausedReason = view.PausedBy, view.PausedReason
 	if upgrade := view.AvailableUpgrade; upgrade != nil {
 		wire.AvailableUpgrade = &upgradeWire{VerificationID: upgrade.VerificationID, Version: upgrade.Version,
@@ -652,6 +664,20 @@ func (handler *Handler) writeDomainError(response http.ResponseWriter, actor Act
 	authorizationID uuid.UUID, err error, mutation bool) {
 	status, code := pluginInstallationDomainError(err, mutation)
 	if status < http.StatusInternalServerError {
+		if scopes := RefusedScopes(err); len(scopes) > 0 {
+			// Only scope codes go back (error.details.scopes): which ones are missing or not approved.
+			type details struct {
+				Scopes []string `json:"scopes"`
+			}
+			type body struct {
+				Code    string  `json:"code"`
+				Details details `json:"details"`
+			}
+			writePluginInstallationJSON(response, status, struct {
+				Error body `json:"error"`
+			}{Error: body{Code: code, Details: details{Scopes: scopes}}})
+			return
+		}
 		writePluginInstallationError(response, status, code)
 		return
 	}
@@ -668,9 +694,7 @@ func (handler *Handler) writeDomainError(response http.ResponseWriter, actor Act
 		if stage := StageOf(err); stage != "" {
 			attrs = append(attrs, "stage", stage)
 		}
-		attrs = append(attrs, "error_class", pluginInstallationErrorClass(err),
-			// committed: the local write went through and only its outcome report is missing.
-			"committed", errors.Is(err, ErrResultUnknown) && strings.HasSuffix(StageOf(err), ".report"))
+		attrs = append(attrs, "error_class", pluginInstallationErrorClass(err))
 		if failure := StorageFailureOf(err); failure.SQLState != "" {
 			attrs = append(attrs, "sqlstate", failure.SQLState)
 			if failure.Constraint != "" {
@@ -729,6 +753,12 @@ func pluginInstallationDomainError(err error, mutation bool) (int, string) {
 		status, code = http.StatusConflict, "plugin_installation_revision_conflict"
 	case errors.Is(err, ErrIdempotencyConflict):
 		status, code = http.StatusConflict, "plugin_installation_idempotency_conflict"
+	case errors.Is(err, ErrRequiredScopesMissing):
+		status, code = http.StatusUnprocessableEntity, "plugin_installation_required_scopes_missing"
+	case errors.Is(err, ErrScopeNotApproved):
+		status, code = http.StatusUnprocessableEntity, "plugin_installation_scope_not_approved"
+	case errors.Is(err, ErrApprovalStale):
+		status, code = http.StatusConflict, "plugin_installation_approval_stale"
 	case errors.Is(err, ErrConsentRequired), errors.Is(err, ErrFactRequired), errors.Is(err, ErrFactDenied):
 		status, code = http.StatusUnprocessableEntity, "plugin_installation_scope_approval_required"
 	case errors.Is(err, ErrPlatformPaused):

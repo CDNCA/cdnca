@@ -8,6 +8,8 @@ import { useSessionStore } from '../auth/session'
 import SiteBlockLogPage from '../pages/SiteBlockLogPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { tabPanelOf } from '../test/tabs'
+import { sitesApi, type SiteListResponse } from '../api/sites'
 
 const tenantId = '018f0000-0000-7000-8000-000000000010'
 const siteId = '018f0000-0000-7000-8000-000000000020'
@@ -27,6 +29,26 @@ describe('SiteBlockLogPage', () => {
     expect(container.querySelectorAll('.site-block-log-page .analytics-panel')).toHaveLength(1)
     expect(within(container.querySelector('.site-block-log-page > .analytics-panel') as HTMLElement)
       .getByTestId('block-state-current')).toBeInTheDocument()
+  })
+
+  // 选中页签 aria-controls 指向唯一一个含表格的面板（不再另有自建的 role=tabpanel），切换后跟着走。
+  it('renders each view inside the single tab panel its tab controls', async () => {
+    const actor = principal({ permissions: ['sites.read'] })
+    useSessionStore.getState().setSession(authResponse(actor), actor)
+    vi.spyOn(analyticsLogsApi, 'listCurrentBlocks').mockResolvedValue({ data: [], total_count: 0, snapshot_at: '2026-08-07T08:03:00Z' })
+    vi.spyOn(analyticsLogsApi, 'listCCBans').mockResolvedValue({ data: [], truncated: false })
+    const user = userEvent.setup()
+    renderWithProviders(<SiteBlockLogPage />)
+
+    expect(await screen.findByRole('tab', { name: '当前拉黑', selected: true })).toBeInTheDocument()
+    expect(within(tabPanelOf('当前拉黑')).getByTestId('block-state-current')).toBeInTheDocument()
+    expect(within(tabPanelOf('当前拉黑')).getByRole('table')).toBeInTheDocument()
+    expect(document.querySelectorAll('[role="tabpanel"]:not(.ant-tabs-tabpane)')).toHaveLength(0)
+
+    await user.click(screen.getByRole('tab', { name: 'CC 自动封禁' }))
+    await waitFor(() => expect(within(tabPanelOf('CC 自动封禁')).getByTestId('block-state-cc-bans')).toBeInTheDocument())
+    expect(tabPanelOf('当前拉黑')).toBeEmptyDOMElement()
+    expect(document.querySelectorAll('[role="tabpanel"]:not(.ant-tabs-tabpane)')).toHaveLength(0)
   })
 
   it('exposes the competitor current, count, and history tabs and applies the visible filters', async () => {
@@ -386,8 +408,14 @@ describe('SiteBlockLogPage', () => {
     renderWithProviders(<SiteBlockLogPage />)
 
     expect(await screen.findByText('192.0.2.10/32')).toBeInTheDocument()
+    // 按域名选网站，确认前显示域名与解锁范围。
+    vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [{ id: siteId, display_id: '42', domain: 'cdn.example.test', owner: { display_name: 'QA' } }], total: 1, page: 1, limit: 10 } as unknown as SiteListResponse)
     await user.click(screen.getByRole('button', { name: '解锁网站' }))
-    await user.type(within(await screen.findByRole('dialog')).getByPlaceholderText('请输入网站ID'), '42')
+    const site = within(await screen.findByRole('dialog')).getByRole('combobox', { name: '网站' })
+    await user.click(site)
+    await user.type(site, 'cdn.example')
+    await user.click(await screen.findByTitle('cdn.example.test（42） · QA'))
+    expect(screen.getByText('将解锁站点 cdn.example.test（42） 当前全部可解锁的拉黑记录。')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '确认解锁' }))
 
     expect(await screen.findByText('该网站 ID 在多个租户中重复，无法安全批量解锁。')).toBeInTheDocument()

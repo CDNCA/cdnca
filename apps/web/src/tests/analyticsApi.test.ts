@@ -217,7 +217,7 @@ describe('analytics API', () => {
     expect(new URL(String(fetchSpy.mock.calls[0][0]), 'https://web.test').pathname).toBe('/v1/analytics/top/ja4')
   })
 
-  it('sends referer rank domain sets and listen ports only to the rank contract', async () => {
+  it('sends domain sets and listen ports to both the rank and the summary contract', async () => {
     const rankResponse = {
       data: [{ key: '__unknown__', request_count: 2, response_bytes: 600 }],
       dimension: 'referer',
@@ -241,8 +241,16 @@ describe('analytics API', () => {
     expect(rankURL.searchParams.get('domain')).toBe(rankFilters.domain)
     expect(rankURL.searchParams.get('listen_port')).toBe('443')
     const summaryURL = new URL(String(fetchSpy.mock.calls[1][0]), 'https://web.test')
-    expect(summaryURL.searchParams.has('domain')).toBe(false)
-    expect(summaryURL.searchParams.has('listen_port')).toBe(false)
+    expect(summaryURL.pathname).toBe('/v1/analytics/summary')
+    expect(summaryURL.searchParams.get('domain')).toBe(rankFilters.domain)
+    expect(summaryURL.searchParams.get('listen_port')).toBe('443')
+  })
+
+  it('accepts null security counts on a summary only', async () => {
+    const narrowed = { ...summary, security_events: null, security_event_rows: null }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ data: narrowed, meta }))
+    await expect(analyticsApi.summary('token', 'tenant', { ...filters, domain: 'cdn.example.test' }))
+      .resolves.toEqual({ data: narrowed, meta })
   })
 
   it.each([
@@ -251,6 +259,8 @@ describe('analytics API', () => {
     { label: 'wrong metric version', response: { data: { ...summary, metric_version: 2 }, meta }, call: 'summary' },
     { label: 'negative metric', response: { data: { ...summary, total_bytes: -1 }, meta }, call: 'summary' },
     { label: 'extra trend property', response: { data: [{ hour: meta.from, ...summary, sql: 'secret' }], meta }, call: 'trend' },
+    { label: 'half-null security counts', response: { data: { ...summary, security_event_rows: null }, meta }, call: 'summary' },
+    { label: 'null trend security counts', response: { data: [{ hour: meta.from, ...summary, security_events: null, security_event_rows: null }], meta }, call: 'trend' },
   ])('rejects a strict response with $label', async ({ response, call }) => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(response))
 

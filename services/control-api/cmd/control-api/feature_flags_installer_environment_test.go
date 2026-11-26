@@ -40,6 +40,7 @@ func TestNativeInstallerFeatureFlagsLoad(t *testing.T) {
 		pairs = append(pairs, match[0], base64.StdEncoding.EncodeToString(raw))
 	}
 	pairs = append(pairs, "${CONTROL_ORIGIN}", "https://control.example.test:8443",
+		"${CONTROL_DOMAIN}", "control.example.test",
 		"${INSTALLATION_ID}", "11111111-1111-4111-8111-111111111111")
 	replacer := strings.NewReplacer(pairs...)
 	prefixes := []string{"SYSTEM_SETTINGS_RUNTIME_", "HTTP_POLICY_RUNTIME_", "CHALLENGE_POLICY_",
@@ -54,6 +55,11 @@ func TestNativeInstallerFeatureFlagsLoad(t *testing.T) {
 		resolved := replacer.Replace(line)
 		if strings.Contains(resolved, "${") {
 			t.Fatalf("installer setting has an unbound placeholder: %s", line)
+		}
+		if strings.HasPrefix(name, "ACCOUNT_RECOVERY_") {
+			_, value, _ := strings.Cut(resolved, "=")
+			value = strings.TrimPrefix(strings.TrimSuffix(value, "'"), "'")
+			resolved = name + "=" + strings.ReplaceAll(value, `\"`, `"`)
 		}
 		if _, duplicate := environment[name]; duplicate {
 			t.Fatalf("installer writes %s twice", name)
@@ -90,12 +96,15 @@ func TestNativeInstallerFeatureFlagsLoad(t *testing.T) {
 		t.Fatalf("identity verification issuer must load disabled: %v", err)
 	}
 	recovery, err := loadAccountRecoveryRuntimeConfigFromEnv(os.LookupEnv)
-	if err != nil || recovery.Enabled {
-		t.Fatalf("account recovery must load disabled: %v", err)
+	if err != nil || !recovery.Enabled || len(recovery.DigestKey) != 32 || recovery.DispatchKeys == nil ||
+		recovery.RecoveryURL != "https://control.example.test:8443/dashboard/reset-password" ||
+		len(recovery.PlatformHosts) != 1 || recovery.PlatformHosts[0] != "control.example.test" {
+		t.Fatalf("installer account recovery configuration: %+v, %v", recovery, err)
 	}
 	if registration, err := loadAccountRegistrationRuntimeConfigFromEnv(recovery, os.LookupEnv); err != nil || registration.Enabled {
 		t.Fatalf("account registration must load disabled: %v", err)
 	}
+	recovery.clearSecrets()
 	// fix-flags2 E1: the webhook runtime needs NATS credentials + CA the local
 	// NATS does not have, so the installer writes it off explicitly.
 	if environment["PLUGIN_WEBHOOK_RUNTIME_ENABLED"] != "false" {

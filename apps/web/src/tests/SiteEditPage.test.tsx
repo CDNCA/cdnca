@@ -2,10 +2,11 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { Route, Routes, useNavigate } from 'react-router-dom'
-import { beforeEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
 
 import { cachePoliciesApi, type CachePolicyView } from '../api/cachePolicies'
 import { originRoutingApi, ORIGIN_ROUTING_SCHEMA } from '../api/siteOriginRouting'
+import { siteOriginStatusApi, type SiteOriginPoolStatus } from '../api/siteOriginStatus'
 import type { SiteDetail } from '../api/sites'
 import { useSessionStore, type SessionUpdate } from '../auth/session'
 import i18n from '../i18n'
@@ -160,6 +161,18 @@ async function commitEdits() {
   await act(async () => { (document.activeElement as HTMLElement | null)?.blur() })
 }
 
+// 负载方式是下拉（源站负载方式），打开后按选项标题选择。
+async function openBalance(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('combobox', { name: '源站负载方式' }))
+}
+async function balanceOption(name: string) {
+  return (await screen.findAllByTitle(name)).find((node) => node.classList.contains('ant-select-item-option'))!
+}
+async function pickBalance(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await openBalance(user)
+  await user.click(await balanceOption(name))
+}
+
 function renderEdit(path = '/site/site-1/edit') {
   let queryClient: QueryClient | undefined
   const result = renderWithProviders(
@@ -282,10 +295,11 @@ describe('SiteEditPage basic configuration', () => {
       expect(screen.queryByRole('combobox', { name: moved })).not.toBeInTheDocument()
     }
     expect(screen.queryByRole('heading', { name: '回源转发' })).not.toBeInTheDocument()
-    // 负载方式 is cards with their use case, no select and no line below it.
-    expect(screen.getByRole('radio', { name: '轮询' })).toBeChecked()
-    expect(screen.getByText('按权重轮流，最通用')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: '源站负载方式' })).not.toBeInTheDocument()
+    // 负载方式 is one compact select; the chosen method's explanation sits behind (?).
+    expect(screen.getByRole('combobox', { name: '源站负载方式' })).toBeInTheDocument()
+    expect(screen.getByTitle('轮询', { exact: true })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: '轮询' })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /^请求按源站权重依次轮流转发/ })).toBeInTheDocument()
     expect(screen.getByText('新增源站')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '批量编辑访问域名' })).toBeEnabled()
     expect(screen.queryByText('CNAME 模式')).not.toBeInTheDocument()
@@ -326,7 +340,8 @@ describe('SiteEditPage basic configuration', () => {
     renderEdit()
     await screen.findByRole('heading', { name: 'www.example.com' })
 
-    await user.click(screen.getByRole('switch', { name: '健康检查' }))
+    // 基本配置页签是懒加载的：等开关出现再点（单独运行本用例时懒加载块还没缓存）。
+    await user.click(await screen.findByRole('switch', { name: '健康检查' }))
     await commitEdits()
 
     expect((await screen.findAllByText('操作成功'))[0]).toBeInTheDocument()
@@ -1109,71 +1124,77 @@ describe('SiteEdit review closure session identity and live permissions', () => 
     },
   )
 
+  // a write refused for permission keeps the readable site.
   it.each([
     ['basic', 'permission_denied'],
     ['basic', 'forbidden'],
     ['origin', 'permission_denied'],
     ['origin', 'forbidden'],
   ] as const)(
-    'makes a %s PATCH %s denial terminal for the current session lineage',
+    'keeps the details and drafts after a %s PATCH %s denial and turns read-only while reads are allowed',
     async (section, code) => {
-      const session = setSiteSession({ accessToken: `site-edit-terminal-${section}-${code}-a` })
-      let detailReads = 0
+      const session = setSiteSession({ accessToken: `site-edit-write-denied-${section}-${code}` })
       const rawMessage = `private ${section} ${code} policy detail`
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      const isMe = (input: unknown) => String(input).includes('/v1/auth/me')
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
         if (init?.method === 'PATCH') {
           return Promise.resolve(jsonResponse({ error: { code, message: rawMessage } }, 403))
         }
-        detailReads += 1
+        if (isMe(input)) return Promise.resolve(jsonResponse({ ...session.actor, permissions: ['sites.read'] }))
         return Promise.resolve(jsonResponse(detail))
       })
       const user = userEvent.setup()
       const { queryClient } = renderEdit()
       const detailKey = ['site-detail', session.owner, 'site-1'] as const
-      const mutationKey = ['site-edit-save', session.owner, 'site-1'] as const
       await screen.findByRole('heading', { name: 'www.example.com' })
 
+      const domain = await screen.findByLabelText('域名')
       if (section === 'basic') {
-        const domain = await screen.findByLabelText('域名')
         await user.clear(domain)
         await user.type(domain, 'terminal-denial.example.com')
       } else {
-        await user.click(await screen.findByRole('radio', { name: '随机' }))
+        await pickBalance(user, '随机')
       }
       await commitEdits()
 
-      expect(await screen.findByText(i18n.t('sites:edit.errors.forbiddenTitle'))).toBeInTheDocument()
-      expect(screen.getByText(i18n.t('sites:edit.errors.permission_denied'))).toBeInTheDocument()
+      expect((await screen.findAllByText('你的权限已变化，当前无法修改'))[0]).toBeInTheDocument()
+      await waitFor(() => expect(useSessionStore.getState().principal?.permissions).toEqual(['sites.read']))
+      expect(useSessionStore.getState().sessionEpoch).toBe(session.sessionEpoch)
+      expect(screen.queryByText(i18n.t('sites:edit.errors.forbiddenTitle'))).not.toBeInTheDocument()
+      // the title keeps the saved primary domain, not the refused draft's.
+      expect(screen.getByRole('heading', { level: 1, name: 'www.example.com' })).toBeInTheDocument()
+      expect(screen.getAllByText(i18n.t('sites:edit.readOnly.title'))[0]).toBeInTheDocument()
       expect(screen.queryByText(rawMessage)).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '使用同一请求重试' })).not.toBeInTheDocument()
-      expect(queryClient.getQueryState(detailKey)).toBeUndefined()
-      await waitFor(() =>
-        expect(queryClient.getMutationCache().findAll({ mutationKey, exact: true })).toHaveLength(0),
-      )
-      if (section === 'origin') expect(sessionStorage.getItem(originRetryKey)).toBeNull()
-      const requestsBeforeRefresh = fetchSpy.mock.calls.length
-
-      act(() => {
-        setSiteSession({
-          accessToken: `site-edit-terminal-${section}-${code}-b`,
-          update: 'refresh',
-        })
-      })
+      expect(queryClient.getQueryData(detailKey)).toEqual(detail)
+      expect(await screen.findByRole('button', { name: '新增源站信息' })).toBeDisabled()
+      expect(domain).toBeDisabled()
+      if (section === 'basic') {
+        expect(domain).toHaveValue('terminal-denial.example.com')
+      } else {
+        expect(screen.getAllByTitle('随机').some((node) => node.classList.contains('ant-select-selection-item'))).toBe(true)
+        expect(sessionStorage.getItem(originRetryKey)).toBeNull()
+      }
+      // Not retried, and the session permissions were read once.
       await act(async () => { await Promise.resolve() })
-      expect(useSessionStore.getState().sessionEpoch).toBe(session.sessionEpoch)
-      expect(fetchSpy).toHaveBeenCalledTimes(requestsBeforeRefresh)
-      expect(screen.getByText(i18n.t('sites:edit.errors.forbiddenTitle'))).toBeInTheDocument()
-
-      act(() => {
-        setSiteSession({ accessToken: `site-edit-terminal-${section}-${code}-fresh` })
-      })
-      expect(await screen.findByRole('heading', { name: 'www.example.com' })).toBeInTheDocument()
-      expect(detailReads).toBe(2)
-      expect(authorization(fetchSpy.mock.calls.at(-1)?.[1])).toBe(
-        `Bearer site-edit-terminal-${section}-${code}-fresh`,
-      )
+      expect(fetchSpy.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1)
+      expect(fetchSpy.mock.calls.filter(([input]) => isMe(input))).toHaveLength(1)
     },
   )
+
+  it('still shows the read denial when the detail read answers 403', async () => {
+    setSiteSession({ accessToken: 'site-edit-read-denied' })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      error: { code: 'permission_denied', message: 'private read policy detail' },
+    }, 403))
+    renderEdit()
+
+    expect(await screen.findByText(i18n.t('sites:edit.errors.forbiddenTitle'))).toBeInTheDocument()
+    expect(screen.getByText(i18n.t('sites:edit.errors.permission_denied'))).toBeInTheDocument()
+    expect(screen.queryByText('private read policy detail')).not.toBeInTheDocument()
+    expect(screen.queryByText('你的权限已变化，当前无法修改')).not.toBeInTheDocument()
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
 
   it('keeps an entitlement 403 recoverable and uses the latest token for a new save attempt', async () => {
     const session = setSiteSession({ accessToken: 'site-edit-entitlement-a' })
@@ -1196,7 +1217,7 @@ describe('SiteEdit review closure session identity and live permissions', () => 
     await user.type(domain, 'entitlement.example.com')
     await commitEdits()
 
-    expect(await screen.findByText('操作被拒绝（错误码 entitlement_required）')).toBeInTheDocument()
+    expect((await screen.findByText('操作被拒绝', { selector: '.cdnca-feedback-title > span' })).closest('.cdnca-feedback')).toHaveTextContent('错误码：entitlement_required')
     expect(screen.queryByText(i18n.t('sites:edit.errors.forbiddenTitle'))).not.toBeInTheDocument()
     expect(screen.queryByText('private entitlement detail')).not.toBeInTheDocument()
     act(() => {
@@ -1946,7 +1967,7 @@ describe('SiteEditPage editing', () => {
     const ipv6 = (await screen.findByRole('switch', { name: SHARED }))
     const before = ipv6.getAttribute('aria-checked')
     await user.click(ipv6)
-    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
+    expect((await screen.findByText('操作被拒绝', { selector: '.cdnca-feedback-title > span' })).closest('.cdnca-feedback')).toHaveTextContent('错误码：validation_failed')
     await waitFor(() => expect(screen.getByRole('switch', { name: SHARED })).toHaveAttribute('aria-checked', before!))
   })
 
@@ -1969,7 +1990,7 @@ describe('SiteEditPage editing', () => {
     await user.clear(ports)
     await user.type(ports, '8081')
     await act(async () => refuse!(jsonResponse({ error: { code: 'validation_failed', message: 'refused' } }, 422)))
-    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
+    expect((await screen.findByText('操作被拒绝', { selector: '.cdnca-feedback-title > span' })).closest('.cdnca-feedback')).toHaveTextContent('错误码：validation_failed')
     expect(ports).toHaveValue('8081')
     await waitFor(() => expect(screen.getByRole('switch', { name: SHARED })).toHaveAttribute('aria-checked', before!))
   })
@@ -1991,7 +2012,7 @@ describe('SiteEditPage editing', () => {
     const backups = screen.getByRole('textbox', { name: i18n.t('siteOriginForwarding:fields.backupOrigins') })
     await user.type(backups, '192.0.2.20:80')
     await act(async () => refuse!(jsonResponse({ error: { code: 'validation_failed', message: 'refused' } }, 422)))
-    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
+    expect((await screen.findByText('操作被拒绝', { selector: '.cdnca-feedback-title > span' })).closest('.cdnca-feedback')).toHaveTextContent('错误码：validation_failed')
     expect(backups).toHaveValue('192.0.2.20:80')
   })
 
@@ -2023,7 +2044,25 @@ describe('SiteEditPage editing', () => {
       <Route path="/site/publications" element={<div>发布记录占位</div>} />
     </Routes>, ['/site/site-1/edit'])
     await screen.findByRole('heading', { name: 'www.example.com' })
+    // 原生 href 带 basename，复制或新标签打开也进控制台。
+    expect(screen.getByTestId('site-edit-publications')).toHaveAttribute('href', '/site/publications')
     await user.click(screen.getByTestId('site-edit-publications'))
+    expect(await screen.findByText('发布记录占位')).toBeInTheDocument()
+  })
+
+  it('the publication records link carries the router basename and leaves modifier clicks to the browser', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse(detail)))
+    renderWithProviders(<Routes>
+      <Route path="/site/:id/edit" element={<SiteEditPage />} />
+      <Route path="/site/publications" element={<div>发布记录占位</div>} />
+    </Routes>, ['/dashboard/site/site-1/edit'], '/dashboard')
+    await screen.findByRole('heading', { name: 'www.example.com' })
+    const link = screen.getByTestId('site-edit-publications')
+    expect(link).toHaveAttribute('href', '/dashboard/site/publications')
+    expect(fireEvent.click(link, { ctrlKey: true })).toBe(true)
+    expect(screen.queryByText('发布记录占位')).toBeNull()
+    expect(fireEvent.click(link)).toBe(false)
     expect(await screen.findByText('发布记录占位')).toBeInTheDocument()
   })
 
@@ -2212,7 +2251,7 @@ describe('SiteEditPage editing', () => {
     await user.clear(domain)
     await user.type(domain, 'retry.example.com')
     await commitEdits()
-    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
+    expect((await screen.findByText('操作被拒绝', { selector: '.cdnca-feedback-title > span' })).closest('.cdnca-feedback')).toHaveTextContent('错误码：validation_failed')
     expect(screen.queryByText('配置无效')).not.toBeInTheDocument()
     // the refused value went back; editing again sends a new attempt
     await waitFor(() => expect(domain).toHaveValue('www.example.com'))
@@ -2244,7 +2283,8 @@ describe('SiteEditPage editing', () => {
 
     await user.click(screen.getByRole('button', { name: '返回网站列表' }))
     expect(confirm).toHaveBeenCalledWith('当前页面有未保存的修改，确定离开吗？')
-    expect(screen.getByRole('heading', { name: 'dirty.example.com' })).toBeInTheDocument()
+    expect(screen.getByLabelText('域名')).toHaveValue('dirty.example.com')
+    expect(screen.queryByRole('heading', { name: 'dirty.example.com' })).not.toBeInTheDocument()
   })
 })
 
@@ -2277,7 +2317,7 @@ describe('SiteEditPage origin pool editing', () => {
     await user.type(weight, '25')
     // The dialog's 确定 saves the origin list; the balance chosen meanwhile waits for that save.
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
-    await user.click(await screen.findByRole('radio', { name: '最少连接' }))
+    await pickBalance(user, '最少连接')
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2))
     const stored = JSON.parse(sessionStorage.getItem(originRetryKey) ?? 'null') as {
@@ -2322,7 +2362,7 @@ describe('SiteEditPage origin pool editing', () => {
     const user = userEvent.setup()
     renderEdit()
     await screen.findByRole('heading', { name: 'www.example.com' })
-    await user.click(await screen.findByRole('radio', { name: '最少连接' }))
+    await pickBalance(user, '最少连接')
     await commitEdits()
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2))
@@ -2348,7 +2388,7 @@ describe('SiteEditPage origin pool editing', () => {
     expect(sessionStorage.getItem(originRetryKey)).toBe(persisted)
     expect(screen.getByRole('button', { name: '使用同一请求重试' })).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '新增源站信息' })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: '最少连接' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '源站负载方式' })).toBeDisabled()
     const domain = screen.getByLabelText('域名')
     expect(domain).toBeDisabled()
     fireEvent.change(domain, { target: { value: 'different-request.example.com' } })
@@ -2372,7 +2412,7 @@ describe('SiteEditPage origin pool editing', () => {
     const user = userEvent.setup()
     const first = renderEdit()
     await screen.findByRole('heading', { name: 'www.example.com' })
-    await user.click(await screen.findByRole('radio', { name: '随机' }))
+    await pickBalance(user, '随机')
     await commitEdits()
     expect(await screen.findByText('无法连接服务，请稍后重试')).toBeInTheDocument()
     const firstWrite = fetchSpy.mock.calls[1][1]
@@ -2399,7 +2439,8 @@ describe('SiteEditPage origin pool editing', () => {
     const user = userEvent.setup()
     renderEdit()
     await screen.findByRole('heading', { name: 'www.example.com' })
-    const hash = await screen.findByRole('radio', { name: 'IP 哈希' })
+    await openBalance(user)
+    const hash = await balanceOption('IP 哈希')
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('quota exceeded')
     })
@@ -2467,21 +2508,20 @@ describe('SiteEditPage origin pool editing', () => {
 
 describe('SiteEdit review closure stable origin retry identity', () => {
   it.each(['permission_denied', 'forbidden'] as const)(
-    'settles a restored cross-epoch origin retry when the old request returns terminal %s',
+    'settles a restored cross-epoch origin retry when the old request returns terminal %s and keeps the site readable',
     async (code) => {
       const latePatch = deferred<Response>()
       const sessionA = setSiteSession({ accessToken: `site-origin-terminal-${code}-a` })
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) =>
         init?.method === 'PATCH' ? latePatch.promise : Promise.resolve(jsonResponse(detail)),
       )
+      const patches = () => fetchSpy.mock.calls.filter(([, init]) => init?.method === 'PATCH')
       const user = userEvent.setup()
       const { queryClient } = renderEdit()
       await screen.findByRole('heading', { name: 'www.example.com' })
-      await user.click(await screen.findByRole('radio', { name: '随机' }))
+      await pickBalance(user, '随机')
       await commitEdits()
-      await waitFor(() =>
-        expect(fetchSpy.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1),
-      )
+      await waitFor(() => expect(patches()).toHaveLength(1))
       const persisted = sessionStorage.getItem(originRetryKey)
       expect(persisted).not.toBeNull()
 
@@ -2505,34 +2545,35 @@ describe('SiteEdit review closure stable origin retry identity', () => {
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
       })
 
-      expect(await screen.findByText(i18n.t('sites:edit.errors.forbiddenTitle'))).toBeInTheDocument()
-      expect(screen.getByText(i18n.t('sites:edit.errors.permission_denied'))).toBeInTheDocument()
+      // Only this write lost its retry; the site stays readable in session B.
+      expect((await screen.findAllByText('你的权限已变化，当前无法修改'))[0]).toBeInTheDocument()
+      expect(screen.queryByText(i18n.t('sites:edit.errors.forbiddenTitle'))).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'www.example.com' })).toBeInTheDocument()
       expect(screen.queryByText(rawMessage)).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '使用同一请求重试' })).not.toBeInTheDocument()
       expect(sessionStorage.getItem(originRetryKey)).toBe(persisted)
-      expect(queryClient.getQueryState(['site-detail', sessionA.owner, 'site-1'])).toBeUndefined()
-      expect(queryClient.getQueryState(['site-detail', sessionB.owner, 'site-1'])).toBeUndefined()
-      for (const session of [sessionA, sessionB]) {
-        expect(queryClient.getMutationCache().findAll({
-          mutationKey: ['site-edit-save', session.owner, 'site-1'],
-          exact: true,
-        })).toHaveLength(0)
-      }
+      expect(queryClient.getQueryData(['site-detail', sessionB.owner, 'site-1'])).toEqual(detail)
+      expect(queryClient.getMutationCache().findAll({
+        mutationKey: ['site-edit-save', sessionB.owner, 'site-1'],
+        exact: true,
+      })).toHaveLength(0)
 
       act(() => {
         setSiteSession({ accessToken: `site-origin-terminal-${code}-refresh`, update: 'refresh' })
       })
       fireEvent.click(retry)
       await act(async () => { await Promise.resolve() })
-      expect(fetchSpy).toHaveBeenCalledTimes(3)
-      expect(screen.getByText(i18n.t('sites:edit.errors.forbiddenTitle'))).toBeInTheDocument()
+      expect(patches()).toHaveLength(1)
+      expect(screen.getByRole('heading', { name: 'www.example.com' })).toBeInTheDocument()
 
+      // A later lineage does not restore the refused write as a retry.
       act(() => {
         setSiteSession({ accessToken: `site-origin-terminal-${code}-next-epoch` })
       })
+      expect(await screen.findByRole('heading', { name: 'www.example.com' })).toBeInTheDocument()
       await act(async () => { await Promise.resolve() })
-      expect(fetchSpy).toHaveBeenCalledTimes(3)
-      expect(screen.getByText(i18n.t('sites:edit.errors.forbiddenTitle'))).toBeInTheDocument()
+      expect(patches()).toHaveLength(1)
+      expect(screen.queryByText(i18n.t('sites:edit.errors.forbiddenTitle'))).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '使用同一请求重试' })).not.toBeInTheDocument()
     },
   )
@@ -2642,7 +2683,9 @@ describe('autodefense-ux 页头接入受阻的查看原因', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(blocked))
     renderEdit('/site/site-1/edit?tab=advanced')
     const reason = await screen.findByTestId('site-edit-access-reason')
-    expect(screen.getByTestId('site-edit-access')).toHaveTextContent('接入受阻：CNAME 未生成')
+    // 53 补充：主状态已写“接入受阻”，接入标签只写未通过的那一项。
+    expect(screen.getByTestId('site-edit-status')).toHaveTextContent('接入受阻')
+    expect(screen.getByTestId('site-edit-access')).toHaveTextContent(/^CNAME 未生成$/)
     expect(screen.queryByTestId('site-access-card')).not.toBeInTheDocument()
     await userEvent.click(reason)
     expect(await screen.findByTestId('site-access-card')).toBeInTheDocument()
@@ -2655,4 +2698,149 @@ describe('autodefense-ux 页头接入受阻的查看原因', () => {
     expect(await screen.findByTestId('site-edit-access')).toBeInTheDocument()
     expect(screen.queryByTestId('site-edit-access-reason')).not.toBeInTheDocument()
   })
+})
+
+// 首装验收（1.0.35）：「配置已同步」只说节点配置，不推导站点健康；接入、源站分别展示，全部就绪才「正常」。
+describe('首装验收 页头主状态与配置同步分开', () => {
+  const originStatus = (overall: 'healthy' | 'unhealthy'): SiteOriginPoolStatus => ({
+    site_id: 'site-1', failback_mode: 'auto', active_level: 0, overall, failback_ready: false,
+    levels: [{ level: 0, status: overall }],
+    origins: [{ position: 0, host: 'example.com', port: 80, level: 0, enabled: true, status: overall,
+      reason: overall === 'unhealthy' ? 'status_5xx' : '', checked_at: '2026-11-20T08:00:00Z' }],
+    switched_at: null, checked_at: '2026-11-20T08:00:00Z',
+  })
+  const serve = (site: SiteDetail, overall: 'healthy' | 'unhealthy') => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse(site))
+    vi.mocked(siteOriginStatusApi.get).mockResolvedValue(originStatus(overall))
+  }
+  afterEach(() => { vi.mocked(siteOriginStatusApi.get).mockImplementation(() => new Promise(() => {})) })
+  const ready = { state: 'ready' as const, checks: [] }
+
+  it('synced but CNAME not generated: the headline is not 正常', async () => {
+    authenticate('admin')
+    serve({ ...detail, access_readiness: { state: 'blocked', checks: [
+      { code: 'cname_generated', ok: false, detail: 'dns_provider_not_configured', checked_at: null }] } }, 'unhealthy')
+    renderEdit()
+    expect(await screen.findByTestId('site-edit-sync-status')).toHaveTextContent('配置已同步')
+    expect(screen.getByTestId('site-edit-status')).toHaveTextContent('接入受阻')
+    expect(screen.getByTestId('site-edit-status')).not.toHaveTextContent('正常')
+    expect(screen.getByTestId('site-edit-access')).toHaveTextContent(/^CNAME 未生成$/)
+    expect(screen.getByTestId('site-edit-access-reason')).toBeInTheDocument()
+    expect(await screen.findByTestId('site-edit-origin')).toHaveTextContent('源站异常：返回 5xx')
+  })
+
+  it('synced, CNAME ready, origin unhealthy: 源站异常 with a way to the origin settings', async () => {
+    authenticate('admin')
+    serve({ ...detail, access_readiness: ready }, 'unhealthy')
+    renderEdit()
+    const settings = await screen.findByTestId('site-edit-origin-settings')
+    expect(screen.getByTestId('site-edit-status')).toHaveTextContent('源站异常')
+    expect(screen.getByTestId('site-edit-sync-status')).toHaveTextContent('配置已同步')
+    await userEvent.click(settings)
+    await waitFor(() => expect(document.querySelector('[data-site-edit-tab="origin"]')).not.toHaveAttribute('hidden'))
+  })
+
+  it('everything ready: 正常', async () => {
+    authenticate('admin')
+    serve({ ...detail, access_readiness: ready }, 'healthy')
+    renderEdit()
+    expect(await screen.findByTestId('site-edit-origin')).toHaveTextContent('源站正常')
+    expect(screen.getByTestId('site-edit-status')).toHaveTextContent('正常')
+    expect(screen.queryByTestId('site-edit-origin-settings')).not.toBeInTheDocument()
+  })
+})
+
+// CNAME 失败但配置已同步时，页头、基础设置都不把访问状态说成「正常」。
+// 接入状态只在页头说一次，卡里只列未通过项，基本配置不再有「本页摘要」状态按钮。
+describe('基本配置的接入状态', () => {
+  it('CNAME failed but synced: one access status, the failing check with its action, no duplicated summary', async () => {
+    authenticate('user')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({
+      ...detail,
+      status_state: 'normal', status_code: 200, status_recovery: null,
+      basic: { ...detail.basic, cname: '', cname_state: 'failed', cname_failure_code: 'dns_provider_not_configured' },
+      access_readiness: { state: 'blocked', checks: [
+        { code: 'line_group', ok: true, detail: '', checked_at: null },
+        { code: 'cname_generated', ok: false, detail: 'dns_provider_not_configured', checked_at: null }] },
+    }))
+    renderEdit()
+    expect(await screen.findByTestId('site-edit-sync-status')).toHaveTextContent('配置已同步')
+    expect(screen.getByTestId('site-edit-status')).toHaveTextContent('接入受阻')
+    expect(screen.getByTestId('site-edit-status')).not.toHaveTextContent('正常')
+
+    const basicTab = document.querySelector<HTMLElement>('[data-site-edit-tab="basic"]')!
+    const card = await within(basicTab).findByTestId('site-access-card')
+    // 「接入受阻」只出现在页头
+    expect(within(basicTab).queryByText('接入受阻')).not.toBeInTheDocument()
+    expect(within(basicTab).queryByRole('region', { name: '本页摘要' })).not.toBeInTheDocument()
+    // 未通过项与动作展开在卡里，已通过的「线路」收起
+    const failing = card.querySelector<HTMLElement>('#site-access-check-cname_generated')!
+    expect(failing).toHaveClass('is-failed')
+    expect(within(failing).getByRole('button', { name: '联系管理员（提交工单）' })).toBeInTheDocument()
+    const passed = card.querySelector('details.site-access-passed') as HTMLDetailsElement
+    expect(passed.open).toBe(false)
+    expect(passed).toHaveTextContent('已通过 1 项')
+    expect(passed).toContainElement(card.querySelector('#site-access-check-line_group'))
+
+    const basicStatus = screen.getByTestId('site-basic-status')
+    expect(basicStatus).toHaveTextContent('站点已启用')
+    expect(basicStatus).not.toHaveTextContent('正常')
+  })
+})
+
+// 重新生成后以服务端状态为准，不残留本地「生成中」。
+describe('重新生成 CNAME 以服务端状态为准', () => {
+  const failedBasic = { ...detail.basic, cname: '', cname_state: 'failed' as const, cname_failure_code: 'cname_label_exhausted', cname_task_id: 'task-1' }
+  const failedDetail: SiteDetail = { ...detail, basic: failedBasic }
+
+  async function regenerateFromDialog(user: ReturnType<typeof userEvent.setup>) {
+    const field = await screen.findByText((_, element) => element?.classList.contains('site-basic-cname') ?? false)
+    await user.click(within(field).getByRole('button', { name: /生成失败/ }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'CNAME 生成失败' })).getByRole('button', { name: '重新生成' }))
+  }
+
+  it('a PATCH answer that is already failed shows the failure and its reason at once', async () => {
+    authenticate('admin', ['sites.read', 'sites.manage', 'dns.manage'])
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.method === 'PATCH') {
+        return jsonResponse({ ...failedDetail, version: 2,
+          basic: { ...failedBasic, cname_failure_code: 'dns_provider_not_configured', cname_task_id: 'task-2' } })
+      }
+      return jsonResponse(failedDetail)
+    })
+    const user = userEvent.setup()
+    renderEdit()
+    await screen.findByRole('heading', { name: 'www.example.com' })
+    await regenerateFromDialog(user)
+
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(true))
+    const body = JSON.parse(String(fetchSpy.mock.calls.find(([, init]) => init?.method === 'PATCH')?.[1]?.body)) as { changes: { cname_regenerate?: boolean } }
+    expect(body.changes.cname_regenerate).toBe(true)
+    const field = document.querySelector<HTMLElement>('.site-basic-cname')!
+    await waitFor(() => expect(within(field).getByRole('button', { name: 'CNAME 生成失败', description: /尚未配置 DNS 服务商/ })).toBeInTheDocument())
+    expect(field).not.toHaveTextContent('生成中')
+    expect(screen.queryByText('CNAME 生成中')).not.toBeInTheDocument()
+  })
+
+  it('a pending PATCH answer is polled until the server says failed', async () => {
+    authenticate('admin', ['sites.read', 'sites.manage', 'dns.manage'])
+    let server: SiteDetail = failedDetail
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.method === 'PATCH') {
+        // 服务端先回生成中，后台随即判定失败（失败不推高版本号）。
+        const pending = { ...failedDetail, version: 2, basic: { ...failedBasic, cname_state: 'pending' as const, cname_failure_code: null, cname_task_id: 'task-2' } }
+        server = { ...pending, basic: { ...pending.basic, cname_state: 'failed', cname_failure_code: 'cname_package_domain_missing' } }
+        return jsonResponse(pending)
+      }
+      return jsonResponse(server)
+    })
+    const user = userEvent.setup()
+    renderEdit()
+    await screen.findByRole('heading', { name: 'www.example.com' })
+    await regenerateFromDialog(user)
+
+    const field = document.querySelector<HTMLElement>('.site-basic-cname')!
+    await waitFor(() => expect(within(field).getByRole('button', { name: 'CNAME 生成失败', description: /所选套餐未绑定 CNAME 域名/ })).toBeInTheDocument(), { timeout: 6_000 })
+    expect(field).not.toHaveTextContent('生成中')
+  }, 10_000)
 })

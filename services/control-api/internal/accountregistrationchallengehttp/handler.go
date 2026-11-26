@@ -13,6 +13,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
+	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +26,20 @@ const (
 	maximumMaxRequestBytes = 64 << 10
 	defaultRetryAfter      = time.Minute
 	maximumRetryAfter      = time.Hour
+	// BindingCookieName(channel, challenge) carries the browser binding of
+	// one code: set by the create response, sent back
+	// only to the verification route. Behind a CDN without origin
+	// authentication sending and checking a code come from different edges,
+	// so the code is bound to the browser, not the source. One cookie per
+	// challenge, so two sign-up tabs of one browser keep their own
+	//.
+	BindingCookiePrefix = "cdnca_reg_challenge_bind_"
 )
+
+// BindingCookieName is the binding cookie of one challenge.
+func BindingCookieName(channel string, challengeID uuid.UUID) string {
+	return BindingCookiePrefix + channel + "_" + challengeID.String()
+}
 
 var (
 	errInvalidRequest     = errors.New("invalid account registration challenge HTTP request")
@@ -191,9 +205,16 @@ func (handler *Handler) create(
 		IdempotencyKey: idempotencyKey, RequestID: requestID,
 	})
 	if err != nil {
+		// Why the CAPTCHA was refused goes to the refusal log only.
+		refusalreason.Record(request.Context(), refusalreason.Of(err))
 		handler.writeServiceError(writer, requestID, err)
 		return
 	}
+	http.SetCookie(writer, &http.Cookie{
+		Name: BindingCookieName(body.VerificationChannel, result.ChallengeID), Value: result.Binding, Path: VerificationPath,
+		Expires: result.ExpiresAt.UTC(), MaxAge: max(int(time.Until(result.ExpiresAt).Seconds()), 1),
+		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
+	})
 	handler.writeJSON(writer, http.StatusAccepted, challengeResponse{Data: challengeResponseData{
 		Accepted: true, ChallengeID: result.ChallengeID,
 		ExpiresAt: result.ExpiresAt.UTC().Format(time.RFC3339Nano), Replayed: result.Replayed,
@@ -211,17 +232,23 @@ func (handler *Handler) verify(
 		handler.writeServiceError(writer, requestID, err)
 		return
 	}
+	var binding string
+	if cookie, err := request.Cookie(BindingCookieName(body.VerificationChannel, body.ChallengeID)); err == nil {
+		binding = cookie.Value
+	}
 	result, err := handler.service.Verify(request.Context(), accountregistrationchallenge.VerifyInput{
 		ScopeID: trusted.ScopeID, ChallengeID: body.ChallengeID, Username: body.Username,
 		Email: body.Email, Phone: body.Phone, Channel: body.VerificationChannel,
-		Source: trusted.SourceIP, OTP: body.OTP, IdempotencyKey: idempotencyKey, RequestID: requestID,
+		Source: trusted.SourceIP, Binding: binding, OTP: body.OTP, IdempotencyKey: idempotencyKey, RequestID: requestID,
 	})
 	if err != nil {
 		handler.writeServiceError(writer, requestID, err)
 		return
 	}
-	// One cookie per channel, so email and SMS can both be proved.
-	cookie, err := accountregistrationproof.NewChannelReferenceCookie(body.VerificationChannel, result.Reference, result.ExpiresAt)
+	// One cookie per channel, so email and SMS can both be proved,
+	// and per challenge, so two sign-up tabs do not replace each other's
+	// proof: registration names the challenge.
+	cookie, err := accountregistrationproof.NewChannelReferenceCookie(body.VerificationChannel, body.ChallengeID, result.Reference, result.ExpiresAt)
 	if err != nil {
 		handler.writeServiceError(writer, requestID, accountregistrationchallenge.ErrChallengeUnavailable)
 		return
@@ -247,8 +274,11 @@ func (handler *Handler) decodeJSON(writer http.ResponseWriter, request *http.Req
 func (handler *Handler) writeServiceError(writer http.ResponseWriter, requestID string, err error) {
 	status, code := http.StatusServiceUnavailable, "account_registration_challenge_unavailable"
 	switch {
+	case errors.Is(err, accountregistrationchallenge.ErrHumanInvalid):
+		// the image CAPTCHA / Turnstile check failed (the page asks for a new
+		// one); other 422 are the details or the code
+		status, code = http.StatusUnprocessableEntity, "account_registration_human_invalid"
 	case errors.Is(err, accountregistrationchallenge.ErrInvalidInput),
-		errors.Is(err, accountregistrationchallenge.ErrHumanInvalid),
 		errors.Is(err, accountregistrationchallenge.ErrOTPInvalid), errors.Is(err, errInvalidRequest):
 		status, code = http.StatusUnprocessableEntity, "account_registration_challenge_invalid"
 	case errors.Is(err, accountregistrationchallenge.ErrRegistrationDisabled):

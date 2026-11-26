@@ -178,7 +178,7 @@ describe('tenant tasks page', () => {
       ...expected,
       confirm: {
         cancelTitle: expect.any(String), cancelDescription: expect.any(String),
-        retryTitle: expect.any(String), retryDescription: expect.any(String),
+        retryTitleNamed: expect.any(String), retryConfirmNamed: expect.any(String), retryDescription: expect.any(String),
       },
       notices: {
         cancelSucceeded: expect.any(String), retrySucceeded: expect.any(String),
@@ -221,7 +221,7 @@ describe('tenant tasks page', () => {
     expect(page).toHaveStyle({ width: 'auto', minWidth: 0, maxWidth: '100%', overflowX: 'hidden' })
     expect(page).not.toHaveStyle({ width: '100%' })
     await user.click(screen.getByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
     await waitFor(() => expect(within(drawer).getByText('site:tenant.test')).toBeInTheDocument())
     await user.click(within(drawer).getByRole('button', { name: '取消任务' }))
     await user.click(within((await screen.findByText('确认取消任务')).closest<HTMLElement>('[role="dialog"]')!)
@@ -258,8 +258,8 @@ describe('tenant tasks page', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/task'])
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
 
     expect(await screen.findByText('任务已重新入队')).toBeInTheDocument()
     expect(fetchSpy.mock.calls.some(([input, init]) =>
@@ -332,7 +332,7 @@ describe('tenant tasks page', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/task'])
     await user.click(await screen.findByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
 
     expect(await within(drawer).findByText('任务详情加载失败')).toBeInTheDocument()
     expect(within(drawer).getByText('服务响应无效，请稍后重试')).toBeInTheDocument()
@@ -373,7 +373,7 @@ describe('tenant tasks page', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/task'])
     await user.click(await screen.findByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
 
     expect(await within(drawer).findByText('任务详情加载失败')).toBeInTheDocument()
     expect(within(drawer).getByText('服务响应无效，请稍后重试')).toBeInTheDocument()
@@ -462,8 +462,8 @@ describe('tenant tasks page', () => {
 
     renderWithProviders(<AdminTasksPage />, ['/task'])
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
 
     expect(await screen.findByText('操作结果待确认', OUTCOME_BAR)).toBeInTheDocument()
     expect(screen.queryByText('任务已重新入队')).not.toBeInTheDocument()
@@ -533,12 +533,12 @@ describe('tenant tasks page', () => {
     await user.click(screen.getByRole('button', { name: '查询' }))
     await user.click(await screen.findByRole('button', { name: '下一页' }))
     await user.click(screen.getByRole('button', { name: '详情' }))
-    const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
+    const drawer = await screen.findByRole('dialog', { name: '任务详情' })
     await user.click(await within(drawer).findByRole('button', { name: '下一页尝试记录' }))
     await user.click(await within(drawer).findByRole('button', { name: '下一页逐项结果' }))
     await user.click(within(drawer).getByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
     expect(await screen.findByText('操作结果待确认', OUTCOME_BAR)).toBeInTheDocument()
 
     const readsBeforeRefresh = [list, detail, attempts, results].map((spy) => spy.mock.calls.length)
@@ -652,8 +652,8 @@ describe('tenant tasks page', () => {
     await user.click(await screen.findByRole('button', { name: '下一页' }))
     expect(await screen.findByText('第 2 页')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '详情' }))
-    expect(await screen.findByRole('dialog', { name: '子任务详情' })).toBeInTheDocument()
-    await user.click(within(screen.getByRole('dialog', { name: '子任务详情' }))
+    expect(await screen.findByRole('dialog', { name: '任务详情' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('dialog', { name: '任务详情' }))
       .getByRole('button', { name: '取消任务' }))
     expect(await screen.findByText('确认取消任务')).toBeInTheDocument()
     const ownerAFamilies = queryClient.getQueryCache().getAll()
@@ -681,7 +681,7 @@ describe('tenant tasks page', () => {
     expect(screen.getByText('第 1 页')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '任务类型' })).toHaveValue('')
     expect(screen.getByLabelText('资源标识')).toHaveValue('')
-    expect(screen.queryByRole('dialog', { name: '子任务详情' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '任务详情' })).not.toBeInTheDocument()
     expect(screen.queryByText('确认取消任务')).not.toBeInTheDocument()
     const resetParams = vi.mocked(jobsApi.list).mock.calls.filter(([token]) => token === 'tenant-read-token-b').at(-1)![2]
     expect(resetParams.kind).toBeUndefined()
@@ -765,8 +765,8 @@ describe('tenant tasks page', () => {
 
     renderTenantTasksWithQueryClient(queryClient)
     await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-    await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-      .getByRole('button', { name: '确认' }))
+    await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+      .getByRole('button', { name: /^确认重试/ }))
     expect(await screen.findByText('操作结果待确认', OUTCOME_BAR)).toBeInTheDocument()
     expect(queryClient.getMutationCache().getAll().map((mutation) => mutation.options.mutationKey))
       .toContainEqual(['job-command', ...ownerA, 'tenant'])
@@ -821,8 +821,8 @@ describe('tenant tasks page', () => {
 
       renderTenantTasksWithQueryClient(queryClient)
       await user.click(await screen.findByRole('button', { name: '重试失败任务' }))
-      await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
-        .getByRole('button', { name: '确认' }))
+      await user.click(within((await screen.findByText(/^重试任务「/)).closest<HTMLElement>('[role="dialog"]')!)
+        .getByRole('button', { name: /^确认重试/ }))
       expect(queryClient.getMutationCache().getAll().map((mutation) => mutation.options.mutationKey))
         .toContainEqual(['job-command', ...ownerA, 'tenant'])
 

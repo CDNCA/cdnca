@@ -52,7 +52,7 @@ func TestHandlerLogsStorageClassAndCommitStage(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	assertHandlerError(t, response, http.StatusInternalServerError, "internal_error")
-	for _, want := range []string{`"stage":"resume.apply"`, `"error_class":"storage"`, `"sqlstate":"42501"`, `"committed":false`} {
+	for _, want := range []string{`"stage":"resume.apply"`, `"error_class":"storage"`, `"sqlstate":"42501"`} {
 		if !strings.Contains(logs.String(), want) {
 			t.Fatalf("log missing %s: %s", want, logs.String())
 		}
@@ -61,28 +61,16 @@ func TestHandlerLogsStorageClassAndCommitStage(t *testing.T) {
 		t.Fatalf("log leaked database message or idempotency key: %s", logs.String())
 	}
 
-	// 写入已提交、上报失败：结果未知，标 committed=true。
-	logs.Reset()
-	domain.err = StageError("resume.report", fmt.Errorf("%w: report license lifecycle", ErrResultUnknown))
-	response = httptest.NewRecorder()
-	request = authenticatedHandlerRequest(http.MethodPost,
-		"/v1/tenant-scopes/"+tenantID.String()+"/plugin-installations/"+authorizationID.String()+"/resume", bytes.NewBufferString(`{}`))
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("If-Match", `"7"`)
-	request.Header.Set("Idempotency-Key", "plugin-resume-diagnosis")
-	handler.ServeHTTP(response, request)
-	assertHandlerError(t, response, http.StatusServiceUnavailable, "plugin_installation_result_unknown")
-	if !strings.Contains(logs.String(), `"stage":"resume.report"`) || !strings.Contains(logs.String(), `"committed":true`) {
-		t.Fatalf("report-stage log=%s", logs.String())
-	}
 }
 
 func TestProductionResumeTagsStages(t *testing.T) {
 	domain, repository, resolver, actor := productionResumeFixture(StatusDisabled, PausedByInstallation)
 	head := repository.head
+	// 本机写入已提交后上报失败不再是 resume.report 结果未知，而是成功 + license_sync=pending。
 	resolver.reportErr = errors.New("license unreachable")
-	_, err := domain.Mutate(context.Background(), actor, resumeRequest(actor, head))
-	if !errors.Is(err, ErrResultUnknown) || StageOf(err) != "resume.report" {
-		t.Fatalf("report failure err=%v stage=%q", err, StageOf(err))
+	result, err := domain.Mutate(context.Background(), actor, resumeRequest(actor, head))
+	if err != nil || StageOf(err) != "" || result.Installation.Status != StatusEnabled || result.LicenseSync != LicenseSyncPending {
+		t.Fatalf("report failure err=%v stage=%q status=%s sync=%s", err, StageOf(err), result.Installation.Status,
+			result.LicenseSync)
 	}
 }

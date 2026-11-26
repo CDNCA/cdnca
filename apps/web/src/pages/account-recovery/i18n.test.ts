@@ -3,12 +3,11 @@ import i18n from '../../i18n'
 const recoveryKeys = [
   'pageTitle', 'requestPageTitle', 'resetPageTitle', 'requestTab', 'confirmTab',
   'usernameLabel', 'usernamePlaceholder', 'usernameRequired', 'usernameTooLong',
-  'sendInstructions', 'accepted', 'requestAgain', 'invalidLink', 'requestNewLink',
+  'sendInstructions', 'accepted', 'requestAgain', 'invalidLinkTitle', 'invalidLink', 'requestNewLink',
   'newPasswordLabel', 'newPasswordPlaceholder', 'newPasswordRequired',
   'passwordTooShort', 'passwordTooLong', 'confirmPasswordLabel',
   'confirmPasswordPlaceholder', 'confirmPasswordRequired', 'passwordMismatch',
-  'resetPassword', 'returnToLogin', 'footerLinks', 'officialSite', 'community',
-  'contactUs', 'copyright',
+  'resetPassword', 'returnToLogin', 'copyright',
 ] as const
 
 const errorKeys = [

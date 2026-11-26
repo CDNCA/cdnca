@@ -11,9 +11,8 @@ import {
   dnsReconcileApi,
   type DNSReconcileTask,
 } from '../api/dnsReconcile'
-import { dnsApi } from '../api/dns'
-import { dnsZonesApi } from '../api/dnsZones'
-import { sitesApi } from '../api/sites'
+import { dnsHubApi } from '../api/dnsHub'
+import { sitesApi, type SiteAutoDNSStatus, type SiteListItem } from '../api/sites'
 import { useSessionStore } from '../auth/session'
 import i18n from '../i18n'
 import { authResponse, principal } from '../test/fixtures'
@@ -88,14 +87,15 @@ function renderPage(
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } }),
   strict = false,
   state?: unknown,
+  search = '',
 ) {
   const page = (
     <ConfigProvider button={{ autoInsertSpace: false }}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={[{ pathname: `/site/${siteID}/dns-reconcile`, state }]}>
+          <MemoryRouter initialEntries={[{ pathname: `/site/${siteID}/dns-reconcile`, search, state }]}>
             <Routes>
-              <Route path="/site/:id/dns-reconcile" element={<DnsReconcilePage />} />
+              <Route path="/site/:id/dns-reconcile" element={<><DnsReconcilePage /><SearchProbe /></>} />
               <Route path="/site/list" element={<BackProbe />} />
             </Routes>
           </MemoryRouter>
@@ -109,21 +109,41 @@ function renderPage(
   }
 }
 
-// 区域与 DNS 账号读接口：默认返回一个托管 example.com 的区域（版本 7），页面据此自动带出区域与版本。
+// 网站与 DNS 账号域名清单读接口：网站用自有账号 own-cloudflare，账号域名清单里有 example.com。
 const providerID = '55555555-5555-4555-8555-555555555555'
-const zone = {
-  id: zoneID, scope_id: tenantID, provider_id: providerID, name: 'example.com', status: 'draft' as const, version: 7,
-  created_at: '2026-08-07T00:00:00Z', updated_at: '2026-08-07T00:00:00Z',
+const autoDNS: SiteAutoDNSStatus = {
+  provider_id: providerID, provider_name: 'own-cloudflare', state: 'failed', failure_code: 'zone_not_hosted', attempts: 3,
+  results: [], updated_at: '2026-10-27T00:00:00Z',
 }
-function mockZones(items = [zone]) {
-  vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [{
-    id: providerID, scope_id: tenantID, name: 'own-cloudflare', provider_type: 'cloudflare', credentials_configured: true,
-    status: 'verified', version: 1, created_at: '2026-08-07T00:00:00Z', updated_at: '2026-08-07T00:00:00Z',
-  }] } as Awaited<ReturnType<typeof dnsApi.list>>)
-  return vi.spyOn(dnsZonesApi, 'listZones').mockResolvedValue({ items })
+function siteItem(domains = ['www.example.com'], auto_dns: SiteAutoDNSStatus | null = autoDNS): SiteListItem {
+  return {
+    id: siteID, display_id: '12', version: 1, owner: null, domain: domains[0], domains,
+    listen_ports: ['80'], origins: [], cname: 'abc.cdn.example.net', https_enabled: false, package: null, group_name: null, region: null,
+    status: 'active', listener_state: { ipv6_desired_enabled: false, ipv6_runtime_state: 'disabled' },
+    lock: { locked: false, reason: null, locked_at: null, operator: null }, created_at: '2026-08-07T00:00:00Z', auto_dns,
+  } as unknown as SiteListItem
+}
+function mockSite(items = [siteItem()]) {
+  return vi.spyOn(sitesApi, 'list').mockResolvedValue({ items, total: items.length, page: 1, limit: 1 })
+}
+function hosted(apexes: string[]) {
+  return {
+    accounts: [], next_cursor: '',
+    items: apexes.map((apex) => ({ provider_id: providerID, provider_name: 'own-cloudflare', provider_type: 'cloudflare', apex, record_count: null })),
+  }
+}
+function mockZones(apexes = ['example.com']) {
+  mockSite()
+  return vi.spyOn(dnsHubApi, 'domains').mockResolvedValue(hosted(apexes))
+}
+const snapshot = { zone_id: zoneID, revision: 7, records: [] }
+const planned = { ...result, status: 'dry_run' as const, provider: snapshot }
+
+function SearchProbe() {
+  return <output aria-label="location-search">{useLocation().search}</output>
 }
 
-// 带解析检测上下文进入，等区域自动匹配完成后点「检查并生成修复方案」。
+// 带解析检测上下文进入，等托管区域匹配完成后点「检查并生成修复方案」。
 async function checkAndPlan(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText('example.com')
   await user.click(screen.getByRole('button', { name: '检查并生成修复方案' }))
@@ -156,7 +176,7 @@ describe('DnsReconcilePage', () => {
   // 期望值默认带入 CNAME，区域与版本按域名自动匹配；返回保留筛选与页码。
   it('opens a read-only diagnosis with values derived from the site and DNS account', async () => {
     authenticate()
-    mockZones()
+    const hostedSpy = mockZones(['example.org', 'example.com'])
     const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun')
     const applySpy = vi.spyOn(dnsReconcileApi, 'apply')
     const user = userEvent.setup()
@@ -166,11 +186,12 @@ describe('DnsReconcilePage', () => {
     expect(screen.getByText('所选 DNS 账号下没有托管这个域名。')).toBeInTheDocument()
     expect(screen.getByText('abc.cdn.example.net')).toBeInTheDocument()
     expect(await screen.findByText('example.com')).toBeInTheDocument()
+    expect(screen.getByText('own-cloudflare')).toBeInTheDocument()
+    expect(hostedSpy).toHaveBeenCalledWith('dns-token', { provider_id: providerID, q: 'example.com', limit: 500 })
     expect(dryRunSpy).not.toHaveBeenCalled()
     expect(applySpy).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: /高级设置/ }))
     expect(screen.getByLabelText('应指向的值')).toHaveValue('abc.cdn.example.net')
-    expect(screen.getByLabelText('区域版本')).toHaveValue('7')
     await user.click(screen.getByRole('button', { name: '返回解析检测' }))
     expect(await screen.findByText('back:dnsCheck:failed:2')).toBeInTheDocument()
   })
@@ -181,10 +202,14 @@ describe('DnsReconcilePage', () => {
     const user = userEvent.setup()
     renderPage(undefined, false, contextState)
     await screen.findByText('example.com')
-    for (const label of ['TTL', '权重', '最长等待生效', '权威 DNS 服务器', 'DNS 区域', '区域版本']) {
+    for (const label of ['TTL', '权重', '最长等待生效', '权威 DNS 服务器']) {
       expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
     }
     await user.click(screen.getByRole('button', { name: /高级设置/ }))
+    // 区域与版本由服务端按 DNS 账号解析，不出现让用户填的区域 ID / 版本。
+    for (const label of ['DNS 区域', 'DNS 区域 ID', '区域版本']) {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
+    }
     const ttl = screen.getByLabelText('TTL')
     expect(ttl).toHaveValue('300')
     expect(ttl).toHaveAccessibleDescription(/1–604800 秒/)
@@ -192,27 +217,62 @@ describe('DnsReconcilePage', () => {
     expect(screen.getByLabelText('权重')).toHaveAccessibleDescription(/0–100/)
   })
 
-  it('asks for a domain first when opened without a check context', async () => {
+  // 从网站行进入只带网站 ID。
+  it('enters the diagnosis directly for a single-domain site opened from the site row', async () => {
     authenticate()
-    const zonesSpy = mockZones()
+    const listSpy = mockSite([siteItem(['www.example.com'])])
+    vi.spyOn(dnsHubApi, 'domains').mockResolvedValue(hosted(['example.com']))
     const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun')
-    const listSpy = vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [{
-      id: siteID, display_id: '12', version: 1, owner: null, domain: 'www.example.com', domains: ['www.example.com', 'img.example.com'],
-      listen_ports: ['80'], origins: [], cname: 'abc.cdn.example.net', https_enabled: false, package: null, group_name: null, region: null,
-      status: 'active', listener_state: { ipv6_desired_enabled: false, ipv6_runtime_state: 'disabled' },
-      lock: { locked: false, reason: null, locked_at: null, operator: null }, created_at: '2026-08-07T00:00:00Z', auto_dns: null,
-    }] as unknown as Awaited<ReturnType<typeof sitesApi.list>>['items'], total: 1, page: 1, limit: 20 })
+    renderPage()
+    expect(await screen.findByText('www.example.com 的当前情况')).toBeInTheDocument()
+    expect(listSpy).toHaveBeenCalledWith('dns-token', expect.objectContaining({ site_ids: siteID, limit: 1 }))
+    expect(screen.queryByRole('heading', { name: '选择要检查的域名' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '换一个域名' })).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('location-search')).toHaveTextContent('?domain=www.example.com')
+    expect(dryRunSpy).not.toHaveBeenCalled()
+  })
+
+  it('lists only the site domains for a multi-domain site and keeps choosing another one', async () => {
+    authenticate()
+    mockSite([siteItem(['www.example.com', 'img.example.com'], null)])
+    const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun')
     const user = userEvent.setup()
     renderPage()
     expect(await screen.findByRole('heading', { name: '选择要检查的域名' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '检查并生成修复方案' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: '应指向的值' })).not.toBeInTheDocument()
-    expect(zonesSpy).not.toHaveBeenCalled()
-    expect(listSpy).toHaveBeenCalledWith('dns-token', expect.objectContaining({ site_ids: siteID }))
+    expect(document.body).not.toHaveTextContent(/选好后会自动带出|其他网站/)
     await user.click(screen.getByRole('combobox', { name: '域名' }))
-    await user.click(await screen.findByText('img.example.com'))
+    expect(await screen.findAllByRole('option')).toHaveLength(2)
+    await user.click(await screen.findByTitle('img.example.com'))
     expect(await screen.findByText('img.example.com 的当前情况')).toBeInTheDocument()
+    expect(screen.getByLabelText('location-search')).toHaveTextContent('?domain=img.example.com')
     expect(screen.getByText('这个网站没有配置用于自动添加记录的 DNS 账号。')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '换一个域名' }))
+    expect(await screen.findByRole('heading', { name: '选择要检查的域名' })).toBeInTheDocument()
+    expect(dryRunSpy).not.toHaveBeenCalled()
+  })
+
+  it('restores the domain from the URL and ignores a domain of another site', async () => {
+    authenticate()
+    mockSite([siteItem(['www.example.com', 'img.example.com'])])
+    vi.spyOn(dnsHubApi, 'domains').mockResolvedValue(hosted(['example.com']))
+    const { unmount } = renderPage(undefined, false, undefined, '?domain=img.example.com')
+    expect(await screen.findByText('img.example.com 的当前情况')).toBeInTheDocument()
+    unmount()
+    renderPage(undefined, false, undefined, '?domain=www.other.example')
+    expect(await screen.findByRole('heading', { name: '选择要检查的域名' })).toBeInTheDocument()
+    expect(screen.queryByText('www.other.example 的当前情况')).not.toBeInTheDocument()
+  })
+
+  it('shows an unreadable state for a site that is missing or outside the tenant', async () => {
+    authenticate()
+    mockSite([])
+    const hostedSpy = vi.spyOn(dnsHubApi, 'domains')
+    const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun')
+    renderPage(undefined, false, contextState)
+    expect(await screen.findByText('无法读取这个网站')).toBeInTheDocument()
+    expect(screen.queryByText('www.example.com 的当前情况')).not.toBeInTheDocument()
+    expect(hostedSpy).not.toHaveBeenCalled()
     expect(dryRunSpy).not.toHaveBeenCalled()
   })
 
@@ -226,28 +286,79 @@ describe('DnsReconcilePage', () => {
 
   it('shows field-level errors next to invalid advanced settings without a request', async () => {
     authenticate()
-    mockZones([])
+    mockZones()
     const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun')
     const user = userEvent.setup()
     renderPage(undefined, false, contextState)
-    expect(await screen.findByText('未找到托管这个域名的区域')).toBeInTheDocument()
+    await screen.findByText('example.com')
     await user.click(screen.getByRole('button', { name: /高级设置/ }))
     await user.clear(screen.getByLabelText('TTL'))
     await user.type(screen.getByLabelText('TTL'), '0')
     await user.clear(screen.getByLabelText('权重'))
     await user.type(screen.getByLabelText('权重'), '101')
     await user.click(screen.getByRole('button', { name: '检查并生成修复方案' }))
-    expect(await screen.findByText('有 4 项设置需要修改，已在下方标出。')).toBeInTheDocument()
+    expect(await screen.findByText('有 2 项设置需要修改，已在下方标出。')).toBeInTheDocument()
     expect(screen.getByLabelText('TTL')).toHaveAccessibleDescription(/请输入 1–604800 之间的整数/)
     expect(screen.getByLabelText('权重')).toHaveAccessibleDescription(/请输入 0–100 之间的整数/)
-    expect(screen.getByLabelText('DNS 区域')).toHaveAccessibleDescription(/请选择托管这个域名的 DNS 区域/)
-    expect(screen.getByLabelText('区域版本')).toHaveAttribute('aria-invalid', 'true')
     expect(dryRunSpy).not.toHaveBeenCalled()
+  })
+
+  // 解析正常时直接只读检查，不展开表单、不带区域。
+  it('checks directly when the domain already resolves, letting the server resolve the zone', async () => {
+    authenticate()
+    mockZones()
+    const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...planned, plan: { ...planned.plan, operations: [] } })
+    const user = userEvent.setup()
+    renderPage(undefined, false, { dnsCheck: { ...checkContext, task: { ...checkContext.task, state: 'done', code: undefined }, resolve: 'done' } })
+    expect(await screen.findByText('解析正常：域名已指向分配的 CNAME')).toBeInTheDocument()
+    await checkAndPlan(user)
+    expect(await screen.findByText('解析已经正确，不需要修改。')).toBeInTheDocument()
+    expect(dryRunSpy).toHaveBeenCalledTimes(1)
+    expect(dryRunSpy.mock.calls[0][2]).not.toHaveProperty('provider')
+    expect(screen.queryByLabelText('TTL')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '刷新托管范围' })).not.toBeInTheDocument()
+  })
+
+  it('offers refreshing the hosted domains when the zone is missing', async () => {
+    authenticate()
+    mockSite()
+    const hostedSpy = vi.spyOn(dnsHubApi, 'domains').mockResolvedValueOnce(hosted([])).mockResolvedValue(hosted(['example.com']))
+    const refreshSpy = vi.spyOn(dnsHubApi, 'refresh')
+      .mockResolvedValueOnce({ results: [{ provider_id: providerID, state: 'throttled', domain_count: 0, error: '', retry_after_seconds: 45 }] })
+    const user = userEvent.setup()
+    renderPage(undefined, false, contextState)
+    expect(await screen.findByText('未找到托管这个域名的区域')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '刷新托管范围' }))
+    expect(refreshSpy).toHaveBeenCalledWith('dns-token', providerID)
+    expect(await screen.findByText('45 秒后可再次刷新')).toBeInTheDocument()
+    expect(await screen.findByText('example.com')).toBeInTheDocument()
+    expect(hostedSpy).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('button', { name: '刷新托管范围' })).not.toBeInTheDocument()
+  })
+
+  it('shows the refresh entry again when the check finds no hosted zone', async () => {
+    authenticate()
+    mockZones()
+    vi.spyOn(dnsReconcileApi, 'dryRun').mockRejectedValue(new ApiError('zone', 404, 'dns_reconcile_zone_not_found'))
+    const user = userEvent.setup()
+    renderPage(undefined, false, contextState)
+    await checkAndPlan(user)
+    expect(await screen.findByText('这个 DNS 账号下没有托管该域名的区域。')).toBeInTheDocument()
+    expect(screen.getByText('未找到托管这个域名的区域')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '刷新托管范围' })).toBeInTheDocument()
+  })
+
+  it('hides the refresh entry from members who cannot manage DNS', async () => {
+    authenticate(actor({ permissions: ['dns.read'] }))
+    mockZones([])
+    renderPage(undefined, false, contextState)
+    expect(await screen.findByText('未找到托管这个域名的区域')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '刷新托管范围' })).not.toBeInTheDocument()
   })
   it('presents the plan as records to add, change and delete with before and after values', async () => {
     authenticate()
     mockZones()
-    const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...result, status: 'dry_run', plan: { ...result.plan, operations: [
+    const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...planned, plan: { ...result.plan, operations: [
       { sequence: 1, action: 'create', name: 'www.example.com', type: 'CNAME', value: 'abc.cdn.example.net', ttl: 300, reason: 'missing' },
       ...result.plan.operations,
       { sequence: 3, action: 'delete', record_id: 'record-2', name: 'www.example.com', type: 'A', value: '192.0.2.8', ttl: 600, reason: 'conflict' },
@@ -263,8 +374,9 @@ describe('DnsReconcilePage', () => {
     expect(screen.getByText('旧记录会在新记录各地生效、你再次确认之后才删除。')).toBeInTheDocument()
     expect(dryRunSpy.mock.calls[0][2]).toMatchObject({
       name: 'www.example.com', expected: [{ type: 'CNAME', values: ['abc.cdn.example.net'] }], authoritative_ns: [],
-      ttl: 300, weight: 0, propagation_window_seconds: 900, provider: { zone_id: zoneID, revision: 7, records: [] },
+      ttl: 300, weight: 0, propagation_window_seconds: 900,
     })
+    expect(dryRunSpy.mock.calls[0][2]).not.toHaveProperty('provider')
     // 内部用语只在「技术详情」里。
     expect(document.body).not.toHaveTextContent(/确定性|显式提交|持久化任务|前置修订/)
   })
@@ -277,13 +389,13 @@ describe('DnsReconcilePage', () => {
     const dryRunSpy = vi.spyOn(dnsReconcileApi, 'dryRun')
       .mockReturnValueOnce(pending)
       .mockRejectedValueOnce(new ApiError('private detail', 503, 'dns_reconcile_unavailable'))
-      .mockResolvedValueOnce({ ...result, status: 'dry_run', plan: { ...result.plan, operations: [] } })
+      .mockResolvedValueOnce({ ...planned, plan: { ...result.plan, operations: [] } })
     const user = userEvent.setup()
     renderPage(undefined, false, contextState)
     await checkAndPlan(user)
     expect(await screen.findByLabelText('正在读取当前解析并生成修复方案')).toBeInTheDocument()
     await act(async () => {
-      resolvePending({ ...result, status: 'dry_run' })
+      resolvePending(planned)
       await Promise.resolve()
     })
     await waitFor(() => expect(screen.queryByLabelText('正在读取当前解析并生成修复方案')).not.toBeInTheDocument())
@@ -301,7 +413,7 @@ describe('DnsReconcilePage', () => {
   it('completes a dry-run under React StrictMode', async () => {
     authenticate()
     mockZones()
-    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...result, status: 'dry_run' })
+    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue(planned)
     const user = userEvent.setup()
     renderPage(undefined, true, contextState)
     await checkAndPlan(user)
@@ -311,7 +423,7 @@ describe('DnsReconcilePage', () => {
   it('submits a dry-run, applies, and retries an unknown apply with the same identity', async () => {
     authenticate()
     mockZones()
-    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...result, status: 'dry_run' })
+    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue(planned)
     const applySpy = vi.spyOn(dnsReconcileApi, 'apply')
       .mockRejectedValueOnce(new ApiError('private upstream', 503, 'dns_reconcile_result_unknown'))
       .mockResolvedValueOnce(task)
@@ -325,6 +437,8 @@ describe('DnsReconcilePage', () => {
     await waitFor(() => expect(applySpy).toHaveBeenCalledTimes(2))
     expect(applySpy.mock.calls[1]?.[3]).toEqual(applySpy.mock.calls[0]?.[3])
     expect(applySpy.mock.calls[0]?.[3].expectedRevision).toBe(7)
+    // 开始修复带回方案依据的服务商快照。
+    expect(applySpy.mock.calls[0]?.[2]).toMatchObject({ name: 'www.example.com', provider: snapshot })
     expect(await screen.findByText('新记录已在各地生效')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '确认生效并删除旧记录' })).toBeEnabled()
   })
@@ -337,7 +451,7 @@ describe('DnsReconcilePage', () => {
       const promise = new Promise<DNSReconcileTask>((done) => { resolve = done })
       return { promise, resolve }
     })()
-    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...result, status: 'dry_run' })
+    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue(planned)
     const getSpy = vi.spyOn(dnsReconcileApi, 'get').mockReturnValueOnce(deferredRead.promise)
     const user = userEvent.setup()
     const { queryClient } = renderPage(undefined, false, contextState)
@@ -357,7 +471,7 @@ describe('DnsReconcilePage', () => {
   })
 
   it('lets tenant administrators manage reconciliation while tenant viewers remain read-only', async () => {
-    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...result, status: 'dry_run' })
+    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue(planned)
     mockZones()
     const viewer = actor({ roles: ['tenant_viewer'], permissions: ['dns.read'] })
     authenticate(viewer)
@@ -432,7 +546,7 @@ describe('DnsReconcilePage', () => {
         },
       },
     }
-    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({ ...result, status: 'dry_run' })
+    vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue(planned)
     vi.spyOn(dnsReconcileApi, 'apply').mockResolvedValue(diagnosticTask)
     vi.spyOn(dnsReconcileApi, 'get').mockResolvedValue(diagnosticTask)
     mockZones()

@@ -54,7 +54,7 @@ export function publishFailureReason(t: Translate, exists: (key: string) => bool
   if (check.failed_node_count) {
     const reasons = (check.failed_node_reasons ?? []).map((code) => {
       const key = `publishFailure.nodeReasons.${code}`
-      return exists(`siteAccessReadiness:${key}`) ? t(key as 'title') : t('publishFailure.nodeReasons.default', { code })
+      return exists(`siteAccessReadiness:${key}`) ? t(key as 'title') : t('publishFailure.nodeReasons.default')
     }).join(t('publishFailure.separator'))
     return reasons ? t('publishFailure.count', { count: check.failed_node_count, reasons })
       : t('publishFailure.countOnly', { count: check.failed_node_count })
@@ -62,7 +62,7 @@ export function publishFailureReason(t: Translate, exists: (key: string) => bool
   if (check.failure_code) {
     const key = `publishFailure.requestReasons.${check.failure_code}`
     const reason = exists(`siteAccessReadiness:${key}`) ? t(key as 'title')
-      : t('publishFailure.requestReasons.default', { code: check.failure_code })
+      : t('publishFailure.requestReasons.default')
     return t('publishFailure.request', { reason })
   }
   return null

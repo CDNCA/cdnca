@@ -25,7 +25,6 @@ const zhCN = {
   },
   network: { region: '地区', nodes: '节点', online: '在线', unassigned: '未分配' },
   values: { placeholder: '—' },
-  settling: '最近 {{count}} 分钟数据仍在结算',
 } as const
 
 const enUS = {
@@ -51,7 +50,6 @@ const enUS = {
   },
   network: { region: 'Region', nodes: 'Nodes', online: 'Online', unassigned: 'Unassigned' },
   values: { placeholder: '—' },
-  settling: 'Data from the last {{count}} minutes is still settling',
 } as const
 
 function pseudoText(value: string): string {

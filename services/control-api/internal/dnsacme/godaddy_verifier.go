@@ -32,9 +32,7 @@ type GoDaddyProviderVerifier struct {
 }
 
 func NewGoDaddyProviderVerifier() *GoDaddyProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newGoDaddyProviderVerifier("", &http.Client{Transport: transport}, goDaddyVerifyTimeout)
+	return newGoDaddyProviderVerifier("", providerAPIClient(), goDaddyVerifyTimeout)
 }
 
 func newGoDaddyProviderVerifier(testEndpoint string, client *http.Client, timeout time.Duration) *GoDaddyProviderVerifier {

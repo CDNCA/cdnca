@@ -39,7 +39,7 @@ func TestSiteDefaultsAdminForUserAndFollowPort(t *testing.T) {
 	f.exec(`INSERT INTO site_groups(id,scope_id,name) VALUES($1,$2,'gb')`, foreign, f.b.scopeID)
 	key := f.key("admin-parity-foreign")
 	if _, err := f.sites.CreateUserDefault(ctx, admin, SiteUserDefaultCreateRequest{TargetScopeID: f.a.scopeID, OwnerUserID: f.a.userID,
-		Fields: SiteUserDefaultFields{SettingName: SiteDefaultHSTS, Value: "1", ScopeName: SiteDefaultScopeGroup, GroupID: &foreign},
+		Fields:         SiteUserDefaultFields{SettingName: SiteDefaultHSTS, Value: "1", ScopeName: SiteDefaultScopeGroup, GroupID: &foreign},
 		IdempotencyKey: key, RequestID: key}); err == nil {
 		t.Fatal("another tenant's group accepted")
 	}

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 
 import { useSessionStore } from '../auth/session'
@@ -6,6 +6,7 @@ import { changeLocale } from '../i18n'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
 import L4RealtimeMonitorPage from './L4RealtimeMonitorPage'
+import { clearFilterUrlMemory } from './filterUrl'
 
 const tenantID = '018f0000-0000-7000-8000-000000000010'
 
@@ -56,6 +57,7 @@ describe('L4RealtimeMonitorPage access and locale', () => {
   beforeEach(async () => {
     await changeLocale('zh-CN')
     useSessionStore.getState().clearSession()
+    clearFilterUrlMemory()
   })
 
   afterEach(() => {
@@ -107,5 +109,66 @@ describe('L4RealtimeMonitorPage access and locale', () => {
     expect(url.searchParams.get('range')).toBe('custom')
     expect(new Date(url.searchParams.get('from')!).getTime()).toBe(new Date(new Date(url.searchParams.get('to')!).setHours(0, 0, 0, 0)).getTime())
     expect(url.searchParams.has('tenant_id')).toBe(false)
+  })
+
+  // 非法端口的错误挂在端口输入框上并聚焦，不发新请求；纠正后按端口查询。
+  it('marks an invalid port on its field and keeps the applied query', async () => {
+    authenticateAdmin()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(String(input).includes('/l4-realtime')
+      ? realtimeResponse(input) : new Response('{}', { status: 503, headers: { 'Content-Type': 'application/json' } })))
+    const realtimeCalls = () => fetchSpy.mock.calls.filter(([input]) => String(input).includes('/l4-realtime'))
+    renderWithProviders(<L4RealtimeMonitorPage />, ['/monitor/stream/realtime'])
+    await waitFor(() => expect(realtimeCalls().length).toBeGreaterThan(0))
+    const before = realtimeCalls().length
+
+    const port = screen.getByRole('textbox', { name: '端口' })
+    fireEvent.change(port, { target: { value: '65536' } })
+    fireEvent.click(screen.getByRole('button', { name: '查询' }))
+    expect(port).toHaveAttribute('aria-invalid', 'true')
+    expect(port).toHaveAccessibleDescription('请输入 1-65535 的端口。')
+    await waitFor(() => expect(port).toHaveFocus())
+    expect(realtimeCalls()).toHaveLength(before)
+
+    fireEvent.change(port, { target: { value: '443/TCP' } })
+    expect(port).not.toHaveAttribute('aria-invalid')
+    fireEvent.keyDown(port, { key: 'Enter', keyCode: 13 })
+    await waitFor(() => expect(realtimeCalls().some(([input]) => String(input).includes('listen_port=443'))).toBe(true))
+  })
+
+  // 读取成功但没有时间点时只给一条空态，不画零刻度和居中的 0。
+  it('shows one empty state instead of zero-only charts for an empty series', async () => {
+    authenticateTenant()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const body = await realtimeResponse(input).json() as Record<string, unknown>
+      return new Response(JSON.stringify({ ...body, totals: { sessions: 0, bytes_up: 0, bytes_down: 0, errors: 0 }, rows: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    renderWithProviders(<L4RealtimeMonitorPage />, ['/monitor/stream/realtime'])
+    expect(await screen.findByText('当前筛选范围内暂无四层实时数据')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: '带宽' })).toBeNull()
+    expect(document.querySelector('.l4-realtime-axis-label')).toBeNull()
+  })
+
+  // 页签、排行时段与带宽的已生效范围写进 URL，刷新后按它恢复并首查。
+  it('restores the ranking tab and its range from the URL', async () => {
+    authenticateTenant()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(realtimeResponse(input)))
+    renderWithProviders(<L4RealtimeMonitorPage />, ['/monitor/stream/realtime?view=ranking&ranking_range=30m'])
+    expect(await screen.findByRole('tab', { name: '端口排行', selected: true })).toBeInTheDocument()
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('/l4-realtime'))).toBe(true))
+    const url = new URL(String(fetchSpy.mock.calls.find(([input]) => String(input).includes('/l4-realtime'))![0]), 'https://cdnca.test')
+    expect(Date.parse(url.searchParams.get('to')!) - Date.parse(url.searchParams.get('from')!)).toBe(30 * 60_000)
+    expect(screen.getByRole('radio', { name: '近30分钟' })).toBeChecked()
+  })
+
+  it('restores the applied traffic range and ports from the URL', async () => {
+    authenticateTenant()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(realtimeResponse(input)))
+    renderWithProviders(<L4RealtimeMonitorPage />, ['/monitor/stream/realtime?range=last7d&port=443%2FTCP'])
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('/l4-realtime'))).toBe(true))
+    const url = new URL(String(fetchSpy.mock.calls.find(([input]) => String(input).includes('/l4-realtime'))![0]), 'https://cdnca.test')
+    expect(url.searchParams.get('listen_port')).toBe('443')
+    expect(url.searchParams.get('protocol')).toBe('tcp')
+    expect(Date.parse(url.searchParams.get('to')!) - Date.parse(url.searchParams.get('from')!)).toBeGreaterThan(6 * 86_400_000)
+    expect(screen.getByRole('textbox', { name: '端口' })).toHaveValue('443/TCP')
   })
 })

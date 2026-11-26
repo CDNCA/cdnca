@@ -217,10 +217,7 @@ func TestDNSLAProductionVerifierUsesFixedHTTPSDomainListEndpoint(t *testing.T) {
 	if dnslaVerifyEndpoint != "https://api.dns.la/api/domainList?pageIndex=1&pageSize=1" {
 		t.Fatalf("production endpoint = %q", dnslaVerifyEndpoint)
 	}
-	transport, ok := verifier.client.Transport.(*http.Transport)
-	if !ok || transport.Proxy != nil {
-		t.Fatalf("production transport = %#v; proxy must be disabled", verifier.client.Transport)
-	}
+	assertPlatformProxyClient(t, verifier.client)
 }
 
 func newDNSLATestVerifier(server *httptest.Server) *DNSLAProviderVerifier {

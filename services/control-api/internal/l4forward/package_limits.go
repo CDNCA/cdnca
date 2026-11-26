@@ -64,8 +64,9 @@ func requireStreamPorts(ctx context.Context, tx pgx.Tx, scopeID, ownerID uuid.UU
 	if used+requested <= limits.StreamPorts {
 		return nil
 	}
+	previous := int64(0)
 	if current != nil && current.PackageSubscriptionID != nil && *current.PackageSubscriptionID == subscriptionID {
-		previous := socketPorts(current.ListenPort, current.ListenPortEnd)
+		previous = socketPorts(current.ListenPort, current.ListenPortEnd)
 		for _, socket := range current.AdditionalListeners {
 			previous += socketPorts(socket.Port, socket.PortEnd)
 		}
@@ -73,7 +74,10 @@ func requireStreamPorts(ctx context.Context, tx pgx.Tx, scopeID, ownerID uuid.UU
 			return nil
 		}
 	}
-	return packageaddon.ErrQuotaExceeded
+	// used: the subscription's sockets before this save (this stream's own
+	// included when it already counts here); requested: what the save adds.
+	return &packageaddon.QuotaExceededError{Resource: packageaddon.QuotaResourceStreamPorts,
+		Limit: limits.StreamPorts, Used: used + previous, Requested: max(requested-previous, 0)}
 }
 
 // socketPorts is how many ports a listener reserves (a range: every port).

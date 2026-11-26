@@ -15,10 +15,10 @@ import {
   Space,
   Spin,
   Switch,
-  Tabs,
   type FormInstance,
   type FormRule,
 } from 'antd'
+import { Tabs } from '../components/Tabs'
 import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { ChevronDown, RefreshCw, RotateCcw, Save, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
@@ -40,7 +40,8 @@ import {
 import { useSessionStore } from '../auth/session'
 import AcmeCACredentialsCard from './system-settings/AcmeCACredentialsCard'
 import ConfigurationOverridesEditor from './system-settings/ConfigurationOverridesEditor'
-import { CategoryScopeNotice, PendingCategoriesNotice } from './system-settings/PendingCategories'
+import { FieldWithHelp } from '../components/FieldHelp'
+import { CurrentCategoryPending, PendingCategoriesNotice } from './system-settings/PendingCategories'
 import {
   formatByteSize,
   formatDuration,
@@ -71,7 +72,15 @@ type SaveAttempt = { ownerKey: string } & {
   }
 }[EditableCategory]
 
-type ArrayControlProps<T> = {
+// Form.Item 注入的 id / aria-invalid / aria-describedby 透传到真实输入，
+// 错误与输入关联，scrollToFirstError 才能聚焦到它。
+type FieldA11yProps = {
+  id?: string
+  'aria-invalid'?: boolean | 'true' | 'false'
+  'aria-describedby'?: string
+}
+
+type ArrayControlProps<T> = FieldA11yProps & {
   value?: T
   disabled?: boolean
   onChange?: (value: T) => void
@@ -79,6 +88,7 @@ type ArrayControlProps<T> = {
 }
 
 type PortRange = { from: number; to: number }
+type FieldHelpText = { label: string; tip: string }
 
 /**
  * A3-05/A3-06: text the user typed that does not parse. It stays in the form
@@ -163,6 +173,25 @@ function normalizeWriteValue(category: EditableCategory, values: SettingsFormVal
   return value
 }
 
+// 草稿与已保存值按规范化后的内容比较（对象键顺序不影响），
+// 改回原值即与未改动一样；含未挂载页签与区域及节点配置里已加入的设置。
+function sameContent(left: unknown, right: unknown): boolean {
+  if (left === right) return true
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object' || Array.isArray(left) !== Array.isArray(right)) return false
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  return [...keys].every((key) => sameContent((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]))
+}
+
+function draftDiffers(category: EditableCategory, values: SettingsFormValues | undefined, saved: SystemConfigurationDocument<EditableCategory>): boolean {
+  if (!values?.[category]) return false
+  try {
+    return !sameContent(normalizeWriteValue(category, values), normalizeWriteValue(category, formValues(saved)))
+  } catch {
+    // 草稿里有无法规范化的输入（字段校验会拒绝它），按已改动处理。
+    return true
+  }
+}
+
 function performSave(accessToken: string, attempt: SaveAttempt): Promise<SystemConfigurationDocument<EditableCategory>> {
   switch (attempt.category) {
     case 'nginx':
@@ -198,30 +227,30 @@ function integerRules(t: TFunction<'systemSettings'>, minimum: number, maximum: 
   return [{ required: true, type: 'integer', min: minimum, max: maximum, message: t('validation.integerRange', { minimum, maximum }) }]
 }
 
-function SectionIntro({ title, description }: { title: string; description: string }) {
+function SectionIntro({ title, description }: { title: string; description?: string }) {
   return <div className="configuration-section-intro">
     <h2>{title}</h2>
-    <p>{description}</p>
+    {description ? <p>{description}</p> : null}
   </div>
 }
 
 function ConfigCard({ title, description, action, wide = false, children }: {
   title: string
-  description: string
+  description?: string
   action?: ReactNode
   wide?: boolean
   children: ReactNode
 }) {
   return <section className={`configuration-card${wide ? ' configuration-card--wide' : ''}`}>
     <header className="configuration-card-header">
-      <div><h3>{title}</h3><p>{description}</p></div>
+      <div><h3>{title}</h3>{description ? <p>{description}</p> : null}</div>
       {action}
     </header>
     <div className="configuration-card-body">{children}</div>
   </section>
 }
 
-function NumberControl({ value, disabled, onChange, label, minimum, maximum, suffix, clampMaximum = true }: {
+function NumberControl({ value, disabled, onChange, label, minimum, maximum, suffix, clampMaximum = true, ...a11y }: FieldA11yProps & {
   value?: number | null
   disabled?: boolean
   onChange?: (value: number | null) => void
@@ -232,6 +261,7 @@ function NumberControl({ value, disabled, onChange, label, minimum, maximum, suf
   clampMaximum?: boolean
 }) {
   const input = <InputNumber
+    {...a11y}
     aria-label={label}
     value={value}
     disabled={disabled}
@@ -270,7 +300,7 @@ function parseIntegerDirective(value: string, minimum: number, maximum: number, 
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : null
 }
 
-function DirectiveTextControl<T>({ value, disabled, onChange, label, format, parse }: {
+function DirectiveTextControl<T>({ value, disabled, onChange, label, format, parse, ...a11y }: FieldA11yProps & {
   value?: T | InvalidInput
   disabled?: boolean
   onChange?: (value: T | InvalidInput) => void
@@ -301,19 +331,21 @@ function DirectiveTextControl<T>({ value, disabled, onChange, label, format, par
     onChange?.(parsed)
     setDraft(format(parsed))
   }
-  return <Input aria-label={label} value={draft} disabled={disabled} onChange={(event) => updateDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
+  return <Input {...a11y} aria-label={label} value={draft} disabled={disabled} onChange={(event) => updateDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
 }
 
-function DirectiveField<T>({ name, label, format, parse, invalidMessage, extra }: {
+function DirectiveField<T>({ name, label, format, parse, invalidMessage, extra, help }: {
   name: FieldName
   label: string
   format: (value: T) => string
   parse: (value: string) => T | null
   invalidMessage: string
   extra?: ReactNode
+  help?: FieldHelpText
 }) {
+  const control = <DirectiveTextControl label={label} format={format} parse={parse} />
   return <Form.Item className="configuration-field" name={name} label={label} rules={[{ required: true }, rejectInvalidInput(invalidMessage)]} extra={extra}>
-    <DirectiveTextControl label={label} format={format} parse={parse} />
+    {help ? <FieldWithHelp label={help.label} tip={help.tip}>{control}</FieldWithHelp> : control}
   </Form.Item>
 }
 
@@ -340,9 +372,9 @@ function NginxDurationField({ name, label, minimum, maximum }: { name: FieldName
     invalidMessage={t('fieldValidation.duration', { minimum: formatDuration(minimum), maximum: formatDuration(maximum) })} />
 }
 
-function NginxByteSizeField({ name, label, minimum = 0, maximum, extra }: { name: FieldName; label: string; minimum?: number; maximum: number; extra?: ReactNode }) {
+function NginxByteSizeField({ name, label, minimum = 0, maximum, extra, help }: { name: FieldName; label: string; minimum?: number; maximum: number; extra?: ReactNode; help?: FieldHelpText }) {
   const { t } = useTranslation('systemSettings')
-  return <DirectiveField<number> name={name} label={label} format={formatByteSize} parse={(value) => parseByteSize(value, minimum, maximum)} extra={extra}
+  return <DirectiveField<number> name={name} label={label} format={formatByteSize} parse={(value) => parseByteSize(value, minimum, maximum)} extra={extra} help={help}
     invalidMessage={t('fieldValidation.byteSize', { minimum: formatByteSize(minimum), maximum: formatByteSize(maximum) })} />
 }
 
@@ -419,7 +451,7 @@ function WafModuleField({ name, label, t }: { name: FieldName; label: string; t:
   </Form.Item>
 }
 
-function NullableSelectControl({ value, disabled, loading, onChange, label, options }: {
+function NullableSelectControl({ value, disabled, loading, onChange, label, options, ...a11y }: FieldA11yProps & {
   value?: string | null
   disabled?: boolean
   loading?: boolean
@@ -428,6 +460,7 @@ function NullableSelectControl({ value, disabled, loading, onChange, label, opti
   options: Array<{ value: string; label: string }>
 }) {
   return <Select
+    {...a11y}
     aria-label={label}
     value={value ?? '__off__'}
     disabled={disabled}
@@ -445,12 +478,12 @@ function ProtocolCheckboxField({ name, label }: { name: FieldName; label: string
   </Form.Item>
 }
 
-function StringListControl({ value = [], disabled, onChange, 'aria-label': ariaLabel }: ArrayControlProps<string[]>) {
+function StringListControl({ value = [], disabled, onChange, 'aria-label': ariaLabel, ...a11y }: ArrayControlProps<string[]>) {
   const format = (items: string[]) => items.join(' ')
   const [draft, setDraft] = useState(() => format(value))
   useEffect(() => setDraft(format(value)), [value])
   const commit = () => onChange?.([...new Set(draft.split(/[\s,]+/u).map((item) => item.trim()).filter(Boolean))])
-  return <Input aria-label={ariaLabel} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
+  return <Input {...a11y} aria-label={ariaLabel} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
 }
 
 function StringListField({ name, label }: { name: FieldName; label: string }) {
@@ -459,7 +492,7 @@ function StringListField({ name, label }: { name: FieldName; label: string }) {
   </Form.Item>
 }
 
-function NumberListControl({ value = [], disabled, onChange, 'aria-label': ariaLabel }: ArrayControlProps<number[] | InvalidInput>) {
+function NumberListControl({ value = [], disabled, onChange, 'aria-label': ariaLabel, ...a11y }: ArrayControlProps<number[] | InvalidInput>) {
   const format = (current: number[] | InvalidInput) => current instanceof InvalidInput ? current.raw : current.join(', ')
   const [draft, setDraft] = useState(() => format(value))
   useEffect(() => setDraft(format(value)), [value])
@@ -472,10 +505,10 @@ function NumberListControl({ value = [], disabled, onChange, 'aria-label': ariaL
     // A3-05: an out-of-range port (e.g. 70000) used to be dropped silently; keep it so the rule refuses it.
     onChange?.(new InvalidInput(draft))
   }
-  return <Input aria-label={ariaLabel} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
+  return <Input {...a11y} aria-label={ariaLabel} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
 }
 
-function PortRangesControl({ value = [], disabled, onChange, 'aria-label': ariaLabel }: ArrayControlProps<PortRange[]>) {
+function PortRangesControl({ value = [], disabled, onChange, 'aria-label': ariaLabel, ...a11y }: ArrayControlProps<PortRange[]>) {
   const format = (ranges: PortRange[]) => ranges.map((item) => item.from === item.to ? String(item.from) : `${item.from}-${item.to}`).join(', ')
   const [draft, setDraft] = useState(() => format(value))
   useEffect(() => setDraft(format(value)), [value])
@@ -493,7 +526,7 @@ function PortRangesControl({ value = [], disabled, onChange, 'aria-label': ariaL
     if (parsed.some((item, index) => index > 0 && parsed[index - 1]!.to >= item.from)) return
     onChange?.(parsed)
   }
-  return <Input aria-label={ariaLabel} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
+  return <Input {...a11y} aria-label={ariaLabel} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
 }
 
 function NumberListField({ name, label, extra }: { name: FieldName; label: string; extra?: ReactNode }) {
@@ -509,149 +542,157 @@ function PortRangesField({ name, label, extra }: { name: FieldName; label: strin
   </Form.Item>
 }
 
-function NginxFields({ form, t, editable, onOverridesChange }: {
+function NginxFields({ form, t, editable }: {
   form: FormInstance<SettingsFormValues>
   t: TFunction<'systemSettings'>
   editable: boolean
-  onOverridesChange: () => void
 }) {
   const [scope, setScope] = useState('global')
   const [tab, setTab] = useState('worker')
   const root = ['nginx']
   const http = [...root, 'http']
-  return <>
-    <Tabs className="configuration-scope-tabs" activeKey={scope} onChange={setScope} items={[
-      { key: 'global', label: t('parity.tabs.global') },
-      { key: 'regional', label: t('parity.tabs.regionNode') },
-    ]} />
-    {scope === 'regional' ? <ConfigurationOverridesEditor category="nginx" form={form} t={t} editable={editable} onChange={onOverridesChange} /> : <>
-      <Tabs className="configuration-detail-tabs" activeKey={tab} onChange={setTab} items={[
-        // 日志目录与 Stream 超时不在界面上：节点 error.log 固定在运行目录（agent 读它做心跳汇总，
-        // systemd 沙箱也不放行 /var/log/cdnca）；每个四层转发都必填自己的连接/空闲超时，stream 级默认永远被覆盖。
-        { key: 'worker', label: 'Worker' }, { key: 'http', label: 'Http' },
-      ]} />
-      {tab === 'worker' ? <>
-        <SectionIntro title={t('parity.nginx.worker.title')} description={t('parity.nginx.worker.description')} />
-        <div className="configuration-card-grid">
-          <ConfigCard title={t('parity.nginx.worker.processTitle')} description={t('parity.nginx.worker.processDescription')}>
-            <NginxIntegerField name={[...root, 'worker', 'worker_processes']} label="worker_processes" maximum={256} allowAuto />
-            <NginxIntegerField name={[...root, 'worker', 'worker_connections']} label="worker_connections" minimum={128} maximum={1_048_576} />
-          </ConfigCard>
-          <ConfigCard title={t('parity.nginx.worker.resourceTitle')} description={t('parity.nginx.worker.resourceDescription')}>
-            <NginxIntegerField name={[...root, 'worker', 'worker_rlimit_nofile']} label="worker_rlimit_nofile" minimum={1_024} maximum={1_048_576} />
-            <NginxDurationField name={[...root, 'worker', 'worker_shutdown_timeout_ms']} label="worker_shutdown_timeout" minimum={1_000} maximum={300_000} />
-          </ConfigCard>
+  // 字段名用中文名称（与区域配置同一套词条），指令名作括号里的技术标识，两种都能查到。
+  const label = (key: string, directive: string) => t('parity.overrides.settingWithDirective', {
+    name: t(`parity.overrides.nginx.settings.${key}` as 'parity.overrides.nginx.settings.workerProcesses'), directive, interpolation: { escapeValue: false },
+  })
+  // 字段旁的说明是可 Tab 聚焦的帮助按钮（名称「<字段>说明」），说明经 aria-describedby 关联到输入。
+  const help = (key: string): FieldHelpText => ({
+    label: t('parity.fieldHelp', { name: t(`parity.overrides.nginx.settings.${key}` as 'parity.overrides.nginx.settings.workerProcesses') }),
+    tip: t(`parity.overrides.nginx.help.${key}` as 'parity.overrides.nginx.help.workerProcesses'),
+  })
+  // 两级页签的正文各进自己的 tabpanel（外层面板放内层页签，内层面板放字段）；
+  // 只挂当前页签，字段值留在外层同一个 Form 里（Form 默认 preserve），切页签不丢草稿。
+  // 分节只留标题，影响决策的约束（缓存容量缩放、最小剩余空间）放字段旁按需提示。
+  const detail = tab === 'worker' ? <>
+    <SectionIntro title={t('parity.nginx.worker.title')} />
+    <div className="configuration-card-grid">
+      <ConfigCard title={t('parity.nginx.worker.processTitle')}>
+        <NginxIntegerField name={[...root, 'worker', 'worker_processes']} label={label('workerProcesses', 'worker_processes')} maximum={256} allowAuto />
+        <NginxIntegerField name={[...root, 'worker', 'worker_connections']} label={label('workerConnections', 'worker_connections')} minimum={128} maximum={1_048_576} />
+      </ConfigCard>
+      <ConfigCard title={t('parity.nginx.worker.resourceTitle')}>
+        <NginxIntegerField name={[...root, 'worker', 'worker_rlimit_nofile']} label={label('workerRlimit', 'worker_rlimit_nofile')} minimum={1_024} maximum={1_048_576} />
+        <NginxDurationField name={[...root, 'worker', 'worker_shutdown_timeout_ms']} label={label('workerShutdown', 'worker_shutdown_timeout')} minimum={1_000} maximum={300_000} />
+      </ConfigCard>
+    </div>
+  </> : tab === 'http' ? <>
+    <SectionIntro title={t('parity.nginx.http.title')} />
+    <div className="configuration-card-grid">
+      <ConfigCard title={t('parity.nginx.http.gzipTitle')}>
+        <NginxIntegerField name={[...http, 'gzip_comp_level']} label={label('gzipLevel', 'gzip_comp_level')} minimum={1} maximum={9} />
+        <SelectField name={[...http, 'gzip_http_version']} label={label('gzipHttpVersion', 'gzip_http_version')} options={['1.0', '1.1'].map((value) => ({ value, label: value }))} />
+        <NginxByteSizeField name={[...http, 'gzip_min_length_bytes']} label={label('gzipMinLength', 'gzip_min_length')} maximum={2 ** 30} />
+        <SwitchField name={[...http, 'gzip_vary']} label={label('gzipVary', 'gzip_vary')} />
+      </ConfigCard>
+      <ConfigCard title={t('parity.nginx.http.cacheTitle')}>
+        <SwitchField name={[...http, 'server_addr_outgoing']} label={t('parity.overrides.nginx.settings.entryOrigin')} />
+        <SwitchField name={[...http, 'proxy_request_buffering']} label={label('proxyRequestBuffering', 'proxy_request_buffering')} />
+        <SwitchField name={[...http, 'proxy_buffering']} label={label('proxyBuffering', 'proxy_buffering')} />
+        <NginxByteSizeField name={[...http, 'proxy_cache_max_size_bytes']} label={label('cacheMaxSize', 'proxy_cache_max_size')} maximum={2 ** 50} help={help('cacheMaxSize')} />
+        <NginxByteSizeField name={[...http, 'proxy_cache_min_free_bytes']} label={label('cacheMinFree', 'min_free')} maximum={2 ** 44} help={help('cacheMinFree')} />
+        <StringListField name={[...http, 'proxy_cache_methods']} label={label('cacheMethods', 'proxy_cache_methods')} />
+        <SelectField name={[...http, 'proxy_http_version']} label={label('proxyHttpVersion', 'proxy_http_version')} options={['1.0', '1.1'].map((value) => ({ value, label: value }))} />
+        <NginxByteSizeField name={[...http, 'proxy_max_temp_file_size_bytes']} label={label('proxyMaxTempFileSize', 'proxy_max_temp_file_size')} maximum={2 ** 40} />
+        <StringListField name={[...http, 'proxy_next_upstream']} label={label('proxyNextUpstream', 'proxy_next_upstream')} />
+        <NginxDurationField name={[...http, 'proxy_connect_timeout_ms']} label={label('proxyConnectTimeout', 'proxy_connect_timeout')} minimum={100} maximum={75_000} />
+        <NginxDurationField name={[...http, 'proxy_send_timeout_ms']} label={label('proxySendTimeout', 'proxy_send_timeout')} minimum={100} maximum={3_600_000} />
+        <NginxDurationField name={[...http, 'proxy_read_timeout_ms']} label={label('proxyReadTimeout', 'proxy_read_timeout')} minimum={100} maximum={3_600_000} />
+      </ConfigCard>
+      <ConfigCard wide title={t('parity.nginx.http.connectionTitle')}>
+        <div className="configuration-field-columns">
+          <NginxByteSizeField name={[...http, 'client_body_buffer_size_bytes']} label={label('clientBodyBufferSize', 'client_body_buffer_size')} minimum={1} maximum={2 ** 30} />
+          <TextField name={[...http, 'server']} label={label('serverHeader', 'server')} maxLength={64} />
+          <NginxByteSizeField name={[...http, 'client_max_body_size_bytes']} label={label('clientMaxBodySize', 'client_max_body_size')} minimum={1_024} maximum={10 * 2 ** 30} />
+          <SelectField name={[...http, 'default_type']} label={label('defaultType', 'default_type')} options={['application/json', 'text/html', 'text/plain'].map((value) => ({ value, label: value }))} />
+          <NginxIntegerField name={[...http, 'keepalive_requests']} label={label('keepaliveRequests', 'keepalive_requests')} minimum={1} maximum={1_000_000} />
+          <NginxDurationField name={[...http, 'keepalive_timeout_ms']} label={label('keepaliveTimeout', 'keepalive_timeout')} minimum={100} maximum={3_600_000} />
+          <SwitchField name={[...http, 'log_not_found']} label={label('logNotFound', 'log_not_found')} />
+          <SwitchField name={[...http, 'server_tokens']} label={label('serverTokens', 'server_tokens')} />
+          <NginxHeaderBuffersField name={[...http, 'large_client_header_buffers']} label={label('largeClientHeaderBuffers', 'large_client_header_buffers')} />
+          <NginxIntegerField name={[...http, 'server_names_hash_max_size']} label={label('serverNamesHashMaxSize', 'server_names_hash_max_size')} minimum={512} maximum={65_536} />
+          <NginxIntegerField name={[...http, 'server_names_hash_bucket_size']} label={label('serverNamesHashBucketSize', 'server_names_hash_bucket_size')} minimum={32} maximum={1024} />
         </div>
-      </> : tab === 'http' ? <>
-        <SectionIntro title={t('parity.nginx.http.title')} description={t('parity.nginx.http.description')} />
-        <div className="configuration-card-grid">
-          <ConfigCard title={t('parity.nginx.http.gzipTitle')} description={t('parity.nginx.http.gzipDescription')}>
-            <NginxIntegerField name={[...http, 'gzip_comp_level']} label="gzip_comp_level" minimum={1} maximum={9} />
-            <SelectField name={[...http, 'gzip_http_version']} label="gzip_http_version" options={['1.0', '1.1'].map((value) => ({ value, label: value }))} />
-            <NginxByteSizeField name={[...http, 'gzip_min_length_bytes']} label="gzip_min_length" maximum={2 ** 30} />
-            <SwitchField name={[...http, 'gzip_vary']} label="gzip_vary" />
-          </ConfigCard>
-          <ConfigCard title={t('parity.nginx.http.cacheTitle')} description={t('parity.nginx.http.cacheDescription')}>
-            <SwitchField name={[...http, 'server_addr_outgoing']} label={t('parity.nginx.http.entryOrigin')} />
-            <SwitchField name={[...http, 'proxy_request_buffering']} label="proxy_request_buffering" />
-            <SwitchField name={[...http, 'proxy_buffering']} label="proxy_buffering" />
-            <NginxByteSizeField name={[...http, 'proxy_cache_max_size_bytes']} label="proxy_cache_max_size" maximum={2 ** 50} />
-            <NginxByteSizeField name={[...http, 'proxy_cache_min_free_bytes']} label={t('parity.nginx.http.cacheMinFree')} maximum={2 ** 44} />
-            <StringListField name={[...http, 'proxy_cache_methods']} label="proxy_cache_methods" />
-            <SelectField name={[...http, 'proxy_http_version']} label="proxy_http_version" options={['1.0', '1.1'].map((value) => ({ value, label: value }))} />
-            <NginxByteSizeField name={[...http, 'proxy_max_temp_file_size_bytes']} label="proxy_max_temp_file_size" maximum={2 ** 40} />
-            <StringListField name={[...http, 'proxy_next_upstream']} label="proxy_next_upstream" />
-            <NginxDurationField name={[...http, 'proxy_connect_timeout_ms']} label="proxy_connect_timeout" minimum={100} maximum={75_000} />
-            <NginxDurationField name={[...http, 'proxy_send_timeout_ms']} label="proxy_send_timeout" minimum={100} maximum={3_600_000} />
-            <NginxDurationField name={[...http, 'proxy_read_timeout_ms']} label="proxy_read_timeout" minimum={100} maximum={3_600_000} />
-          </ConfigCard>
-          <ConfigCard wide title={t('parity.nginx.http.connectionTitle')} description={t('parity.nginx.http.connectionDescription')}>
-            <div className="configuration-field-columns">
-              <NginxByteSizeField name={[...http, 'client_body_buffer_size_bytes']} label="client_body_buffer_size" minimum={1} maximum={2 ** 30} extra={t('parity.nginx.http.bufferHint')} />
-              <TextField name={[...http, 'server']} label="server" maxLength={64} />
-              <NginxByteSizeField name={[...http, 'client_max_body_size_bytes']} label="client_max_body_size" minimum={1_024} maximum={10 * 2 ** 30} />
-              <SelectField name={[...http, 'default_type']} label="default_type" options={['application/json', 'text/html', 'text/plain'].map((value) => ({ value, label: value }))} />
-              <NginxIntegerField name={[...http, 'keepalive_requests']} label="keepalive_requests" minimum={1} maximum={1_000_000} />
-              <NginxDurationField name={[...http, 'keepalive_timeout_ms']} label="keepalive_timeout" minimum={100} maximum={3_600_000} />
-              <SwitchField name={[...http, 'log_not_found']} label="log_not_found" />
-              <SwitchField name={[...http, 'server_tokens']} label="server_tokens" />
-              <NginxHeaderBuffersField name={[...http, 'large_client_header_buffers']} label="large_client_header_buffers" />
-              <NginxIntegerField name={[...http, 'server_names_hash_max_size']} label="server_names_hash_max_size" minimum={512} maximum={65_536} />
-              <NginxIntegerField name={[...http, 'server_names_hash_bucket_size']} label="server_names_hash_bucket_size" minimum={32} maximum={1024} />
-            </div>
-          </ConfigCard>
-        </div>
-      </> : null}
-    </>}
-  </>
+      </ConfigCard>
+    </div>
+  </> : null
+  const scoped = scope === 'regional' ? <ConfigurationOverridesEditor category="nginx" form={form} t={t} editable={editable} /> : (
+    <Tabs className="configuration-detail-tabs configuration-detail-tabset configuration-detail-tabset--intro" activeKey={tab} onChange={setTab} items={[
+      // 日志目录与 Stream 超时不在界面上（nginx-region-b）：节点 error.log 固定在运行目录（agent 读它做心跳汇总，
+      // systemd 沙箱也不放行 /var/log/cdnca）；每个四层转发都必填自己的连接/空闲超时，stream 级默认永远被覆盖。
+      { key: 'worker', label: 'Worker' }, { key: 'http', label: 'Http' },
+    ].map((item) => ({ ...item, children: item.key === tab ? detail : null }))} />
+  )
+  return <Tabs className="configuration-scope-tabs" activeKey={scope} onChange={setScope} items={[
+    { key: 'global', label: t('parity.tabs.global') },
+    { key: 'regional', label: t('parity.tabs.regionNode') },
+  ].map((item) => ({ ...item, children: item.key === scope ? scoped : null }))} />
 }
 
 function ResourceFields({ t }: { t: TFunction<'systemSettings'> }) {
   const [tab, setTab] = useState('site')
   const root = ['resources']
   const site = [...root, 'site']
-  // 资源配置没有可按节点生效的项（都在建站/建转发时取值），不提供区域配置。
-  return <>
-      <Tabs className="configuration-detail-tabs" activeKey={tab} onChange={setTab} items={[
-        { key: 'site', label: t('parity.tabs.site') },
-        { key: 'stream', label: t('parity.tabs.stream') },
-        { key: 'common', label: t('parity.tabs.common') },
-      ]} />
-      {tab === 'site' ? <>
-        <SectionIntro title={t('parity.resources.site.title')} description={t('parity.resources.site.description')} />
-        <div className="configuration-card-grid">
-          <ConfigCard title={t('parity.resources.site.configurationTitle')} description={t('parity.resources.site.configurationDescription')}>
-            <NumberField name={[...site, 'related_config_min_limit']} label={t('parity.resources.fields.relatedMin')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.items')} />
-            <NumberField name={[...site, 'related_config_max_times_limit']} label={t('parity.resources.fields.relatedMultiplier')} t={t} minimum={1} maximum={1000} suffix={t('parity.units.multiplier')} />
-          </ConfigCard>
-          <ConfigCard title={t('parity.resources.site.listsTitle')} description={t('parity.resources.site.listsDescription')}>
-            <NumberField name={[...site, 'black_ip_limit']} label={t('parity.resources.fields.blacklist')} t={t} minimum={1} maximum={1_000_000} suffix={t('parity.units.items')} />
-            <NumberField name={[...site, 'white_ip_limit']} label={t('parity.resources.fields.whitelist')} t={t} minimum={1} maximum={1_000_000} suffix={t('parity.units.items')} />
-          </ConfigCard>
-          <ConfigCard wide title={t('parity.resources.site.cacheTitle')} description={t('parity.resources.site.cacheDescription')}>
-            <div className="configuration-field-columns">
-              <NumberField name={[...site, 'daily_clean_url_limit']} label={t('parity.resources.fields.cleanUrl')} t={t} minimum={1} maximum={10_000_000} suffix={t('parity.units.perDay')} />
-              <NumberField name={[...site, 'daily_clean_dir_limit']} label={t('parity.resources.fields.cleanDir')} t={t} minimum={1} maximum={1_000_000} suffix={t('parity.units.perDay')} />
-              <NumberField name={[...site, 'daily_pre_cache_url_limit']} label={t('parity.resources.fields.prewarm')} t={t} minimum={1} maximum={10_000_000} suffix={t('parity.units.perDay')} />
-              <NumberField name={[...site, 'daily_ip_unlock_limit']} label={t('parity.resources.fields.unlockDaily')} t={t} minimum={1} maximum={10_000_000} suffix={t('parity.units.perDay')} />
-              <NumberField name={[...site, 'ip_unlock_per_request_limit']} label={t('parity.resources.fields.unlockBatch')} t={t} minimum={1} maximum={100_000} clampMaximum={false} suffix={t('parity.units.perRequest')} />
-            </div>
-          </ConfigCard>
-          <ConfigCard title={t('parity.resources.site.rulesTitle')} description={t('parity.resources.site.rulesDescription')}>
-            <NumberField name={[...site, 'cc_rule_max_limit']} label={t('parity.resources.fields.ccRules')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.rules')} />
-            <NumberField name={[...site, 'max_domains_per_site']} label={t('parity.resources.fields.domains')} t={t} minimum={1} maximum={100} clampMaximum={false} suffix={t('parity.units.items')} />
-            <SwitchField name={[...site, 'listen_default_http_80']} label={t('parity.resources.fields.listen80')} />
-          </ConfigCard>
-          <ConfigCard title={t('parity.resources.site.logsTitle')} description={t('parity.resources.site.logsDescription')}>
-            <NumberField name={[...site, 'daily_access_log_download_limit']} label={t('parity.resources.fields.logDownloads')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.perDay')} />
-            <TextField name={[...site, 'access_log_tmp_dir']} label={t('parity.resources.fields.logDirectory')} maxLength={512} />
-            <NumberField name={[...site, 'access_log_retain_hours']} label={t('parity.resources.fields.logRetention')} t={t} minimum={1} maximum={720} clampMaximum={false} suffix={t('parity.units.hours')} />
-          </ConfigCard>
+  // 资源配置没有可按节点生效的项（都在建站/建转发时取值，08:1x），不提供区域配置。
+  // 当前页签的字段进它自己的 tabpanel，其余页签不挂载（值留在外层 Form）。
+  const detail = tab === 'site' ? <>
+    <SectionIntro title={t('parity.resources.site.title')} description={t('parity.resources.site.description')} />
+    <div className="configuration-card-grid">
+      <ConfigCard title={t('parity.resources.site.configurationTitle')} description={t('parity.resources.site.configurationDescription')}>
+        <NumberField name={[...site, 'related_config_min_limit']} label={t('parity.resources.fields.relatedMin')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.items')} />
+        <NumberField name={[...site, 'related_config_max_times_limit']} label={t('parity.resources.fields.relatedMultiplier')} t={t} minimum={1} maximum={1000} suffix={t('parity.units.multiplier')} />
+      </ConfigCard>
+      <ConfigCard title={t('parity.resources.site.listsTitle')} description={t('parity.resources.site.listsDescription')}>
+        <NumberField name={[...site, 'black_ip_limit']} label={t('parity.resources.fields.blacklist')} t={t} minimum={1} maximum={1_000_000} suffix={t('parity.units.items')} />
+        <NumberField name={[...site, 'white_ip_limit']} label={t('parity.resources.fields.whitelist')} t={t} minimum={1} maximum={1_000_000} suffix={t('parity.units.items')} />
+      </ConfigCard>
+      <ConfigCard wide title={t('parity.resources.site.cacheTitle')} description={t('parity.resources.site.cacheDescription')}>
+        <div className="configuration-field-columns">
+          <NumberField name={[...site, 'daily_clean_url_limit']} label={t('parity.resources.fields.cleanUrl')} t={t} minimum={1} maximum={10_000_000} suffix={t('parity.units.perDay')} />
+          <NumberField name={[...site, 'daily_clean_dir_limit']} label={t('parity.resources.fields.cleanDir')} t={t} minimum={1} maximum={1_000_000} suffix={t('parity.units.perDay')} />
+          <NumberField name={[...site, 'daily_pre_cache_url_limit']} label={t('parity.resources.fields.prewarm')} t={t} minimum={1} maximum={10_000_000} suffix={t('parity.units.perDay')} />
+          <NumberField name={[...site, 'daily_ip_unlock_limit']} label={t('parity.resources.fields.unlockDaily')} t={t} minimum={1} maximum={10_000_000} suffix={t('parity.units.perDay')} />
+          <NumberField name={[...site, 'ip_unlock_per_request_limit']} label={t('parity.resources.fields.unlockBatch')} t={t} minimum={1} maximum={100_000} clampMaximum={false} suffix={t('parity.units.perRequest')} />
         </div>
-      </> : tab === 'stream' ? <>
-        <SectionIntro title={t('parity.resources.stream.title')} description={t('parity.resources.stream.description')} />
-        <div className="configuration-card-grid">
-          <ConfigCard title={t('parity.resources.stream.portsTitle')} description={t('parity.resources.stream.portsDescription')}>
-            <PortRangesField name={[...root, 'stream', 'custom_port_not_allow']} label={t('parity.resources.fields.deniedPorts')} extra={t('parity.resources.fields.portHint')} />
-          </ConfigCard>
-          <ConfigCard title={t('parity.resources.stream.configurationTitle')} description={t('parity.resources.stream.configurationDescription')}>
-            <NumberField name={[...root, 'stream', 'related_config_min_limit']} label={t('parity.resources.fields.relatedMin')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.items')} />
-            <NumberField name={[...root, 'stream', 'related_config_max_times_limit']} label={t('parity.resources.fields.relatedMultiplier')} t={t} minimum={1} maximum={100} clampMaximum={false} suffix={t('parity.units.multiplier')} />
-            <NumberField name={[...root, 'stream', 'acl_max_limit']} label={t('parity.resources.fields.aclRules')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.rules')} extra={t('parity.resources.fields.aclRulesHint')} />
-          </ConfigCard>
+      </ConfigCard>
+      <ConfigCard title={t('parity.resources.site.rulesTitle')} description={t('parity.resources.site.rulesDescription')}>
+        <NumberField name={[...site, 'cc_rule_max_limit']} label={t('parity.resources.fields.ccRules')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.rules')} />
+        <NumberField name={[...site, 'max_domains_per_site']} label={t('parity.resources.fields.domains')} t={t} minimum={1} maximum={100} clampMaximum={false} suffix={t('parity.units.items')} />
+        <SwitchField name={[...site, 'listen_default_http_80']} label={t('parity.resources.fields.listen80')} />
+      </ConfigCard>
+      <ConfigCard title={t('parity.resources.site.logsTitle')} description={t('parity.resources.site.logsDescription')}>
+        <NumberField name={[...site, 'daily_access_log_download_limit']} label={t('parity.resources.fields.logDownloads')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.perDay')} />
+        <TextField name={[...site, 'access_log_tmp_dir']} label={t('parity.resources.fields.logDirectory')} maxLength={512} />
+        <NumberField name={[...site, 'access_log_retain_hours']} label={t('parity.resources.fields.logRetention')} t={t} minimum={1} maximum={720} clampMaximum={false} suffix={t('parity.units.hours')} />
+      </ConfigCard>
+    </div>
+  </> : tab === 'stream' ? <>
+    <SectionIntro title={t('parity.resources.stream.title')} description={t('parity.resources.stream.description')} />
+    <div className="configuration-card-grid">
+      <ConfigCard title={t('parity.resources.stream.portsTitle')} description={t('parity.resources.stream.portsDescription')}>
+        <PortRangesField name={[...root, 'stream', 'custom_port_not_allow']} label={t('parity.resources.fields.deniedPorts')} extra={t('parity.resources.fields.portHint')} />
+      </ConfigCard>
+      <ConfigCard title={t('parity.resources.stream.configurationTitle')} description={t('parity.resources.stream.configurationDescription')}>
+        <NumberField name={[...root, 'stream', 'related_config_min_limit']} label={t('parity.resources.fields.relatedMin')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.items')} />
+        <NumberField name={[...root, 'stream', 'related_config_max_times_limit']} label={t('parity.resources.fields.relatedMultiplier')} t={t} minimum={1} maximum={100} clampMaximum={false} suffix={t('parity.units.multiplier')} />
+        <NumberField name={[...root, 'stream', 'acl_max_limit']} label={t('parity.resources.fields.aclRules')} t={t} minimum={1} maximum={100_000} suffix={t('parity.units.rules')} extra={t('parity.resources.fields.aclRulesHint')} />
+      </ConfigCard>
+    </div>
+  </> : <>
+    <SectionIntro title={t('parity.resources.common.title')} description={t('parity.resources.common.description')} />
+    <div className="configuration-card-grid">
+      <ConfigCard wide title={t('parity.resources.common.portsTitle')} description={t('parity.resources.common.portsDescription')}>
+        <div className="configuration-field-columns">
+          <PortRangesField name={[...root, 'site_stream', 'custom_port_not_allow']} label={t('parity.resources.fields.deniedCustomPorts')} extra={t('parity.resources.fields.portHint')} />
+          <PortRangesField name={[...root, 'site_stream', 'custom_port_allow']} label={t('parity.resources.fields.allowedCustomPorts')} extra={t('parity.resources.fields.portHint')} />
         </div>
-      </> : <>
-        <SectionIntro title={t('parity.resources.common.title')} description={t('parity.resources.common.description')} />
-        <div className="configuration-card-grid">
-          <ConfigCard wide title={t('parity.resources.common.portsTitle')} description={t('parity.resources.common.portsDescription')}>
-            <div className="configuration-field-columns">
-              <PortRangesField name={[...root, 'site_stream', 'custom_port_not_allow']} label={t('parity.resources.fields.deniedCustomPorts')} extra={t('parity.resources.fields.portHint')} />
-              <PortRangesField name={[...root, 'site_stream', 'custom_port_allow']} label={t('parity.resources.fields.allowedCustomPorts')} extra={t('parity.resources.fields.portHint')} />
-            </div>
-          </ConfigCard>
-        </div>
-      </>}
+      </ConfigCard>
+    </div>
   </>
+  return <Tabs className="configuration-detail-tabs configuration-detail-tabset configuration-detail-tabset--intro" activeKey={tab} onChange={setTab} items={[
+    { key: 'site', label: t('parity.tabs.site') },
+    { key: 'stream', label: t('parity.tabs.stream') },
+    { key: 'common', label: t('parity.tabs.common') },
+  ].map((item) => ({ ...item, children: item.key === tab ? detail : null }))} />
 }
 
 function SSLModeField({ form, t }: { form: FormInstance<SettingsFormValues>; t: TFunction<'systemSettings'> }) {
@@ -923,70 +964,67 @@ function DefaultWebsiteFields({ form, t, ccPolicyOptions, ccPolicyLoading }: {
   </div>
 }
 
-function DefaultsFields({ form, t, ccPolicyOptions, ccPolicyLoading, editable, onOverridesChange }: {
+function DefaultsFields({ form, t, ccPolicyOptions, ccPolicyLoading, editable }: {
   form: FormInstance<SettingsFormValues>
   t: TFunction<'systemSettings'>
   ccPolicyOptions: CcPolicyOption[]
   ccPolicyLoading: boolean
   editable: boolean
-  onOverridesChange: () => void
 }) {
   const [scope, setScope] = useState('global')
   // 证书页“去配置”（ZeroSSL EAB）以 ?tab=certificate 直达证书页签。
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState(() => searchParams.get('tab') === 'certificate' ? 'certificate' : 'website')
-  return <>
-    <Tabs className="configuration-scope-tabs" activeKey={scope} onChange={setScope} items={[
-      { key: 'global', label: t('parity.tabs.global') },
-      { key: 'regional', label: t('parity.tabs.region') },
-    ]} />
-    {scope === 'regional' ? <ConfigurationOverridesEditor category="defaults" form={form} t={t} editable={editable} onChange={onOverridesChange} /> : <>
-      <Tabs className="configuration-detail-tabs" activeKey={tab} onChange={setTab} items={[
-        { key: 'website', label: t('parity.tabs.site') },
-        { key: 'stream', label: t('parity.tabs.stream') },
-        { key: 'certificate', label: t('parity.tabs.certificate') },
-      ]} />
-      {tab === 'website' ? <DefaultWebsiteFields form={form} t={t} ccPolicyOptions={ccPolicyOptions} ccPolicyLoading={ccPolicyLoading} /> : tab === 'stream' ? <div className="configuration-card-grid configuration-default-simple-grid">
-        <ConfigCard wide title={t('parity.defaults.stream.title')} description={t('parity.defaults.stream.description')}>
-          <div className="configuration-field-columns">
-            <Form.Item className="configuration-field" name={['defaults', 'stream', 'protocol']} label={t('parity.defaults.fields.listenProtocol')}>
-              <Radio.Group options={['tcp', 'udp'].map((value) => ({ value, label: value.toUpperCase() }))} />
-            </Form.Item>
-            <Form.Item className="configuration-field" name={['defaults', 'stream', 'load_balancing']} label={t('parity.defaults.fields.loadBalancing')}>
-              <Radio.Group options={['round_robin', 'ip_hash'].map((value) => ({ value, label: t(`parity.defaults.loadBalancing.${value}`) }))} />
-            </Form.Item>
-          </div>
-          <SwitchField name={['defaults', 'stream', 'proxy_protocol_enabled']} label={t('parity.defaults.fields.proxyProtocol')} />
-        </ConfigCard>
-      </div> : <div className="configuration-card-grid configuration-default-simple-grid">
-        <ConfigCard wide title={t('parity.defaults.certificate.title')} description={t('parity.defaults.certificate.description')}>
-          <Form.Item className="configuration-field" name={['defaults', 'certificate', 'issuer']} label={t('parity.defaults.fields.defaultCertificateType')}>
-            <Radio.Group options={[
-              { value: 'lets_encrypt', label: "Let's Encrypt" },
-              { value: 'zerossl', label: 'ZeroSSL' },
-              { value: 'google_trust', label: 'Google Trust Services' },
-            ]} />
-          </Form.Item>
-          <AcmeCACredentialsCard t={t} editable={editable} />
-        </ConfigCard>
-      </div>}
-    </>}
-  </>
+  // 两级页签的正文各进自己的 tabpanel（外层面板放内层页签，内层面板放字段），只挂当前页签。
+  const detail = tab === 'website' ? <DefaultWebsiteFields form={form} t={t} ccPolicyOptions={ccPolicyOptions} ccPolicyLoading={ccPolicyLoading} /> : tab === 'stream' ? <div className="configuration-card-grid configuration-default-simple-grid">
+    <ConfigCard wide title={t('parity.defaults.stream.title')} description={t('parity.defaults.stream.description')}>
+      <div className="configuration-field-columns">
+        <Form.Item className="configuration-field" name={['defaults', 'stream', 'protocol']} label={t('parity.defaults.fields.listenProtocol')}>
+          <Radio.Group options={['tcp', 'udp'].map((value) => ({ value, label: value.toUpperCase() }))} />
+        </Form.Item>
+        <Form.Item className="configuration-field" name={['defaults', 'stream', 'load_balancing']} label={t('parity.defaults.fields.loadBalancing')}>
+          <Radio.Group options={['round_robin', 'ip_hash'].map((value) => ({ value, label: t(`parity.defaults.loadBalancing.${value}`) }))} />
+        </Form.Item>
+      </div>
+      <SwitchField name={['defaults', 'stream', 'proxy_protocol_enabled']} label={t('parity.defaults.fields.proxyProtocol')} />
+    </ConfigCard>
+  </div> : <div className="configuration-card-grid configuration-default-simple-grid">
+    <ConfigCard wide title={t('parity.defaults.certificate.title')} description={t('parity.defaults.certificate.description')}>
+      <Form.Item className="configuration-field" name={['defaults', 'certificate', 'issuer']} label={t('parity.defaults.fields.defaultCertificateType')}>
+        <Radio.Group options={[
+          { value: 'lets_encrypt', label: "Let's Encrypt" },
+          { value: 'zerossl', label: 'ZeroSSL' },
+          { value: 'google_trust', label: 'Google Trust Services' },
+        ]} />
+      </Form.Item>
+      <AcmeCACredentialsCard t={t} editable={editable} />
+    </ConfigCard>
+  </div>
+  const scoped = scope === 'regional' ? <ConfigurationOverridesEditor category="defaults" form={form} t={t} editable={editable} /> : (
+    <Tabs className="configuration-detail-tabs configuration-detail-tabset" activeKey={tab} onChange={setTab} items={[
+      { key: 'website', label: t('parity.tabs.site') },
+      { key: 'stream', label: t('parity.tabs.stream') },
+      { key: 'certificate', label: t('parity.tabs.certificate') },
+    ].map((item) => ({ ...item, children: item.key === tab ? detail : null }))} />
+  )
+  return <Tabs className="configuration-scope-tabs" activeKey={scope} onChange={setScope} items={[
+    { key: 'global', label: t('parity.tabs.global') },
+    { key: 'regional', label: t('parity.tabs.region') },
+  ].map((item) => ({ ...item, children: item.key === scope ? scoped : null }))} />
 }
 
-function CategoryFields({ category, form, t, ccPolicyOptions, ccPolicyLoading, editable, onOverridesChange }: {
+function CategoryFields({ category, form, t, ccPolicyOptions, ccPolicyLoading, editable }: {
   category: EditableCategory
   form: FormInstance<SettingsFormValues>
   t: TFunction<'systemSettings'>
   ccPolicyOptions: CcPolicyOption[]
   ccPolicyLoading: boolean
   editable: boolean
-  onOverridesChange: () => void
 }) {
   switch (category) {
-    case 'nginx': return <NginxFields form={form} t={t} editable={editable} onOverridesChange={onOverridesChange} />
+    case 'nginx': return <NginxFields form={form} t={t} editable={editable} />
     case 'resources': return <ResourceFields t={t} />
-    case 'defaults': return <DefaultsFields form={form} t={t} ccPolicyOptions={ccPolicyOptions} ccPolicyLoading={ccPolicyLoading} editable={editable} onOverridesChange={onOverridesChange} />
+    case 'defaults': return <DefaultsFields form={form} t={t} ccPolicyOptions={ccPolicyOptions} ccPolicyLoading={ccPolicyLoading} editable={editable} />
   }
 }
 
@@ -1011,7 +1049,6 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
   const [writeError, setWriteError] = useState<unknown>(null)
   const [conflictRefreshed, setConflictRefreshed] = useState(false)
   const [manageDenied, setManageDenied] = useState(false)
-  const [dirty, setDirty] = useState(false)
   const sessionCanManage = systemSettingsPrincipalCan(principal, 'system_configuration.manage')
   const queryKey = useMemo(() => [...ownerQueryPrefix, category] as const, [category, ownerQueryPrefix])
   const currentSessionMatchesReader = useCallback(() => lineageActiveRef.current && Boolean(currentSystemSettingsAccess(ownerKey)), [ownerKey])
@@ -1102,7 +1139,6 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
       setWriteError(null)
       setConflictRefreshed(false)
       setManageDenied(false)
-      setDirty(false)
       messageApi.success(t('notices.saved'))
     },
     onError: (error, failedAttempt) => {
@@ -1127,8 +1163,10 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
   useEffect(() => {
     if (!query.data || !currentSessionMatchesReader()) return
     form.setFieldsValue(formValues(query.data))
-    setDirty(false)
   }, [currentSessionMatchesReader, form, query.data])
+
+  const watched = Form.useWatch((values: SettingsFormValues) => values, { form, preserve: true })
+  const dirty = useMemo(() => Boolean(query.data && draftDiffers(category, watched, query.data)), [category, query.data, watched])
 
   if (query.error instanceof ApiError && query.error.status === 403) {
     return <Result status="403" title={t('errors.forbiddenTitle')} subTitle={errorText(query.error, t)} />
@@ -1137,7 +1175,7 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
   const uncertain = Boolean(attempt && writeError && isUnknownWriteOutcome(writeError))
   const writeLocked = mutation.isPending || uncertain || !sessionCanManage || manageDenied
   const save = () => {
-    if (!query.data || writeLocked || !currentSystemSettingsAccess(ownerKey, true)) return
+    if (!query.data || !dirty || writeLocked || !currentSystemSettingsAccess(ownerKey, true)) return
     const values = form.getFieldsValue(true)
     const next = {
       ownerKey,
@@ -1160,13 +1198,12 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
     setAttempt(null)
     setWriteError(null)
     setConflictRefreshed(false)
-    setDirty(false)
+    if (query.data) form.setFieldsValue(formValues(query.data))
     void query.refetch()
   }
   const reset = () => {
     if (!query.data) return
     form.setFieldsValue(formValues(query.data))
-    setDirty(false)
   }
 
   return <div className={`system-settings-category-page system-settings-category-${category}`} data-testid="system-settings-page">
@@ -1175,7 +1212,7 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
       : query.error instanceof ApiError && query.error.status === 404 ? <Empty description={t('empty.category')}><Button icon={<RefreshCw size={15} />} onClick={refresh}>{t('actions.refresh')}</Button></Empty>
         : query.isError ? <FeedbackWhen title={t('errors.loadTitle')} detail={errorText(query.error, t)} action={<Button onClick={refresh}>{t('actions.retry')}</Button>} />
           : query.data ? <>
-            <CategoryScopeNotice />
+            <CurrentCategoryPending current={category} pending={query.data.pending_categories} />
             <PendingCategoriesNotice current={category} pending={query.data.pending_categories} />
             {uncertain ? <OutcomeUnknown title={t('uncertain.title')} detail={t('uncertain.description')} action={<Space wrap><Button icon={<RotateCcw size={15} />} loading={mutation.isPending} disabled={!sessionCanManage || manageDenied} onClick={retryExact}>{t('actions.retryExact')}</Button><Button onClick={refresh}>{t('actions.discardAndRefresh')}</Button></Space>} className="configuration-feedback" />
               : writeError ? <FeedbackWhen title={conflictRefreshed ? t('errors.conflictRefreshed') : t('errors.saveTitle')} detail={errorText(writeError, t)} /> : null}
@@ -1187,8 +1224,8 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
               colon={false}
               requiredMark={false}
               disabled={mutation.isPending || uncertain || !sessionCanManage || manageDenied}
-              onValuesChange={() => setDirty(true)}
               onFinish={save}
+              scrollToFirstError={{ focus: true }}
             >
               <CategoryFields
                 category={category}
@@ -1197,7 +1234,6 @@ function SystemSettingsPageContent({ category, owner, ownerKey, principal }: Sys
                 ccPolicyOptions={ccPolicyOptions}
                 ccPolicyLoading={ccPoliciesQuery.isPending && canReadSecurityPolicies}
                 editable={sessionCanManage && !manageDenied}
-                onOverridesChange={() => setDirty(true)}
               />
               {dirty ? <div className="configuration-save-bar">
                 <Button onClick={reset} disabled={mutation.isPending || uncertain}>{t('actions.reset')}</Button>

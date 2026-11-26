@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Descriptions, Drawer, Result, Select, Space, Table, Tabs, Tag, Typography, type TableColumnsType } from 'antd'
-import { useFeedbackMessage, PageSection } from '@cdnca/ui'
+import { Alert, Button, Descriptions, Drawer, Result, Select, Space, Tag, Typography, type TableColumnsType } from 'antd'
+import { Tabs } from '../components/Tabs'
+import { useFeedbackMessage, PageSection, Table } from '@cdnca/ui'
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -76,19 +77,21 @@ function AdminIdentityReviewContent() {
   ]
   return (
     <PageSection><Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div>
-        <Typography.Title level={4}>{t('title')}</Typography.Title>
-        <Typography.Text type="secondary">{t('description')}</Typography.Text>
-      </div>
+      {/* 范围与步骤由页签和表格表达，不常驻说明。 */}
+      <Typography.Title level={4}>{t('title')}</Typography.Title>
+      {/* 当前状态的列表放进它自己的 tabpanel；面板上边距补回原来页签与列表之间的 16px 间隔。 */}
       <Tabs activeKey={status} onChange={(key) => setStatus(key as (typeof tabs)[number])}
-        items={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))}
+        items={tabs.map((key) => ({ key, label: t(`tabs.${key}`), children: key === status ? (
+          <Space direction="vertical" size={16} style={{ width: '100%', paddingTop: 16 }}>
+            {query.isError && <Alert type="error" showIcon message={t('errors.load')} />}
+            <Table rowKey="id" columns={columns} dataSource={rows} loading={query.isPending} pagination={false}
+              locale={{ emptyText: t('empty') }} />
+            {query.hasNextPage && (
+              <Button loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t('actions.more')}</Button>
+            )}
+          </Space>
+        ) : null }))}
         tabBarExtraContent={<Button icon={<RefreshCw size={14} />} onClick={() => void query.refetch()}>{t('actions.refresh')}</Button>} />
-      {query.isError && <Alert type="error" showIcon message={t('errors.load')} />}
-      <Table rowKey="id" columns={columns} dataSource={rows} loading={query.isPending} pagination={false}
-        locale={{ emptyText: t('empty') }} />
-      {query.hasNextPage && (
-        <Button loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t('actions.more')}</Button>
-      )}
       <ReviewDrawer row={selected} onClose={() => setSelected(null)} />
     </Space></PageSection>
   )

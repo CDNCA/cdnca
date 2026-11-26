@@ -24,8 +24,8 @@ const (
 	EventFailover        = "site.origin.failover"
 	EventRecovered       = "site.origin.recovered"
 	templateFailover     = "site.origin.failover.zh-cn"
+	templateHold         = "site.origin.failover.hold.zh-cn" // 706: every level down, the level is kept
 	templateRecovered    = "site.origin.recovered.zh-cn"
-	ReasonAllDown        = "all_down"
 	ReasonManualFailback = "manual_failback"
 )
 
@@ -148,6 +148,11 @@ func (s *Store) Record(ctx context.Context, pool Pool, outcomes map[string]Outco
 	now := s.now().UTC().Truncate(time.Microsecond)
 	var switching bool
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		// The levels as the previous round left them: the all-down notice goes out when the pool enters all down.
+		before, err := levelStatusesTx(ctx, tx, pool.SiteID)
+		if err != nil {
+			return err
+		}
 		for _, origin := range pool.Origins {
 			outcome, probed := outcomes[endpointKey(origin.Host, origin.Port)]
 			if !origin.Enabled || !probed {
@@ -168,7 +173,8 @@ func (s *Store) Record(ctx context.Context, pool Pool, outcomes map[string]Outco
 		if err := writeState(ctx, tx, pool.SiteID, value.state, value.decision.FailbackReady, false, now); err != nil {
 			return err
 		}
-		return s.alertTx(ctx, tx, pool.SiteID, value, now)
+		wasAllDown := Decide(before, value.state.active, value.mode == "manual").AllDown
+		return s.alertTx(ctx, tx, pool.SiteID, value, wasAllDown, now)
 	})
 	if err != nil || !switching {
 		return err
@@ -246,23 +252,32 @@ func evaluateTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, lock bool) (ev
 		WHERE site_id=$1 FOR UPDATE`, siteID).Scan(&value.state.active, &value.state.ready, &value.state.sequence); err != nil {
 		return evaluation{}, err
 	}
+	levels, err := levelStatusesTx(ctx, tx, siteID)
+	if err != nil {
+		return evaluation{}, err
+	}
+	value.levels = levels
+	value.decision = Decide(value.levels, value.state.active, value.mode == "manual")
+	return value, nil
+}
+
+// levelStatusesTx reads the enabled origins' probe states by level.
+func levelStatusesTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID) ([]LevelStatus, error) {
 	rows, err := tx.Query(ctx, `SELECT origin.level, COALESCE(probe.status,'unknown')
 		FROM site_origins origin LEFT JOIN site_origin_probe_states probe
 		  ON probe.site_id=origin.site_id AND probe.host=origin.host AND probe.port=origin.port
 		WHERE origin.site_id=$1 AND origin.enabled`, siteID)
 	if err != nil {
-		return evaluation{}, err
+		return nil, err
 	}
 	origins, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (LevelOrigin, error) {
 		var origin LevelOrigin
 		return origin, row.Scan(&origin.Level, &origin.Status)
 	})
 	if err != nil {
-		return evaluation{}, err
+		return nil, err
 	}
-	value.levels = LevelStatuses(origins)
-	value.decision = Decide(value.levels, value.state.active, value.mode == "manual")
-	return value, nil
+	return LevelStatuses(origins), nil
 }
 
 func writeState(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, state failoverState, ready, switched bool, now time.Time) error {
@@ -333,20 +348,25 @@ func (s *Store) switchTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value
 	})
 }
 
-// alertTx: a manual pool whose higher level recovered (once per sequence),
-// and a pool with every level down (once per sequence).
-func (s *Store) alertTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value evaluation, now time.Time) error {
-	sequence := strconv.FormatInt(value.state.sequence, 10)
+// alertTx: a manual pool whose higher level recovered, and a pool with every
+// level down, each when the state is entered (ready was false, the previous
+// round was not all down). A pool can enter either state more than once
+// without a switch (same sequence), so the source event carries the instant
+// it was entered: the notice of one entry is enqueued once, a later entry
+// gets its own (the all-down notice
+// was re-sent every round with a new occurred_at under the same source event
+// and refused as a conflicting replay).
+func (s *Store) alertTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value evaluation, wasAllDown bool, now time.Time) error {
+	entry := strconv.FormatInt(value.state.sequence, 10) + "/" + strconv.FormatInt(now.UnixMicro(), 10)
 	if value.decision.FailbackReady && !value.state.ready {
 		target := FailbackTarget(value.levels, value.state.active)
-		return s.notify(ctx, tx, value, EventRecovered, templateRecovered, "origin-recovered/"+siteID.String()+"/"+sequence,
+		return s.notify(ctx, tx, value, EventRecovered, templateRecovered, "origin-recovered/"+siteID.String()+"/"+entry,
 			map[string]string{"domain": value.domain, "recovered_at": shanghai(now), "level": LevelName(target),
 				"active_level": LevelName(value.state.active)})
 	}
-	if value.decision.AllDown {
-		return s.notify(ctx, tx, value, EventFailover, templateFailover, "origin-all-down/"+siteID.String()+"/"+sequence,
-			map[string]string{"domain": value.domain, "switched_at": shanghai(now), "from_level": LevelName(value.state.active),
-				"to_level": LevelName(value.state.active), "reason": reasonText(ReasonAllDown),
+	if value.decision.AllDown && !wasAllDown {
+		return s.notify(ctx, tx, value, EventFailover, templateHold, "origin-all-down/"+siteID.String()+"/"+entry,
+			map[string]string{"domain": value.domain, "occurred_at": shanghai(now), "active_level": LevelName(value.state.active),
 				"failback_mode": modeText(value.mode), "action": actionText(value.mode)})
 	}
 	return nil
@@ -514,8 +534,6 @@ func reasonText(reason string) string {
 		return "当前级别的源站全部不可用"
 	case "recovered":
 		return "更高级别的源站已恢复"
-	case ReasonAllDown:
-		return "全部源站不可用，保持当前级别"
 	}
 	return reason
 }

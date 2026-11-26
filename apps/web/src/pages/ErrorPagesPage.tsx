@@ -10,10 +10,9 @@ import {
   Select,
   Space,
   Spin,
-  Table,
-  Tabs,
 } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { Tabs } from '../components/Tabs'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import type { TableColumnsType } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -82,15 +81,22 @@ const emptyDraft: OverrideDraft = { scopeKind: 'node', target: '', items: [], co
 /** A3-10: libs/themepack TemplateMarkers — the server refuses any page carrying one (nodes do no substitution). */
 const templateMarkers = ['{{', '}}', '{%', '%}', '<%', '%>', '${', '<!--#'] as const
 
-function templateMarkerIn(content: string): string | undefined {
-  return templateMarkers.find((marker) => content.includes(marker))
+type MarkerHit = { marker: string; line: number; column: number }
+
+/** 找到最靠前的模板标记并给出行列，作为编辑器字段校验指出位置。 */
+function templateMarkerIn(content: string): MarkerHit | undefined {
+  let hit: { marker: string; index: number } | undefined
+  for (const marker of templateMarkers) {
+    const index = content.indexOf(marker)
+    if (index >= 0 && (!hit || index < hit.index)) hit = { marker, index }
+  }
+  if (!hit) return undefined
+  const lines = content.slice(0, hit.index).split('\n')
+  return { marker: hit.marker, line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 }
 }
 
-/** Save errors are i18n keys; a template-marker refusal carries its marker. */
-function saveErrorText(t: (key: string, options?: Record<string, string>) => string, saveError: string): string {
-  return saveError.startsWith('templateMarker:')
-    ? t('legacy.validation.templateMarker', { marker: saveError.slice('templateMarker:'.length) })
-    : t(saveError)
+function markerText(t: (key: string, options?: Record<string, string | number>) => string, hit: MarkerHit): string {
+  return t('legacy.validation.templateMarker', { marker: hit.marker, line: hit.line, column: hit.column })
 }
 
 function ownerFor(principal: Principal, sessionEpoch: number): Owner | null {
@@ -163,7 +169,11 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
   const [messageApi, messageContext] = useFeedbackMessage()
   const client = useQueryClient()
   const [selected, setSelected] = useState<LegacyErrorPageOption>('p456')
-  const [draftContent, setDraftContent] = useState('')
+  // ERROR-PAGE-DRAFT：草稿按错误类型分别保留，切换类型或页签不丢；与服务端内容相同即视为未改动
+  const [drafts, setDrafts] = useState<Partial<Record<ErrorPageSlotKey, string>>>({})
+  const [markerHit, setMarkerHit] = useState<MarkerHit>()
+  // 空内容与模板标记都就地标在内容框上并聚焦，不再弹「知道了」。
+  const [contentProblem, setContentProblem] = useState<'required' | 'tooLarge'>()
   const [saveError, setSaveError] = useState<string>()
   const [pendingSave, setPendingSave] = useState<GlobalSaveAttempt>()
   const [preview, setPreview] = useState(false)
@@ -199,15 +209,30 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
   })
 
   useEffect(() => {
-    setDraftContent('')
     setSaveError(undefined)
+    setMarkerHit(undefined)
+    setContentProblem(undefined)
     setPendingSave(undefined)
     setPublished(undefined)
   }, [slotKey])
-
+  const contentError = markerHit ? markerText(t, markerHit) : contentProblem ? t(`legacy.validation.${contentProblem}`) : undefined
   useEffect(() => {
-    if (slot.data) setDraftContent(slot.data.content)
-  }, [slot.data])
+    if (markerHit || contentProblem) document.getElementById('error-page-global-content')?.focus()
+  }, [markerHit, contentProblem])
+
+  // 回读的服务端内容只作基准，不覆盖本页草稿
+  const draftContent = drafts[slotKey] ?? slot.data?.content ?? ''
+  const setDraftContent = (value: string) => setDrafts((current) => {
+    const next = { ...current }
+    if (slot.data && value === slot.data.content) delete next[slotKey]
+    else next[slotKey] = value
+    return next
+  })
+  const dropDraft = (key: ErrorPageSlotKey) => setDrafts((current) => {
+    const next = { ...current }
+    delete next[key]
+    return next
+  })
 
   const binding: ErrorPageSlotBinding | undefined = slot.data?.binding ?? slots.data?.items.find((item) => item.key === slotKey)
   const buildSaveAttempt = async (): Promise<GlobalSaveAttempt | null> => {
@@ -236,6 +261,7 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
       const finalized = await errorPagesApi.finalizeAsset(accessToken, initiated.value.id, attempt.finalizeKey)
       const bound = await errorPagesApi.bindSlot(accessToken, attempt.slotKey, finalized.value.id, attempt.revision, attempt.bindKey)
       setPendingSave(undefined)
+      dropDraft(attempt.slotKey)
       setPublished(bound.value.publication ?? null)
       await Promise.all([
         client.invalidateQueries({ queryKey: slotsQueryKey }),
@@ -257,6 +283,7 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
       const accessToken = currentAccess(ownerKey, true)
       if (!accessToken) throw new ApiError('Permission denied', 403, 'permission_denied')
       const unbound = await errorPagesApi.unbindSlot(accessToken, slotKey, binding.revision, operationKey(`${slotKey}-unbind`))
+      dropDraft(slotKey)
       setPublished(unbound.value.publication ?? null)
       await Promise.all([
         client.invalidateQueries({ queryKey: slotsQueryKey }),
@@ -272,13 +299,11 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
 
   const save = async () => {
     const marker = pendingSave ? undefined : templateMarkerIn(draftContent)
-    if (marker) {
-      setSaveError(`templateMarker:${marker}`)
-      return
-    }
+    setMarkerHit(marker)
+    if (marker) return
     const attempt = pendingSave ?? await buildSaveAttempt()
     if (!attempt) {
-      setSaveError('legacy.validation.required')
+      setContentProblem(draftContent ? 'tooLarge' : 'required')
       return
     }
     await executeSave(attempt)
@@ -296,7 +321,10 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
         onChange={(event) => setSelected(event.target.value as LegacyErrorPageOption)}
         aria-label={t('legacy.selectorLabel')}
       >
-        {legacyErrorPageOptions.map((key) => <Radio.Button key={key} value={key}>{t(`legacy.options.${key}`)}</Radio.Button>)}
+        {legacyErrorPageOptions.map((key) => <Radio.Button key={key} value={key}>
+          {t(`legacy.options.${key}`)}
+          {drafts[legacySlotByOption[key]] !== undefined ? <span className="error-page-draft-mark">{t('legacy.unsaved')}</span> : null}
+        </Radio.Button>)}
       </Radio.Group>
     </div>
     {slots.isError ? <FeedbackWhen title={t(errorKey(slots.error))} action={<Button size="small" onClick={() => void slots.refetch()}>{t('actions.retry')}</Button>} /> : null}
@@ -311,18 +339,24 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
           message={slotKey === 'site_locked' ? t('legacy.siteLocked')
             : slotKey in ownFallbackSlots ? t(`legacy.ownFallback.${slotKey}`)
               : t(`legacy.delivery.${slot.data.delivery}`)}
-          description={t('legacy.variables')}
         /> : null}
         <Input.TextArea
           rows={12}
           value={draftContent}
-          onChange={(event) => setDraftContent(event.target.value)}
+          id="error-page-global-content"
+          onChange={(event) => { setMarkerHit(undefined); setContentProblem(undefined); setDraftContent(event.target.value) }}
           disabled={!manageable || slots.isLoading || slot.isLoading || slot.isError}
           aria-label={t('legacy.contentLabel')}
+          status={contentError ? 'error' : undefined}
+          aria-invalid={contentError ? true : undefined}
+          aria-describedby={contentError ? 'error-page-global-marker' : undefined}
         />
+        {contentError ? <div id="error-page-global-marker" className="error-page-field-error" role="alert">{contentError}</div> : null}
         <div className="error-page-global-editor-footer">
           <span className="error-page-global-status" data-testid="error-page-global-status">
-            {binding?.asset_id ? t('legacy.configured', { revision: binding.revision }) : slot.data ? t('legacy.builtin') : null}
+            {/* 有未保存草稿时不再写「系统默认（未修改）」，草稿改回基线即恢复。 */}
+            {binding?.asset_id ? t('legacy.configured', { revision: binding.revision })
+              : slot.data && drafts[slotKey] === undefined ? t('legacy.builtin') : null}
           </span>
           <Space>
             <Button onClick={() => setPreview(true)} disabled={!draftContent}>{t('legacy.actions.preview')}</Button>
@@ -337,7 +371,7 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
           action={<Link to="/site/publications">{t('legacy.actions.viewPublications')}</Link>} /> : null}
         {saveError ? (pendingSave ? <OutcomeUnknown className="error-page-global-alert" title={t('legacy.errors.unknown')}
           action={<Space><Button size="small" onClick={() => void save()}>{t('actions.exactRetry')}</Button><Button size="small" onClick={() => { setPendingSave(undefined); setSaveError(undefined); void slot.refetch() }}>{t('actions.abandon')}</Button></Space>} />
-          : <FeedbackWhen title={saveErrorText(t, saveError)} onClose={() => setSaveError(undefined)} />) : null}
+          : <FeedbackWhen title={t(saveError)} onClose={() => setSaveError(undefined)} />) : null}
       </div>
     </div>
     <Modal open={preview} title={t('legacy.actions.preview')} width={760} footer={null} onCancel={() => setPreview(false)} destroyOnHidden>
@@ -357,11 +391,11 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
   const [targetSearch, setTargetSearch] = useState('')
   const [editorLoading, setEditorLoading] = useState(false)
   const [saveError, setSaveError] = useState<string>()
+  const [markerHit, setMarkerHit] = useState<MarkerHit & { key: ErrorPageScopeOverrideSlotKey }>()
   const [pendingSave, setPendingSave] = useState<SaveAttempt>()
   const [pendingDelete, setPendingDelete] = useState<DeleteAttempt>()
   const [saving, setSaving] = useState(false)
   const confirmClose = useConfirmUnconfirmedClose()
-  const [selectedRows, setSelectedRows] = useState<React.Key[]>([])
   // Node and region pickers read GET /v1/nodes, which needs nodes.read on top of error_pages.*.
   const canListNodes = useSessionStore((state) => state.principal?.permissions.some((code) => code === 'nodes.read' || code === 'platform.admin') ?? false)
   const token = currentAccess(ownerKey)
@@ -406,6 +440,7 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
     setTargetSearch('')
     setEditorLoading(false)
     setSaveError(undefined)
+    setMarkerHit(undefined)
     setPendingSave(undefined)
   }
   // 保存进行中不能关；结果未确认时关闭先确认，确认后关闭并刷新列表核对是否已生效。
@@ -513,11 +548,10 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
 
   const save = async () => {
     if (saving) return
-    const marker = pendingSave ? undefined : draft.items.map((key) => templateMarkerIn(draft.contents[key] ?? '')).find(Boolean)
-    if (marker) {
-      setSaveError(`templateMarker:${marker}`)
-      return
-    }
+    const marker = pendingSave ? undefined : errorPageScopeOverrideSlotKeys.filter((key) => draft.items.includes(key))
+      .map((key) => { const hit = templateMarkerIn(draft.contents[key] ?? ''); return hit ? { ...hit, key } : undefined }).find(Boolean)
+    setMarkerHit(marker)
+    if (marker) return
     const attempt = pendingSave ?? await buildSaveAttempt()
     if (!attempt) {
       setSaveError('regional.validation.required')
@@ -540,14 +574,15 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
     }
   }
 
+  const scopeText = (item: ErrorPageScopeOverride) => item.target.kind === 'node'
+    ? t('regional.targets.nodeValue', { id: item.target.node_display_id, name: item.target.node_name })
+    : t('regional.targets.regionValue', { region: item.target.region })
   const columns: TableColumnsType<ErrorPageScopeOverride> = [
     {
       title: t('regional.columns.scope'),
       key: 'scope',
       width: 360,
-      render: (_, item) => item.target.kind === 'node'
-        ? <span>{t('regional.targets.nodeValue', { id: item.target.node_display_id, name: item.target.node_name })}</span>
-        : <span>{t('regional.targets.regionValue', { region: item.target.region })}</span>,
+      render: (_, item) => <span>{scopeText(item)}</span>,
     },
     {
       title: t('regional.columns.items'),
@@ -585,10 +620,9 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
 
   return <div className="error-page-regional-panel">
     {messageContext}
-    <div className="error-page-regional-toolbar">
-      {manageable ? <Button type="primary" onClick={openCreate}>{t('regional.actions.add')}</Button> : <span />}
-      <span>{t('regional.count', { count: overrides.data?.total ?? 0 })}</span>
-    </div>
+    {manageable ? <div className="error-page-regional-toolbar">
+      <Button type="primary" onClick={openCreate}>{t('regional.actions.add')}</Button>
+    </div> : null}
     {pendingDelete ? <OutcomeUnknown title={t('regional.errors.unknown')} action={<Space><Button size="small" onClick={() => void executeDelete(pendingDelete)}>{t('actions.exactRetry')}</Button><Button size="small" onClick={() => { setPendingDelete(undefined); void overrides.refetch() }}>{t('actions.abandon')}</Button></Space>} className="error-page-regional-alert" /> : null}
     {overrides.isError ? <FeedbackWhen title={t(errorKey(overrides.error))} action={<Button size="small" onClick={() => void overrides.refetch()}>{t('actions.retry')}</Button>} /> : null}
     <Table
@@ -599,7 +633,6 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
       dataSource={overrides.data?.items ?? []}
       columns={columns}
       tableLayout="fixed"
-      rowSelection={{ selectedRowKeys: selectedRows, onChange: setSelectedRows, columnWidth: 70 }}
       pagination={false}
       locale={{ emptyText: <span className="error-page-table-empty">{t('regional.empty')}</span> }}
     />
@@ -674,11 +707,15 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
                 aria-label={t(`regional.items.${key}`)}
                 value={draft.contents[key] ?? ''}
                 autoSize={{ minRows: 6, maxRows: 14 }}
+                status={markerHit?.key === key ? 'error' : undefined}
+                aria-invalid={markerHit?.key === key ? true : undefined}
+                aria-describedby={markerHit?.key === key ? `error-page-marker-${key}` : undefined}
                 onChange={(event) => {
                   const value = event.target.value
                   setDraft((current) => ({ ...current, contents: { ...current.contents, [key]: value } }))
                   setPendingSave(undefined)
                   setSaveError(undefined)
+                  if (markerHit?.key === key) setMarkerHit(undefined)
                 }}
               />
               <button
@@ -696,12 +733,13 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
                 }}
               >×</button>
             </div>
+            {markerHit?.key === key ? <div id={`error-page-marker-${key}`} className="error-page-field-error" role="alert">{markerText(t, markerHit)}</div> : null}
           </div>)}
           {saveError ? <Alert
             className="error-page-override-error"
             type={pendingSave ? 'warning' : 'error'}
             showIcon
-            message={pendingSave ? t('regional.errors.unknown') : saveErrorText(t, saveError)}
+            message={pendingSave ? t('regional.errors.unknown') : t(saveError)}
             action={pendingSave ? <Space><Button size="small" onClick={() => void save()}>{t('actions.exactRetry')}</Button><Button size="small" onClick={() => { setPendingSave(undefined); setSaveError(undefined); void overrides.refetch() }}>{t('actions.abandon')}</Button></Space> : undefined}
           /> : null}
         </div>
@@ -724,14 +762,15 @@ export default function ErrorPagesPage() {
 
   return <section className="identity-page error-pages-page" aria-label={t('heading')}>
     <h1 className="visually-hidden">{t('heading')}</h1>
+    {/* 面板放进各自 tabpanel；切走不卸载（destroyOnHidden 默认关），全局草稿随页签切换保留 */}
     <Tabs
       className="error-page-tabs"
       activeKey={activeTab}
       onChange={setActiveTab}
-      items={[{ key: 'global', label: t('tabs.global') }, { key: 'regional', label: t('tabs.regional') }]}
+      items={[
+        { key: 'global', label: t('tabs.global'), children: <GlobalErrorPagePanel owner={owner} ownerKey={ownerKey} manageable={canManage(principal)} /> },
+        { key: 'regional', label: t('tabs.regional'), children: <RegionalOverridesPanel owner={owner} ownerKey={ownerKey} manageable={canManage(principal)} /> },
+      ]}
     />
-    {activeTab === 'global'
-      ? <GlobalErrorPagePanel owner={owner} ownerKey={ownerKey} manageable={canManage(principal)} />
-      : <RegionalOverridesPanel owner={owner} ownerKey={ownerKey} manageable={canManage(principal)} />}
   </section>
 }

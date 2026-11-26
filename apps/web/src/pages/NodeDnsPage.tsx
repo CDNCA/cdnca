@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Alert, Button, Form, Input, Modal, Select, Switch, Tabs } from 'antd'
+import { Alert, Button, Form, Input, Modal, Select, Switch } from 'antd'
+import { Tabs } from '../components/Tabs'
 import { useFormSubmitError } from '@cdnca/ui'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -133,6 +134,7 @@ export function errorMessage(error: ApiError, t: TFunction<'dnsProviders'>): str
     'provider_verification_unsupported', 'provider_disabled', 'provider_credentials_invalid',
     'provider_token_inactive', 'provider_credentials_rejected', 'provider_verification_rate_limited',
     'provider_verification_unavailable', 'provider_verification_invalid_response', 'provider_verification_timeout',
+    'provider_proxy_unavailable',
     'dns_provider_platform_managed', 'dns_provider_reauthorization_required',
   ])
   const statusCode = knownCodes.has(error.code) ? error.code : error.status === 403

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hashKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Result, Space, Tag, Tooltip } from 'antd'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useHref, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { ApiError, type Principal } from '../api/auth'
 import { writeOutcomeUnknown as hasUncertainWriteOutcome } from './site-edit/writeOutcome'
@@ -18,7 +18,7 @@ import {
   type SiteDetail,
   type SiteOriginPool,
 } from '../api/sites'
-import { roleForPrincipal, useSessionStore } from '../auth/session'
+import { refreshPrincipalPermissions, roleForPrincipal, useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/siteTLS'
 import '../i18n/pluginUI'
@@ -44,8 +44,12 @@ import { OutcomeUnknown, FeedbackWhen } from '@cdnca/ui'
 import { rebaseDraft, useCommitRequest, useInstantFeedback } from './site-edit/instantSave'
 import { siteAccessGap } from './site-edit/cnameFailureText'
 import { siteEditErrorMessage } from './site-edit/siteErrorText'
+import { sitePackageQuotaNotice, type SitePackageQuotaNotice } from './site-edit/SitePackageQuotaError'
 import { openTabAt } from './site-edit/siteTabSummaryJump'
-import { accessStatusLabel } from './site-edit/accessReadinessText'
+import { accessStatusLabel, firstFailing, lookup } from './site-edit/accessReadinessText'
+import { siteHeadline, siteHeadlineTag } from './site-edit/siteHeadline'
+import { siteOriginStatusApi } from '../api/siteOriginStatus'
+import '../i18n/siteOriginForwarding'
 import { SiteAccessReadinessCard } from './site-edit/SiteAccessReadiness'
 
 const BasicSiteTab = retryableLazy(() => import('./site-edit/BasicSiteTab'))
@@ -128,7 +132,6 @@ interface StoredOriginAttempt {
 interface OriginAttemptState {
   attempt: SaveAttempt | null
   corrupted: boolean
-  terminal: boolean
 }
 
 // CC/WAF 页的自动类功能集中到「自动防御」标签（?tab=autodefense）。
@@ -193,6 +196,14 @@ function isDirtyConfig(original: SiteBasicConfig, draft: SiteBasicConfig): boole
   return JSON.stringify(original) !== JSON.stringify(draft)
 }
 
+const cnamePollIntervalMs = 3_000
+const cnamePollWindowMs = 60_000
+
+// 判断轮询读到的 CNAME 状态是否与页面上的不同。
+function cnameStateKey(basic: SiteBasicConfig): string {
+  return JSON.stringify([basic.cname, basic.cname_state, basic.cname_failure_code ?? null, basic.cname_pending_code ?? null, basic.cname_task_id ?? null])
+}
+
 function cloneOriginPool(pool: SiteOriginPool): SiteOriginPool {
   return { ...pool, origins: pool.origins.map((origin) => ({ ...origin })) }
 }
@@ -233,23 +244,25 @@ function originRetryStorageKey(owner: SiteSessionOwner, siteId: string): string 
 }
 
 function restoreOriginAttempt(key: string | null, siteId: string, ownerKey: string): OriginAttemptState {
-  if (!key) return { attempt: null, corrupted: false, terminal: false }
+  if (!key) return { attempt: null, corrupted: false }
   try {
     const raw = sessionStorage.getItem(key)
-    if (raw === null) return { attempt: null, corrupted: false, terminal: false }
+    if (raw === null) return { attempt: null, corrupted: false }
     const stored = JSON.parse(raw) as StoredOriginAttempt | null
     if (!stored || stored.version !== 1 || stored.siteId !== siteId || !stored.idempotencyKey || !stored.serializedBody) {
-      return { attempt: null, corrupted: true, terminal: false }
+      return { attempt: null, corrupted: true }
     }
     const body = JSON.parse(stored.serializedBody) as PatchSiteOriginRequest
     if (body.section !== 'origin' || !Number.isInteger(body.expected_version) || validateOriginPool(body.changes) !== null) {
-      return { attempt: null, corrupted: true, terminal: false }
+      return { attempt: null, corrupted: true }
+    }
+    // A record whose write was refused for permission (its storage could not
+    // be cleared) is no longer a retry; the site opens as usual.
+    if (terminalOriginAttempts.has(terminalOriginAttemptIdentity(key, stored.idempotencyKey))) {
+      return { attempt: null, corrupted: false }
     }
     return {
       corrupted: false,
-      terminal: terminalOriginAttempts.has(
-        terminalOriginAttemptIdentity(key, stored.idempotencyKey),
-      ),
       attempt: {
         ownerKey,
         siteId,
@@ -261,7 +274,7 @@ function restoreOriginAttempt(key: string | null, siteId: string, ownerKey: stri
       },
     }
   } catch {
-    return { attempt: null, corrupted: true, terminal: false }
+    return { attempt: null, corrupted: true }
   }
 }
 
@@ -338,6 +351,13 @@ function SiteEditForbidden() {
 
 type SiteSyncStatus = 'synced' | 'pending' | 'failed'
 
+/** the publication state of one detail response (header and access card). */
+interface SitePublicationSnapshot {
+  version: number
+  sync_status: SiteSyncStatus | null
+  access_readiness: SiteDetail['access_readiness'] | null
+}
+
 const syncStatusTags = {
   synced: { color: 'success', stateKey: 'synced' },
   pending: { color: 'processing', stateKey: 'syncing' },
@@ -404,7 +424,9 @@ function SiteEditPageContent({
   const setNavigationDirty = useNavigationGuardStore((state) => state.setDirty)
   const role = roleForPrincipal(principal)
   const queryOwner = useRef(owner).current
-  const canManage = sitePrincipalCan(principal, 'sites.manage')
+  // a write refused for permission makes this page read-only at once.
+  const [writeDenied, setWriteDenied] = useState(false)
+  const canManage = sitePrincipalCan(principal, 'sites.manage') && !writeDenied
   const canManageDNS = sitePrincipalCan(principal, 'dns.manage')
   const retryStorageKey = `${siteBatchRetryStorageKey(queryOwner[0], queryOwner[1])}:${
     encodeURIComponent(queryOwner[2] ?? 'null')
@@ -471,6 +493,8 @@ function SiteEditPageContent({
   const [draft, setDraft] = useState<SiteBasicConfig | null>(null)
   const [originDraft, setOriginDraft] = useState<SiteOriginPool | null>(null)
   const [errors, setErrors] = useState<BasicValidationErrors>({})
+  // Shown with its action only while errors[field] is still this text (any edit clears errors).
+  const [packageQuota, setPackageQuota] = useState<SitePackageQuotaNotice>()
   const [originError, setOriginError] = useState<string>()
   const [feedback, setFeedback] = useState<SaveFeedback>('idle')
   const [feedbackMessage, setFeedbackMessage] = useState('')
@@ -480,10 +504,7 @@ function SiteEditPageContent({
   // The reason of a server-refused field marked in place.
   const serverFieldMessage = useRef<string | null>(null)
   const [originRecoveryPending, setOriginRecoveryPending] = useState(false)
-  const [terminalForbidden, setTerminalForbidden] = useState(recoveredOrigin.terminal)
-  const [uncertainWrite, setUncertainWrite] = useState(
-    !recoveredOrigin.terminal && (Boolean(recoveredAttempt) || recoveredOrigin.corrupted),
-  )
+  const [uncertainWrite, setUncertainWrite] = useState(Boolean(recoveredAttempt) || recoveredOrigin.corrupted)
   const detailQueryKey = useMemo(
     () => ['site-detail', queryOwner, id] as const,
     [id, queryOwner],
@@ -534,9 +555,7 @@ function SiteEditPageContent({
   }, [detailQueryKey, ownerKey, removeLineageCache])
 
   const query = useQuery({
-    queryKey: terminalForbidden
-      ? ['site-detail-terminal', queryOwner, id]
-      : detailQueryKey,
+    queryKey: detailQueryKey,
     queryFn: async () => {
       const token = currentSiteSessionAccess(ownerKey, ['sites.read'])
       if (!token) throw staleSiteEditAttempt
@@ -549,7 +568,7 @@ function SiteEditPageContent({
         throw error
       }
     },
-    enabled: Boolean(id) && !terminalForbidden,
+    enabled: Boolean(id),
     retry: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
@@ -559,7 +578,7 @@ function SiteEditPageContent({
   // 页面还在用时，详情 query 被别处的缓存清理删掉（removeQueries 会静默取消进行中的请求，
   // 状态永远停在 fetching），就按当前 key 重新拉一次，不让页面无限加载。
   useEffect(() => {
-    if (terminalForbidden || !id) return
+    if (!id) return
     const detailHash = hashKey(detailQueryKey)
     return queryClient.getQueryCache().subscribe((event) => {
       if (event.type !== 'removed' || event.query.queryHash !== detailHash) return
@@ -568,7 +587,7 @@ function SiteEditPageContent({
         if (lineageActiveRef.current && currentSessionMatchesLineage()) void refetchDetail()
       })
     })
-  }, [currentSessionMatchesLineage, detailQueryKey, id, queryClient, refetchDetail, terminalForbidden])
+  }, [currentSessionMatchesLineage, detailQueryKey, id, queryClient, refetchDetail])
 
   // A11: a "reload" from the slow-loading state re-runs the initialization
   // below even when the query data did not change.
@@ -610,28 +629,64 @@ function SiteEditPageContent({
   if (detail && openedVersion.current === undefined) openedVersion.current = detail.version
   const savedSinceOpen = Boolean(detail) && openedVersion.current !== undefined && (detail?.version ?? 0) > openedVersion.current
   const savedSyncStatus = savedSinceOpen && detail?.basic.sync_status === 'synced' ? 'pending' : detail?.basic.sync_status
+  // 页头同步状态与接入卡片读同一份重读结果（同一详情响应，且版本与本页一致），
+  // 不再只取 sync_status、卡片停在打开时的 access_readiness；手动检查与重新发布也写回这一份。
+  // 编辑草稿与冲突基线仍是打开页面时的 detail，重读不覆盖。
+  const syncQueryKey = ['site-sync-status', queryOwner, id, detail?.version] as const
+  // 渲染与是否继续重读用同一个判断——只有本页修订的快照算数；
+  // 别的修订（如他处已保存的 v3 已同步）不改变本页状态，也不停止重读，直到本页修订给出终态。
+  const snapshotForPage = (value: SitePublicationSnapshot | null | undefined) =>
+    value && value.version === detail?.version ? value : undefined
   const syncQuery = useQuery({
-    queryKey: ['site-sync-status', queryOwner, id, detail?.version],
-    queryFn: async () => {
+    queryKey: syncQueryKey,
+    queryFn: async (): Promise<SitePublicationSnapshot | null> => {
       const token = currentSiteSessionAccess(ownerKey, ['sites.read'])
       if (!token) throw staleSiteEditAttempt
-      return (await sitesApi.detail(token, id))?.basic.sync_status ?? null
+      const latest = await sitesApi.detail(token, id)
+      // 别的修订：保留本页修订上一次的快照（页面状态不变，按它决定是否继续重读）。
+      if (latest && latest.version !== detail?.version) {
+        return snapshotForPage(queryClient.getQueryData<SitePublicationSnapshot | null>(syncQueryKey)) ?? null
+      }
+      return latest ? { version: latest.version, sync_status: latest.basic.sync_status ?? null,
+        access_readiness: latest.access_readiness ?? null } : null
     },
-    enabled: savedSyncStatus === 'pending' && !terminalForbidden,
+    enabled: Boolean(detail),
     // The detail just read is the first sample; the next read waits one interval.
-    initialData: 'pending' as SiteSyncStatus | null,
+    initialData: null,
     staleTime: 5_000,
-    refetchInterval: (state) => (state.state.data ?? 'pending') === 'pending' ? 5_000 : false,
+    refetchInterval: (state) => {
+      const snapshot = snapshotForPage(state.state.data)
+      return (snapshot ? snapshot.sync_status : savedSyncStatus) === 'pending' ? 5_000 : false
+    },
     refetchOnWindowFocus: false,
     retry: false,
   })
-  const syncStatus = savedSyncStatus === 'pending' ? (syncQuery.data ?? 'pending') : savedSyncStatus
+  const publication = snapshotForPage(syncQuery.data)
+  const syncStatus = publication ? publication.sync_status : savedSyncStatus
+  const accessReadiness = publication ? publication.access_readiness : detail?.access_readiness
+  const writePublication = (change: Partial<SitePublicationSnapshot>) => {
+    if (!detail) return
+    queryClient.setQueryData<SitePublicationSnapshot | null>(syncQueryKey, (current) => ({
+      version: detail.version, sync_status: syncStatus ?? null, access_readiness: accessReadiness ?? null,
+      ...(current && current.version === detail.version ? current : {}), ...change,
+    }))
+  }
   // WEB/FLOW-STATE-01: a failed read is not a node failure and not "pending";
   // the last known state stays, the header says the read failed and offers a retry.
-  const syncReadFailed = savedSyncStatus === 'pending' && syncQuery.isError
+  const syncReadFailed = syncStatus === 'pending' && syncQuery.isError
+  // 首装验收：源站健康单独展示并参与主状态（与「基本配置」源站状态卡同一查询、同一缓存）。读失败时不参与判定。
+  const originStatusQuery = useQuery({
+    queryKey: ['site-origin-status', detail?.id ?? id],
+    retry: false,
+    refetchInterval: 30_000,
+    enabled: Boolean(detail),
+    queryFn: ({ signal }) => siteOriginStatusApi.get(accessToken, detail?.id ?? id, signal),
+  })
   const publicationsPath = principal.scope_kind === 'platform' && detail?.scope_id
     ? `/site/publications?target_scope_id=${encodeURIComponent(detail.scope_id)}` : '/site/publications'
-  // 10-27 用户：待同步时显示"N秒后刷新"，从 5 倒数到下一次重读。
+  // 原生 href 带路由 basename（/dashboard），复制链接或新标签打开才进控制台而不是官网。
+  const publicationsHref = useHref(publicationsPath)
+  // 待同步时显示"N秒后刷新"，从 5 倒数到下一次重读。
   const [syncNow, setSyncNow] = useState(() => Date.now())
   useEffect(() => {
     if (syncStatus !== 'pending' || syncReadFailed) return
@@ -722,43 +777,42 @@ function SiteEditPageContent({
     return true
   }
 
-  const denyCurrentLineage = useCallback((attempt: SaveAttempt) => {
-    lineageActiveRef.current = false
-    if (attempt.section === 'origin' && originStorageKey) {
-      const terminalIdentity = terminalOriginAttemptIdentity(
-        originStorageKey,
-        attempt.idempotencyKey,
-      )
-      let invalidated = false
-      try {
-        sessionStorage.removeItem(originStorageKey)
-        invalidated = true
-      } catch {
+  // a write refused for permission is not a
+  // read refusal. Only this attempt ends (an origin retry record is
+  // invalidated so it is not sent again); the details and drafts stay, the
+  // page turns read-only, says so once and re-reads the session permissions.
+  // Only a detail read answered 403 shows the read denial.
+  const writeDeniedRef = useRef(false)
+  const warnInstant = instantFeedback.warning
+  const settleWriteDenied = useCallback((attempt: SaveAttempt) => {
+    if (saveAttemptRef.current?.idempotencyKey === attempt.idempotencyKey) {
+      if (attempt.section === 'origin' && originStorageKey) {
+        const terminalIdentity = terminalOriginAttemptIdentity(originStorageKey, attempt.idempotencyKey)
+        let invalidated = false
         try {
-          sessionStorage.setItem(originStorageKey, '{}')
+          sessionStorage.removeItem(originStorageKey)
           invalidated = true
         } catch {
-          // The current lineage remains terminal even when browser storage is unavailable.
+          try {
+            sessionStorage.setItem(originStorageKey, '{}')
+            invalidated = true
+          } catch {
+            // The in-memory mark keeps the record from being restored as a retry.
+          }
         }
+        if (invalidated) terminalOriginAttempts.delete(terminalIdentity)
       }
-      if (invalidated) terminalOriginAttempts.delete(terminalIdentity)
+      saveAttemptRef.current = null
+      setUncertainWrite(false)
     }
-    saveAttemptRef.current = null
-    setDetail(null)
-    setDraft(null)
-    setOriginDraft(null)
-    setErrors({})
-    setOriginError(undefined)
     setFeedback('idle')
     setFeedbackMessage('')
-    setUncertainWrite(false)
-    setCacheWriteState({ dirty: false, uncertain: false, pending: false })
-    setHttpsWriteState({ dirty: false, uncertain: false, pending: false })
-    setConditionalWriteState({ dirty: false, uncertain: false, pending: false })
-    setNavigationDirty(false)
-    setTerminalForbidden(true)
-    queueMicrotask(removeLineageCache)
-  }, [originStorageKey, removeLineageCache, setNavigationDirty])
+    if (writeDeniedRef.current) return
+    writeDeniedRef.current = true
+    setWriteDenied(true)
+    warnInstant(t('edit.feedback.permissionChanged'))
+    void refreshPrincipalPermissions().catch(() => undefined)
+  }, [originStorageKey, t, warnInstant])
 
   useEffect(() => {
     const settle = (identity: string) => {
@@ -767,7 +821,7 @@ function SiteEditPageContent({
         attempt?.section === 'origin' &&
         identity === terminalOriginAttemptIdentity(originStorageKey, attempt.idempotencyKey)
       ) {
-        denyCurrentLineage(attempt)
+        settleWriteDenied(attempt)
       }
     }
     terminalOriginListeners.add(settle)
@@ -779,7 +833,7 @@ function SiteEditPageContent({
     return () => {
       terminalOriginListeners.delete(settle)
     }
-  }, [denyCurrentLineage, originStorageKey])
+  }, [settleWriteDenied, originStorageKey])
 
   const detailRef = useRef<SiteDetail | null>(null)
   detailRef.current = detail
@@ -882,7 +936,7 @@ function SiteEditPageContent({
     onError: (error: unknown, attempt) => {
       if (error === staleSiteEditAttempt || !attemptMatchesLiveReader(attempt)) return
       if (terminalSiteAuthorizationError(error)) {
-        denyCurrentLineage(attempt)
+        settleWriteDenied(attempt)
         return
       }
       if (error instanceof ApiError && error.status === 409 && error.code === 'site_locked') {
@@ -907,6 +961,18 @@ function SiteEditPageContent({
       // controls go back to the saved values, the reason stays under the
       // field); the focus check falls back to the dialog when it is on a
       // hidden tab.
+      // a package quota refusal is marked under its
+      // field and the sent input stays, so the user removes what is over the limit.
+      const quota = !uncertain && attempt.section === 'basic' && detailRef.current
+        ? sitePackageQuotaNotice(error, attempt.changes as SiteBasicConfig, detailRef.current.basic) : null
+      if (quota) {
+        setErrors({ [quota.field]: quota.text })
+        setPackageQuota(quota)
+        serverFieldMessage.current = quota.text
+        setFeedback('idle')
+        setFocusErrorRequest((request) => request + 1)
+        return
+      }
       const pinned = !uncertain ? serverFieldError(error) : null
       if (pinned) {
         // Under the field only the reason; the dialog fallback keeps the request ID.
@@ -933,8 +999,55 @@ function SiteEditPageContent({
     },
   })
 
+  // CNAME 生成中时每 3 秒重读详情，最多 60 秒；读到结果（失败、完成或停滞原因变化）就以服务端为准
+  // 写回页面（未保存的改动保留），不残留本地“生成中”。到上限仍在生成时给“刷新状态”。
+  const cnamePending = detail?.basic.cname_state === 'pending'
+  const cnameTaskID = detail?.basic.cname_task_id ?? null
+  const [cnamePollRound, setCnamePollRound] = useState(0)
+  const [cnamePollExpired, setCnamePollExpired] = useState(false)
+  useEffect(() => { setCnamePollExpired(false) }, [cnamePending, cnameTaskID])
+  useEffect(() => {
+    if (!cnamePending || cnamePollExpired) return
+    const timer = window.setTimeout(() => setCnamePollExpired(true), cnamePollWindowMs)
+    return () => window.clearTimeout(timer)
+  }, [cnamePending, cnamePollExpired, cnamePollRound, cnameTaskID])
+  const cnameQuery = useQuery({
+    queryKey: ['site-cname-state', queryOwner, id, cnameTaskID, cnamePollRound],
+    queryFn: async () => {
+      const token = currentSiteSessionAccess(ownerKey, ['sites.read'])
+      if (!token) throw staleSiteEditAttempt
+      const latest = await sitesApi.detail(token, id)
+      if (!currentSessionMatchesLineage()) throw staleSiteEditAttempt
+      return latest
+    },
+    enabled: cnamePending && !cnamePollExpired,
+    // 刚读到的详情就是第一次采样；“刷新状态”（新一轮）立即重读。
+    initialData: cnamePollRound === 0 && cnamePending ? detail ?? undefined : undefined,
+    staleTime: cnamePollIntervalMs,
+    gcTime: 0,
+    refetchInterval: cnamePollIntervalMs,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+  const cnameLatest = cnameQuery.data
+  useEffect(() => {
+    const previous = detailRef.current
+    if (!cnameLatest || !previous || cnameLatest.id !== previous.id || cnameLatest.version < previous.version) return
+    if (saveMutation.isPending || uncertainWrite || batchWriteLocked) return
+    if (cnameStateKey(cnameLatest.basic) === cnameStateKey(previous.basic)) return
+    setDetail(cnameLatest)
+    setDraft((current) => current ? rebaseDraft(cnameLatest.basic, current, previous.basic) : cnameLatest.basic)
+    setOriginDraft((current) => !current || JSON.stringify(current) === JSON.stringify(previous.origin_pool)
+      ? cloneOriginPool(cnameLatest.origin_pool) : current)
+    queryClient.setQueryData(detailQueryKey, cnameLatest)
+  }, [cnameLatest, detail, saveMutation.isPending, uncertainWrite, batchWriteLocked]) // eslint-disable-line react-hooks/exhaustive-deps
+  const recheckCname = () => {
+    setCnamePollExpired(false)
+    setCnamePollRound((round) => round + 1)
+  }
+
   const apiError = query.error instanceof ApiError ? query.error : null
-  const forbidden = terminalForbidden || apiError?.status === 403 || apiError?.code === 'permission_denied'
+  const forbidden = apiError?.status === 403 || apiError?.code === 'permission_denied'
   const notFound = apiError?.status === 404 || apiError?.code === 'site_not_found'
 
   const setTab = (tab: TabKey) => {
@@ -1241,8 +1354,19 @@ function SiteEditPageContent({
     status_state: detail.status_state,
     lock: detail.lock,
   })
-  const statusTranslationKey = statusState === 'normal' ? 'active' : statusState
   const accessGap = siteAccessGap({ ...detail.basic, https_certificate_bound: detail.https_certificate_bound })
+  // 运行态 normal 时，接入未就绪显示“接入受阻/待配置”，源站异常显示“源站异常”，全部就绪才“正常”。
+  const originStatus = originStatusQuery.data
+  const headline = siteHeadline({ readiness: accessReadiness, accessGap, originOverall: originStatus?.overall })
+  const headlineTag = siteHeadlineTag({ statusState, headline })
+  // 主状态已写“接入受阻/待配置”时，接入标签只写未通过的那一项，不再重复整句。
+  const accessFailing = accessReadiness ? firstFailing(accessReadiness) : undefined
+  const accessTagText = !accessReadiness ? ''
+    : accessFailing && (headline === 'accessBlocked' || headline === 'accessPending') && headlineTag.labelKey === `states.headline.${headline}`
+      ? lookup(tAccess, (key) => i18n.exists(key), 'short', accessFailing)
+      : accessStatusLabel(accessReadiness, tAccess, (key) => i18n.exists(key))
+  const originFailing = originStatus?.overall === 'unhealthy'
+    ? originStatus.origins.find((origin) => origin.enabled && origin.status === 'unhealthy') : undefined
   const lockDescription = [
     detail.lock.reason,
     detail.lock.operator?.display_name
@@ -1269,9 +1393,11 @@ function SiteEditPageContent({
             if (canLeaveCurrentPage()) navigate('/site/list')
           }}
         />
-        <h1 id="site-edit-title">{draft.domains[0] || detail.id}</h1>
-        <Tag color={statusState === 'normal' ? 'success' : statusState === 'locked' ? 'error' : 'warning'}>
-          {t(`states.${statusTranslationKey}`)}
+        {/* 页头显示已保存的主域名，保存被拒时不显示未生效的草稿域名。 */}
+        <h1 id="site-edit-title">{detail.basic.domains[0] || detail.id}</h1>
+        <Tag color={headlineTag.color}
+          data-testid="site-edit-status">
+          {t(headlineTag.labelKey)}
         </Tag>
         {syncStatus ? (
           <span data-testid="site-edit-sync-status" role="status" aria-live="polite"
@@ -1281,7 +1407,7 @@ function SiteEditPageContent({
               ? t('states.syncReadFailed', { time: formatDateTime(new Date(Math.max(syncQuery.dataUpdatedAt, query.dataUpdatedAt)).toISOString(), i18n.resolvedLanguage) })
               : syncStatus === 'pending'
                 ? t('states.syncPendingCountdown', { seconds: syncSecondsLeft })
-                : t(`states.${syncStatusTags[syncStatus].stateKey}`)}
+                : syncStatus === 'synced' ? t('states.configSynced') : t(`states.${syncStatusTags[syncStatus].stateKey}`)}
             {syncReadFailed ? (
               <Button type="link" size="small" onClick={() => void syncQuery.refetch()} loading={syncQuery.isFetching}>
                 {t('states.syncReadRetry')}
@@ -1290,10 +1416,10 @@ function SiteEditPageContent({
           </span>
         ) : null}
         {/* FLOW001：“已同步”只说节点配置；入口（线路/CNAME/证书）是否就绪单独标出，与列表同一判定。 */}
-        {detail.access_readiness ? (
-          <Tag data-testid="site-edit-access" color={detail.access_readiness.state === 'ready' ? 'success'
-            : detail.access_readiness.state === 'blocked' ? 'error' : 'warning'}>
-            {accessStatusLabel(detail.access_readiness, tAccess, (key) => i18n.exists(key))}
+        {accessReadiness ? (
+          <Tag data-testid="site-edit-access" color={accessReadiness.state === 'ready' ? 'success'
+            : accessReadiness.state === 'blocked' ? 'error' : 'warning'}>
+            {accessTagText}
           </Tag>
         ) : accessGap ? (
           <Tooltip title={t(`states.accessGapHint.${accessGap}`)}>
@@ -1303,17 +1429,32 @@ function SiteEditPageContent({
           <Tag data-testid="site-edit-access" color="success">{t('states.accessReady')}</Tag>
         )}
         {/* 接入未就绪时页头直接去「基本配置」的接入状态卡（逐项原因、去 DNS 配置/重新生成）。 */}
-        {detail.access_readiness && detail.access_readiness.state !== 'ready' ? (
+        {accessReadiness && accessReadiness.state !== 'ready' ? (
           <Button type="link" size="small" className="site-edit-access-reason" data-testid="site-edit-access-reason"
             onClick={() => openTabAt((tab) => setTab(tab as TabKey), 'basic', 'site-access-card')}>
             {tAccess('actions.viewReason')}
           </Button>
         ) : null}
+        {/* 首装验收：源站健康独立一项；异常时旁边直接去本站源站设置。 */}
+        {originStatus && originStatus.overall !== 'unknown' ? (
+          <Tag data-testid="site-edit-origin" color={originStatus.overall === 'healthy' ? 'success' : 'error'}>
+            {originStatus.overall === 'healthy' ? t('states.originHealthy') : originFailing?.reason
+              ? t('states.originUnhealthyReason', { reason: t(`siteOriginForwarding:failover.reason.${originFailing.reason}`, { defaultValue: originFailing.reason }) })
+              : t('states.originUnhealthy')}
+          </Tag>
+        ) : null}
+        {originStatus?.overall === 'unhealthy' ? (
+          <Button type="link" size="small" data-testid="site-edit-origin-settings" onClick={() => setTab('origin')}>
+            {t('states.viewOriginSettings')}
+          </Button>
+        ) : null}
         {/* WEB/FLOW-STATE-01: one stable way from the site to what was published
             (the owner's publication records; an administrator lands on the owner). */}
         <a className="site-edit-publications-link" data-testid="site-edit-publications"
-          href={publicationsPath}
+          href={publicationsHref}
           onClick={(event) => {
+            // 修饰键与中键交给浏览器开新标签；普通点击仍经未保存确认后站内跳转。
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
             event.preventDefault()
             if (canLeaveCurrentPage()) navigate(publicationsPath)
           }}>
@@ -1414,20 +1555,19 @@ function SiteEditPageContent({
         <div data-site-edit-tab="basic" hidden={activeTab !== 'basic'}>
         <SiteEditTabBoundary key="basic" fallback={<EditLoading />}>
           {/* 服务端接入状态逐项（线路/CNAME/解析/证书/发布）与“立即检查”。 */}
-          {detail.access_readiness ? (
-            <SiteAccessReadinessCard readiness={detail.access_readiness} siteID={detail.id} admin={role === 'admin'}
+          {accessReadiness ? (
+            <SiteAccessReadinessCard readiness={accessReadiness} siteID={detail.id} admin={role === 'admin'}
               cname={detail.basic.cname} cnameFailureCode={detail.basic.cname_state === 'failed' ? detail.basic.cname_failure_code : null}
+              cnameDomain={detail.basic.cname_domain} packageSuspension={detail.package_suspension}
               onCheckNow={accessToken ? async () => {
                 const readiness = await sitesApi.checkAccess(accessToken, detail.id)
-                queryClient.setQueryData<SiteDetail | null>(detailQueryKey,
-                  (current) => current ? { ...current, access_readiness: readiness } : current)
+                writePublication({ access_readiness: readiness })
               } : undefined}
               // “已发布到节点”未通过时重新发布（sites.manage，未被锁定）；之后重读详情让同步状态跟上。
               onRepublish={accessToken && canManage && !lockedForTenant ? async () => {
                 const readiness = await sitesApi.republish(accessToken, detail.id)
-                queryClient.setQueryData<SiteDetail | null>(detailQueryKey,
-                  (current) => current ? { ...current, access_readiness: readiness } : current)
-                void queryClient.invalidateQueries({ queryKey: detailQueryKey })
+                // 重新发布已排队：同步状态回到待同步并恢复 5 秒重读，直到节点回执给出结果。
+                writePublication({ access_readiness: readiness, sync_status: 'pending' })
               } : undefined} />
           ) : null}
           <BasicSiteTab
@@ -1437,6 +1577,7 @@ function SiteEditPageContent({
             value={draft}
             originPool={originDraft}
             errors={errors}
+            packageQuota={packageQuota}
             originError={originError}
             readOnly={!canManage || lockedForTenant || uncertainWrite || batchWriteLocked}
             originReadOnly={!canManage || lockedForTenant || uncertainWrite || batchWriteLocked}
@@ -1447,6 +1588,8 @@ function SiteEditPageContent({
             canManageOrigins={canManage && !lockedForTenant}
             selectScopeID={principal.scope_kind === 'platform' ? detail.scope_id : principal.scope_id}
             onTransfer={role === 'admin' && principal.scope_kind === 'platform' && canManage ? () => setTransferOpen(true) : undefined}
+            cnamePollExpired={cnamePollExpired}
+            onCnameRecheck={recheckCname}
           />
           {transferOpen && accessToken ? (
             <SiteTransferModal
@@ -1629,6 +1772,7 @@ function SiteEditPageContent({
             canManage={canManage}
             lockedForTenant={lockedForTenant}
             siteScopeId={principal.scope_kind === 'platform' ? detail?.scope_id : principal.scope_id}
+            siteName={detail?.basic.domains[0]}
             websocketEnabled={detail ? originForwarding(detail.origin_pool).websocket.enabled : undefined}
             edgeOptions={draft && originDraft ? (part) => (
               <SiteEdgeOptionsSection part={part} pool={originDraft} basic={draft} admin={role === 'admin'} accessToken={accessToken}

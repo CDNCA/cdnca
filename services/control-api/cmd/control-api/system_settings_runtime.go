@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/clientip"
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 	"github.com/cdnca/cdnca/services/control-api/internal/httpapi"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemcleanup"
@@ -146,7 +148,35 @@ func buildSystemMailSettingsHandlerFactory(config systemSettingsRuntimeConfig, p
 	}, nil
 }
 
-func buildSystemOtherSettingsHandlerFactory(config systemSettingsRuntimeConfig, pool *pgxpool.Pool, identityService *identity.Service) (httpapi.MountedHandlerFactory, error) {
+// sourceIPHeaderRefresh: how long a 源IP请求头 read is reused (another
+// control-api instance's save applies within it; this one's at once).
+const sourceIPHeaderRefresh = 5 * time.Second
+
+// newSourceIPHeaderSetting is the live 源IP请求头
+// httpapi takes the visitor address from; nil without a database (direct).
+func newSourceIPHeaderSetting(pool *pgxpool.Pool) *clientip.Setting {
+	if pool == nil {
+		return nil
+	}
+	return clientip.NewSetting(func(ctx context.Context) (string, error) {
+		return systemothersettings.SourceIPHeader(ctx, pool)
+	}, sourceIPHeaderRefresh)
+}
+
+// newDNSAPIProxySetting is the live http代理 DNS provider API requests go
+// through (dnsapiproxy); nil without a database (direct). Same refresh as the
+// 源IP请求头.
+func newDNSAPIProxySetting(pool *pgxpool.Pool) *dnsapiproxy.Setting {
+	if pool == nil {
+		return nil
+	}
+	return dnsapiproxy.NewSetting(func(ctx context.Context) (string, error) {
+		return systemothersettings.HTTPProxy(ctx, pool)
+	}, sourceIPHeaderRefresh)
+}
+
+func buildSystemOtherSettingsHandlerFactory(config systemSettingsRuntimeConfig, pool *pgxpool.Pool, identityService *identity.Service,
+	sourceIPHeader *clientip.Setting) (httpapi.MountedHandlerFactory, error) {
 	if !config.Enabled {
 		return nil, nil
 	}
@@ -158,6 +188,10 @@ func buildSystemOtherSettingsHandlerFactory(config systemSettingsRuntimeConfig, 
 		if err != nil {
 			return nil, err
 		}
+		service.WithSaved(func(value systemothersettings.Settings) {
+			sourceIPHeader.Store(value.SourceIPHeader)
+			dnsapiproxy.Store(value.HTTPProxy)
+		})
 		return systemothersettingshttp.New(service, func(request *http.Request, rawSession string) (identity.AuthenticatedSession, error) {
 			return identityService.AuthenticateSession(context.WithoutCancel(request.Context()), rawSession)
 		})

@@ -280,8 +280,6 @@ Connection options:
                                enable BBR with the fq qdisc and persist it in
                                /etc/sysctl.d/90-cdnca-bbr.conf; an algorithm other
                                than cubic/reno set by the operator is never replaced)
-                               不改 TCP 拥塞控制（默认开启 BBR + fq 并持久化；
-                               管理员已设的非 cubic/reno 算法不会被覆盖）
   --disable-xdp                Do not attach the XDP kernel filter (default: use
                                native XDP, else generic XDP, else nftables only)
   --ssh-guard-ignoreip "A B"   fail2ban sshd: addresses/CIDRs never banned (operator egress, platform hosts)
@@ -1480,9 +1478,10 @@ progress_tick() {
   elif [ "$waited" -ge "$PROGRESS_WAIT_NEXT" ]; then PROGRESS_WAIT_NEXT=$((PROGRESS_WAIT_NEXT + 10)); progress_line "$text"; fi
 }
 
-# apt 输出里的 “N/M：包名”；看不出时输出为空。
+# apt 输出里的 “N/M：包名”；看不出时输出为空。$2 为本次命令输出在文件里的起始行（默认 1），
+# 只看这之后的行，下一步不会继承上一步 apt 的包名。
 progress_apt_detail() {
-  awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
+  tail -n "+${2:-1}" "$1" 2>/dev/null | awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
     /^Get:[0-9]+ / { got++ }
     /^Unpacking / { name = $2 }
     /^Setting up / { done++; name = $3 }
@@ -1490,15 +1489,15 @@ progress_apt_detail() {
       if (total <= 0) exit
       if (name != "") printf (en ? "  installing %d/%d: %s" : "  正在安装 %d/%d：%s"), done, total, name
       else if (got > 0) printf (en ? "  downloading packages %d/%d" : "  正在下载软件包 %d/%d"), got, total
-    }' "$1" 2>/dev/null || true
+    }' 2>/dev/null || true
 }
 
 # 后台心跳：终端每秒、非终端每 15 秒一行；安装器进程（$$）退出后自停。
 progress_heartbeat() {
-  local label=$1 output=$2 started=$SECONDS next=15 elapsed text
+  local label=$1 output=$2 from=${3:-1} started=$SECONDS next=15 elapsed text
   while sleep 1 && kill -0 "$$" 2>/dev/null; do
     elapsed=$((SECONDS - started))
-    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
+    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output" "$from")"
     if "$PROGRESS_TTY"; then progress_inline "$text"
     elif [ "$elapsed" -ge "$next" ]; then next=$((next + 15)); progress_line "$text"; fi
   done
@@ -1528,7 +1527,7 @@ progress_run() {
   else
     : >"$output"
   fi
-  progress_heartbeat "$label" "$output" &
+  progress_heartbeat "$label" "$output" "$from" &
   PROGRESS_HEARTBEAT=$!
   "$@" >>"$output" 2>&1 </dev/null || status=$?
   progress_stop_heartbeat
@@ -3495,8 +3494,8 @@ verify_agent_connected() {
 # of an enrolled host needs no key.
 node_next_steps() {
   printf '%s\n  1) %s\n  2) %s\n  3) %s\n  4) %s\n' "$(msg '下一步：' 'Next steps:')" \
-    "$(msg '主控「节点列表 → 待初始化」找到本机，点「初始化」（第一次装主控时还需先建「区域」）' 'console Nodes -> Pending initialization: find this host and click Initialize (on a new console create a Region first)')" \
-    "$(msg '把本机加入线路组（「线路组」→ 新建或编辑，端点选本机 80 端口），站点才会解析到本机' 'add this host to a line group (Line groups -> new or edit, endpoint this host port 80) so sites resolve to it')" \
+    "$(msg '主控「节点列表 → 待初始化」找到本机，点「初始化」' 'console Nodes -> Pending initialization: find this host and click Initialize')" \
+    "$(msg '把本机 IP 加入线路分组（「线路分组」→ 选分组 →「配置解析」），站点才会解析到本机' 'add this host IP to a line group (Line groups -> pick a group -> Configure resolution) so sites resolve to it')" \
     "$(msg '（可选，只用于复核）初始化后在原安装命令最后一个参数后面加上 --resume 重新自检（本机已有身份，无需重新取注册密钥；直接 bash <安装器> ... --resume </dev/null 也可）；不执行也不影响节点开放' '(optional, re-check only) after initializing rerun the original install command with --resume (this host already has its identity, no need to fetch the registration key again; bash <installer> ... --resume </dev/null works too); the node opens without it')" \
     "$(msg "复核通过后可随时核对：${INSTALLER_COPY} check（应全部 OK）" "after the re-check verify any time: ${INSTALLER_COPY} check (every item must be OK)")" >&2
 }
@@ -3680,9 +3679,10 @@ node_install_summary() {
     printf '  TCP 80, TCP 443  %s\n' "$(msg '网站 HTTP/HTTPS' 'website HTTP/HTTPS')"
     printf '  UDP 443          %s\n' "$(msg '网站 HTTP/3（站点开启 HTTP/3 时）' 'website HTTP/3 (when enabled on a site)')"
     printf '  %s\n' "$(msg "四层转发端口按管理端配置另行放行；出站需能访问网关 ${GATEWAY_ADDRESS}。" "Open layer-4 forwarding ports as configured in the console; outbound must reach ${GATEWAY_ADDRESS}.")"
-    printf '%s http://127.0.0.1:18080/healthz %s\n' "$(msg '健康检查：' 'Health check:')" "$(msg '（仅本机）' '(local only)')"
-    printf '%s journalctl -u %s%s\n' "$(msg '日志：' 'Logs:')" "$SERVICE_NAME" "${PROGRESS_LOG:+; $PROGRESS_LOG}"
     printf '%s %s check\n' "$(msg '核对：' 'Verify:')" "$INSTALLER_COPY"
+    # 18080 只在发布首个站点后由 Agent 启动的 OpenResty 监听；首装核对用 check。
+    printf '%s http://127.0.0.1:18080/healthz %s\n' "$(msg '发布首个站点后的本机探针：' 'Local probe once the first site is published:')" "$(msg '（应为 204；无站点时未监听属正常）' '(expect 204; not listening before any site is normal)')"
+    printf '%s journalctl -u %s%s\n' "$(msg '日志：' 'Logs:')" "$SERVICE_NAME" "${PROGRESS_LOG:+; $PROGRESS_LOG}"
     printf '%s /usr/libexec/cdnca-edge-agent/uninstall.sh\n' "$(msg '卸载：' 'Uninstall:')"
     printf '%s\n' '================================================================'
   } >&2

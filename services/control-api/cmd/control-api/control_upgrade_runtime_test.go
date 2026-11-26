@@ -290,8 +290,11 @@ func TestControlUpgradeLicenseReceiptWorkerCompositionContract(t *testing.T) {
 	}
 	for _, required := range []string{
 		"controlupgrade.NewLicenseReceiptDispatcher(store, license,",
-		"results := make(chan error, 4)",
+		"results := make(chan error, 5)",
 		"runtime.runReceiptDispatcher(runCtx)",
+		// create preparations run beside the dispatchers.
+		"runtime.runPreparations(runCtx)",
+		"preparations: service, workerID: runtimeConfig.WorkerID,",
 		"func (runtime *controlUpgradeProductionRuntime) runReceiptDispatcher",
 		"runtime.receiptDispatcher.HasFailed(ctx)",
 	} {

@@ -148,11 +148,11 @@ type Endpoint struct {
 }
 
 type Route struct {
-	ID             string   `json:"id"`
-	Priority       int      `json:"priority"`
-	PathPrefix     string   `json:"path_prefix,omitempty"`
-	NodeRegions    []string `json:"node_regions,omitempty"`
-	ClientCIDRs    []string `json:"client_cidrs,omitempty"`
+	ID          string   `json:"id"`
+	Priority    int      `json:"priority"`
+	PathPrefix  string   `json:"path_prefix,omitempty"`
+	NodeRegions []string `json:"node_regions,omitempty"`
+	ClientCIDRs []string `json:"client_cidrs,omitempty"`
 	// Hosts match the request host: exact names, or "*.x" for any deeper
 	// subdomain of x (a site's leading wildcard domain).
 	Hosts          []string `json:"hosts,omitempty"`

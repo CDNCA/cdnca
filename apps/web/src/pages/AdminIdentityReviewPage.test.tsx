@@ -4,6 +4,7 @@ import { useSessionStore } from '../auth/session'
 import { getBreadcrumbLabels, isImplementedPath } from '../routes/navigation'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { tabPanelOf } from '../test/tabs'
 import AdminIdentityReviewPage from './AdminIdentityReviewPage'
 
 const tenantScope = '44444444-4444-4444-8444-444444444444'
@@ -45,6 +46,23 @@ describe('admin identity review page', () => {
     expect(isImplementedPath('admin', '/sys/identity-review', ['platform.admin'])).toBe(true)
     expect(isImplementedPath('admin', '/sys/identity-review', ['sites.read'])).toBe(false)
     expect(getBreadcrumbLabels('admin', '/sys/identity-review').at(-1)).toBe('实名审核')
+  })
+
+  // 选中状态页签 aria-controls 指向的面板里就是该状态的列表，切换后跟着走。
+  it('renders each status list inside the panel its tab controls', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const status = new URL(String(input), 'http://x').searchParams.get('status')
+      return json({ items: status === 'submitted' ? [summary('submitted')] : [] })
+    })
+    renderWithProviders(<AdminIdentityReviewPage />)
+    expect(await within(tabPanelOf('待审核')).findByText('甲租户')).toBeInTheDocument()
+    expect(within(tabPanelOf('待审核')).getByRole('table')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: '已通过' }))
+    await waitFor(() => expect(within(tabPanelOf('已通过')).getByRole('table')).toBeInTheDocument())
+    expect(tabPanelOf('待审核')).toBeEmptyDOMElement()
+    expect(within(tabPanelOf('已通过')).queryByText('甲租户')).not.toBeInTheDocument()
   })
 
   it('lists every tenant\'s cases by status and claims then approves one as the administrator', async () => {

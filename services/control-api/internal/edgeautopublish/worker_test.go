@@ -10,6 +10,7 @@ import (
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
+	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
 	"github.com/google/uuid"
 )
 
@@ -147,6 +148,14 @@ func TestWorkerFailsUnpublishableAutomaticPublication(t *testing.T) {
 		// https_ports {443} was retried every 5 seconds as an unknown outcome.
 		fmt.Errorf("publish: %w", &edgepublish.SiteConfigInvalidError{SiteID: uuid.New(),
 			Reason: "https_ports_mismatch"}): FailureSiteConfigInvalid,
+		// a system republication
+		// refused package_subscription_inactive was retried every 5 seconds.
+		fmt.Errorf("publish: %w", packageaddon.ErrSubscriptionInactive):      FailurePackageSubscriptionInactive,
+		fmt.Errorf("publish: %w", packageaddon.ErrQuotaExceeded):             FailurePackageQuotaExceeded,
+		fmt.Errorf("publish: %w", packageaddon.ErrFeatureDenied):             FailurePackageFeatureDenied,
+		&edgepublish.ModuleNotEntitledError{Modules: []string{"module.waf"}}: FailureModuleNotEntitled,
+		fmt.Errorf("publish: %w", edgepublish.ErrSiteL2Unavailable):          FailureSiteL2Unavailable,
+		&edgepublish.CRSOutOfProfileError{}:                                  FailureRulePackOutOfProfile,
 	} {
 		reference := automaticReference(t)
 		repository := &workerRepositoryStub{references: []edgepublish.AutomaticClaimReference{reference}}
@@ -180,6 +189,47 @@ func TestWorkerRetriesAutomaticPublicationFailure(t *testing.T) {
 		}
 		if len(repository.retries) != 1 || repository.retries[0] != FailurePublishUnknown {
 			t.Fatalf("publish error=%v retries=%v", publishErr, repository.retries)
+		}
+	}
+}
+
+// Every terminal reason the worker writes is one the store accepts, and the
+// publication page's reasons name the same codes.
+func TestWorkerTerminalReasonsAreStoredAndShown(t *testing.T) {
+	for worker, page := range map[string]string{
+		FailurePackageSubscriptionInactive: edgepublish.AutomaticFailurePackageSubscriptionInactive,
+		FailurePackageQuotaExceeded:        edgepublish.AutomaticFailurePackageQuotaExceeded,
+		FailurePackageFeatureDenied:        edgepublish.AutomaticFailurePackageFeatureDenied,
+		FailureModuleNotEntitled:           edgepublish.AutomaticFailureModuleNotEntitled,
+		FailureSiteL2Unavailable:           edgepublish.AutomaticFailureSiteL2Unavailable,
+		FailureRulePackOutOfProfile:        edgepublish.AutomaticFailureRulePackOutOfProfile,
+		FailureSDKShieldPortShared:         edgepublish.AutomaticFailureSDKShieldPortShared,
+	} {
+		if !validTerminalReason(worker) || worker != page {
+			t.Fatalf("terminal reason %s: stored=%t shown as %s", worker, validTerminalReason(worker), page)
+		}
+	}
+}
+
+// An unknown outcome backs off from the configured delay, doubling per
+// attempt up to maxRetryBackoff; a delay configured above the cap stays.
+func TestRetryBackoffDoublesUpToTheCap(t *testing.T) {
+	for _, test := range []struct {
+		base    time.Duration
+		attempt int
+		want    time.Duration
+	}{
+		{5 * time.Second, 0, 5 * time.Second},
+		{5 * time.Second, 1, 5 * time.Second},
+		{5 * time.Second, 2, 10 * time.Second},
+		{5 * time.Second, 4, 40 * time.Second},
+		{5 * time.Second, 7, maxRetryBackoff},
+		{5 * time.Second, 350, maxRetryBackoff},
+		{0, 9, 0},
+		{10 * time.Minute, 3, 10 * time.Minute},
+	} {
+		if got := retryBackoff(test.base, test.attempt); got != test.want {
+			t.Fatalf("retryBackoff(%s, %d) = %s, want %s", test.base, test.attempt, got, test.want)
 		}
 	}
 }

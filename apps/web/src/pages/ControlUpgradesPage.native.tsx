@@ -13,7 +13,7 @@ import {
 } from '../api/controlUpgrades.native'
 import { useSessionStore } from '../auth/session'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
-import { issueRefusalMessage, maintenanceUpgradeMessage, maintenanceUpgradeReasonMessage, upgradeTargetReasonMessage } from '../i18n/maintenanceUpgrade'
+import { currentSchemaHeadMessage, issueRefusalMessage, maintenanceUpgradeMessage, maintenanceUpgradeReasonMessage, upgradeTargetReasonMessage } from '../i18n/maintenanceUpgrade'
 import { FeedbackWhen, OutcomeUnknown, useFeedback } from '@cdnca/ui'
 
 type Session = ReturnType<typeof useSessionStore.getState>
@@ -327,7 +327,7 @@ function VersionPicker({ locale, loading, failed, data, chosen, disabled, onChan
     {selected ? <Descriptions size="small" column={1} className="native-upgrade-facts" items={[
       { key: 'version', label: mt('nativeConfirmVersion'), children: <>{selected.version} {tags(selected)}</> },
       ...(selected.control_schema_head ? [{ key: 'schema', label: mt('nativeVersionSchema'),
-        children: `${options?.current_schema_head ?? '?'} → ${selected.control_schema_head}` }] : []),
+        children: `${options ? currentSchemaHeadMessage(locale, options.current_schema_head, options.current_schema_head_reason) : '?'} → ${selected.control_schema_head}` }] : []),
       ...(selected.published_at ? [{ key: 'published', label: mt('nativePublishedAt'),
         children: formatDateTime(new Date(selected.published_at * 1000).toISOString(), locale) }] : []),
       { key: 'notes', label: mt('nativeVersionNotes'),

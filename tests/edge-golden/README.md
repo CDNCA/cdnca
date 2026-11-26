@@ -61,7 +61,7 @@ release converted into site objects by the control plane's own conversion
 skeleton (`edgeskeleton.Render`, `cdnca_dynroute` entry). A renderer converts
 `facts` (the control plane output) into its own inputs.
 
-## Corpus (33 scenarios)
+## Corpus (34 scenarios)
 
 | scenario | covers |
 |---|---|
@@ -76,6 +76,7 @@ skeleton (`edgeskeleton.Render`, `cdnca_dynroute` entry). A renderer converts
 | force-https | 301 to the HTTPS port (path, query, POST), ACME HTTP-01 still proxied, HTTPS served |
 | origin-tls | HTTPS origin: trusted CA and SNI, untrusted CA 502, SNI mismatch 502 |
 | http-policy | request/response header add/set/delete, rewrites, 301/302/307/308 redirects, CORS preflight/simple, upload limit 413 (fixed and chunked) |
+| http-policy-cache | the HTTP policy on a cached site: response headers add/set/delete on MISS and HIT (the cache variant's pass after ngx.exec restores the policy state), request headers, a site without policy untouched |
 | site-access | host redirect (URI kept, ACME excepted), forced HTTPS 308 with an excluded domain, HSTS on HTTPS only, site gzip types, basic auth (credential not forwarded, excluded prefix, wrong password), maintenance page with an allowed network |
 | http-rules | regex rewrite to the origin with captures, regex redirect with escaped captures, prefix redirect keeping the path suffix (and query), a plain prefix redirect that does not |
 | acl-waf | source IP ACL, path allow before deny, header exact/exists, method, path exact/prefix and bypass attempts (case, encoding, dot segments, double slash), default deny |

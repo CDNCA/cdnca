@@ -51,6 +51,8 @@ export type NavIcon =
 export interface NavigationItem {
   key: string
   label: string
+  // accessibleLabel is the menu item's accessible name when it differs from the visible label.
+  accessibleLabel?: string
   icon?: NavIcon
   implemented?: boolean
   children?: NavigationItem[]
@@ -58,6 +60,9 @@ export interface NavigationItem {
 
 export interface NavigationDefinition extends Omit<NavigationItem, 'label' | 'children'> {
   labelKey: string
+  // titleKey: two entries keep the same familiar visible label (user rule: menus keep the old names),
+  // so this full name is the menu item's accessible name and the page title (header/breadcrumb).
+  titleKey?: string
   // requiredModule is a module/pack/theme feature code (GET /v1/modules).
   // Unlike permissions it has no platform-admin fallback: the lease, not
   // RBAC, decides it, and the API entry gate refuses it the same way.
@@ -107,7 +112,7 @@ const adminNavigation: NavigationDefinition[] = [
     labelKey: 'navigation:analytics',
     icon: 'analytics',
     children: [
-      { key: '/monitor/site/realtime', labelKey: 'navigation:realtime', implemented: true, requiredPermission: 'sites.read' },
+      { key: '/monitor/site/realtime', labelKey: 'navigation:realtime', titleKey: 'navigation:siteRealtime', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/analysis', labelKey: 'navigation:dataAnalysis', implemented: true, requiredPermission: 'sites.read' },
       // Real user monitoring report
       { key: '/monitor/site/rum', labelKey: 'navigation:rum', implemented: true, requiredPermission: 'sites.read' },
@@ -160,7 +165,7 @@ const adminNavigation: NavigationDefinition[] = [
         implemented: true,
         requiredPermission: 'system_configuration.read',
       },
-      { key: '/node/realtime', labelKey: 'navigation:realtime', implemented: true, requiredPermission: 'nodes.read' },
+      { key: '/node/realtime', labelKey: 'navigation:realtime', titleKey: 'navigation:nodeRealtime', implemented: true, requiredPermission: 'nodes.read' },
     ],
   },
   {
@@ -264,8 +269,9 @@ const userNavigation: NavigationDefinition[] = [
     icon: 'analytics',
     // tp-b1: the six reference entries first; our additions
     // follow. Cross-node CC state is an operator page (admin menu only).
+    // 常用项两次点击；低频排查页收进次级分组「诊断」，一级下不超过 8 项。
     children: [
-      { key: '/monitor/site/realtime', labelKey: 'navigation:realtime', implemented: true, requiredPermission: 'sites.read' },
+      { key: '/monitor/site/realtime', labelKey: 'navigation:realtime', titleKey: 'navigation:siteRealtime', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/analysis', labelKey: 'navigation:dataAnalysis', implemented: true, requiredPermission: 'sites.read' },
       // Real user monitoring report
       { key: '/monitor/site/rum', labelKey: 'navigation:rum', implemented: true, requiredPermission: 'sites.read' },
@@ -273,9 +279,15 @@ const userNavigation: NavigationDefinition[] = [
       { key: '/monitor/site/access-log', labelKey: 'navigation:accessLog', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/attack-log', labelKey: 'navigation:wafLog', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/stream/realtime', labelKey: 'navigation:streamRealtime', implemented: true, requiredPermission: 'sites.read' },
-      { key: '/monitor/site/block-event-log', labelKey: 'navigation:blockEventLog', implemented: true, requiredPermission: 'sites.read' },
-      { key: '/monitor/stream/access-log', labelKey: 'navigation:streamAccessLog', implemented: true, requiredPermission: 'sites.read' },
-      { key: '/monitor/stream/live-connections', labelKey: 'navigation:streamLiveConnections', implemented: true, requiredPermission: 'streams.read' },
+      {
+        key: 'monitor-diagnostics',
+        labelKey: 'navigation:diagnostics',
+        children: [
+          { key: '/monitor/site/block-event-log', labelKey: 'navigation:blockEventLog', implemented: true, requiredPermission: 'sites.read' },
+          { key: '/monitor/stream/access-log', labelKey: 'navigation:streamAccessLog', implemented: true, requiredPermission: 'sites.read' },
+          { key: '/monitor/stream/live-connections', labelKey: 'navigation:streamLiveConnections', implemented: true, requiredPermission: 'streams.read' },
+        ],
+      },
     ],
   },
   {
@@ -323,10 +335,18 @@ const userNavigation: NavigationDefinition[] = [
       { key: '/account/message', labelKey: 'navigation:messageQuery', implemented: true, requiredPermission: 'announcements.read' },
       { key: '/account/subscribe', labelKey: 'navigation:messageSubscription', implemented: true, requiredPermission: 'announcements.read' },
       { key: '/account/api', labelKey: 'navigation:apiKeys', implemented: true, requiredPermission: 'api_keys.self.manage' },
-      // 子账号：租户管理员管理本租户成员与自定义角色。
+      { key: '/account/tickets', labelKey: 'tickets:title', implemented: true },
+    ],
+  },
+  {
+    // 团队相关页从账户中心拆成一级「团队管理」（路由不变）；无权限/无功能时子项全被过滤，整组不出现。
+    key: 'team',
+    labelKey: 'navigation:teamManagement',
+    icon: 'account',
+    children: [
+      // 子账号：套餐层功能，菜单始终显示；套餐成员数上限为 0 时页面内提示未开通并给升级入口。
       { key: '/account/members', labelKey: 'tenantMembers:title', implemented: true, requiredPermission: 'identity.roles.manage', platformAdminFallback: false },
       { key: '/account/custom-roles', labelKey: 'customRolesPage:title', implemented: true, requiredPermission: 'identity.roles.manage', requiredRuntime: 'custom_rbac', platformAdminFallback: false },
-      { key: '/account/tickets', labelKey: 'tickets:title', implemented: true },
     ],
   },
 ]
@@ -353,7 +373,8 @@ const directRouteDefinitions: DirectRouteDefinition[] = [
   { path: '/account/sessions', labelKey: 'identitySessions:title', parentKey: 'system', roles: ['admin'], implemented: true, selectionKey: '/sys/setting' },
   { path: '/account/sessions', labelKey: 'identitySessions:title', parentKey: 'account', roles: ['user'], implemented: true, selectionKey: '/account/user' },
   { path: '/task', labelKey: 'navigation:backgroundTasks', parentKey: 'system', roles: ['user'], implemented: true, requiredPermission: jobsReadPermission },
-  { path: '/account/domains', labelKey: 'navigation:verifiedDomains', parentKey: 'account', roles: ['user'], implemented: true, requiredPermission: 'sites.read', platformAdminFallback: false, selectionKey: '/account/user' },
+  // 从网站列表「更多操作」进入，侧栏选中网站列表、面包屑在网站管理下（不再高亮个人资料）。
+  { path: '/account/domains', labelKey: 'navigation:verifiedDomains', parentKey: 'site', roles: ['user'], implemented: true, requiredPermission: 'sites.read', platformAdminFallback: false, selectionKey: '/site/list' },
   { path: '/site/domain-security', labelKey: 'navigation:domainSecurity', parentKey: 'site', roles: ['admin'], implemented: true, requiredPermission: 'domains.security.manage', platformAdminFallback: true, selectionKey: '/site/list' },
   { path: '/sys/plugin-providers', labelKey: 'pluginProviders:title', parentKey: 'system', roles: ['admin'], implemented: true, requiredPermission: 'plugin_installations.read', platformAdminFallback: true, selectionKey: '/sys/setting' },
   { path: '/sys/ip-intel-updates', labelKey: 'ipIntelUpdates:title', parentKey: 'system', roles: ['admin'], implemented: true, requiredPermission: 'system.ip_intel_updates.manage', requiredModule: 'module.ipintel.dnspup', platformAdminFallback: true, selectionKey: '/sys/setting' },
@@ -412,6 +433,7 @@ export function localizeNavigation(
 ): NavigationItem[] {
   return definitions.flatMap(({
     labelKey,
+    titleKey,
     children,
     requiredModule,
     requiredRuntime,
@@ -438,7 +460,7 @@ export function localizeNavigation(
       ? localizeNavigation(children, translate, permissions, modules, runtimes)
       : undefined
     if (children && visibleChildren?.length === 0) return []
-    return [{ ...item, label: translate(labelKey), children: visibleChildren }]
+    return [{ ...item, label: translate(labelKey), ...(titleKey ? { accessibleLabel: translate(titleKey) } : {}), children: visibleChildren }]
   })
 }
 
@@ -541,15 +563,51 @@ export function isImplementedPath(
   if (/^\/node\/line-group\/line\/[^/]+$/.test(path)) {
     return role === 'admin' && (permissions === undefined || permissions.includes(nodeSchedulingReadPermission))
   }
-  const visible = getNavigation(role, defaultTranslate, permissions, modules, runtimes).some(
-    (item) =>
-      (item.key === path && item.implemented) ||
-      item.children?.some((child) => child.key === path && child.implemented),
+  const visible = flattenItems(getNavigation(role, defaultTranslate, permissions, modules, runtimes)).some(
+    (item) => item.key === path && item.implemented,
   )
   if (visible) return true
 
   const direct = getDirectRouteDefinition(role, path)
   return direct?.implemented !== false && direct !== undefined && hasRoutePermission(direct, permissions, modules, runtimes)
+}
+
+function flattenItems(items: readonly NavigationItem[]): NavigationItem[] {
+  return items.flatMap((item) => [item, ...(item.children ? flattenItems(item.children) : [])])
+}
+
+/** getNavigationTrail is the path of items (outermost first) down to key in an assembled menu tree. */
+export function getNavigationTrail(items: readonly NavigationItem[], key: string): NavigationItem[] | undefined {
+  for (const item of items) {
+    if (item.key === key) return [item]
+    const nested = item.children ? getNavigationTrail(item.children, key) : undefined
+    if (nested) return [item, ...nested]
+  }
+  return undefined
+}
+
+function findTrail(
+  definitions: readonly NavigationDefinition[],
+  key: string,
+  trail: readonly NavigationDefinition[] = [],
+): NavigationDefinition[] | undefined {
+  for (const item of definitions) {
+    if (item.key === key) return [...trail, item]
+    const nested = item.children ? findTrail(item.children, key, [...trail, item]) : undefined
+    if (nested) return nested
+  }
+  return undefined
+}
+
+/** getOpenNavigationKeys lists the group keys (outermost first) that must be expanded to show path. */
+export function getOpenNavigationKeys(role: AppRole, path: string): string[] {
+  const definitions = getNavigationDefinitions(role)
+  const selected = findTrail(definitions, getNavigationSelectionKey(role, path))
+  if (selected) return selected.slice(0, -1).map((item) => item.key)
+  const parent = getParentNavigationKey(role, path)
+  if (!parent) return []
+  const trail = findTrail(definitions, parent)
+  return trail ? trail.map((item) => item.key) : [parent]
 }
 
 export function getParentNavigationKey(role: AppRole, path: string): string | undefined {
@@ -561,11 +619,11 @@ export function getParentNavigationKey(role: AppRole, path: string): string | un
   if (path === '/site/cert/orders' || path === '/site/cache-clean/history') return 'site'
   if (path === '/monitor/site/analysis/ja4-blocks') return 'monitor'
   if (/^\/sys\/identity-verification(?:\/[^/]+(?:\/decision)?)?$/.test(path)) return 'system'
+  const trail = findTrail(getNavigationDefinitions(role), path)
+  if (trail && trail.length > 1) return trail[trail.length - 2]!.key
   const direct = getDirectRouteDefinition(role, path)
   if (direct?.parentKey) return direct.parentKey
-  return getNavigationDefinitions(role).find((item) =>
-    item.children?.some((child) => child.key === path),
-  )?.key
+  return undefined
 }
 
 export function getNavigationSelectionKey(role: AppRole, path: string): string {
@@ -687,7 +745,7 @@ export function getBreadcrumbLabels(
     return [
       translate('navigation:home'),
       translate('navigation:analytics'),
-      translate('navigation:realtime'),
+      translate('navigation:siteRealtime'),
     ]
   }
   // 顶部条只显示当前页面标题。管理员侧边栏没有账户中心分组，
@@ -703,23 +761,22 @@ export function getBreadcrumbLabels(
     ]
   }
   const direct = getDirectRouteDefinition(role, path)
+  const own = trailLabels(role, path, translate)
+  if (own && (!direct || !direct.breadcrumbKeys)) return [translate('navigation:home'), ...own]
   if (direct) {
     if (direct.breadcrumbKeys) return direct.breadcrumbKeys.map((key) => translate(key))
-    const parent = direct.parentKey
-      ? getNavigationDefinitions(role).find((item) => item.key === direct.parentKey)
-      : undefined
+    const parent = direct.parentKey ? trailLabels(role, direct.parentKey, translate) : undefined
     return direct.parentKey
       ? [
           translate('navigation:home'),
-          translate(parent?.labelKey ?? parentLabelKey(direct.parentKey)),
+          ...(parent ?? [translate(parentLabelKey(direct.parentKey))]),
           translate(direct.labelKey),
         ]
       : [translate('navigation:home'), translate(direct.labelKey)]
   }
-  for (const item of getNavigationDefinitions(role)) {
-    if (item.key === path) return [translate('navigation:home'), translate(item.labelKey)]
-    const child = item.children?.find((candidate) => candidate.key === path)
-    if (child) return [translate('navigation:home'), translate(item.labelKey), translate(child.labelKey)]
-  }
   return [translate('navigation:home')]
+}
+
+function trailLabels(role: AppRole, key: string, translate: Translate): string[] | undefined {
+  return findTrail(getNavigationDefinitions(role), key)?.map((item) => translate(item.titleKey ?? item.labelKey))
 }

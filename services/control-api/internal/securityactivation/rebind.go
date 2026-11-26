@@ -27,13 +27,32 @@ import (
 // pass after the candidate ends starts the latest revision once, so several
 // saves merge into one release. A saved revision waits rebindGrace first, so
 // a save in a site context (the page starts that site itself) is not raced.
-// A start refused for anything else (package feature not enabled, no target
-// node, site locked, permission revoked) is retried after rebindBackoff.
+// A start refused because another candidate of the scope holds the node
+// target (a new site's WAF and CC defaults start together) is retried after
+// rebindBusyRetry:  left a new
+// site's CC unpublished for five minutes. A start refused for anything else
+// (package feature not enabled, no target node, site locked, permission
+// revoked) is retried after rebindBackoff.
+//
+// a new site's WAF
+// candidate (source revision 62) was healthy on its node when the site's own
+// automatic publication (63) reached the same node; promotion requires the
+// scope still at 62, so the candidate failed and recovered. The binding's
+// last claimed version was then the library's revision and nothing started it
+// again: the site ended with no active WAF. Such a binding (its last claim's
+// candidate failed at promotion, i.e. healthy on every node, and recovered)
+// is claimed again at the same version (reclaim, migration 695) once
+// rebindGrace has passed since the recovery, at most promotionReclaimLimit
+// times per version; after that it stays failed and the status says so.
+
+// promotionReclaimLimit bounds the reclaims of one library version.
+const promotionReclaimLimit = 5
 
 const (
 	rebindBatchSize = 100
 	rebindGrace     = 15 * time.Second
 	rebindBackoff   = 5 * time.Minute
+	rebindBusyRetry = 15 * time.Second
 )
 
 // rebindItem is one stale WAF/CC/ACL binding and the actor its start runs as:
@@ -47,7 +66,10 @@ type rebindItem struct {
 	policyRevision      int64
 	bindingRevision     int64
 	activePolicyVersion int64
-	actor               securitypolicy.Actor
+	// reclaim is the reclaim attempt (1..promotionReclaimLimit) of the last
+	// claimed version; 0 starts a newer version.
+	reclaim int
+	actor   securitypolicy.Actor
 }
 
 type rebindStore interface {
@@ -68,6 +90,7 @@ type rebinder struct {
 type rebindKey struct {
 	bindingID uuid.UUID
 	revision  int64
+	reclaim   int
 }
 
 func newRebinder(store rebindStore, clock func() time.Time, ttl time.Duration) *rebinder {
@@ -88,7 +111,7 @@ func (r *rebinder) run(ctx context.Context) error {
 		}
 	}
 	for _, item := range items {
-		key := rebindKey{bindingID: item.bindingID, revision: item.policyRevision}
+		key := rebindKey{bindingID: item.bindingID, revision: item.policyRevision, reclaim: item.reclaim}
 		if _, waiting := r.retryAt[key]; waiting {
 			continue
 		}
@@ -96,7 +119,11 @@ func (r *rebinder) run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			r.retryAt[key] = now.Add(rebindBackoff)
+			delay := rebindBackoff
+			if errors.Is(err, ErrTargetBusy) {
+				delay = rebindBusyRetry
+			}
+			r.retryAt[key] = now.Add(delay)
 		}
 	}
 	r.cursor = uuid.Nil
@@ -108,9 +135,14 @@ func (r *rebinder) run(ctx context.Context) error {
 
 // rebindInput is the start of one stale binding: no nodes and canary 0 (the
 // site's package line groups, one canary node), keyed by binding and
-// revision so concurrent controllers cannot start it twice.
+// revision (and reclaim attempt) so concurrent controllers cannot start it
+// twice.
 func rebindInput(item rebindItem, now time.Time, ttl time.Duration) StartInput {
-	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\n%s\n%d", item.scopeID, item.bindingID, item.policyRevision)))
+	value := fmt.Sprintf("%s\n%s\n%d", item.scopeID, item.bindingID, item.policyRevision)
+	if item.reclaim > 0 {
+		value += fmt.Sprintf("\nreclaim\n%d", item.reclaim)
+	}
+	digest := sha256.Sum256([]byte(value))
 	key := "rebind." + hex.EncodeToString(digest[:])
 	taskID := "security-activation-rebind"
 	return StartInput{
@@ -123,24 +155,57 @@ func rebindInput(item rebindItem, now time.Time, ttl time.Duration) StartInput {
 		Traceparent:                 activationTraceparent(item.bindingID, key),
 		TaskID:                      &taskID,
 		ExpiresAt:                   now.Add(ttl - time.Minute),
+		reclaim:                     item.reclaim > 0,
 	}
 }
 
 // staleBindingsFrom / staleBindingsWhere select WAF/CC/ACL bindings (ACL
 // needs no package feature; RebindStatus counts WAF and CC only) of live
 // sites whose live library has a revision newer than both the active and the
-// last claimed version and that have no unfinished candidate.
+// last claimed version, or whose last claimed version can be reclaimed
+// (reclaimableBinding), and that have no unfinished candidate.
 const staleBindingsFrom = `FROM security_policy_site_bindings binding
 	JOIN security_policies policy ON policy.scope_id=binding.tenant_scope_id AND policy.id=binding.policy_id
 	  AND policy.kind=binding.policy_kind AND policy.deleted_at IS NULL
 	JOIN sites site ON site.scope_id=binding.tenant_scope_id AND site.id=binding.site_id AND site.deleted_at IS NULL`
 
-const staleBindingsWhere = `binding.policy_kind IN ('waf','cc','acl')
-	  AND policy.revision>GREATEST(COALESCE(binding.active_policy_version,0),COALESCE(binding.last_claimed_policy_version,0))
+var staleBindingsWhere = `binding.policy_kind IN ('waf','cc','acl')
+	  AND (policy.revision>GREATEST(COALESCE(binding.active_policy_version,0),COALESCE(binding.last_claimed_policy_version,0))
+	       OR ` + reclaimableBinding + `)
 	  AND NOT EXISTS (SELECT 1 FROM security_policy_activation_candidates open
 	    WHERE open.tenant_scope_id=binding.tenant_scope_id AND open.binding_id=binding.id
 	      AND (open.candidate_status IN ('claimed','canary','expanding','healthy') OR
 	           (open.candidate_status IN ('failed','cancelled','expired') AND open.recovered_at IS NULL)))`
+
+// promotionFailedEventSQL is failPromotion's event of candidate <alias>
+// (derivedEventKey("promotion-failed", id)).
+func promotionFailedEventSQL(alias string) string {
+	return `EXISTS (SELECT 1 FROM security_policy_activation_events event WHERE event.candidate_id=` + alias + `.id
+	    AND event.event_key='promotion-failed:'||encode(sha256(convert_to('promotion-failed:'||` + alias + `.id::text,'UTF8')),'hex'))`
+}
+
+// promotionFailuresSQL counts the binding's candidates of its last claimed
+// version of its library that failed at promotion.
+var promotionFailuresSQL = `(SELECT count(*) FROM security_policy_activation_candidates failed
+	  JOIN security_policy_publications failed_claim ON failed_claim.id=failed.last_bundle_id
+	  WHERE failed.tenant_scope_id=binding.tenant_scope_id AND failed.binding_id=binding.id
+	    AND failed.last_claimed_policy_version=binding.last_claimed_policy_version
+	    AND failed_claim.policy_id=binding.policy_id AND NOT failed_claim.detach
+	    AND ` + promotionFailedEventSQL("failed") + `)`
+
+// reclaimableBinding: the library is still at the binding's last claimed
+// version, which is not active, and that claim's candidate failed at
+// promotion and has recovered, fewer than promotionReclaimLimit+1 times.
+var reclaimableBinding = `(policy.revision=binding.last_claimed_policy_version
+	    AND policy.revision>COALESCE(binding.active_policy_version,0)
+	    AND EXISTS (SELECT 1 FROM security_policy_activation_candidates last_claim
+	      JOIN security_policy_publications last_publication ON last_publication.id=last_claim.last_bundle_id
+	      WHERE last_claim.tenant_scope_id=binding.tenant_scope_id AND last_claim.binding_id=binding.id
+	        AND last_claim.last_bundle_id=binding.last_bundle_id AND last_claim.candidate_status='failed'
+	        AND last_claim.recovered_at IS NOT NULL
+	        AND last_publication.policy_id=binding.policy_id AND NOT last_publication.detach
+	        AND ` + promotionFailedEventSQL("last_claim") + `)
+	    AND ` + promotionFailuresSQL + `<=` + fmt.Sprint(promotionReclaimLimit) + `)`
 
 // loadRebindItems also skips bindings with a capability wait (waiting, or
 // already recorded for this revision or a newer one: it resumes or failed
@@ -151,6 +216,8 @@ func (store *Store) loadRebindItems(ctx context.Context, savedBefore time.Time, 
 	}
 	rows, err := store.pool.Query(ctx, `SELECT binding.id,binding.tenant_scope_id,binding.site_id,binding.policy_id,
 		policy.revision,binding.revision,COALESCE(binding.active_policy_version,0),
+		CASE WHEN policy.revision>GREATEST(COALESCE(binding.active_policy_version,0),COALESCE(binding.last_claimed_policy_version,0))
+		  THEN 0 ELSE `+promotionFailuresSQL+` END,
 		version.created_by_user_id,actor.scope_id,actor.kind
 		`+staleBindingsFrom+`
 		JOIN security_policy_versions version ON version.policy_id=policy.id AND version.revision=policy.revision
@@ -161,6 +228,9 @@ func (store *Store) loadRebindItems(ctx context.Context, savedBefore time.Time, 
 		    ORDER BY (membership.scope_id=binding.tenant_scope_id) DESC, membership.scope_id LIMIT 1) actor ON true
 		WHERE `+staleBindingsWhere+`
 		  AND version.created_at<=$1
+		  AND NOT EXISTS (SELECT 1 FROM security_policy_activation_candidates recovered
+		    WHERE recovered.tenant_scope_id=binding.tenant_scope_id AND recovered.binding_id=binding.id
+		      AND recovered.recovered_at>$1)
 		  AND NOT EXISTS (SELECT 1 FROM security_activation_capability_waits wait
 		    WHERE wait.tenant_scope_id=binding.tenant_scope_id AND wait.site_id=binding.site_id
 		      AND wait.policy_kind=binding.policy_kind AND (wait.status='waiting' OR wait.policy_version>=policy.revision))
@@ -174,7 +244,7 @@ func (store *Store) loadRebindItems(ctx context.Context, savedBefore time.Time, 
 	for rows.Next() {
 		var item rebindItem
 		if err := rows.Scan(&item.bindingID, &item.scopeID, &item.siteID, &item.policyID, &item.policyRevision,
-			&item.bindingRevision, &item.activePolicyVersion, &item.actor.UserID, &item.actor.ScopeID,
+			&item.bindingRevision, &item.activePolicyVersion, &item.reclaim, &item.actor.UserID, &item.actor.ScopeID,
 			&item.actor.ScopeKind); err != nil {
 			return nil, err
 		}
@@ -271,3 +341,32 @@ func (store *Store) packageDenied(ctx context.Context, scopeID uuid.UUID, site r
 }
 
 var errRebindStatusRollback = errors.New("security activation rebind status read")
+
+// loadPromotionFailure reads the promotion failure of the binding's latest
+// candidate (failed); nil when it failed otherwise.
+func loadPromotionFailure(ctx context.Context, tx pgx.Tx, binding Binding, candidate Candidate) (*PromotionFailure, error) {
+	var failed bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM security_policy_activation_events
+		WHERE candidate_id=$1 AND event_key=$2)`, candidate.ID,
+		derivedEventKey("promotion-failed", candidate.ID.String())).Scan(&failed); err != nil || !failed {
+		return nil, err
+	}
+	var failures int
+	var retrying bool
+	err := tx.QueryRow(ctx, `SELECT `+promotionFailuresSQL+`,
+		COALESCE(claimed.policy_id=binding.policy_id AND NOT claimed.detach AND (
+		  policy.revision>binding.last_claimed_policy_version OR
+		  (policy.revision=binding.last_claimed_policy_version AND binding.last_bundle_id=$3 AND
+		   `+promotionFailuresSQL+`<=$4)),false)
+		FROM security_policy_site_bindings binding
+		JOIN security_policy_publications claimed ON claimed.id=$3
+		LEFT JOIN security_policies policy ON policy.scope_id=binding.tenant_scope_id AND policy.id=binding.policy_id
+		  AND policy.deleted_at IS NULL
+		WHERE binding.tenant_scope_id=$1 AND binding.id=$2`, candidate.TenantScopeID, binding.ID,
+		candidate.LastBundleID, promotionReclaimLimit).Scan(&failures, &retrying)
+	if err != nil {
+		return nil, err
+	}
+	return &PromotionFailure{Reason: PromotionFailureSuperseded, Failures: failures,
+		MaxReclaims: promotionReclaimLimit, Retrying: retrying}, nil
+}

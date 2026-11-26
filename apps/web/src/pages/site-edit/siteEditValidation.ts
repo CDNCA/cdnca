@@ -9,6 +9,8 @@ import {
 import type { TFunction } from 'i18next'
 
 export interface BasicValidationErrors {
+  /** A package quota refusal of the website count, shown under the package select. */
+  package?: string
   domains?: string
   http_listen_ports?: string
   https_listen_ports?: string

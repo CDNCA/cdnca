@@ -9,9 +9,13 @@ import (
 
 func TestPlatformSystemOtherSettings196Contract(t *testing.T) {
 	up, err := controlmigrations.FS.ReadFile("196_platform_system_other_settings.up.sql")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	down, err := controlmigrations.FS.ReadFile("196_platform_system_other_settings.down.sql")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	combined := string(up) + string(down)
 	for _, required := range []string{
 		"version=195 AND migration_id='195_platform_system_mail_settings'",
@@ -22,7 +26,11 @@ func TestPlatformSystemOtherSettings196Contract(t *testing.T) {
 		"platform system other settings require a platform scope",
 		"migration 196 rollback requires the exact verified release head",
 	} {
-		if !strings.Contains(combined, required) { t.Errorf("196 migration missing %q", required) }
+		if !strings.Contains(combined, required) {
+			t.Errorf("196 migration missing %q", required)
+		}
 	}
-	if strings.Contains(strings.ToUpper(combined), "CASCADE") || strings.Contains(combined, "DELETE FROM schema_migrations") { t.Fatal("196 migration must not use destructive migration shortcuts") }
+	if strings.Contains(strings.ToUpper(combined), "CASCADE") || strings.Contains(combined, "DELETE FROM schema_migrations") {
+		t.Fatal("196 migration must not use destructive migration shortcuts")
+	}
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Pagination, Radio, Select, Space, Table, type TableColumnsType } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { Alert, Button, Form, Modal, Radio, Select, Space, type TableColumnsType } from 'antd'
+import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, Pagination, Table } from '@cdnca/ui'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
@@ -22,6 +22,7 @@ import { hasStreamReadPermission } from './streamForm'
 import { useStreamPanelWrites } from './StreamGroupsState'
 import '../i18n/streamPanels'
 import '../i18n/unconfirmedClose'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 interface DefaultFormValues {
   owner_id?: string
@@ -87,6 +88,7 @@ export default function StreamDefaultsPanel({
   const { t } = useTranslation('streams')
   const { t: tp } = useTranslation('streamPanels')
   const { t: tu } = useTranslation('unconfirmedClose')
+  const namedRows = useNamedRowSelection()
   const queryClient = useQueryClient()
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
@@ -149,6 +151,12 @@ export default function StreamDefaultsPanel({
   })
 
   const selectedOwner = ownerQuery.data?.find((owner) => owner.id === ownerID)
+  // 范围写明是谁的新建转发：租户是本账号，管理员是所选用户；协议值仍是 global/group
+  const scopeLabel = (scope: StreamSettingScope, ownerName?: string) => ownerName
+    ? t(scope === 'group' ? 'defaults.scopeGroupUser' : 'defaults.scopeGlobalUser', { name: ownerName })
+    : t(scope === 'group' ? 'defaults.scopeGroup' : 'defaults.scopeGlobal')
+  const rowScopeOwner = (item: StreamUserConfig) => isAdmin ? item.owner?.display_name ?? t('values.unavailable') : undefined
+  const formScopeOwner = isAdmin && selectedOwner ? selectedOwner.display_name || selectedOwner.username : undefined
   const targetScopeID = isAdmin ? selectedOwner?.scope_id : scopeID
   const targetOwnerID = isAdmin ? selectedOwner?.id : useSessionStore.getState().principal?.user_id
   const groupQuery = useQuery({
@@ -217,13 +225,28 @@ export default function StreamDefaultsPanel({
 
   const selectedConfigs = (query.data?.items ?? []).filter((item) => selectedRowKeys.includes(item.id))
 
+  const settingText = (item: StreamUserConfig) => settingNameOptions.find((option) => option.value === item.setting_name)?.label ?? item.setting_name
+  const rowScopeText = (item: StreamUserConfig) => item.scope_name === 'group'
+    ? `${scopeLabel('group', rowScopeOwner(item))}${item.group ? `：${item.group.name}` : ''}`
+    : scopeLabel('global', rowScopeOwner(item))
+
+  // The dialog names what is deleted: the setting, its value and where it applies.
   const beginDelete = (items: StreamUserConfig[]) => {
     if (items.length === 0) return
+    const single = items.length === 1 ? items[0] : undefined
     modalApi.confirm({
-      title: t('defaults.deleteTitle'),
-      content: t('defaults.deleteDescription'),
+      title: single ? t('defaults.deleteTitle', { name: settingText(single) }) : t('defaults.deleteTitleMany', { count: items.length }),
+      content: <div>
+        {single ? <>
+          <p>{t('defaults.deleteValue', { value: settingValueLabel(single.setting_name, single.setting_value) })}</p>
+          <p>{t('defaults.deleteScope', { scope: rowScopeText(single) })}</p>
+        </> : <ul>{items.map((item) => <li key={item.id}>
+          {t('defaults.deleteItem', { name: settingText(item), value: settingValueLabel(item.setting_name, item.setting_value), scope: rowScopeText(item) })}
+        </li>)}</ul>}
+        <p>{t('defaults.deleteDescription')}</p>
+      </div>,
       okText: t('actions.confirmDelete'),
-      okButtonProps: { danger: true },
+      okButtonProps: { danger: true, 'aria-label': single ? t('defaults.deleteConfirmNamed', { name: settingText(single) }) : t('defaults.deleteConfirmMany', { count: items.length }) },
       cancelText: t('actions.cancel'),
       onOk: () => {
         if (!canManage(scopeKind, scopeID, sessionEpoch)) return
@@ -237,25 +260,24 @@ export default function StreamDefaultsPanel({
       title: t('columns.id'), dataIndex: 'display_id', width: 78,
       render: (_: string, item) => <ResourceID internalId={item.id} displayId={item.display_id} />,
     },
-    {
+    // 普通租户只看自己的默认设置，不显示用户列
+    ...(isAdmin ? [{
       title: t('defaults.user'), key: 'owner', width: 180,
-      render: (_, item) => <span className={item.owner ? undefined : 'stream-unavailable'}>
+      render: (_: unknown, item: StreamUserConfig) => <span className={item.owner ? undefined : 'stream-unavailable'}>
         {item.owner?.display_name ?? t('values.unavailable')}
       </span>,
-    },
+    }] : []),
     {
       title: t('defaults.settingName'), key: 'settingName', width: 160,
-      render: (_, item) => settingNameOptions.find((option) => option.value === item.setting_name)?.label ?? item.setting_name,
+      render: (_, item) => settingText(item),
     },
     {
       title: t('defaults.settingValue'), key: 'settingValue', width: 140,
       render: (_, item) => settingValueLabel(item.setting_name, item.setting_value),
     },
     {
-      title: t('defaults.scope'), key: 'scope', width: 180,
-      render: (_, item) => item.scope_name === 'group'
-        ? <span>{t('defaults.scopeGroup')}{item.group ? ` ${item.group.name}` : ''}</span>
-        : <span>{t('defaults.scopeGlobal')}</span>,
+      title: t('defaults.scope'), key: 'scope', width: 220,
+      render: (_, item) => <span>{rowScopeText(item)}</span>,
     },
     {
       title: t('columns.actions'), key: 'actions', width: 118, fixed: 'right',
@@ -290,7 +312,6 @@ export default function StreamDefaultsPanel({
       {messageContext}
       {modalContext}
       <div className="stream-panel-toolbar stream-defaults-toolbar">
-        <p className="stream-panel-description">{t('defaults.description')}</p>
         <div className="stream-toolbar-actions">
           {canManageDefaults ? <Button type="primary" icon={<Plus size={15} />} disabled={writesLocked} onClick={() => {
             writes.clearError()
@@ -308,7 +329,7 @@ export default function StreamDefaultsPanel({
         <Table<StreamUserConfig>
           rowKey="id"
           size="small"
-          rowSelection={canManageDefaults ? { selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys.map(String)) } : undefined}
+          rowSelection={canManageDefaults ? namedRows<StreamUserConfig>({ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys.map(String)) }, (item) => `${item.display_id} ${settingNameOptions.find((option) => option.value === item.setting_name)?.label ?? item.setting_name}`, t('selectionScope.defaults')) : undefined}
           columns={columns}
           dataSource={forbidden ? [] : query.data?.items ?? []}
           loading={query.isPending || query.isFetching}
@@ -339,11 +360,12 @@ export default function StreamDefaultsPanel({
         {isAdmin && (!canReadOwners() || ownerQuery.isError) ? <Alert className="identity-alert" type="error" showIcon message={tp(canReadOwners() ? 'ownersFailed' : 'ownersForbidden')} action={canReadOwners() ? <Button size="small" onClick={() => void ownerQuery.refetch()}>{t('actions.retry')}</Button> : undefined} /> : null}
         {scopeName === 'group' && groupQuery.isError ? <Alert className="identity-alert" type="error" showIcon message={t('groups.listFailed')} action={<Button size="small" onClick={() => void groupQuery.refetch()}>{t('actions.retry')}</Button>} /> : null}
         <Form form={form} disabled={pending} layout="horizontal" labelCol={{ flex: '88px' }} wrapperCol={{ flex: 1 }} requiredMark={false} onFinish={submit}>
-          <Form.Item name="owner_id" label={t('defaults.user')} rules={isAdmin ? [
+          {/* 普通租户的归属由服务端会话决定，不显示用户字段、不传 owner */}
+          {isAdmin ? <Form.Item name="owner_id" label={t('defaults.user')} rules={[
             { required: true, message: t('groups.userRequired') },
             { pattern: uuidPattern, message: t('groups.userInvalid') },
-          ] : []}>
-            {isAdmin ? <Select
+          ]}>
+            <Select
               showSearch
               optionFilterProp="label"
               placeholder={t('defaults.user')}
@@ -351,8 +373,8 @@ export default function StreamDefaultsPanel({
               disabled={ownerUnavailable}
               onChange={() => form.setFieldValue('group_id', undefined)}
               options={(ownerQuery.data ?? []).map((user) => ({ value: user.id, label: user.display_name || user.username }))}
-            /> : <Input disabled placeholder={t('defaults.user')} />}
-          </Form.Item>
+            />
+          </Form.Item> : null}
           <Form.Item name="setting_name" label={t('defaults.settingName')} rules={[{ required: true, message: t('defaults.settingRequired') }]}>
             <Select
               options={settingNameOptions}
@@ -369,8 +391,8 @@ export default function StreamDefaultsPanel({
           </Form.Item>
           <Form.Item name="scope_name" label={t('defaults.scope')} rules={[{ required: true, message: t('defaults.scopeRequired') }]}>
             <Radio.Group buttonStyle="solid" onChange={() => form.setFieldValue('group_id', undefined)}>
-              <Radio.Button value="global">{t('defaults.scopeGlobal')}</Radio.Button>
-              <Radio.Button value="group">{t('defaults.scopeGroup')}</Radio.Button>
+              <Radio.Button value="global">{scopeLabel('global', formScopeOwner)}</Radio.Button>
+              <Radio.Button value="group">{scopeLabel('group', formScopeOwner)}</Radio.Button>
             </Radio.Group>
           </Form.Item>
           {scopeName === 'group' ? <Form.Item name="group_id" label={t('defaults.group')} rules={[

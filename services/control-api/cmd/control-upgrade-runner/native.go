@@ -77,7 +77,8 @@ func runNativeStandalone(ctx context.Context, installationID string, trust *enti
 		return err
 	}
 	defer runner.Close()
-	verify := newNativePlanVerifier(ctx, trust, installationID, protocol, store, runner, time.Now)
+	logNativeStartup(ctx, runner, slog.Default())
+	verify := newNativePlanVerifier(ctx, trust, installationID, protocol, store, runner, time.Now, slog.Default())
 	return runNativeWithStatus(ctx, runner, requiredEnv("CDNCA_NATIVE_UPGRADE_STATUS_FILE"),
 		5*time.Second, func(runCtx context.Context) error {
 			return runPlanLoop(runCtx, source, lkg, initial, runner, verify, poll,
@@ -85,8 +86,26 @@ func runNativeStandalone(ctx context.Context, installationID string, trust *enti
 		})
 }
 
+// logNativeStartup records what the runner sees at start. An unverified
+// current release keeps the runner up and refusing plans; it is not an exit.
+func logNativeStartup(ctx context.Context, runner nativeStatusRunner, logger *slog.Logger) {
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	status, err := runner.Probe(probeCtx)
+	attributes := []any{"current_version", status.CurrentVersion, "ready", status.Ready, "busy", status.Busy,
+		"phase", status.Phase, "reason", status.Reason}
+	if status.Reason == controlplaneupgrade.NativeReasonCurrentReleaseUnverified {
+		logger.Error("control upgrade runner refusing plans", append(attributes, "error", err)...)
+		return
+	}
+	logger.Info("control upgrade runner started", attributes...)
+}
+
 func newNativePlanVerifier(ctx context.Context, trust *entitlementguard.TrustStore, installationID string,
-	protocol int, store *controlplaneupgrade.FileStore, runner nativeStatusRunner, now func() time.Time) httpPlanVerifier {
+	protocol int, store *controlplaneupgrade.FileStore, runner nativeStatusRunner, now func() time.Time,
+	logger *slog.Logger) httpPlanVerifier {
+	// The source is polled every interval; one line per distinct rejection.
+	var lastRejection string
 	return func(encoded []byte) error {
 		signed, err := entitlement.DecodeUpgradePlanArtifactBundle(encoded)
 		if err != nil {
@@ -111,8 +130,19 @@ func newNativePlanVerifier(ctx context.Context, trust *entitlementguard.TrustSto
 			status.CurrentVersion != signed.Bundle.CurrentVersion || status.InstallationID != installationID ||
 			status.ProtocolVersion != protocol ||
 			(status.ArtifactFormat != controlplaneupgrade.NativeManifestSchema && status.ArtifactFormat != controlplaneupgrade.NativeManifestSignedSchema) {
+			// Only signature-verified plan fields are logged, never the bundle.
+			rejection := fmt.Sprintf("%s|%d|%s|%s|%t|%s|%v", signed.Bundle.PlanID, signed.Bundle.InitialPlanRevision,
+				status.CurrentVersion, status.Phase, status.Ready, status.Reason, err)
+			if rejection != lastRejection {
+				lastRejection = rejection
+				logger.Warn("control upgrade plan rejected", "plan_id", signed.Bundle.PlanID,
+					"plan_revision", signed.Bundle.InitialPlanRevision, "plan_current_version", signed.Bundle.CurrentVersion,
+					"plan_target_version", signed.Bundle.Version, "runner_current_version", status.CurrentVersion,
+					"ready", status.Ready, "busy", status.Busy, "phase", status.Phase, "reason", status.Reason, "probe_error", err)
+			}
 			return controlplaneupgrade.ErrTargetMismatch
 		}
+		lastRejection = ""
 		return nil
 	}
 }

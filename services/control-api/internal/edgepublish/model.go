@@ -42,6 +42,12 @@ var (
 	ErrPersistence               = errors.New("edge publication persistence failed")
 )
 
+// ErrPackageSubscriptionSuspended: the site's package subscription is
+// suspended, so every publication leaves the site out (migration 555) until
+// it is unsuspended. Told apart from ErrNotFound so a refused security
+// activation says why.
+var ErrPackageSubscriptionSuspended = errors.New("site package subscription is suspended")
+
 const (
 	canonicalTargetSchema     = "cdnca.edge.target-snapshot/v1"
 	ScopeKindPlatform         = "platform"
@@ -326,6 +332,14 @@ type SystemConfigurationPublishRequest struct {
 type PreparedAutomaticPublication struct {
 	Request     PublishRequest
 	DatabaseNow time.Time
+	// NodeSettingsOnly: the request's trigger changes node settings only
+	// (NodeSettingsOnlyRequest); a content refusal redelivers the scope's
+	// release in effect with them (node_settings_redelivery.go).
+	NodeSettingsOnly bool
+	// NodeSettingsPending: the request superseded a node settings only one
+	// whose settings no publication of the scope has delivered since; a
+	// content refusal redelivers them too, and the request still ends refused.
+	NodeSettingsPending bool
 }
 
 type PublishResult struct {
@@ -359,6 +373,10 @@ type PublishResult struct {
 	// and on the publication (migration 649), so replays and reads carry it.
 	KeyEnvelopeOversizedNodeIDs []uuid.UUID
 	keyEnvelopeOversized        []oversizedKeyEnvelope
+	// NodeSettingsRefusal is set on a node settings redelivery (publication
+	// kind node_settings, migration 701): the content refusal it was made for
+	// (NodeSettingsContentRefusal). "" for a content publication.
+	NodeSettingsRefusal string
 }
 
 type RollbackRequest struct {

@@ -2,6 +2,7 @@ package dnsmaintenance
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
@@ -43,19 +44,19 @@ func (worker *Worker) repair(ctx context.Context, claim jobstate.Claim, scopeID 
 	}
 	providerType, credentials, err := worker.platform.PlatformCredentials(ctx)
 	if err != nil {
-		return CodeProviderUnavailable
+		return credentialFailure(err)
 	}
 	defer clear(credentials)
 	apex, err := worker.targets.ZoneApex(ctx, target, providerType, credentials)
 	if err != nil {
-		return CodeProviderUnavailable
+		return providerFailure(err)
 	}
 	config := dnsproviderremote.ProviderConfig{TenantID: target.TenantID, ScopeID: target.ScopeID, TenantScopeID: target.ScopeID,
 		ProviderID: target.ProviderID, ProviderType: providerType, ZoneID: target.ZoneID, ZoneName: target.ZoneName,
 		ProviderZoneName: apex, Credentials: credentials}
 	existing, err := worker.remote.ListZoneRecords(ctx, config, target.Owner)
 	if err != nil {
-		return CodeProviderUnavailable
+		return providerFailure(err)
 	}
 	check := cnameallocation.PublishCheckRequest(target.TenantID, target.SiteID, target.ZoneID, target.ZoneRevision,
 		target.Owner, values, settings)
@@ -128,15 +129,23 @@ func (worker *Worker) repair(ctx context.Context, claim jobstate.Claim, scopeID 
 }
 
 // cleanup deletes one record listed by 清除CDN无关解析 after checking again
-// that it still exists unchanged and its owner is still no allocated CNAME.
+// that its owner is still no allocated CNAME or zone apex, and that the
+// provider still holds it unchanged: same record ID, owner, type and full
+// value as stored with the plan (migration 686). A changed record is kept.
 func (worker *Worker) cleanup(ctx context.Context, claim jobstate.Claim, scopeID uuid.UUID, item string) string {
 	if item == NothingToClean {
 		return ""
 	}
-	record, ok := ParseCleanupItem(item)
-	if !ok {
-		return CodeRecordChanged
+	// The item text may truncate the value; a job planned before 696 has no
+	// stored record and deletes nothing.
+	record, ok, err := worker.targets.CleanupPlanRecord(ctx, claim.Job.TenantID, claim.Job.ID, item)
+	if err != nil {
+		return CodeProviderUnavailable
 	}
+	if !ok {
+		return CodeCleanupPlanStale
+	}
+	record.Name = canonicalOwner(record.Name)
 	zones, err := worker.platform.PlatformZoneNames(ctx)
 	if err != nil {
 		return CodeProviderUnavailable
@@ -162,33 +171,50 @@ func (worker *Worker) cleanup(ctx context.Context, claim jobstate.Claim, scopeID
 	}
 	providerType, credentials, err := worker.platform.PlatformCredentials(ctx)
 	if err != nil {
-		return CodeProviderUnavailable
+		return credentialFailure(err)
 	}
 	defer clear(credentials)
 	apex, err := worker.platform.PlatformZoneApex(ctx, record.ZoneID, providerType, credentials)
 	if err != nil {
-		return CodeProviderUnavailable
+		return providerFailure(err)
 	}
 	config := providerConfig(dnsacme.PlatformTenant{TenantID: claim.Job.TenantID, ScopeID: scopeID}, providerType,
 		credentials, record.ZoneID, zoneName, apex)
 	current, err := worker.remote.ListZoneRecords(ctx, config, record.Name)
 	if err != nil {
-		return CodeProviderUnavailable
+		return providerFailure(err)
 	}
-	for _, found := range current {
-		if found.ID != record.RecordID {
-			continue
+	found, ok := findRecord(current, record.RecordID)
+	if !ok {
+		// Not under the planned owner: gone, or renamed under the same ID.
+		zone, err := worker.remote.ListZoneRecords(ctx, config, "")
+		if err != nil {
+			return providerFailure(err)
 		}
-		if recordTypeName(found.Type) != record.Type {
-			return CodeRecordChanged
+		if found, ok = findRecord(zone, record.RecordID); !ok {
+			return "" // already gone
 		}
-		if _, err := worker.remote.Mutate(ctx, config, dnscheck.ProviderOperation{Action: dnscheck.ProviderDelete,
-			RecordID: found.ID, Name: found.Name, Type: found.Type, Value: found.Value, TTL: found.TTL}); err != nil {
-			return CodeDeleteFailed
-		}
-		return ""
 	}
-	return "" // already gone
+	if !sameRecord(record, found) {
+		return CodeRecordChanged
+	}
+	if _, err := worker.remote.Mutate(ctx, config, dnscheck.ProviderOperation{Action: dnscheck.ProviderDelete,
+		RecordID: found.ID, Name: found.Name, Type: found.Type, Value: found.Value, TTL: found.TTL}); err != nil {
+		if code := providerFailure(err); code == CodeProxyUnavailable {
+			return code
+		}
+		return CodeDeleteFailed
+	}
+	return ""
+}
+
+func findRecord(records []dnsproviderremote.ZoneRecord, id string) (dnsproviderremote.ZoneRecord, bool) {
+	for _, record := range records {
+		if record.ID == id {
+			return record, true
+		}
+	}
+	return dnsproviderremote.ZoneRecord{}, false
 }
 
 func recordTypeName(recordType dnscheck.RecordType) string {
@@ -202,4 +228,22 @@ func recordTypeName(recordType dnscheck.RecordType) string {
 	default:
 		return "OTHER"
 	}
+}
+
+// providerFailure: a provider call that could not use the platform http代理
+// is CodeProxyUnavailable; any other failure leaves the provider unavailable.
+func providerFailure(err error) string {
+	if dnsproviderremote.ErrorCodeOf(err) == dnsproviderremote.CodeProxyUnavailable {
+		return CodeProxyUnavailable
+	}
+	return CodeProviderUnavailable
+}
+
+// credentialFailure: a platform without a DNS provider is not configured; any
+// other credential read failure leaves the provider unavailable.
+func credentialFailure(err error) string {
+	if errors.Is(err, dnsacme.ErrPlatformNotConfigured) {
+		return CodeNotConfigured
+	}
+	return CodeProviderUnavailable
 }

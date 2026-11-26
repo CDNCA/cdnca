@@ -368,10 +368,16 @@
   .account-user-check {
     gap: 12px;
     align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  /* the action moves under its text instead of disappearing. */
+  .account-user-check > .account-user-action-main {
+    flex: 1 1 calc(100% - 60px);
   }
 
   .account-user-check > .ant-btn {
-    display: none;
+    margin-inline-start: 60px;
   }
 
   .account-user-bind-form {

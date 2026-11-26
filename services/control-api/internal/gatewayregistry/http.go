@@ -104,12 +104,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.actor(w, r); !ok {
 		return
 	}
-	gateways, err := h.service.List(r.Context())
+	gateways, local, err := h.service.Overview(r.Context())
 	if err != nil {
 		writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": gateways, "installation_id": h.service.InstallationID(),
+	writeJSON(w, http.StatusOK, map[string]any{"items": gateways, "local": local, "installation_id": h.service.InstallationID(),
 		"standalone_access_open": h.service.config.Endpoints.ControlInternalAddress != ""})
 }
 

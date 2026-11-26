@@ -21,6 +21,11 @@ import (
 const NativeStatusSchema = "cdnca.native-management.runner-status/v1"
 const nativeMaintenanceSchema = "cdnca.native-management.maintenance/v1"
 
+// NativeReasonCurrentReleaseUnverified: the current release directory or its
+// archive no longer matches the signed release manifest. The runner stays up,
+// never ready, and refuses every plan until the release is restored.
+const NativeReasonCurrentReleaseUnverified = "control_upgrade_current_release_unverified"
+
 type NativeStandaloneStatus struct {
 	Schema                string    `json:"schema"`
 	Ready                 bool      `json:"ready"`
@@ -110,13 +115,20 @@ func readNativeStandaloneRunLog(filename string, owner uint32) (RunLog, error) {
 func readNativeStandaloneStatus(filename, installationID string, now time.Time, owner uint32, inspect nativeProcessInspector) (NativeStandaloneStatus, error) {
 	var status NativeStandaloneStatus
 	encoded, err := readNativeOwnedFile(filename, owner, 16*1024)
-	if err != nil || decodeNativeJSON(encoded, &status) != nil || status.Schema != NativeStatusSchema ||
+	if err == nil && decodeNativeJSON(encoded, &status) != nil {
+		return NativeStandaloneStatus{}, ErrTargetMismatch
+	}
+	// An unverified current release has no trustworthy version facts; it is only
+	// ever a not-ready status, and callers then see a version mismatch.
+	unverified := !status.Ready && status.Reason == NativeReasonCurrentReleaseUnverified && status.CurrentVersion == "" &&
+		status.CurrentArtifactSHA256 == "" && status.SourceCommit == "" && status.SourceTree == ""
+	if err != nil || status.Schema != NativeStatusSchema ||
 		status.InstallationID != installationID || status.ProtocolVersion < 1 ||
 		(status.ArtifactFormat != NativeManifestSchema && status.ArtifactFormat != NativeManifestSignedSchema) ||
 		status.RunnerPID < 1 || status.StartID == "" || !digestPattern.MatchString(status.RunnerExeSHA256) ||
 		status.ObservedAt.After(now.Add(time.Second)) || now.Sub(status.ObservedAt) > 30*time.Second ||
-		!nativeVersion(status.CurrentVersion) || !digestPattern.MatchString(status.CurrentArtifactSHA256) ||
-		!nativeGitObject.MatchString(status.SourceCommit) || !nativeGitObject.MatchString(status.SourceTree) ||
+		(!unverified && (!nativeVersion(status.CurrentVersion) || !digestPattern.MatchString(status.CurrentArtifactSHA256) ||
+			!nativeGitObject.MatchString(status.SourceCommit) || !nativeGitObject.MatchString(status.SourceTree))) ||
 		(status.Ready && (status.Busy || status.Phase != "idle" || status.Reason != "ready")) {
 		return NativeStandaloneStatus{}, ErrTargetMismatch
 	}

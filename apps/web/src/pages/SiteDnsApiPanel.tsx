@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
-import { Button, Pagination, Popconfirm, Space, Table, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Popconfirm, Space, Tooltip, type TableColumnsType } from 'antd'
 import { CircleCheck, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, Pagination, Table } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import { dnsApi, ownDNSProviders, type CreateDNSProviderInput, type DNSProvider, type UpdateDNSProviderInput } from '../api/dns'
@@ -15,6 +15,7 @@ import {
   credentialFields, errorMessage, isCreatableProviderType, ProviderEditor, providerLabel,
   type DNSProviderEditorState, type ProviderForm,
 } from './NodeDnsPage'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 // DNS API（网站列表与证书管理两处共用，同一份数据）：
 // 列 ID / 用户（仅管理员）/ 名称 / 类型 / 备注 / 操作，工具条「新增 DNS API」「删除选中」。
@@ -54,6 +55,7 @@ export default function SiteDnsApiPanel({ onChanged }: {
 } = {}) {
   const { t } = useTranslation('dnsProviders')
   const { t: certT } = useTranslation('certificates')
+  const namedRows = useNamedRowSelection()
   const queryClient = useQueryClient()
   const principal = useSessionStore((state) => state.principal)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
@@ -276,9 +278,9 @@ export default function SiteDnsApiPanel({ onChanged }: {
       ) : null}
       <Table rowKey="id" size="small" columns={columns} dataSource={pageItems} pagination={false} scroll={{ x: 900 }}
         loading={query.isPending || query.isFetching} locale={{ emptyText: query.isPending ? ' ' : certT('dnsApi.empty') }}
-        rowSelection={canManage ? {
+        rowSelection={canManage ? namedRows<DNSProvider>({
           selectedRowKeys: selected, onChange: (keys) => setSelected(keys.map(String)),
-        } : undefined} />
+        }, (item) => item.name, certT('dnsApi.selectionScope')) : undefined} />
       <div className="identity-pagination">
         <Pagination current={page} pageSize={limit} total={items.length} showSizeChanger pageSizeOptions={[10, 20, 50]}
           showTotal={(total) => certT('dnsApi.total', { count: total })}

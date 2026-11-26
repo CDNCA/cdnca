@@ -56,6 +56,12 @@
   padding: 0 24px;
 }
 
+/* 展开高级设置后表单在弹窗内滚动，底部「创建网站」始终在可视区。 */
+.site-create-modal .ant-modal-body {
+  max-height: max(240px, calc(100dvh - 240px));
+  overflow-y: auto;
+}
+
 .site-create-modal .ant-modal-footer {
   margin: 16px 0 0;
   padding: 12px 28px;

@@ -585,6 +585,14 @@
    "zh": "撤回平台策略",
    "en": "Withdraw platform policy"
   },
+  "plugin.backend_credential.issue": {
+   "zh": "发放插件后端凭据",
+   "en": "Issue plugin backend credential"
+  },
+  "plugin.backend_credential.revoke": {
+   "zh": "撤销插件后端凭据",
+   "en": "Revoke plugin backend credential"
+  },
   "plugin.license.bind": {
    "zh": "插件授权绑定主控",
    "en": "Bind plugin license"
@@ -1614,6 +1622,10 @@
   "platform_policy_targets": {
    "zh": "平台策略列表",
    "en": "Platform policies"
+  },
+  "plugin_backend_credential": {
+   "zh": "插件后端凭据",
+   "en": "Plugin backend credential"
   },
   "plugin_capability_approval": {
    "zh": "插件权限审批",

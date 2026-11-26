@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
-import { Alert, Button, Input, InputNumber, Modal, Radio, Select, Space, Switch, Table, Upload, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, InputNumber, Modal, Radio, Select, Space, Switch, Upload, type TableColumnsType } from 'antd'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -15,9 +15,9 @@ import { SiteSchedule302Card } from './SiteSchedule302Card'
 import { SiteTrafficLimitCard } from './SiteTrafficLimitCard'
 import { FormRow, SettingGroup, SettingSection } from './SiteEditFields'
 import SiteCapturePolicyPanel from './SiteCapturePolicyPanel'
-import { FeedbackWhen, MODAL_WIDTH, ModalFooter, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, MODAL_WIDTH, ModalFooter, OutcomeUnknown, Table } from '@cdnca/ui'
 import SiteEditState from './SiteEditState'
-import { emptyHttpPolicyConfig, MAX_HTTP_POLICY_UPLOAD_BYTES, type HttpPolicyPage } from '../../api/httpPolicies'
+import { emptyHttpPolicyConfig, formatUploadBytes, MAX_HTTP_POLICY_UPLOAD_BYTES, type HttpPolicyPage } from '../../api/httpPolicies'
 import type { SiteAccessState } from '../../api/siteAccess'
 import type { Schedule302State } from '../../api/siteSchedule302'
 import '../../i18n/httpPolicies'
@@ -46,6 +46,8 @@ interface AdvancedSiteTabProps {
   permissions: readonly string[]
   canManage: boolean
   lockedForTenant: boolean
+  // the site's primary domain (HTTP policy delete confirmation)
+  siteName?: string
 }
 
 type WriteSource = 'assets' | 'rules'
@@ -155,7 +157,7 @@ function AdvancedSummary({ props, ownerParts }: { props: AdvancedSiteTabProps; o
   const { t: tEdge } = useTranslation('siteEdgeOptions')
   // no policy yet: the panel shows (and saves from) the empty config
   const policyPage = useCachedData<HttpPolicyPage>(['site-http-policy', ...ownerParts])
-  const policy = policyPage ? policyPage.items[0] ?? emptyHttpPolicyConfig() : undefined
+  const policy = policyPage ? policyPage.items[0] ?? emptyHttpPolicyConfig(policyPage.system_max_upload_bytes) : undefined
   const access = useCachedData<SiteAccessState>(['site-access', props.siteId])
   const schedule = useCachedData<Schedule302State>(['site-schedule302', props.siteId])
   const onOff = (on: boolean): Pick<SummaryItem, 'value' | 'tone'> => ({ value: t(on ? 'summary.on' : 'summary.off'), tone: on ? 'on' : 'off' })
@@ -163,8 +165,8 @@ function AdvancedSummary({ props, ownerParts }: { props: AdvancedSiteTabProps; o
   if (policy) {
     items.push(
       { key: 'upload', label: tPolicy('groupUpload'), target: 'site-advanced-upload',
-        value: policy.max_upload_bytes === MAX_HTTP_POLICY_UPLOAD_BYTES ? tHttp('uploadMax')
-          : t('summary.advanced.uploadValue', { mb: Math.round(policy.max_upload_bytes / 1048576 * 10) / 10 }) },
+        value: policy.max_upload_bytes === policyPage?.system_max_upload_bytes ? tHttp('uploadSystem', { size: formatUploadBytes(policy.max_upload_bytes) })
+          : policy.max_upload_bytes === MAX_HTTP_POLICY_UPLOAD_BYTES ? tHttp('uploadMax') : formatUploadBytes(policy.max_upload_bytes) },
       { key: 'referer', label: tHttp('refererTitle'), target: 'site-advanced-access', ...onOff(policy.referer_check !== null) },
       { key: 'cors', label: tHttp('corsTitle'), target: 'site-advanced-access', ...onOff(policy.cors !== null) },
     )
@@ -607,7 +609,7 @@ export default function AdvancedSiteTab(props: AdvancedSiteTabProps) {
     {parts ? <>
       {/* 分区只有一个两键选择时，与标题、说明同一行 */}
       <SettingSection id="site-advanced-upload" title={t('groupUpload')} help={t('groupUploadHelp')} className="site-setting-section-inline">{parts.upload}</SettingSection>
-      <SettingSection id="site-advanced-access" title={t('groupAccess')} help={t('groupAccessHelp')}>
+      <SettingSection id="site-advanced-access" title={t('groupAccess')}>
         <div className="site-setting-card-grid">{parts.referer}{parts.cors}</div>
       </SettingSection>
     </> : fallback}
@@ -623,7 +625,7 @@ export default function AdvancedSiteTab(props: AdvancedSiteTabProps) {
       </SettingSection>
     ) : null}
     {parts ? <>
-      <SettingSection title={t('groupHeaders')} help={t('groupHeadersHelp')}>
+      <SettingSection title={t('groupHeaders')}>
         <div className="site-setting-card-grid">{parts.requestHeaders}{parts.responseHeaders}{parts.actions}</div>
       </SettingSection>
     </> : null}

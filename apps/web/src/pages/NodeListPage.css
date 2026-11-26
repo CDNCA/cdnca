@@ -92,6 +92,15 @@
   line-height: 21px;
 }
 
+/* 工具栏与列表进了当前 tabpanel；原来页签下方的间距改成面板上边距。 */
+.node-tabset.node-tabs {
+  margin-bottom: 0;
+}
+
+.node-tabset.node-tabs > .ant-tabs-content-holder {
+  padding-top: 14px;
+}
+
 
 .node-toolbar {
   display: flex;
@@ -597,27 +606,8 @@
   margin-bottom: 20px;
 }
 
-/* 五个 tab 放不下时（英文、放大字号）横向滚动，不折叠成 "…" 下拉。 */
-.node-list-modal .ant-tabs-nav-wrap {
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.node-list-modal .ant-tabs-nav-wrap::-webkit-scrollbar {
-  display: none;
-}
-
-.node-list-modal .ant-tabs-nav-operations {
-  display: none !important;
-}
-
-.node-list-modal .ant-tabs-nav-list {
-  width: max-content;
-  min-width: 100%;
-  transform: none !important;
-  white-space: nowrap;
-}
+/* 五个页签放不下时交回 rc-tabs（选中项与焦点移入可见区、「更多页签」可达末项）。
+   原先用原生横滚 + 隐藏「更多」+ transform none，320px 时「添加子IP」不可见，滚到后点击也会跳回开头。 */
 
 /* 每行固定"左标签 + 右控件"：antd 默认 flex-wrap: wrap，控件列带长说明时会整行掉到
    标签下面从最左侧开始。 */
@@ -821,6 +811,14 @@
     align-items: flex-start;
   }
 
+  .node-tabset.node-tabs {
+    margin-bottom: 0;
+  }
+
+  .node-tabset.node-tabs > .ant-tabs-content-holder {
+    padding-top: 16px;
+  }
+
   .node-install-label-desktop {
     display: none;
   }
@@ -859,26 +857,8 @@
     order: 0;
   }
 
-  .node-tabs .ant-tabs-nav-wrap {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .node-tabs .ant-tabs-nav-wrap::-webkit-scrollbar {
-    display: none;
-  }
-
-  .node-tabs .ant-tabs-nav-operations {
-    display: none !important;
-  }
-
-  .node-tabs .ant-tabs-nav-list {
-    width: max-content;
-    min-width: 100%;
-    transform: none !important;
-    white-space: nowrap;
-  }
+  /* 窄屏不再用原生横滚替代 rc-tabs（隐藏「更多」+ transform none），否则键盘选到
+     「区域管理」时焦点在屏幕外。rc-tabs 自己把选中项和焦点移入可见区，放不下的进「更多」，触摸可横滑。 */
 
   .node-table-scroll {
     max-width: 100%;
@@ -1290,3 +1270,6 @@
   .node-ssh-header { align-items: stretch; }
   .node-ssh-header .ant-segmented { width: 100%; overflow-x: auto; }
 }
+
+/* Line groups that keep the node in its region, each a link to it. */
+.node-region-locks a { margin-left: 8px; }

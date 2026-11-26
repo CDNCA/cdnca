@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Input, Table, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, type TableColumnsType } from 'antd'
+import { Table } from '@cdnca/ui'
 import { ChevronLeft, ChevronRight, Filter, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -15,6 +16,7 @@ import { rankAddressLabel } from '../pages/analyticsRankLabels'
 import { businessTimeZone, formatNumber } from '../i18n/formatters'
 import { formatAnalyticsBandwidth, formatAnalyticsBytes } from '../i18n/analyticsUnits'
 import '../i18n/dashboardOverview'
+import { DataState } from './DataState'
 import { useChartTheme } from './useChartTheme'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -63,6 +65,9 @@ export function DashboardDrilldown({ value, onApply }: {
 }
 
 type TrendMetric = 'bandwidth' | 'requests' | 'traffic' | 'blocked'
+
+// Ranking card table: 76px requests + 88px traffic + at least 136px for the name column.
+const rankingTableMinWidth = 300
 
 function isAuthoritativeEmptyAnalytics(analytics: DashboardAnalyticsOverview): boolean {
   const summary = analytics.summary
@@ -186,46 +191,67 @@ function BandwidthTrend({ analytics, locale, metric = 'bandwidth' }: { analytics
   )
 }
 
-/** 结算水位落后时只提示，不拦截展示。 */
-export function AnalyticsSettlingHint({ minutes }: { minutes?: number }) {
-  const { t } = useTranslation('dashboardOverview')
-  if (!minutes) return null
-  return <div className="dashboard-analytics-settling" role="note">{t('settling', { count: minutes })}</div>
-}
-
-export function DashboardAnalyticsView({ analytics, locale, variant = 'default', mode = 'both' }: {
+export function DashboardAnalyticsView({ analytics, locale, variant = 'default', mode = 'both', rankingsTitle, loading = false }: {
   analytics: DashboardAnalyticsOverview
   locale: string
   variant?: 'default' | 'admin'
   mode?: 'both' | 'trend' | 'rankings'
+  /** Name of the ranking section; the admin home's own 30-minute read keeps the default. */
+  rankingsTitle?: string
+  /** The caller's period changed and its first read is still running: hide the previous period's
+   *  values but stay mounted, so the chosen trend metric and ranking tab survive. */
+  loading?: boolean
 }) {
   const { t } = useTranslation('dashboardOverview')
+  const rankTitle = rankingsTitle ?? (variant === 'admin' ? t('top.adminTitle') : t('top.title'))
   const displayMode = mode
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('bandwidth')
+  const rankTabBarRef = useRef<HTMLDivElement>(null)
   const rankTabViewportRef = useRef<HTMLDivElement>(null)
+  const rankTabTrackRef = useRef<HTMLDivElement>(null)
   const [rankTabsOverflow, setRankTabsOverflow] = useState(false)
+  // Overflow compares two widths the arrows cannot change: the tab bar (outer
+  // container, arrows included) and the tabs' own max-content track. Measuring
+  // the scroll viewport instead fed the arrows' width back into the decision.
   useEffect(() => {
+    const bar = rankTabBarRef.current
     const viewport = rankTabViewportRef.current
-    if (!viewport) return
-    const update = () => setRankTabsOverflow(viewport.scrollWidth > (viewport.parentElement?.clientWidth ?? viewport.clientWidth) + 1)
+    const track = rankTabTrackRef.current
+    if (!bar || !viewport || !track) return
+    const update = () => setRankTabsOverflow(track.scrollWidth > bar.clientWidth + 1)
     const observer = new ResizeObserver(update)
-    observer.observe(viewport)
-    if (viewport.parentElement) observer.observe(viewport.parentElement)
+    observer.observe(bar)
+    observer.observe(track)
     update()
-    return () => observer.disconnect()
+    // A vertical wheel scrolls the tabs sideways while they can still move.
+    const wheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+      const max = viewport.scrollWidth - viewport.clientWidth
+      const next = Math.min(max, Math.max(0, viewport.scrollLeft + event.deltaY))
+      if (max <= 0 || next === viewport.scrollLeft) return
+      event.preventDefault()
+      viewport.scrollLeft = next
+    }
+    viewport.addEventListener('wheel', wheel, { passive: false })
+    return () => {
+      observer.disconnect()
+      viewport.removeEventListener('wheel', wheel)
+    }
   }, [variant, displayMode, locale])
   const rankSource = variant === 'admin' && analytics.top_extended ? analytics.top_extended : analytics.top
   const [selectedDimension, setSelectedDimension] = useState<NonNullable<DashboardAnalyticsOverview['top_extended']>[number]['dimension']>('domain')
   // Domain / URL rows show their address (host:port, scheme://host:port/path)
   // like the analytics page; other dimensions show the key.
-  const columnsFor = (dimension: string): TableColumnsType<DashboardRankItem> => [
+  // compact: the ranking card's own table. The name column keeps a readable
+  // width (ellipsis + title) and the table scrolls inside itself below that.
+  const columnsFor = (dimension: string, compact = false): TableColumnsType<DashboardRankItem> => [
     // 首列按当前维度命名（域名/URL/IP/国家），与上方页签一致。
     { title: ({ domain: t('top.domain'), url: t('top.url'), ip: t('top.ip'), region: variant === 'admin' ? t('top.country') : t('top.region'), carrier: t('top.carrier') } as Record<string, string>)[dimension] ?? t('top.key'),
       dataIndex: 'key', key: 'key', ellipsis: true,
       render: (value: string, item) => rankAddressLabel(dimension, item) ?? value },
-    { title: t('top.requests'), dataIndex: 'request_count', key: 'request_count', width: 80,
+    { title: t('top.requests'), dataIndex: 'request_count', key: 'request_count', width: compact ? 76 : 80,
       render: (value: string) => formatDashboardInteger(value, locale) },
-    { title: t('top.traffic'), dataIndex: 'response_bytes', key: 'response_bytes', width: 100,
+    { title: t('top.traffic'), dataIndex: 'response_bytes', key: 'response_bytes', width: compact ? 88 : 100,
       render: (value: string) => BigInt(value) < 1024n ? formatAnalyticsBytes(Number(value), locale) : formatDashboardBytes(value, locale) },
   ]
   const selected = rankSource.find((snapshot) => snapshot.dimension === selectedDimension) ?? rankSource[0]
@@ -244,6 +270,17 @@ export function DashboardAnalyticsView({ analytics, locale, variant = 'default',
         { key: 'region', label: t('top.country'), enabled: true },
       ] as const
     : null
+  // Keep the selected tab fully inside the scroll viewport (click, keyboard or a narrower card).
+  const selectedRankDimension = selected?.dimension
+  useEffect(() => {
+    const viewport = rankTabViewportRef.current
+    const active = viewport?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    if (!viewport || !active) return
+    const view = viewport.getBoundingClientRect()
+    const tab = active.getBoundingClientRect()
+    if (tab.left < view.left) viewport.scrollLeft -= view.left - tab.left
+    else if (tab.right > view.right) viewport.scrollLeft += tab.right - view.right
+  }, [selectedRankDimension, rankTabsOverflow])
   const scrollRankTabs = (direction: -1 | 1) => {
     const viewport = rankTabViewportRef.current
     if (!viewport) return
@@ -265,17 +302,19 @@ export function DashboardAnalyticsView({ analytics, locale, variant = 'default',
           </button>
         ))}
       </div> : null}
-      <BandwidthTrend analytics={analytics} locale={locale} metric={variant === 'admin' ? trendMetric : 'bandwidth'} />
+      {loading ? <DataState status="loading" className="analytics-chart-state" />
+        : <BandwidthTrend analytics={analytics} locale={locale} metric={variant === 'admin' ? trendMetric : 'bandwidth'} />}
     </section>
   )
   const rankings = rankTabs ? (
-      <section className="dashboard-rank-section dashboard-rank-tabs" aria-label={variant === 'admin' ? t('top.adminTitle') : t('top.title')}>
-      {variant === 'admin' && displayMode === 'both' ? <h3 className="dashboard-trend-heading">{t('top.adminTitle')}</h3> : null}
-      <div className="dashboard-rank-tabbar">
+      <section className="dashboard-rank-section dashboard-rank-tabs" aria-label={rankTitle}>
+      {variant === 'admin' && displayMode === 'both' ? <h3 className="dashboard-trend-heading">{rankTitle}</h3> : null}
+      <div ref={rankTabBarRef} className="dashboard-rank-tabbar">
         {rankTabsOverflow ? <button className="dashboard-rank-tab-arrow" type="button" aria-label={t('top.previous')} onClick={() => scrollRankTabs(-1)}>
           <ChevronLeft size={16} aria-hidden="true" />
         </button> : null}
         <div ref={rankTabViewportRef} className="dashboard-rank-tablist" role="tablist">
+          <div ref={rankTabTrackRef} className="dashboard-rank-tabtrack">
           {rankTabs.map((tab) => (
             <button
               key={tab.key}
@@ -291,14 +330,16 @@ export function DashboardAnalyticsView({ analytics, locale, variant = 'default',
               {tab.label}
             </button>
           ))}
+          </div>
         </div>
         {rankTabsOverflow ? <button className="dashboard-rank-tab-arrow" type="button" aria-label={t('top.next')} onClick={() => scrollRankTabs(1)}>
           <ChevronRight size={16} aria-hidden="true" />
         </button> : null}
       </div>
       {selected ? <div className="dashboard-table-wrap">
-        <Table rowKey="key" size="small" pagination={false} columns={columnsFor(selected.dimension)} dataSource={selected.items}
-          locale={{ emptyText: t('top.empty') }} scroll={displayMode === 'rankings' ? undefined : { x: 520 }} />
+        <Table rowKey="key" size="small" pagination={false} columns={columnsFor(selected.dimension, displayMode === 'rankings')}
+          dataSource={loading ? [] : selected.items} loading={loading}
+          locale={{ emptyText: loading ? ' ' : t('top.empty') }} scroll={{ x: displayMode === 'rankings' ? rankingTableMinWidth : 520 }} />
       </div> : <div className="dashboard-chart-state">{t('top.empty')}</div>}
     </section>
   ) : (
@@ -316,7 +357,6 @@ export function DashboardAnalyticsView({ analytics, locale, variant = 'default',
   )
   return (
     <div className={`dashboard-analytics-overview${variant === 'admin' ? ' dashboard-analytics-admin' : ''}${displayMode === 'trend' ? ' dashboard-analytics-trend-only' : displayMode === 'rankings' ? ' dashboard-analytics-rankings-only' : ''}`}>
-      <AnalyticsSettlingHint minutes={analytics.settling_minutes} />
       {displayMode !== 'rankings' ? trend : null}
       {displayMode !== 'trend' ? rankings : null}
     </div>

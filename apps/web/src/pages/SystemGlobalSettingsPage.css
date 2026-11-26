@@ -26,12 +26,8 @@
   border-bottom-color: var(--cdnca-color-border);
 }
 
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav-wrap {
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  -webkit-overflow-scrolling: touch;
-}
+/* 页签导航不再自加原生横向滚动。rc-tabs 自己按可见宽度（扣除「更多」）
+   平移列表、把选中项移入可见区并支持触摸滑动；两套滚动叠加时选中的「其它配置」在 390px 被「更多」挡住一半。 */
 
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav-list {
   flex: 0 0 auto;
@@ -186,17 +182,6 @@
   display: block;
 }
 
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-payment-grid {
-  width: 100%;
-  max-width: 840px;
-}
-
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-payment-card {
-  background: var(--cdnca-color-bg-container, #fff);
-  border-color: var(--cdnca-color-border-secondary);
-  border-radius: 3px;
-}
-
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input,
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-number,
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-selector,
@@ -325,10 +310,6 @@
   .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form textarea {
     width: 100%;
     max-width: 100%;
-  }
-
-  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-payment-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-space {
@@ -575,23 +556,35 @@
   color: var(--cdnca-color-text);
 }
 
+/* the control column fills what the 170px label leaves, up to
+ * 760px on desktop. A fixed 760px column wrapped under the label and ran past
+ * the card whenever the content area was narrower than 930px (768px with the
+ * sidebar open); narrow cards stack label over control (@container below). */
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control {
-  flex: 0 0 760px !important;
-  width: 760px !important;
+  flex: 1 1 0 !important;
+  inline-size: auto !important;
   max-width: 760px !important;
   min-width: 0;
 }
 
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input,
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input-content {
-  width: 760px !important;
+  inline-size: 100% !important;
   max-width: 760px !important;
   min-width: 0;
 }
 
+/* 复验：说明行随控件列宽度（上限 760px），不再固定 760px 撑开父级；长部署项可折断。 */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-additional {
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 760px;
+}
+
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-extra {
-  width: 760px;
+  inline-size: 100%;
   max-width: 100%;
+  overflow-wrap: anywhere;
   color: var(--cdnca-color-text-secondary);
   font-size: 12px;
   line-height: 20px;
@@ -688,29 +681,6 @@
   max-height: 58px;
 }
 
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item {
-  width: auto;
-  max-width: none;
-}
-
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item-control {
-  flex: 1 1 auto !important;
-  width: auto !important;
-  max-width: none !important;
-}
-
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item-control-input,
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item-control-input-content {
-  width: auto !important;
-  max-width: none !important;
-}
-
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-purchase-notice {
   width: 960px !important;
   max-width: 100% !important;
@@ -774,11 +744,6 @@
     max-width: 100% !important;
   }
 
-  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-
   .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
@@ -817,19 +782,7 @@
   }
 }
 
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .system-settings-toggle-grid .ant-form-item-control {
-  flex: 1 1 0 !important;
-  width: auto !important;
-  max-width: none !important;
-}
-
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .system-settings-toggle-grid .ant-form-item-control-input,
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .system-settings-toggle-grid .ant-form-item-control-input-content {
-  width: auto !important;
-  max-width: none !important;
-}
-
-/* Canonical settings refinements. */
+/* Canonical settings parity refinements. */
 .system-settings-baseline-page.sys-setting.sys-setting-reference-page {
   position: relative;
 }
@@ -950,19 +903,6 @@
   max-height: 44px;
 }
 
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-https-instructions {
-  width: 760px;
-  max-width: calc(100% - 170px);
-  margin: 4px 0 2px 170px;
-  color: var(--cdnca-color-text);
-  font-size: 12px;
-  line-height: 22px;
-}
-
-.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-https-instructions p {
-  margin: 0 0 4px;
-}
-
 @media (max-width: 767px) {
   .system-settings-baseline-page.sys-setting.sys-setting-reference-page {
     margin: 12px !important;
@@ -986,12 +926,6 @@
   .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview,
   .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview {
     min-height: 58px;
-  }
-
-  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-https-instructions {
-    width: 100%;
-    max-width: none;
-    margin-left: 0;
   }
 }
 
@@ -1025,3 +959,148 @@
 .control-host-bind-command { margin: 4px 0 12px; overflow-wrap: anywhere; }
 .control-host-bind-command code { white-space: pre-wrap; word-break: break-all; }
 .control-host-bind-requirements { margin: 6px 0 12px; padding-left: 20px; font-size: 14px; line-height: 1.7; }
+.system-settings-smtp-fields {
+  margin-block: 16px;
+  padding-block: 12px;
+  border-block: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.system-settings-smtp-fields h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.system-settings-mail-test {
+  width: 100%;
+}
+
+/* lay the settings forms out by the width the card really has,
+ * not by the viewport. From 768px the sidebar is docked, so a 768-1023px
+ * window leaves a card narrower than label (170px) + a usable control; those
+ * cards stack the label above a full-width control, like the phone layout. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card {
+  container: sys-setting-card / inline-size;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card .ant-alert {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+@container sys-setting-card (width < 560px) {
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page :is(.system-settings-baseline-form > .system-settings-config-card, .system-settings-config-card > .system-settings-baseline-form) .ant-form-item-row {
+    display: block;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page :is(.system-settings-baseline-form > .system-settings-config-card, .system-settings-config-card > .system-settings-baseline-form) .ant-form-item-label {
+    inline-size: 100% !important;
+    max-inline-size: none !important;
+    padding: 0 0 5px;
+    text-align: start;
+    white-space: normal;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page :is(.system-settings-baseline-form > .system-settings-config-card, .system-settings-config-card > .system-settings-baseline-form) .ant-form-item-label > label {
+    height: auto;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page :is(.system-settings-baseline-form > .system-settings-config-card, .system-settings-config-card > .system-settings-baseline-form) .ant-form-item-control,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page :is(.system-settings-baseline-form > .system-settings-config-card, .system-settings-config-card > .system-settings-baseline-form) .ant-form-item-control-input,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page :is(.system-settings-baseline-form > .system-settings-config-card, .system-settings-config-card > .system-settings-baseline-form) .ant-form-item-control-input-content {
+    flex: none !important;
+    inline-size: 100% !important;
+    min-inline-size: 0;
+    max-inline-size: 100% !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 复验：卡片内横排 Space 的子项可收缩，Tag 长文案可换行。伪语言下
+ * 「各收银台支付服务状态」单枚 Tag 约 456px 且 antd 默认 nowrap，768px 时撑出整页横向溢出。 */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card .ant-space-horizontal > .ant-space-item {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card .ant-tag {
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 复验：页内导航项放不下时换行，每一项都在导航条内可见、可按位置点击，不再依赖
+ * 横向滚动（767/768px 伪语言下 Tab 到末项时按钮被裁）。一行放得下时高度与原来相同；
+ * 行距 10px 让非末行的选中下划线（按钮下方 7–9px）落在行距里。 */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav {
+  height: auto;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-space {
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 10px !important;
+}
+
+/* 「网关端点」未部署时，状态、短说明、可展开的 control.env 部署项在同一控件列内纵排，
+ * 各占满列宽（控件列本身是横排 flex，原先说明段与清单被挤成两列）。变量名不折行，放不下时在本行横向滚动，复制完整。 */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-sms-gateway-setup {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.system-settings-sms-gateway-env > summary {
+  cursor: pointer;
+  color: var(--cdnca-color-primary);
+  inline-size: fit-content;
+  max-inline-size: 100%;
+}
+
+.system-settings-sms-gateway-env > .ant-typography {
+  margin: 6px 0 0;
+}
+
+.system-settings-sms-gateway-env > ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.system-settings-sms-gateway-env > ul > li {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.system-settings-sms-gateway-env-key {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* 页内跳转的目标让出吸顶导航（及滚动整页时的固定顶栏）占住的高度 + 8px，
+   由 SectionNavigation 实测写入 --section-scroll-offset；所有页内锚点通用。 */
+.system-settings-config-card,
+.sys-setting-section-anchor {
+  scroll-margin-top: var(--section-scroll-offset, 0px);
+}
+
+/* 用户注册：收起的通知模板与模板分组标题 */
+.system-settings-template-collapse {
+  margin: 0 0 16px;
+}
+
+.system-settings-template-title {
+  margin: 8px 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}

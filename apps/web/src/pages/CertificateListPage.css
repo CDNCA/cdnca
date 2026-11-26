@@ -758,13 +758,6 @@
   font-weight: 600;
 }
 
-.certificate-type-section > h3 > small {
-  margin-left: 8px;
-  color: var(--cdnca-color-text-secondary, #808695);
-  font-size: 12px;
-  font-weight: 400;
-}
-
 .certificate-type-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

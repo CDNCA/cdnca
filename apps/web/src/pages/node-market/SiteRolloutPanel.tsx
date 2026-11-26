@@ -4,7 +4,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Collapse, Descriptions, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Collapse, Descriptions, Popconfirm, Select, Space, Tag, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 import { marketReason } from '@cdnca/ui/market-reasons'
 

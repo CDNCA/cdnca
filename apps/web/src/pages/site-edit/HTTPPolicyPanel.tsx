@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Input, InputNumber, Radio, Space, Spin, Switch, Table, type TableColumnsType } from 'antd'
+import { Alert, Button, Checkbox, Input, InputNumber, Modal, Radio, Space, Spin, Switch, type TableColumnsType } from 'antd'
 import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -8,12 +8,15 @@ import { ApiError, type ScopeKind } from '../../api/auth'
 import { writeOutcomeUnknown as unknownOutcome } from './writeOutcome'
 import {
   configFromHttpPolicy,
+  customUploadStart,
   emptyHttpPolicyConfig,
+  formatUploadBytes,
   httpPoliciesApi,
   MAX_HTTP_POLICY_UPLOAD_BYTES,
   type HeaderAction,
   type HttpPolicyConfig,
   type HttpPolicyIdentity,
+  type HttpPolicyPage,
   type HttpPolicyWriteMetadata,
 } from '../../api/httpPolicies'
 import { useSessionStore } from '../../auth/session'
@@ -23,7 +26,7 @@ import { emptyRefererDraft, refererCheckFrom, refererDraftFrom, type RefererDraf
 import HTTPHeaderDialog from './HTTPHeaderDialog'
 import URLRedirectDialog from './URLRedirectDialog'
 import { draftFromRedirect, draftFromRewrite, type URLRedirectDraft } from './urlRedirectDraft'
-import { OutcomeUnknown, FeedbackWhen } from '@cdnca/ui'
+import { OutcomeUnknown, FeedbackWhen, Table } from '@cdnca/ui'
 import SiteEditState from './SiteEditState'
 import { useCommitRequest, useInstantFeedback } from './instantSave'
 
@@ -40,7 +43,9 @@ export interface HTTPPolicyPanelProps {
   permissions: readonly string[]
   canManage: boolean
   lockedForTenant: boolean
-  // tp-b3c: the HTTP policy is spread over several groups of
+  // the site's primary domain, named in the delete confirmation
+  siteName?: string
+  // the HTTP policy is spread the HTTP policy over several groups of
   // 高级设置; the caller places the parts (one draft, one save). Before the
   // policy loads (or without access) parts is null and fallback is the state.
   children?: (parts: HTTPPolicyParts | null, fallback: ReactNode) => ReactNode
@@ -137,8 +142,9 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
   const expectedOwner = props.scopeKind === 'tenant' ? props.userId : undefined
   const identity = useMemo<HttpPolicyIdentity>(() => ({ scopeId: targetScopeId, siteId: props.siteId, ownerUserId: expectedOwner }),
     [expectedOwner, targetScopeId, props.siteId])
-  const [config, setConfig] = useState<HttpPolicyConfig>(emptyHttpPolicyConfig)
-  // Header and redirect dialogs (index null = new)
+  // replaced by the system upload limit once the list loads (the editors wait for it)
+  const [config, setConfig] = useState<HttpPolicyConfig>(() => emptyHttpPolicyConfig(MAX_HTTP_POLICY_UPLOAD_BYTES))
+  // header and redirect dialogs (index null = new)
   const [headerDialog, setHeaderDialog] = useState<{ side: 'request' | 'response'; index: number | null } | null>(null)
   const [redirectDialog, setRedirectDialog] = useState<{ list: 'redirects' | 'rewrites'; index: number | null } | null>(null)
   const [refererDraft, setRefererDraft] = useState<RefererDraft>(emptyRefererDraft)
@@ -177,6 +183,13 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     },
   })
   const policy = policyQuery.data?.items[0]
+  // the upload limit of this site while it has no policy (the node's system limit)
+  const systemMax = policyQuery.data?.system_max_upload_bytes ?? MAX_HTTP_POLICY_UPLOAD_BYTES
+
+  useEffect(() => {
+    if (!policyQuery.data || policy || loadedRevision !== 0 || attemptRef.current) return
+    setConfig(emptyHttpPolicyConfig(systemMax))
+  }, [loadedRevision, policy, policyQuery.data, systemMax])
 
   useEffect(() => {
     if (!policy || policy.revision === loadedRevision || attemptRef.current) return
@@ -192,8 +205,9 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     setNotice('')
     setAbandoning(false)
     setLoadedRevision(0)
-    setConfig(emptyHttpPolicyConfig())
+    setConfig(emptyHttpPolicyConfig(systemMax))
     setRefererDraft(emptyRefererDraft())
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reset per owner only
   }, [owner])
 
   useEffect(() => () => {
@@ -227,12 +241,12 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     onSuccess: (result, id) => {
       const completed = attemptRef.current
       if (!completed || completed.id !== id || completed.owner !== owner) return
-      queryClient.setQueryData(queryKey, { items: result.deleted ? [] : [result] })
+      queryClient.setQueryData<HttpPolicyPage>(queryKey, (current) => ({ system_max_upload_bytes: systemMax, ...current, items: result.deleted ? [] : [result] }))
       setLoadedRevision(result.deleted ? 0 : result.revision)
       const editedSince = sentRef.current !== null && sentRef.current !== draftKey.current
       sentRef.current = null
       if (result.deleted) {
-        setConfig(emptyHttpPolicyConfig())
+        setConfig(emptyHttpPolicyConfig(systemMax))
         setRefererDraft(emptyRefererDraft())
       } else if (!editedSince) {
         setConfig(configFromHttpPolicy(result))
@@ -254,7 +268,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
         // 明确拒绝：控件回滚到服务端值；版本冲突重读最新值。
         sentRef.current = null
         const stored = policyQuery.data?.items[0]
-        setConfig(stored ? configFromHttpPolicy(stored) : emptyHttpPolicyConfig())
+        setConfig(stored ? configFromHttpPolicy(stored) : emptyHttpPolicyConfig(systemMax))
         setRefererDraft(stored?.referer_check ? refererDraftFrom(stored.referer_check) : emptyRefererDraft())
         if (error instanceof ApiError && (error.code === 'revision_conflict' || error.status === 412)) void policyQuery.refetch()
       }
@@ -298,7 +312,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
   // 草稿一改就请求提交（键入类等失焦/回车）；校验失败就地提示，不提交。
   const draftKey = useRef('')
   draftKey.current = JSON.stringify([config, refererDraft])
-  const storedConfig = policy ? configFromHttpPolicy(policy) : emptyHttpPolicyConfig()
+  const storedConfig = policy ? configFromHttpPolicy(policy) : emptyHttpPolicyConfig(systemMax)
   const storedReferer = policy?.referer_check ? refererDraftFrom(policy.referer_check) : emptyRefererDraft()
   const draftChanged = () => {
     const effective = (value: HttpPolicyConfig, referer: RefererDraft) => JSON.stringify({ ...value,
@@ -313,10 +327,31 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     begin({ id: `http-policy-${operation}-${crypto.randomUUID()}`, owner, operation, policyId: policy.id,
       revision: policy.revision, metadata: requestMetadata(operation), identity })
   }
+  const [modal, modalHolder] = Modal.useModal()
+  // the confirmation names the site and lists what the saved policy holds
   const removePolicy = () => {
-    if (!policy || !window.confirm(t('confirmDelete'))) return
-    begin({ id: `http-policy-delete-${crypto.randomUUID()}`, owner, operation: 'delete', policyId: policy.id,
-      revision: policy.revision, metadata: requestMetadata('delete'), identity })
+    if (!policy) return
+    const target = policy
+    const scope = [
+      target.request_headers.length ? t('deleteScopeRequestHeaders', { count: target.request_headers.length }) : null,
+      target.response_headers.length ? t('deleteScopeResponseHeaders', { count: target.response_headers.length }) : null,
+      target.redirects.length + target.rewrites.length
+        ? t('deleteScopeRedirects', { count: target.redirects.length + target.rewrites.length }) : null,
+      target.referer_check ? t('refererTitle') : null,
+      target.cors ? t('corsTitle') : null,
+    ].filter((item): item is string => item !== null)
+    void modal.confirm({
+      title: props.siteName ? t('deleteConfirmNamed', { site: props.siteName }) : t('confirmDelete'),
+      content: <>
+        {scope.length ? <p>{t('deleteScopeItems', { items: scope.join(t('deleteScopeSeparator')) })}</p> : null}
+        <p>{t('deleteScopeUpload', { size: formatUploadBytes(systemMax) })}</p>
+      </>,
+      okText: t('deletePolicy'), cancelText: t('cancel'), okButtonProps: { danger: true }, autoFocusButton: 'cancel',
+      onOk: () => {
+        begin({ id: `http-policy-delete-${crypto.randomUUID()}`, owner, operation: 'delete', policyId: target.id,
+          revision: target.revision, metadata: requestMetadata('delete'), identity })
+      },
+    })
   }
   const retryExact = () => {
     if (activeAttempt && !mutation.isPending) mutation.mutate(activeAttempt.id)
@@ -396,7 +431,8 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
 
   const preview = previewQuery.data
   const included = preview?.snapshot.sites.some((site) => site.site_id === props.siteId) ?? false
-  const custom = config.max_upload_bytes !== MAX_HTTP_POLICY_UPLOAD_BYTES
+  const uploadMode = config.max_upload_bytes === systemMax ? 'system' : config.max_upload_bytes === MAX_HTTP_POLICY_UPLOAD_BYTES ? 'max' : 'custom'
+  const custom = uploadMode === 'custom'
   const updateReferer = (changes: Partial<RefererDraft>) => { setWriteError(null); setRefererDraft((current) => ({ ...current, ...changes })); commits.requestUnlessTyping() }
   const empty = (text: string) => <div className="site-setting-empty">{text}</div>
   const count = (value: number) => t('count', { count: value })
@@ -443,10 +479,13 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
   const parts: HTTPPolicyParts = {
     upload: <div className="site-instant-contents" {...commits.typingProps}>
       <FormRow label={t('uploadLimit')}>
-        <Radio.Group aria-label={t('uploadLimit')} optionType="button" disabled={locked} value={custom ? 'custom' : 'max'}
-          options={[{ value: 'max', label: t('uploadMax') }, { value: 'custom', label: t('uploadCustom') }]}
+        <Radio.Group aria-label={t('uploadLimit')} optionType="button" disabled={locked} value={uploadMode}
+          options={[{ value: 'system', label: t('uploadSystem', { size: formatUploadBytes(systemMax) }) },
+            ...(systemMax === MAX_HTTP_POLICY_UPLOAD_BYTES ? [] : [{ value: 'max', label: t('uploadMax') }]),
+            { value: 'custom', label: t('uploadCustom') }]}
           onChange={(event) => editConfig((current) => ({ ...current,
-            max_upload_bytes: event.target.value === 'max' ? MAX_HTTP_POLICY_UPLOAD_BYTES : 100 * 1024 * 1024 }))} />
+            max_upload_bytes: event.target.value === 'system' ? systemMax : event.target.value === 'max' ? MAX_HTTP_POLICY_UPLOAD_BYTES
+              : customUploadStart(systemMax) }))} />
       </FormRow>
       {custom ? (
         <FormRow label={t('maxUploadBytes')} help={t('uploadHint')}>
@@ -456,7 +495,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
       ) : null}
     </div>,
     referer: (
-      <div className="site-instant-contents" {...commits.typingProps}><SettingGroup title={t('refererTitle')} status={config.referer_check ? t('stateOn') : t('stateOff')} help={t('refererShort')} tip={t('refererHelp')}
+      <div className="site-instant-contents" {...commits.typingProps}><SettingGroup title={t('refererTitle')} status={config.referer_check ? t('stateOn') : t('stateOff')} tip={t('refererHelp')}
         className={config.referer_check ? 'is-wide' : undefined}
         extra={<Switch aria-label={t('refererEnabled')} checked={config.referer_check !== null} disabled={locked}
           onChange={(enabled) => editConfig((current) => ({ ...current, referer_check: enabled
@@ -478,11 +517,11 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
           <FormRow label={t('refererExtensions')} help={t('refererExtensionsHint')}>
             <Input.TextArea aria-label={t('refererExtensions')} rows={2} placeholder="jpg" value={refererDraft.extensions} disabled={locked} onChange={(event) => updateReferer({ extensions: event.target.value })} />
           </FormRow>
-        </> : empty(t('refererOff'))}
+        </> : null}
       </SettingGroup></div>
     ),
     cors: (
-      <div className="site-instant-contents" {...commits.typingProps}><SettingGroup title={t('corsTitle')} status={config.cors ? t('stateOn') : t('stateOff')} help={t('corsShort')}
+      <div className="site-instant-contents" {...commits.typingProps}><SettingGroup title={t('corsTitle')} status={config.cors ? t('stateOn') : t('stateOff')} tip={t('corsShort')}
         className={config.cors ? 'is-wide' : undefined}
         extra={<Switch aria-label={t('corsEnabled')} checked={config.cors !== null} disabled={locked}
           onChange={(enabled) => editConfig((current) => ({ ...current, cors: enabled ? {
@@ -495,7 +534,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
           <FormRow label={t('corsExposedHeaders')}><Input.TextArea aria-label={t('corsExposedHeaders')} value={config.cors.exposed_headers.join('\n')} disabled={locked} onChange={(event) => updateCors({ exposed_headers: lines(event.target.value).map((item) => item.toLowerCase()) })} /></FormRow>
           <FormRow label={t('corsAllowCredentials')}><Switch aria-label={t('corsAllowCredentials')} checked={config.cors.allow_credentials} disabled={locked} onChange={(value) => updateCors({ allow_credentials: value })} /></FormRow>
           <FormRow label={t('corsMaxAge')}><InputNumber aria-label={t('corsMaxAge')} min={0} max={86400} value={config.cors.max_age_seconds} disabled={locked} onChange={(value) => value !== null && updateCors({ max_age_seconds: value })} /></FormRow>
-        </> : empty(t('corsOff'))}
+        </> : null}
       </SettingGroup></div>
     ),
     // URL 转向 (one list; 内部重写 is one of its types, our rewrites)
@@ -510,7 +549,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     ),
     rewrites: null,
     requestHeaders: (
-      <SettingGroup title={t('requestHeadersTitle')} status={count(config.request_headers.length)} help={t('requestHeadersShort')}
+      <SettingGroup title={t('requestHeadersTitle')} status={count(config.request_headers.length)}
         className={config.request_headers.length ? 'is-wide' : undefined}
         extra={canWrite ? <Button type="primary" icon={<Plus size={15} />} disabled={editLocked}
           onClick={() => setHeaderDialog({ side: 'request', index: null })}>{t('addRequestHeader')}</Button> : null}>
@@ -521,7 +560,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
       </SettingGroup>
     ),
     responseHeaders: (
-      <SettingGroup title={t('responseHeadersTitle')} status={count(config.response_headers.length)} help={t('responseHeadersShort')} tip={t('responseHeaderHint')}
+      <SettingGroup title={t('responseHeadersTitle')} status={count(config.response_headers.length)} tip={t('responseHeaderHint')}
         className={config.response_headers.length ? 'is-wide' : undefined}
         extra={canWrite ? <Button type="primary" icon={<Plus size={15} />} disabled={editLocked}
           onClick={() => setHeaderDialog({ side: 'response', index: null })}>{t('addResponseHeader')}</Button> : null}>
@@ -532,6 +571,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
       </SettingGroup>
     ),
     actions: <>
+      {modalHolder}
       {!canWrite ? <Alert type="info" message={t('readOnly')} /> : null}
       {notice ? <Alert type="success" message={notice} closable onClose={() => setNotice('')} /> : null}
       {writeError ? uncertain ? <OutcomeUnknown title={t('unknownTitle')} detail={t('unknownDescription')} action={<Space><Button loading={abandoning} disabled={mutation.isPending} onClick={() => { void abandon() }}>{t('abandonRefresh')}</Button>
@@ -540,7 +580,6 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
       {canWrite ? <div className="site-setting-actions">
         {policy ? <Switch aria-label={policy.enabled ? t('disable') : t('enable')} checked={policy.enabled} disabled={writesLocked} onChange={toggle} /> : null}
         {policy ? <Button danger icon={<Trash2 size={15} />} disabled={writesLocked} onClick={removePolicy}>{t('delete')}</Button> : null}
-        <span className="site-setting-section-help">{t('saveScope')}</span>
       </div> : null}
       {headerDialog ? (
         <HTTPHeaderDialog open side={headerDialog.side} disabled={locked}

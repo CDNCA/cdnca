@@ -460,6 +460,34 @@
 @media (max-width: 600px) {
   .analytics-log-page.site-access-log-page .analytics-log-time-break { display: none; }
 
+  /* 窄屏只有数据表自己横滚；分页条不按内容撑宽（桌面的 max-content 曾把 320/390 整页撑到 479），放不下就换行。 */
+  .analytics-log-page.site-access-log-page .analytics-log-pagination {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  /* 页签栏（日志查询/申请记录/供货方日志）放不下就换行，不截半个页签、不收进「…」溢出菜单。 */
+  .analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-nav-wrap {
+    overflow: visible;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-nav-list {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    min-width: 0;
+    transform: none !important;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-nav-operations {
+    display: none !important;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-tab {
+    padding: 6px 10px;
+  }
+
   .analytics-log-page.site-access-log-page .analytics-log-domain-control {
     flex: 0 0 100%;
     width: 100%;
@@ -501,6 +529,18 @@
 
   .analytics-log-page.site-access-log-page .analytics-log-toolbar-actions {
     margin-left: 0;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-toolbar-actions,
+  .analytics-log-page.site-access-log-page .cdnca-adv-filters-actions {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-export-hint {
+    white-space: normal;
   }
 
   .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-baseline-filter,
@@ -629,7 +669,13 @@
   display: none;
 }
 
-/* 市场供给筛选栏按底边对齐，时间范围与「查询」按钮落在输入框同一条线上（同 AdvancedFilters 的 flex-end）。 */
+/* 来源页签栏单独一张卡片，正文（各来源的筛选与表格）在页签面板里，与页签栏隔开。 */
+.analytics-block-event-tabbar {
+  margin-bottom: 16px;
+  padding-bottom: 0;
+}
+
+/* ui-align3：市场供给筛选栏按底边对齐，时间范围与「查询」按钮落在输入框同一条线上（同 AdvancedFilters 的 flex-end）。 */
 .analytics-log-page .market-security-filter-bar {
   align-items: flex-end;
 }
@@ -664,4 +710,36 @@
   .analytics-log-page .market-security-filter-bar .analytics-filter-field .ant-select {
     width: 100%;
   }
+}
+
+/* 供货方日志页签只列供货方支持的筛选项。 */
+.analytics-log-page.site-access-log-page .analytics-market-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-market-log-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-market-log-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 180px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-market-log-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

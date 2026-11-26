@@ -127,6 +127,29 @@ func TestOBS09HandlerParsesDisplayUserFilter(t *testing.T) {
 	}
 }
 
+// hide_session_refresh 只接受一个 true。
+func TestOBS09HandlerParsesHideSessionRefresh(t *testing.T) {
+	for _, testCase := range []struct {
+		query string
+		code  int
+		hide  bool
+	}{
+		{"kind=operation&hide_session_refresh=true", http.StatusOK, true},
+		{"kind=operation", http.StatusOK, false},
+		{"kind=operation&hide_session_refresh=1", http.StatusBadRequest, false},
+		{"kind=operation&hide_session_refresh=true&hide_session_refresh=true", http.StatusBadRequest, false},
+	} {
+		domain := &fakeDomain09{}
+		handler := handler09(t, domain, platformSession09(uuid.New(), uuid.New(), uuid.New(), true))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request09(http.MethodGet, "/v1/observability/logs?target_scope_id="+uuid.New().String()+"&"+testCase.query, ""))
+		if response.Code != testCase.code || (testCase.code == http.StatusOK && domain.query.HideSessionRefresh != testCase.hide) ||
+			(testCase.code != http.StatusOK && domain.listCalls != 0) {
+			t.Fatalf("%s: code=%d query=%#v calls=%d body=%s", testCase.query, response.Code, domain.query, domain.listCalls, response.Body.String())
+		}
+	}
+}
+
 func TestOBS09HandlerRejectsCrossScopeBeforeDomainCall(t *testing.T) {
 	tenantScope, platformScope, targetScope := uuid.New(), uuid.New(), uuid.New()
 	tests := []struct {

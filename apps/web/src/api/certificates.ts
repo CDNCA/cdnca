@@ -340,6 +340,17 @@ function isSiteBindingDetail(value: unknown): value is CertificateSiteBindingDet
     version.status === 'active'
 }
 
+/**
+ * the version a site can be bound to: the newest active one, or the first version of an asset
+ * that was never activated (status default, e.g. an ACME order's issued certificate); binding activates it.
+ */
+export function bindableVersion(versions: CertificateAssetVersion[]): CertificateAssetVersion | undefined {
+  const active = versions.filter((version) => version.status === 'active').sort((left, right) => right.version - left.version)[0]
+  if (active) return active
+  if (versions.some((version) => version.status === 'superseded')) return undefined
+  return versions.find((version) => version.status === 'default')
+}
+
 function invalidResponse(): ApiError {
   return new ApiError('Invalid certificate asset response', 502, 'invalid_response')
 }

@@ -40,19 +40,21 @@ func LoadSites(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Site, 
 			                 JOIN cname_allocation_targets frozen ON frozen.tenant_id=allocation.tenant_id AND frozen.job_id=allocation.job_id
 			                 WHERE binding.site_id=site.id LIMIT 1),
 			                (SELECT line_group.tenant_scope_id FROM node_line_groups line_group
-			                 WHERE line_group.id=COALESCE(site.node_group_id,(subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+			                 WHERE line_group.id=COALESCE(site.node_group_id,(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
 			                   AND line_group.deleted_at IS NULL)) AS group_scope_id,
 			       COALESCE((SELECT frozen.node_group_id FROM cname_site_bindings binding
 			                 JOIN cname_allocations allocation ON allocation.tenant_scope_id=binding.tenant_scope_id
 			                  AND allocation.id=binding.current_allocation_id AND allocation.state='done'
 			                 JOIN cname_allocation_targets frozen ON frozen.tenant_id=allocation.tenant_id AND frozen.job_id=allocation.job_id
 			                 WHERE binding.site_id=site.id LIMIT 1), site.node_group_id,
-			                (subscription.product_snapshot->'spec'->>'node_group_id')::uuid) AS group_id
+			                (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid) AS group_id
 			FROM site_schedule302_settings setting
 			JOIN sites site ON site.id=setting.site_id AND site.scope_id=setting.scope_id
 			-- a site following its package uses the package's primary group (sec-followup)
 			LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
 			 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+			-- its current entitlement's (701: a changed package moves the primary group)
+			LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 			WHERE site.deleted_at IS NULL AND site.enabled
 		)
 		SELECT scheduled.site_id,scheduled.target,scheduled.sign_key,scheduled.http_ports,scheduled.domains,scheduled.domain,

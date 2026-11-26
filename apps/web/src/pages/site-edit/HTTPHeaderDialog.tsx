@@ -1,7 +1,7 @@
 // 新增源站请求头 / 客户端响应头 dialog: name with
 // presets, value with variable presets, 执行动作 cards 添加/覆盖/删除, 允许重复.
 import { useEffect, useId, useState } from 'react'
-import { Alert, Button, Input, Modal, Space, Switch } from 'antd'
+import { Alert, Button, Input, Modal, Select, Space, Switch } from 'antd'
 import { MODAL_WIDTH, ModalFooter } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
@@ -10,8 +10,9 @@ import '../../i18n/httpPolicies'
 
 const requestNamePresets = ['X-Request-ID', 'X-Trace-ID', 'X-Origin-Host', 'X-Client-IP', 'X-CDN-Node', 'X-Site-ID']
 const responseNamePresets = ['Cache-Control', 'X-Frame-Options', 'X-Content-Type-Options', 'Content-Security-Policy', 'Referrer-Policy']
-// the seven common ones, in this order; the rest of headerVariables are accepted too
-const variablePresets = ['remote_addr', 'tls_fp', 'isp', 'areacode', 'country', 'province', 'city'] as const
+// the seven common ones first; the rest of headerVariables are accepted too
+const variablePresets: readonly string[] = ['remote_addr', 'tls_fp', 'isp', 'areacode', 'country', 'province', 'city']
+const moreVariables = headerVariables.filter((variable) => !variablePresets.includes(variable))
 const tokenPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/
 // CU-ADV-01 B：与服务端 httppolicycontrol/validate.go 同一份受管头名单，弹窗里就地拒绝并保留草稿，
 // 不发一次必被 422 拒绝、回滚整份配置的请求。
@@ -87,6 +88,7 @@ export default function HTTPHeaderDialog(props: HTTPHeaderDialogProps) {
     : t(request ? 'requestHeaderDialog' : 'responseHeaderDialog')
   const nameLabel = t(request ? 'headerName' : 'responseHeaderName')
   const valueLabel = t(request ? 'headerValue' : 'responseHeaderValue')
+  const duplicateLabel = request ? 'allowDuplicateRequest' : 'allowDuplicateResponse'
 
   return (
     <Modal open={props.open} title={title} onCancel={props.onCancel} width={MODAL_WIDTH.M} destroyOnHidden className="http-header-dialog"
@@ -112,8 +114,13 @@ export default function HTTPHeaderDialog(props: HTTPHeaderDialogProps) {
               <Button key={variable} size="small" disabled={props.disabled}
                 onClick={() => setValue((current) => `${current}$${variable}`)}>${variable}</Button>
             ))}
+            {moreVariables.length > 0 ? (
+              <Select size="small" value={null} disabled={props.disabled} placeholder={t('moreVariables')}
+                aria-label={t('moreVariables')} popupMatchSelectWidth={false} style={{ minWidth: 120 }}
+                options={moreVariables.map((variable) => ({ value: variable, label: `$${variable}` }))}
+                onChange={(variable: string) => setValue((current) => `${current}$${variable}`)} />
+            ) : null}
           </Space>
-          <small className="http-dialog-help">{headerVariables.map((variable) => `$${variable}`).join(' ')}</small>
         </div>
       ) : null}
       <div className="http-dialog-field">
@@ -130,8 +137,8 @@ export default function HTTPHeaderDialog(props: HTTPHeaderDialogProps) {
       </div>
       {kind === 'add' ? (
         <div className="http-dialog-switch-row">
-          <div><strong>{t('allowDuplicate')}</strong><span>{t('allowDuplicateDesc')}</span></div>
-          <Switch aria-label={t('allowDuplicate')} checked={duplicate} disabled={props.disabled} onChange={setDuplicate} />
+          <div><strong>{t(duplicateLabel)}</strong></div>
+          <Switch aria-label={t(duplicateLabel)} checked={duplicate} disabled={props.disabled} onChange={setDuplicate} />
         </div>
       ) : null}
       {error ? <Alert type="warning" showIcon message={error} /> : null}

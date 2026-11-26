@@ -11,13 +11,12 @@ import {
   Result,
   Select,
   Space,
-  Table,
-  Tabs,
   Tag,
   type TableColumnsType,
 } from 'antd'
+import { Tabs } from '../components/Tabs'
 import dayjs from 'dayjs'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -45,7 +44,8 @@ import '../i18n/ipIntel'
 import { rankItemLabel } from './analyticsRankLabels'
 import '../i18n/ja4Blocks'
 import './SiteAnalysisPage.css'
-import { FeedbackWhen, TimeRangeFilter, type TimeRange, type TimeRangePreset } from '@cdnca/ui'
+import { FeedbackWhen, TimeRangeFilter, type TimeRange, type TimeRangePreset, Table } from '@cdnca/ui'
+import { SearchInput } from '../components/SearchInput'
 
 const hourMilliseconds = 60 * 60 * 1000
 const maximumWindowMilliseconds = 31 * 24 * hourMilliseconds
@@ -59,7 +59,7 @@ const nilUuid = '00000000-0000-0000-0000-000000000000'
 
 type AnalysisRange = 'today' | 'last7d' | 'last30d' | 'custom'
 type AnalysisDimension = AnalyticsRankDimension
-type AnalysisSearchType = 'domain' | 'server_port' | 'cc'
+type AnalysisSearchType = 'domain' | 'server_port'
 
 type AnalysisFilterTag = Readonly<{
   type: AnalysisSearchType
@@ -344,7 +344,7 @@ export default function SiteAnalysisPage() {
   })
 
   // Cache hit ratio and unique client IPs of the applied range (history facts,
-  // so they cover what the trend covers).
+  // so they cover what the trend covers), narrowed by the same filters as the ranking.
   const summaryQuery = useQuery({
     queryKey: ['analytics', 'summary', ...ownerKey, appliedFilters, queryGeneration],
     queryFn: () => analyticsApi.summary(accessToken!, audience, appliedFilters),
@@ -376,14 +376,6 @@ export default function SiteAnalysisPage() {
     setValidationError(null)
   }
   const resolveListenPort = (): { blocked: boolean; listenPort?: number } => {
-    if (searchType === 'cc') {
-      setFilterTags((current) => [
-        ...current.filter((tag) => tag.type !== 'cc'),
-        { type: 'cc', value: '1', label: t('filters.attackRequest') },
-      ])
-      setValidationError(t('states.filterUnsupported'))
-      return { blocked: true }
-    }
     if (searchType === 'server_port') {
       const port = Number(searchValue.trim())
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -440,15 +432,6 @@ export default function SiteAnalysisPage() {
     setSearchType(value)
     setSearchValue('')
     setValidationError(null)
-    if (value === 'cc') {
-      setFilterTags((current) => [
-        ...current.filter((tag) => tag.type !== 'cc'),
-        { type: 'cc', value: '1', label: t('filters.attackRequest') },
-      ])
-      setValidationError(t('states.filterUnsupported'))
-    } else {
-      setFilterTags((current) => current.filter((tag) => tag.type !== 'cc'))
-    }
   }
   const clearFilterTags = () => {
     const nextDraft = { ...draft, siteId: '' }
@@ -463,10 +446,6 @@ export default function SiteAnalysisPage() {
   const removeFilterTag = (tag: AnalysisFilterTag) => {
     const remaining = filterTags.filter((candidate) => candidate !== tag)
     setFilterTags(remaining)
-    if (tag.type === 'cc') {
-      setValidationError(null)
-      return
-    }
     if (tag.type === 'server_port') {
       const nextFilters = { ...appliedFilters }
       delete nextFilters.listenPort
@@ -806,12 +785,11 @@ export default function SiteAnalysisPage() {
             <label className="visually-hidden" htmlFor="analytics-analysis-site-filter">
               {t('filters.site')}
             </label>
-            <Input.Search
+            <SearchInput
               className="analytics-analysis-search-input"
               id="analytics-analysis-site-filter"
-              aria-label={searchType === 'domain'
-                ? t('filters.domain')
-                : searchType === 'server_port' ? t('filters.serverPort') : t('filters.attackRequest')}
+              aria-label={searchType === 'domain' ? t('filters.domain') : t('filters.serverPort')}
+              enterButton={<Button aria-label={t('actions.search')} icon={<Search size={15} aria-hidden="true" />} />}
               addonBefore={(
                 <Select
                   size="small"
@@ -827,14 +805,11 @@ export default function SiteAnalysisPage() {
                   options={[
                     { value: 'domain', label: t('filters.domain') },
                     { value: 'server_port', label: t('filters.serverPort') },
-                    { value: 'cc', label: t('filters.attackRequest') },
                   ]}
                 />
               )}
               value={searchType === 'domain' ? draft.siteId : searchValue}
-              placeholder={searchType === 'domain'
-                ? t('filters.domainPlaceholder')
-                : searchType === 'server_port' ? t('filters.serverPortPlaceholder') : undefined}
+              placeholder={searchType === 'domain' ? t('filters.domainPlaceholder') : t('filters.serverPortPlaceholder')}
               onSearch={apply}
               onChange={(event) => searchType === 'domain'
                 ? setDraft((current) => ({ ...current, siteId: event.target.value }))
@@ -871,12 +846,14 @@ export default function SiteAnalysisPage() {
             <span className="analytics-meta-item">
               {t('rangeSummary.uniqueClientIPs', { value: formatNumber(summaryQuery.data.data.unique_client_ips, language) })}
             </span>
-            <span className="analytics-meta-item">
-              {t('rangeSummary.securityRequests', { value: formatNumber(summaryQuery.data.data.security_events, language) })}
-              <small className="analytics-meta-note">
-                {t('rangeSummary.securityRows', { value: formatNumber(summaryQuery.data.data.security_event_rows, language) })}
-              </small>
-            </span>
+            {summaryQuery.data.data.security_events !== null && summaryQuery.data.data.security_event_rows !== null ? (
+              <span className="analytics-meta-item">
+                {t('rangeSummary.securityRequests', { value: formatNumber(summaryQuery.data.data.security_events, language) })}
+                <small className="analytics-meta-note">
+                  {t('rangeSummary.securityRows', { value: formatNumber(summaryQuery.data.data.security_event_rows, language) })}
+                </small>
+              </span>
+            ) : null}
           </div>
         ) : null}
         {rankQuery.data?.page.retained_from ? (

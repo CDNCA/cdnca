@@ -160,12 +160,6 @@
   font-weight: normal;
 }
 
-.admin-message-detail-hint {
-  margin: 0;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
-}
-
 .admin-message-detail-channel pre {
   max-height: 180px;
   margin: 0;

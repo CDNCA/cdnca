@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
+	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgestatus"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"

@@ -255,6 +255,20 @@ describe('WafLogsPage redesign', () => {
     expect(ipURL.searchParams.has('host')).toBe(false)
   })
 
+  // the 日志明细 tab panel is not announced again as 拉黑日志.
+  it('does not name the embedded log details as a second 拉黑日志 region', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(analyticsResponse(input)))
+    const user = userEvent.setup()
+    renderWithProviders(<WafLogsPage />)
+    await user.click(await screen.findByRole('tab', { name: '日志明细' }))
+
+    const panel = screen.getByRole('tabpanel')
+    await within(panel).findByTestId('analytics-log-table')
+    expect(within(panel).queryByRole('region', { name: '拉黑日志' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '拉黑日志' })).not.toBeInTheDocument()
+  })
+
   it('lists events in six merged columns without horizontal scroll and opens grouped details from the row', async () => {
     authenticate()
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(analyticsResponse(input)))

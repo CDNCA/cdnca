@@ -196,7 +196,8 @@ describe('L4-007 结果未知时保留原请求', () => {
     await user.click(screen.getAllByRole('checkbox')[1]!)
     await user.click(screen.getByRole('button', { name: '更多操作' }))
     await user.click(await screen.findByText('停用', { selector: '.ant-dropdown-menu-title-content' }))
-    await user.click(await screen.findByRole('button', { name: /^确\s*[认定]$/u }))
+    // 确认按钮与动作同名，限定在停用确认框内点。
+    await user.click(within(await screen.findByRole('dialog', { name: /^停用 / })).getByRole('button', { name: '停用' }))
     await waitFor(() => expect(update).toHaveBeenCalledOnce())
     await screen.findByRole('button', { name: '重试' })
     await user.click(screen.getByRole('button', { name: 'Go B' })); await detailLoaded(18101)
@@ -217,7 +218,8 @@ describe('L4-007 结果未知时保留原请求', () => {
     await user.click(screen.getAllByRole('checkbox')[1]!)
     await user.click(screen.getByRole('button', { name: '更多操作' }))
     await user.click(await screen.findByText('停用', { selector: '.ant-dropdown-menu-title-content' }))
-    await user.click(await screen.findByRole('button', { name: /^确\s*[认定]$/u }))
+    // 确认按钮与动作同名，限定在停用确认框内点。
+    await user.click(within(await screen.findByRole('dialog', { name: /^停用 / })).getByRole('button', { name: '停用' }))
     await user.click(await screen.findByRole('button', { name: '重试' }))
     await waitFor(() => expect(screen.getByRole('button', { name: '放弃并刷新' })).toBeDisabled())
     await act(async () => rejectRetry(unavailable()))

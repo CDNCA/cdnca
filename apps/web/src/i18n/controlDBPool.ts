@@ -4,6 +4,7 @@ import i18n from './index'
 // (pages/ControlDBPoolPanel.tsx, GET /v1/admin/system-db-pool).
 const zhCN = {
   title: '主控数据库连接池',
+  diagnostics: '诊断详情',
   description: '应答本页的主控进程每 {{interval}} 秒采样一次自己的数据库连接池；请求排队等待连接时通知平台管理员（站内消息、邮件/短信）。',
   instance: '实例 {{name}}',
   healthy: '连接池正常',
@@ -51,6 +52,7 @@ const zhCN = {
 
 const enUS: typeof zhCN = {
   title: 'Control database pool',
+  diagnostics: 'Diagnostic details',
   description: 'The control-api process answering this page samples its own database pool every {{interval}} seconds and notifies platform administrators (message center, email/SMS) when requests queue for connections.',
   instance: 'Instance {{name}}',
   healthy: 'Pool healthy',

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoveryhttp"
+	"github.com/cdnca/cdnca/services/control-api/internal/clientip"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -168,6 +169,11 @@ func (resolver *Resolver) Resolve(request *http.Request) (accountrecoveryhttp.Tr
 		hostname, source, err = resolver.trustedProxyContext(request, hostname)
 		if err != nil {
 			return trusted, ErrUnavailable
+		}
+		// The visitor address the 源IP请求头 setting gave (httpapi
+		// WithClientSourceIP); one this resolver refuses keeps the proxy's.
+		if visitor, ok := clientip.Visitor(request.Context()); ok && !disallowedSource(visitor, resolver.allowPrivateSourceIP) {
+			source = visitor
 		}
 	} else if disallowedSource(source, resolver.allowPrivateSourceIP) {
 		return trusted, ErrUnavailable

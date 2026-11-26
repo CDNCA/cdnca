@@ -11,6 +11,7 @@
       "@cdnca/ui/console.css",
       "@cdnca/ui/styles.css",
       "components/AppShell.css",
+      "components/FieldHelp.css",
       "components/ResourceID.css",
       "components/SiteCacheTabs.css",
       "pages/AccountApiKeysPage.css",
@@ -180,6 +181,7 @@
       "components/CertificatePEMDialog.css",
       "components/CertificateSyncStatus.css",
       "components/CnameLabelEditor.css",
+      "components/FieldHelp.css",
       "components/NodeFrozenTag.css",
       "components/ResourceID.css",
       "pages/AccountApiKeysPage.css",
@@ -233,6 +235,7 @@
       "pages/plugin-webhooks/PluginWebhooksPage.css",
       "pages/site-edit/BasicSiteTab.css",
       "pages/site-edit/CacheSiteTab.css",
+      "pages/site-edit/HttpsSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
       "pages/site-edit/SiteEditState.css",
       "pages/site-edit/SiteEditSyncStatus.css",
@@ -366,7 +369,6 @@
       "pages/site-edit/CacheSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
       "pages/site-edit/SiteEditV4.css",
-      "pages/site-edit/SiteOfficialPacksCard.css",
       "pages/site-edit/SiteProtectionTabs.css",
       "pages/tickets/TicketsChat.css",
       "styles.css",
@@ -475,7 +477,6 @@
       "pages/NodeLineGroupsPage.css",
       "pages/NodeListPage.css",
       "pages/NodeSchedulingPage.css",
-      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
       "pages/SiteAnalysisPage.css",
@@ -581,6 +582,7 @@
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
       "pages/DnsReconcilePage.css",
+      "pages/DoHServicePage.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
@@ -598,7 +600,6 @@
       "pages/RegisterPage.css",
       "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
-      "pages/SiteGroupsPage.css",
       "pages/SystemGlobalSettingsPage.css",
       "pages/SystemGlobalSettingsV2.css",
       "pages/SystemSettingsPage.css",
@@ -651,6 +652,7 @@
       "pages/market/MarketStorePage.css",
       "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteCreatedProgress.css",
       "pages/site-edit/SiteEditSyncStatus.css",
       "pages/site-edit/SiteEditV4.css",
       "pages/site-edit/SiteProtectionTabs.css",
@@ -670,6 +672,7 @@
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/ErrorPagesPage.css",
       "pages/LogCenterPage.css",
       "pages/NodeDnsPage.css",
       "pages/NodeL2TopologyDetailPage.css",
@@ -685,6 +688,7 @@
       "pages/dns-hub/DnsHubPage.css",
       "pages/market/MarketStorePage.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteCreatedProgress.css",
       "pages/site-edit/SiteEditSyncStatus.css",
       "pages/site-edit/SiteEditV4.css",
       "pages/tickets/TicketsChat.css",
@@ -709,6 +713,7 @@
       "pages/CertificateListPage.css",
       "pages/ContentRewritePage.css",
       "pages/DnsReconcilePage.css",
+      "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/LogCenterPage.css",
       "pages/NodeDnsPage.css",
@@ -728,6 +733,7 @@
       "pages/lists/lists.css",
       "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteCreatedProgress.css",
       "pages/site-edit/SiteEditSyncStatus.css",
       "pages/site-edit/SiteEditV4.css",
       "pages/site-edit/SiteProtectionTabs.css",
@@ -766,7 +772,6 @@
     "used_in": [
       "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
-      "pages/RegisterPage.css",
       "pages/SystemGlobalSettingsV2.css",
       "pages/market/MarketStorePage.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
@@ -878,7 +883,6 @@
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
       "pages/SiteBlockLogPage.css",
-      "pages/SiteGroupsPage.css",
       "pages/StreamListPage.css",
       "pages/SystemSettingsPage.css",
       "pages/WafLogsPage.css",
@@ -909,7 +913,6 @@
       "pages/NotificationDeliveryPolicyPanel.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
-      "pages/SiteGroupsPage.css",
       "pages/SystemGlobalSettingsPage.css",
       "pages/SystemSettingsPage.css",
       "pages/WafLogsPage.css",
@@ -935,7 +938,6 @@
       "pages/NodeL2TopologyPage.css",
       "pages/NodeLineGroupsPage.css",
       "pages/NodeListPage.css",
-      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamListPage.css",
       "pages/plugin-market/PluginMarketPage.css"
@@ -1225,7 +1227,6 @@
     "used_in": [
       "pages/AnnouncementManagementPage.css",
       "pages/CacheOperationsPage.css",
-      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SystemGlobalSettingsV2.css",
       "pages/WafLogsV2.css",
@@ -1250,6 +1251,7 @@
     "group": "base",
     "used_in": [
       "components/AppShell.css",
+      "components/FieldHelp.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/NodeListPage.css",
@@ -1271,7 +1273,6 @@
       "components/SiteCacheTabs.css",
       "pages/CacheOperationsPage.css",
       "pages/FirewallPoliciesPage.css",
-      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/StreamListPage.css",
@@ -1290,7 +1291,6 @@
     "used_in": [
       "pages/AnnouncementManagementPage.css",
       "pages/NodeL2TopologyPage.css",
-      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/node-market/NodeMarketV2.css",
@@ -1364,8 +1364,8 @@
     "group": "base",
     "used_in": [
       "pages/ControlUpgradesPage.css",
-      "pages/RegisterPage.css",
       "pages/SystemLogPage.css",
+      "pages/market/MarketStorePage.css",
       "pages/plugin-market/PluginMarketPage.css",
       "styles.css",
       "styles/adminHomeReference.css"
@@ -1582,10 +1582,7 @@
   },
   "colorBlue24": {
     "kind": "color",
-    "group": "scale",
-    "used_in": [
-      "pages/CacheOperationsPage.css"
-    ]
+    "group": "scale"
   },
   "colorBlue25": {
     "kind": "color",
@@ -2164,6 +2161,7 @@
     "group": "scale",
     "used_in": [
       "pages/AdminTasksPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
       "pages/SecurityPoliciesPage.css"
     ]
   },

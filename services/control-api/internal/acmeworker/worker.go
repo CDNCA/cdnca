@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/acme"
 )
@@ -1331,6 +1332,9 @@ func phaseFailure(code ErrorCode, cause error) error {
 	switch ErrorCodeOf(cause) {
 	case CodeHTTP01NodeAggregateRequired, CodeHTTP01NodeUnsupported, CodeHTTP01NoServingNode:
 		return failure(ErrorCodeOf(cause), nil)
+	}
+	if errors.Is(cause, dnsapiproxy.ErrProxyUnavailable) {
+		return &Error{Code: CodeDNSProxyUnavailable, Temporary: true}
 	}
 	return failure(code, cause)
 }

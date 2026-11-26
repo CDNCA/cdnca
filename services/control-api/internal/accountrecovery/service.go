@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/libs/passwordpolicy"
+	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamstage2b"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
@@ -55,6 +56,7 @@ type Service struct {
 	templates        map[notification.Channel]notification.TemplateRef
 	templateResolver DispatchTemplateResolver
 	hashPassword     func(string) (string, error)
+	proofKeys        [][]byte
 }
 
 type writeRecord struct {
@@ -116,6 +118,7 @@ func NewServiceWithDependencies(pool *pgxpool.Pool, config Config, auditor Audit
 		dispatcher: config.DispatchEnqueuer, templates: cloneDispatchTemplates(config.DispatchTemplates),
 		templateResolver: config.TemplateResolver,
 		hashPassword:     identity.HashPassword,
+		proofKeys:        cloneProofKeys(config.RegistrationProofKeys),
 	}, nil
 }
 
@@ -126,7 +129,11 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 	if err != nil {
 		return RequestResult{}, err
 	}
-	templates, err := s.resolveDispatchTemplates(ctx, input.ScopeID)
+	target, err := resolveRecoveryTarget(ctx, s.pool, input, username, s.proofKeys)
+	if err != nil {
+		return RequestResult{}, fmt.Errorf("request account recovery: %w", stableAccountRecoveryError(err))
+	}
+	templates, err := s.resolveDispatchTemplates(ctx, target.ScopeID)
 	if err != nil {
 		return RequestResult{}, ErrDispatchUnavailable
 	}
@@ -145,13 +152,20 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 	var outcome error
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := beginAccountRecoveryAuthorityMutation(ctx, tx,
-			iamstage2b.OperationAccountRecoveryRequest, []uuid.UUID{input.ScopeID}); err != nil {
+			iamstage2b.OperationAccountRecoveryRequest, []uuid.UUID{input.ScopeID, target.ScopeID}); err != nil {
 			return err
 		}
 		if err := validateScope(ctx, tx, input.TenantID, input.ScopeID); err != nil {
 			return err
 		}
-		write, replayed, err := s.claimWrite(ctx, tx, input.TenantID, input.ScopeID, "request",
+		if confirmed, err := resolveRecoveryTarget(ctx, tx, input, username, s.proofKeys); err != nil {
+			return err
+		} else if confirmed != target {
+			return ErrUnavailable
+		}
+		// The write, audit, challenge and dispatch belong to the target scope;
+		// rate windows stay on the scope the request arrived at.
+		write, replayed, err := s.claimWrite(ctx, tx, target.TenantID, target.ScopeID, "request",
 			input.IdempotencyKey, requestDigest, input.Context, now)
 		if err != nil {
 			return err
@@ -175,7 +189,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 			return err
 		}
 		if subjectCount > s.subjectLimit || sourceCount > s.sourceLimit {
-			if err := s.appendAudit(ctx, tx, input.ScopeID, write.ID, input.Context,
+			if err := s.appendAudit(ctx, tx, target.ScopeID, write.ID, input.Context,
 				"identity.account_recovery.request", "account_recovery_request", "denied", "rate_limited", uuid.Nil); err != nil {
 				return err
 			}
@@ -190,15 +204,22 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 		var userID uuid.UUID
 		var revision int64
 		var email, phone *string
+		var emailUserID any
+		if target.EmailUserID != uuid.Nil {
+			emailUserID = target.EmailUserID
+		}
 		findErr := tx.QueryRow(ctx, `SELECT user_row.id,user_row.revision,user_row.email,user_row.phone
 			FROM users user_row
 			JOIN memberships membership ON membership.user_id=user_row.id
 			JOIN access_scopes scope ON scope.id=membership.scope_id
-			WHERE user_row.username=$1 AND membership.scope_id=$2
+			WHERE (($4::uuid IS NULL AND lower(user_row.username)=$1) OR
+			       (user_row.id=$4 AND user_row.email=$1))
+			  AND membership.scope_id=$2
 			  AND ((scope.kind='tenant' AND scope.tenant_id=$3) OR
 			       (scope.kind='platform' AND scope.tenant_id IS NULL AND $3::uuid IS NULL))
 			  AND user_row.status='active' AND membership.status='active'
-			FOR UPDATE OF user_row,membership`, username, input.ScopeID, databaseTenantID(input.TenantID)).
+			FOR UPDATE OF user_row,membership`, username, target.ScopeID, databaseTenantID(target.TenantID),
+			emailUserID).
 			Scan(&userID, &revision, &email, &phone)
 		if findErr != nil && !errors.Is(findErr, pgx.ErrNoRows) {
 			return findErr
@@ -214,20 +235,20 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 			if _, err := tx.Exec(ctx, `INSERT INTO account_recovery_challenges(
 				id,tenant_id,scope_id,user_id,token_digest,subject_digest,password_revision,
 				issued_by_write_id,issued_at,expires_at
-			) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, databaseTenantID(input.TenantID), input.ScopeID,
+			) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, databaseTenantID(target.TenantID), target.ScopeID,
 				userID, tokenDigest[:], subjectDigest[:], revision, write.ID, now, expiresAt); err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE account_recovery_challenges
 				SET revoked_at=$3,terminal_reason='superseded'
 				WHERE scope_id=$1 AND user_id=$2 AND id<>$4
-				  AND consumed_at IS NULL AND revoked_at IS NULL`, input.ScopeID, userID, now, id); err != nil {
+				  AND consumed_at IS NULL AND revoked_at IS NULL`, target.ScopeID, userID, now, id); err != nil {
 				return err
 			}
 			challengeID = &id
 		}
 		enqueued, err := s.dispatcher.EnqueueDispatchTx(ctx, tx, notification.DispatchEnqueueRequest{
-			ScopeID: input.ScopeID, SourceEventID: dispatchReference.String(),
+			ScopeID: target.ScopeID, SourceEventID: dispatchReference.String(),
 			AnonymousDispatchReference: dispatchReference, Templates: templates,
 			AuditRequestID: input.Context.RequestID,
 		})
@@ -236,7 +257,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 		}
 		if challengeID != nil {
 			claim := dispatchClaim{
-				Reference: dispatchReference, TenantID: input.TenantID, ScopeID: input.ScopeID,
+				Reference: dispatchReference, TenantID: target.TenantID, ScopeID: target.ScopeID,
 				UserID: userID, ChallengeID: *challengeID, IssuedAt: now, ExpiresAt: expiresAt,
 			}
 			if email != nil {
@@ -251,7 +272,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 				return err
 			}
 		}
-		if err := s.appendAudit(ctx, tx, input.ScopeID, write.ID, input.Context,
+		if err := s.appendAudit(ctx, tx, target.ScopeID, write.ID, input.Context,
 			"identity.account_recovery.request", "account_recovery_request", "success", "", uuid.Nil); err != nil {
 			return err
 		}
@@ -599,6 +620,134 @@ func findChallengeIdentity(ctx context.Context, query accountRecoveryRowQuerier,
 	return challenge, err
 }
 
+// recoveryTarget is the scope that owns a recovery challenge and, when the
+// identifier is a verified registration email, the account it names.
+type recoveryTarget struct {
+	TenantID uuid.UUID
+	ScopeID  uuid.UUID
+	// EmailUserID: uuid.Nil looks the identifier up as a username.
+	EmailUserID uuid.UUID
+}
+
+// resolveRecoveryTarget returns the request scope, except on the platform host,
+// where it picks the membership that sign-in picks without a scope hint
+// (identity.Store.FindLoginIdentity: platform first, then the oldest
+// membership). When that membership is in an active tenant, the challenge
+// belongs to that tenant. Tenant hosts never fall back; the identifier comes
+// from the request body and the scopes only from the server.
+//
+// an identifier that is no username but an
+// account's email names that account only while the email is verified
+// (resolveEmailRecoveryTarget); as at sign-in, a username match wins.
+func resolveRecoveryTarget(
+	ctx context.Context,
+	query accountRecoveryRowQuerier,
+	input RequestInput,
+	identifier string,
+	proofKeys [][]byte,
+) (recoveryTarget, error) {
+	target := recoveryTarget{TenantID: input.TenantID, ScopeID: input.ScopeID}
+	if len(proofKeys) > 0 && strings.Contains(identifier, "@") {
+		var usernameTaken bool
+		if err := query.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE lower(username)=$1)`, identifier).
+			Scan(&usernameTaken); err != nil {
+			return recoveryTarget{}, err
+		}
+		if !usernameTaken {
+			return resolveEmailRecoveryTarget(ctx, query, input, identifier, proofKeys)
+		}
+	}
+	if input.TenantID != uuid.Nil {
+		return target, nil
+	}
+	scope, found, err := loginScope(ctx, query, `lower(user_row.username)=$1`, identifier)
+	if err != nil || !found {
+		return target, err
+	}
+	if !scope.activeTenant() {
+		return target, nil
+	}
+	return recoveryTarget{TenantID: *scope.tenantID, ScopeID: scope.scopeID}, nil
+}
+
+// resolveEmailRecoveryTarget names the account whose own registration proved
+// this email (accountregistrationproof.VerifiedRegistrationEmail), in that
+// registration's tenant: on a tenant host only that tenant's host, on the
+// platform host only while sign-in picks that tenant too. Anything else (no
+// or more than one account with the email, an unverified email, another
+// scope) names no account: the request is answered alike and sends nothing.
+func resolveEmailRecoveryTarget(
+	ctx context.Context,
+	query accountRecoveryRowQuerier,
+	input RequestInput,
+	email string,
+	proofKeys [][]byte,
+) (recoveryTarget, error) {
+	target := recoveryTarget{TenantID: input.TenantID, ScopeID: input.ScopeID}
+	var candidates []uuid.UUID
+	if err := query.QueryRow(ctx, `SELECT COALESCE(array_agg(id),'{}') FROM (
+		SELECT id FROM users WHERE email=$1 ORDER BY id LIMIT 2) candidate`, email).Scan(&candidates); err != nil {
+		return recoveryTarget{}, err
+	}
+	candidate := uuid.Nil
+	if len(candidates) == 1 {
+		candidate = candidates[0]
+	}
+	registration, verified, err := accountregistrationproof.VerifiedRegistrationEmail(ctx, query, proofKeys, candidate, email)
+	if err != nil || !verified || candidate == uuid.Nil {
+		return target, err
+	}
+	if input.TenantID != uuid.Nil {
+		if registration.TenantID != input.TenantID || registration.ScopeID != input.ScopeID {
+			return target, nil
+		}
+		target.EmailUserID = candidate
+		return target, nil
+	}
+	scope, found, err := loginScope(ctx, query, `user_row.id=$1`, candidate)
+	if err != nil || !found || !scope.activeTenant() || scope.scopeID != registration.ScopeID {
+		return target, err
+	}
+	return recoveryTarget{TenantID: registration.TenantID, ScopeID: registration.ScopeID, EmailUserID: candidate}, nil
+}
+
+type loginScopeRow struct {
+	kind         string
+	tenantID     *uuid.UUID
+	scopeID      uuid.UUID
+	tenantActive bool
+}
+
+func (scope loginScopeRow) activeTenant() bool {
+	return scope.kind == "tenant" && scope.tenantID != nil && *scope.tenantID != uuid.Nil && scope.tenantActive
+}
+
+// loginScope is the membership sign-in picks without a scope hint for the
+// user the condition selects.
+func loginScope(
+	ctx context.Context,
+	query accountRecoveryRowQuerier,
+	condition string,
+	value any,
+) (loginScopeRow, bool, error) {
+	var scope loginScopeRow
+	err := query.QueryRow(ctx, `SELECT scope.kind,scope.tenant_id,scope.id,COALESCE(tenant.status='active',false)
+		FROM users user_row
+		JOIN memberships membership ON membership.user_id=user_row.id
+		JOIN access_scopes scope ON scope.id=membership.scope_id
+		LEFT JOIN tenants tenant ON tenant.id=scope.tenant_id
+		WHERE `+condition+`
+		ORDER BY CASE scope.kind WHEN 'platform' THEN 0 ELSE 1 END,membership.created_at,membership.scope_id
+		LIMIT 1`, value).Scan(&scope.kind, &scope.tenantID, &scope.scopeID, &scope.tenantActive)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return loginScopeRow{}, false, nil
+	}
+	if err != nil {
+		return loginScopeRow{}, false, err
+	}
+	return scope, true, nil
+}
+
 func databaseTenantID(tenantID uuid.UUID) any {
 	if tenantID == uuid.Nil {
 		return nil
@@ -675,6 +824,16 @@ func validDispatchTemplates(templates map[notification.Channel]notification.Temp
 		}
 	}
 	return true
+}
+
+func cloneProofKeys(keys [][]byte) [][]byte {
+	cloned := make([][]byte, 0, len(keys))
+	for _, key := range keys {
+		if len(key) >= 32 {
+			cloned = append(cloned, append([]byte(nil), key...))
+		}
+	}
+	return cloned
 }
 
 func cloneDispatchTemplates(source map[notification.Channel]notification.TemplateRef) map[notification.Channel]notification.TemplateRef {

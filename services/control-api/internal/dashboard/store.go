@@ -1120,12 +1120,19 @@ func readBalance(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (BalanceStat
 	return result, err == nil, err
 }
 
-const tenantSubscriptionsSQL = `SELECT subscription.id,subscription.product_snapshot->>'name',
-	subscription.ends_at,subscription.timezone,subscription.site_limit,subscription.domain_limit,
-	subscription.node_limit,subscription.traffic_limit_bytes,progress.period_key,
+// The package name and limits are the entitlement in effect at $2 (701): an
+// upgrade/downgrade leaves package_subscriptions on the purchase facts.
+const tenantSubscriptionsSQL = `SELECT subscription.id,
+	COALESCE(entitlement.product_snapshot,subscription.product_snapshot)->>'name',
+	subscription.ends_at,subscription.timezone,COALESCE(entitlement.site_limit,subscription.site_limit),
+	COALESCE(entitlement.domain_limit,subscription.domain_limit),COALESCE(entitlement.node_limit,subscription.node_limit),
+	COALESCE(entitlement.traffic_limit_bytes,subscription.traffic_limit_bytes),progress.period_key,
 	progress.observed_value::text,progress.finalized_through,progress.source_watermark::text,
 	progress.source_evidence_digest
 	FROM package_subscriptions subscription
+	LEFT JOIN package_subscription_entitlement_versions entitlement
+	  ON entitlement.subscription_id=subscription.id AND entitlement.tenant_scope_id=subscription.tenant_scope_id
+	 AND entitlement.revision=package_subscription_effective_entitlement_revision(subscription.id,$2)
 	LEFT JOIN LATERAL (
 		SELECT observation.period_key,observation.observed_value,observation.finalized_through,
 			observation.source_watermark,observation.source_evidence_digest

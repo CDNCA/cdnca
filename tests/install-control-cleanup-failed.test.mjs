@@ -1,11 +1,12 @@
-// AUDIT-1029 ①-12：主控全新安装半途失败后，原命令重跑被空机门禁拒绝且无出路。
+// ①-12：主控全新安装半途失败后，原命令重跑被空机门禁拒绝且无出路。
 // 主控不支持续装（签名辅助脚本只做全新安装、密钥/口令每次重新生成），
 // 改为 --cleanup-failed：只删安装记录之后由本安装器创建的东西，需确认；安装前已有的路径不动。
 // 真实脚本中的所有绝对路径改写到临时根目录下运行，systemctl/psql 等打桩；不碰宿主。
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { spawnSync as pipeSpawnSync } from 'node:child_process'
 import test from 'node:test'
 import { spawnSync } from './helpers/large-bash-script.mjs'
 
@@ -46,12 +47,13 @@ exit 0`)
     return target
   }
   const run = (body, { env = {}, input } = {}) => spawnSync('bash', ['-c', `${isolated}\n${body}`, 'fixture'], {
-    encoding: 'utf8', input, timeout: 20000,
+    // 只防挂死：每次都要载入整个 install-control.sh，全量并发跑 web 时单次超过 20 秒被杀（status null）。
+    encoding: 'utf8', input, timeout: 120000,
     env: { PATH: `${bin}:/usr/bin:/bin`, PROGRESS_LOG_DIR: join(root, 'var/log'), ...env },
   })
   const calls = () => (existsSync(join(root, 'calls.log')) ? readFileSync(join(root, 'calls.log'), 'utf8') : '')
   const sql = () => (existsSync(join(root, 'sql.log')) ? readFileSync(join(root, 'sql.log'), 'utf8') : '')
-  return { root, file, run, calls, sql, exists: (path) => existsSync(join(root, path)) }
+  return { root, file, run, calls, sql, isolated, exists: (path) => existsSync(join(root, path)) }
 }
 
 test('a fresh install records preexisting candidate paths before creating anything', () => {
@@ -148,9 +150,52 @@ test('rerunning the fresh installer after a failure points at --cleanup-failed',
     halfInstalled(value)
     const result = value.run('assert_fresh_installation')
     assert.equal(result.status, 1)
-    assert.match(result.stderr, /主控安装不支持续装.*--cleanup-failed/)
-    assert.match(result.stderr, /run install-control.sh --cleanup-failed first/)
+      assert.match(result.stderr, /主控安装不支持续装.*先以 root 执行下面的命令.*\n.*warning: {3}\S.* --cleanup-failed\n/)
+      assert.match(result.stderr, /run first: \S*install-control\.sh --cleanup-failed$|run first: bash \S+ --cleanup-failed$/m)
   } finally { rmSync(value.root, { recursive: true, force: true }) }
+})
+
+// 第 1–4 步失败（例如完整包下载 403 未登记 IP）时本机只多了安装记录，补登记后原命令重跑却被要求先
+// --cleanup-failed。记录里没有 created=/step=、按记录算出的清理清单为空时，失败摘要直接给“重新执行原命令”，
+// 重跑持锁后移除记录继续；未持锁的首次检查只放行不删（可能是另一个正在下载的安装）。
+test('a failure before the install changed the host is rerun with the original command', () => {
+  const value = fixture()
+  try {
+    mkdirSync(join(value.root, 'var/lib'), { recursive: true })
+    value.file('usr/local/libexec/cdnca/cdnca-ed25519', 'tool', 0o555)
+    const hint = value.run('control_install_state_begin; control_install_failed_hint')
+    assert.equal(hint.status, 0, hint.stderr)
+    assert.match(hint.stderr, /停在改动本机之前.*直接重新执行原安装命令/)
+    assert.doesNotMatch(hint.stderr, /--cleanup-failed/)
+    const unlocked = value.run('assert_fresh_installation; [ -f "$CONTROL_INSTALL_STATE_FILE" ] && echo KEPT')
+    assert.equal(unlocked.status, 0, unlocked.stderr)
+    assert.match(unlocked.stdout, /^KEPT$/m, 'the unlocked first check never removes a record')
+    const locked = value.run('CONTROL_INSTALL_LOCKED=true; assert_fresh_installation; [ ! -e "$CONTROL_INSTALL_STATE_DIR" ] && echo REMOVED')
+    assert.equal(locked.status, 0, locked.stderr)
+    assert.match(locked.stdout, /已移除该记录并继续/)
+    assert.match(locked.stdout, /^REMOVED$/m)
+    assert.ok(value.exists('usr/local/libexec/cdnca/cdnca-ed25519'), 'a path that existed before is left alone')
+  } finally { rmSync(value.root, { recursive: true, force: true }) }
+})
+
+test('a record with something created, an activation step or an unsafe mode still needs --cleanup-failed', () => {
+  for (const [name, after] of [
+    ['a unit the install wrote', (value) => value.file('etc/systemd/system/cdnca-control-api.service', '[Unit]\n')],
+    ['an activation was submitted', (value) => value.run('control_install_state_add step=activation_attempted')],
+    ['a database was created', (value) => value.run('control_install_state_add created=postgresql:5432')],
+    ['the record is not 0600', (value) => chmodSync(join(value.root, 'var/lib/cdnca-control-install/state'), 0o644)],
+  ]) {
+    const value = fixture()
+    try {
+      mkdirSync(join(value.root, 'var/lib'), { recursive: true })
+      assert.equal(value.run('control_install_state_begin').status, 0, name)
+      after(value)
+      const result = value.run('CONTROL_INSTALL_LOCKED=true; assert_fresh_installation')
+      assert.equal(result.status, 1, name)
+      assert.match(result.stderr, /run first: \S*install-control\.sh --cleanup-failed$|run first: bash \S+ --cleanup-failed$/m, name)
+      assert.ok(value.exists('var/lib/cdnca-control-install/state'), `${name}: record kept`)
+    } finally { rmSync(value.root, { recursive: true, force: true }) }
+  }
 })
 
 test('--cleanup-failed lists exactly what the install created and needs confirmation', () => {
@@ -447,4 +492,95 @@ test('cleanup removes the community edition state, units and the RustFS certific
     assert.ok(!existsSync(link) && existsSync(other), 'only the objectstore hash link is removed')
     assert.match(value.calls(), /systemctl disable --now .*cdnca-community-identity-refresh\.timer/)
   } finally { rmSync(value.root, { recursive: true, force: true }) }
+})
+
+// 提示里的裸命令 install-control.sh 不在 PATH（官方命令把安装器下到 mktemp 文件、退出即删），返回 127。
+// control_rerun_command 给出能直接运行的完整命令：副本 > 原处的安装器文件 > 与本次同源的官方命令（mktemp 下载 +
+// 完整性核对，或同一条管道命令）。打印出的命令用桩 curl 真正执行一遍，安装器要收到同样的参数。
+function rerunFixture(value) {
+  const bin = join(value.root, 'bin')
+  writeFileSync(join(bin, 'curl'), `#!/bin/bash
+out=''; url=''
+while [ $# -gt 0 ]; do case $1 in -o) out=$2; shift 2 ;; --proto|--proto-redir) shift 2 ;; -*) shift ;; *) url=$1; shift ;; esac; done
+echo "$url" >> "${value.root}/curl.log"
+[ "$url" != "\${FIXTURE_CURL_FAIL:-}" ] || exit 22
+body='#!/bin/bash
+main() { echo "ran $*"; }
+main "$@"'
+if [ -n "$out" ]; then printf '%s\\n' "$body" > "$out"; else printf '%s\\n' "$body"; fi
+`)
+  chmodSync(join(bin, 'curl'), 0o755)
+  const env = { PATH: `${bin}:/usr/bin:/bin` }
+  // 安装器开头把 LICENSING_SERVER 置空、由参数赋值，这里在脚本里赋值（带尾部斜杠，同 normalise 前的参数）
+  const servers = "LICENSING_SERVER=https://auth.example.com/ LICENSING_SERVER_FALLBACK=https://auth2.example.com"
+  const execute = (command, extra = {}) => spawnSync('bash', ['-c', command], { encoding: 'utf8', env: { ...env, ...extra } })
+  return { env, execute, servers }
+}
+
+test('a piped installer prints the same pipe command with the new arguments, and it runs', () => {
+  const value = fixture()
+  try {
+    const { env, execute, servers } = rerunFixture(value)
+    // 真正从管道读入（bash -s）：BASH_SOURCE 为空
+    const result = pipeSpawnSync('bash', ['-s'], { encoding: 'utf8', env, input: `${value.isolated}\n${servers}\ncontrol_rerun_command --cleanup-failed\n` })
+    assert.equal(result.status, 0, result.stderr)
+    const command = result.stdout.trim()
+    assert.equal(command, "curl --proto '=https' --proto-redir '=https' -fsSL 'https://auth.example.com/downloads/install-control.sh' | bash -s -- --cleanup-failed")
+    assert.equal(execute(command).stdout.trim(), 'ran --cleanup-failed')
+  } finally { rmSync(value.root, { recursive: true, force: true }) }
+})
+
+test('a piped installer from the official release directory reads the installer from that directory', () => {
+  const value = fixture()
+  try {
+    const { env } = rerunFixture(value)
+    const servers = 'LICENSING_SERVER=https://www.cdnca.com/downloads/ce/ LICENSING_SERVER_FALLBACK=https://www.cdnca.com/downloads/ce'
+    const result = pipeSpawnSync('bash', ['-s'], { encoding: 'utf8', env, input: `${value.isolated}\n${servers}\ncontrol_rerun_command --cleanup-failed\n` })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.stdout.trim(), "curl --proto '=https' --proto-redir '=https' -fsSL 'https://www.cdnca.com/downloads/ce/install-control.sh' | bash -s -- --cleanup-failed")
+  } finally { rmSync(value.root, { recursive: true, force: true }) }
+})
+
+test('an installer run from the official mktemp file prints the official download command, with its fallback', () => {
+  const value = fixture()
+  try {
+    const { env, execute, servers } = rerunFixture(value)
+    const tmp = join(value.root, 'tmpdir')
+    mkdirSync(tmp)
+    const installer = join(tmp, 'tmp.AbCdEf1234')
+    writeFileSync(installer, `${value.isolated}\n${servers}\ncontrol_rerun_command --cleanup-failed\n`)
+    const result = spawnSync('bash', [installer], { encoding: 'utf8', env: { ...env, TMPDIR: tmp } })
+    assert.equal(result.status, 0, result.stderr)
+    const command = result.stdout.trim()
+    assert.match(command, /^\(f=\$\(mktemp\) \|\| exit 1; trap 'rc=\$\?; rm -f "\$f"; exit \$rc' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; \{ curl /)
+    assert.ok(command.includes(`-o "$f" 'https://auth.example.com/downloads/install-control.sh' || curl --proto '=https' --proto-redir '=https' -fsSL -o "$f" 'https://auth2.example.com/downloads/install-control.sh'; }`), command)
+    assert.ok(command.includes(`[ "$(tail -n 1 "$f")" = 'main "$@"' ]`), command)
+    assert.ok(command.endsWith('bash "$f" --cleanup-failed)'), command)
+    assert.equal(execute(command).stdout.trim(), 'ran --cleanup-failed')
+    assert.equal(execute(command, { FIXTURE_CURL_FAIL: 'https://auth.example.com/downloads/install-control.sh' }).stdout.trim(), 'ran --cleanup-failed', 'fallback URL')
+  } finally { rmSync(value.root, { recursive: true, force: true }) }
+})
+
+test('an installer file that stays on disk, or the kept copy, is used by its absolute path; another host gets the official command', () => {
+  const value = fixture()
+  try {
+    const { env, servers } = rerunFixture(value)
+    const installer = join(value.root, 'install-control.sh')
+    writeFileSync(installer, `${value.isolated}\n${servers}\ncontrol_rerun_command --cleanup-failed\ncontrol_rerun_command --other-host migrate-from root@203.0.113.9\n`)
+    let lines = spawnSync('bash', [installer], { encoding: 'utf8', env }).stdout.trim().split('\n')
+    assert.equal(lines[0], `bash ${realpathSync(installer)} --cleanup-failed`)
+    assert.match(lines[1], /^\(f=\$\(mktemp\).*bash "\$f" migrate-from root@203\.0\.113\.9\)$/)
+    const copy = value.file('var/lib/cdnca-control-install/install-control.sh', '#!/bin/bash\n', 0o700)
+    lines = spawnSync('bash', [installer], { encoding: 'utf8', env }).stdout.trim().split('\n')
+    assert.equal(lines[0], `${copy} --cleanup-failed`)
+    assert.match(lines[1], /^\(f=\$\(mktemp\).*bash "\$f" migrate-from root@203\.0\.113\.9\)$/, 'migrate-from runs on the new host: never this host\'s copy')
+  } finally { rmSync(value.root, { recursive: true, force: true }) }
+})
+
+test('the failure hint and the fresh-install refusal print the runnable cleanup command', () => {
+  const hint = source.match(/^control_install_failed_hint\(\) \{[\s\S]*?^\}\n/m)[0]
+  assert.match(hint, /cleanup=\$\(control_rerun_command --cleanup-failed\)/)
+  assert.match(hint, /warn " {2}\$cleanup"/)
+  assert.doesNotMatch(hint, /install-control\.sh --cleanup-failed/)
+  assert.match(source, /run first: \$\(control_rerun_command --cleanup-failed\)/)
 })

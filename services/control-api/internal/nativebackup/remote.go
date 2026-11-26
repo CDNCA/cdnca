@@ -108,6 +108,57 @@ func (target Target) Validate() error {
 	return nil
 }
 
+// InvalidField names the request field (JSON key) of the first rule Validate
+// refuses, so the console can mark that input; "" when the target is valid.
+func (target Target) InvalidField() string {
+	if target.Validate() == nil {
+		return ""
+	}
+	if !targetNamePattern.MatchString(target.Name) {
+		return "name"
+	}
+	switch target.Kind {
+	case "s3":
+		switch {
+		case errors.Is(target.Validate(), ErrInvalidEndpoint):
+			return "endpoint"
+		case !regionPattern.MatchString(target.Region):
+			return "region"
+		case !bucketPattern.MatchString(target.Bucket):
+			return "bucket"
+		case !prefixPattern.MatchString(target.Prefix) || len(target.Prefix) > 255:
+			return "prefix"
+		case target.AccessKey == "":
+			return "access_key"
+		case target.SecretKey == "":
+			return "secret_key"
+		}
+		for _, segment := range strings.Split(strings.TrimSuffix(target.Prefix, "/"), "/") {
+			if segment == "." || segment == ".." {
+				return "prefix"
+			}
+		}
+		return "ca_certificate"
+	case "sftp":
+		switch {
+		case !hostPattern.MatchString(target.Host):
+			return "host"
+		case target.Port < 1 || target.Port > 65535:
+			return "port"
+		case !usernamePattern.MatchString(target.Username):
+			return "username"
+		case !strings.HasPrefix(target.RemoteDir, "/") || path.Clean(target.RemoteDir) != target.RemoteDir:
+			return "remote_dir"
+		case !hostKeyPattern.MatchString(target.HostKeySHA256):
+			return "host_key_sha256"
+		case target.PrivateKey != "" && target.Password == "":
+			return "private_key"
+		}
+		return "password"
+	}
+	return "kind"
+}
+
 // Redacted returns the target without secrets, with fingerprints instead.
 func (target Target) Redacted() map[string]any {
 	view := map[string]any{"name": target.Name, "kind": target.Kind, "enabled": target.Enabled}

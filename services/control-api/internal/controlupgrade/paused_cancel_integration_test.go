@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,20 +143,35 @@ func TestCancelPausedRolloutPostgres(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = tx.Rollback(t.Context()) }()
-			for _, step := range []struct {
-				version int
-				name    string
-			}{
-				{680, "680_geoarea_v2_codes"}, {679, "679_cname_line_area_scopes"},
-				{678, "678_region_catalog_area_code"}, {677, "677_upgrade_cancel_expired_nodes"},
-				{676, "676_upgrade_status_observed_skew"},
-			} {
-				if _, err := tx.Exec(t.Context(), readDown(step.name)); err != nil {
-					t.Fatalf("%d down: %v", step.version, err)
+			// The head moves with every new migration; each down requires the exact head, so step from the
+			// current head back to 677 first (down SQL, then its schema_migrations row).
+			var head int
+			if err := tx.QueryRow(t.Context(), `SELECT max(version) FROM schema_migrations`).Scan(&head); err != nil {
+				t.Fatal(err)
+			}
+			for version := head; version > 677; version-- {
+				matches, err := filepath.Glob(filepath.Join("..", "..", "migrations", fmt.Sprintf("%03d_*.down.sql", version)))
+				if err != nil || len(matches) != 1 {
+					t.Fatalf("down file of %d: %v %v", version, matches, err)
 				}
-				if _, err := tx.Exec(t.Context(), `DELETE FROM schema_migrations WHERE version=$1`, step.version); err != nil {
+				if _, err := tx.Exec(t.Context(), readDown(strings.TrimSuffix(filepath.Base(matches[0]), ".down.sql"))); err != nil {
+					t.Fatalf("%d down: %v", version, err)
+				}
+				if _, err := tx.Exec(t.Context(), `DELETE FROM schema_migrations WHERE version=$1`, version); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if _, err := tx.Exec(t.Context(), readDown("677_upgrade_cancel_expired_nodes")); err != nil {
+				t.Fatalf("677 down: %v", err)
+			}
+			if _, err := tx.Exec(t.Context(), `DELETE FROM schema_migrations WHERE version=677`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tx.Exec(t.Context(), readDown("676_upgrade_status_observed_skew")); err != nil {
+				t.Fatalf("676 down: %v", err)
+			}
+			if _, err := tx.Exec(t.Context(), `DELETE FROM schema_migrations WHERE version=676`); err != nil {
+				t.Fatal(err)
 			}
 			_, err = tx.Exec(t.Context(), readDown("675_upgrade_paused_cancel"))
 			var pgErr *pgconn.PgError

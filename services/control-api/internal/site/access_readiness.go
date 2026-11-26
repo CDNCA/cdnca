@@ -138,7 +138,10 @@ type accessFacts struct {
 	// PublishState: site_publication_outcome_618 (migration 618): succeeded /
 	// failed / pending (publishing) / excluded (the latest publication does
 	// not carry the site), "" never published. Only the current publication
-	// on the nodes now serving the site counts.
+	// on the nodes now serving the site counts. A site that belongs in the
+	// publication and is not carried yet while a scope publication carrying
+	// it is in flight (an unsuspend's republication) is pending, not
+	// excluded (migration 692); a suspended site stays excluded.
 	PublishState string
 	// publish_failed details: the failed serving nodes, or the automatic
 	// request's terminal code when it failed before any publication.
@@ -231,6 +234,12 @@ func buildAccessReadiness(facts accessFacts, now time.Time) AccessReadiness {
 		published = check(AccessCheckPublished, false, "publishing")
 	case facts.PublishState == "succeeded":
 		published = check(AccessCheckPublished, true, "")
+	case facts.PublishState == publishExcluded && facts.PackageUnavailable != nil &&
+		(*facts.PackageUnavailable == PackageUnavailableSuspended || *facts.PackageUnavailable == PackageUnavailableCancelled):
+		// A suspended or cancelled subscription's sites are left out of every
+		// publication (migration 555, user); a suspended one goes out
+		// again on unsuspend: say so, not "missing".
+		published = check(AccessCheckPublished, false, *facts.PackageUnavailable)
 	case facts.PublishState == publishExcluded:
 		published = check(AccessCheckPublished, false, "site_not_in_publication")
 	default:
@@ -303,7 +312,8 @@ func accessCheckBlocked(check AccessCheck) bool {
 	case AccessCheckHTTPS:
 		return check.Detail != "certificate_not_active"
 	case AccessCheckPublished:
-		return check.Detail == "site_disabled" || check.Detail == "publish_failed"
+		return check.Detail == "site_disabled" || check.Detail == "publish_failed" ||
+			check.Detail == PackageUnavailableSuspended || check.Detail == PackageUnavailableCancelled
 	}
 	return false
 }

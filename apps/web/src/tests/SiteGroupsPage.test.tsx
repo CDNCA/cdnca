@@ -134,7 +134,7 @@ describe('SiteGroupsPage', () => {
     const { fetchSpy } = siteGroupPageFixture(); renderGroups()
     const { user, dialog } = await siteGroupPageCreate()
     await user.type(within(dialog).getByLabelText('备注'), '第一行\n第二行'); await user.click(within(dialog).getByRole('button', { name: '确定' }))
-    expect(await screen.findByText('网站分组已保存')).toBeInTheDocument()
+    expect(await screen.findByText('网站分组已创建')).toBeInTheDocument()
     const writes = fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(writes).toHaveLength(1)
     expect(JSON.parse(String(writes[0][1]?.body))).toEqual({ target_scope_id: tenantScope, name: '网站分组A', remark: '第一行\n第二行' })
@@ -162,7 +162,7 @@ describe('SiteGroupsPage', () => {
       expect(document.querySelector('.cdnca-feedback')).toBeNull()
       await act(async () => pending[step]())
     }
-    expect(await screen.findByText(i18n.t('siteGroups:messages.saved'))).toBeInTheDocument()
+    expect(await screen.findByText(i18n.t('siteGroups:messages.created'))).toBeInTheDocument()
     await waitFor(() => expect(screen.getAllByText('123123').length).toBeGreaterThan(0))
     expect(document.querySelector('.cdnca-feedback')).toBeNull()
     expect(screen.queryByText(i18n.t('siteGroups:errors.readback'))).not.toBeInTheDocument()
@@ -179,7 +179,7 @@ describe('SiteGroupsPage', () => {
     expect(within(dialog).getByText('分组只给这个用户的网站使用，建好后不能换用户。')).toBeInTheDocument()
     await userEvent.setup().type(within(dialog).getByLabelText('名称'), '123123')
     await userEvent.setup().click(within(dialog).getByRole('button', { name: '确定' }))
-    expect(await screen.findByText('网站分组已保存')).toBeInTheDocument()
+    expect(await screen.findByText('网站分组已创建')).toBeInTheDocument()
     expect(JSON.parse(String(fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST')![1]?.body)).target_scope_id).toBe(tenantScope)
   })
   // fix-fielderr-be4：服务端拒绝备注时标在备注框下，编辑弹窗不关、不弹错误窗
@@ -238,7 +238,7 @@ describe('SiteGroupsPage', () => {
     await user.type(selector, 'tenant-b'); await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('search=tenant-b'))).toBe(true))
     expect(within(dialog).getByRole('button', { name: '确定' })).toBeDisabled()
     await user.click(await screen.findByText('tenant-b（28）')); await user.click(within(dialog).getByRole('button', { name: '确定' }))
-    expect(await screen.findByText('网站分组已保存')).toBeInTheDocument()
+    expect(await screen.findByText('网站分组已创建')).toBeInTheDocument()
     expect(JSON.parse(String(fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST')![1]?.body)).target_scope_id).toBe(scopeID)
   })
   it('does not read or report success after a write finishes following logout', async () => {
@@ -249,7 +249,7 @@ describe('SiteGroupsPage', () => {
     expect(screen.getByRole('combobox', { name: '所属用户' })).toBeDisabled(); act(() => useSessionStore.getState().clearSession())
     const count = fetchSpy.mock.calls.length
     await act(async () => resolve(json({ ...group, name: '网站分组A', remark: '', revision: 1 }, 201)))
-    expect(fetchSpy).toHaveBeenCalledTimes(count); expect(screen.queryByText('网站分组已保存')).not.toBeInTheDocument()
+    expect(fetchSpy).toHaveBeenCalledTimes(count); expect(screen.queryByText('网站分组已创建')).not.toBeInTheDocument()
     expect(screen.getByText('无权查看网站分组')).toBeInTheDocument()
   })
   it.each(['exact', 'list'])('keeps acknowledged writes GET-only after %s readback failure and a new QueryClient', async (failure) => {
@@ -260,11 +260,11 @@ describe('SiteGroupsPage', () => {
     })
     const view = renderGroups(); const { user, dialog } = await siteGroupPageCreate(); await user.click(within(dialog).getByRole('button', { name: '确定' }))
     await screen.findByRole('button', { name: '重新加载' }); await waitFor(() => expect(screen.getByRole('button', { name: '重新加载' })).not.toHaveClass('ant-btn-loading'))
-    expect(screen.queryByText('网站分组已保存')).not.toBeInTheDocument(); expect(within(dialog).getByRole('button', { name: '确定' })).toBeDisabled()
+    expect(screen.queryByText('网站分组已创建')).not.toBeInTheDocument(); expect(within(dialog).getByRole('button', { name: '确定' })).toBeDisabled()
     view.unmount(); fail = false; renderGroups()
     expect(fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
     await user.click(await screen.findByRole('button', { name: '重新加载' }))
-    expect(await screen.findByText('网站分组已保存')).toBeInTheDocument()
+    expect(await screen.findByText('网站分组已创建')).toBeInTheDocument()
     expect(fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1); expect(document.body.textContent).not.toContain('raw read failure')
   })
   it.each([503, 200])('retains unknown body/key after %s, then 409/422 and a full remount', async (initialStatus) => {
@@ -282,7 +282,7 @@ describe('SiteGroupsPage', () => {
       await user.click(await screen.findByRole('button', { name: '再试一次' })); await waitFor(() => expect(writes).toBe(retry + 2))
       if (retry < 2) await waitFor(() => expect(screen.getByRole('button', { name: '再试一次' })).not.toHaveClass('ant-btn-loading'))
     }
-    expect(await screen.findByText('网站分组已保存')).toBeInTheDocument()
+    expect(await screen.findByText('网站分组已创建')).toBeInTheDocument()
     const requests = fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(new Set(requests.map(([, init]) => init?.body)).size).toBe(1); expect(new Set(requests.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))).size).toBe(1)
     expect(new Headers(requests[1][1]?.headers).get('Authorization')).toBe('Bearer refreshed-token'); expect(document.body.textContent).not.toContain('raw unknown')
@@ -323,7 +323,7 @@ describe('SiteGroupsPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '再试一次' })).not.toHaveClass('ant-btn-loading'))
     expect(within(dialog).getByRole('button', { name: '确定' })).toBeDisabled()
     expect(fetchSpy.mock.calls.some(([url]) => String(url).startsWith('/v1/site-groups/'))).toBe(false)
-    expect(screen.queryByText('网站分组已保存')).not.toBeInTheDocument()
+    expect(screen.queryByText('网站分组已创建')).not.toBeInTheDocument()
   })
   it('does not submit a draft canceled before asynchronous validation finishes', async () => {
     const { fetchSpy } = siteGroupPageFixture(); renderGroups(); const { dialog } = await siteGroupPageCreate()
@@ -337,7 +337,7 @@ describe('SiteGroupsPage', () => {
     await user.click(within(row).getByRole('button', { name: action === 'rename' ? '编辑' : '删除' }))
     if (action === 'rename') { await user.clear(screen.getByLabelText('名称')); await user.type(screen.getByLabelText('名称'), '已重命名') }
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: action === 'rename' ? '确定' : '删除' }))
-    await user.click(await screen.findByRole('button', { name: '再试一次' })); expect(await screen.findByText('网站分组已保存')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: '再试一次' })); expect(await screen.findByText(action === 'rename' ? '网站分组已保存' : '网站分组已删除')).toBeInTheDocument()
     const requests = fetchSpy.mock.calls.filter(([, init]) => init?.method)
     expect(requests).toHaveLength(2); expect(requests[1][0]).toBe(`/v1/site-groups/${group.id}?scope_id=${tenantScope}`)
     expect(requests[1][1]?.body).toBe(requests[0][1]?.body); expect(requests[1][1]?.headers).toEqual(requests[0][1]?.headers)
@@ -364,7 +364,7 @@ describe('SiteGroupsPage', () => {
   it('distinguishes a concurrent later revision from exact synchronization', async () => {
     const { fetchSpy } = siteGroupPageFixture((url) => url.pathname.startsWith('/v1/site-groups/') ? json({ ...group, id: createdID, revision: 2, name: '后来版本', remark: 'later' }) : undefined)
     renderGroups(); const { user, dialog } = await siteGroupPageCreate(); await user.click(within(dialog).getByRole('button', { name: '确定' }))
-    expect(await screen.findByText(i18n.t('siteGroups:messages.superseded'))).toBeInTheDocument(); expect(screen.queryByText('网站分组已保存')).not.toBeInTheDocument()
+    expect(await screen.findByText(i18n.t('siteGroups:messages.superseded'))).toBeInTheDocument(); expect(screen.queryByText('网站分组已创建')).not.toBeInTheDocument()
     expect(fetchSpy.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1)
   })
   it('retains a later-version warning after failed list readback and a fresh QueryClient', async () => {
@@ -381,7 +381,7 @@ describe('SiteGroupsPage', () => {
     view.unmount(); failList = false; renderGroups()
     await user.click(await screen.findByRole('button', { name: '重新加载' }))
     expect(await screen.findByText(i18n.t('siteGroups:messages.superseded'))).toBeInTheDocument()
-    expect(screen.queryByText('网站分组已保存')).not.toBeInTheDocument()
+    expect(screen.queryByText('网站分组已创建')).not.toBeInTheDocument()
     expect(fetchSpy.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1)
   })
   it.each(['mismatch', '403'])('stops a serial batch on %s readback before the next delete', async (failure) => {
@@ -412,7 +412,7 @@ describe('SiteGroupsPage', () => {
     await act(async () => resolve(json({ error: { code: 'not_found', message: 'not found' } }, 404)))
     expect(fetchSpy.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1)
     expect(pageDialogs()).toHaveLength(0)
-    expect(screen.queryByText('网站分组已保存')).not.toBeInTheDocument()
+    expect(screen.queryByText('网站分组已删除')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '新增分组' })).toBeDisabled()
   })
   it('keeps a batch frozen across remount and sends remaining deletes only after manual recovery', async () => {
@@ -423,7 +423,7 @@ describe('SiteGroupsPage', () => {
     await user.click(screen.getAllByRole('checkbox')[0]); await user.click(screen.getAllByRole('button', { name: '删除' })[0]); await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '删除' }))
     await waitFor(() => expect(screen.getByRole('button', { name: '再试一次' })).not.toHaveClass('ant-btn-loading'))
     view.unmount(); renderGroups(); expect(fetchSpy.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1)
-    await user.click(screen.getByRole('button', { name: '再试一次' })); expect(await screen.findByText('网站分组已保存')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '再试一次' })); expect(await screen.findByText('网站分组已删除')).toBeInTheDocument()
     const writes = fetchSpy.mock.calls.filter(([, init]) => init?.method)
     expect(writes).toHaveLength(3); expect(writes[0][0]).toBe(writes[1][0]); expect(writes[0][1]?.headers).toEqual(writes[1][1]?.headers); expect(writes[2][0]).toContain(scopeID)
   })

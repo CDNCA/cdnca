@@ -80,7 +80,9 @@ func testSigner(name string) enginemoduletest.Signer {
 	return enginemoduletest.Signer{KeyID: name, Private: ed25519.NewKeyFromSeed(seed[:])}
 }
 
-func (signer testSignerKeys) trust() Trust { return Trust{Release: map[string]ed25519.PublicKey(signer)} }
+func (signer testSignerKeys) trust() Trust {
+	return Trust{Release: map[string]ed25519.PublicKey(signer)}
+}
 
 type testSignerKeys map[string]ed25519.PublicKey
 

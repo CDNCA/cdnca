@@ -33,7 +33,7 @@
 
 安装器需要签名的主控整包（`cdnca-control-native.tar`）、配对的发布公钥清单，以及同一版本的节点包。两种方式二选一：
 
-- 发布站：`--release-server https://<发布站>`。安装器从 `/downloads/control-native/latest/`、`/downloads/edge-agent/latest/` 下载并按 `SHA256SUMS` 和发布公钥校验。
+- 发布站：`--release-server <发布目录>`，官方发布目录是 `https://www.cdnca.com/downloads/ce`。安装器从其下的 `control-native/latest/`、`edge-agent/latest/` 下载并按 `SHA256SUMS` 和发布公钥校验；只写域名（如 `https://<自建发布站>`）时按发布包的目录布局读 `/downloads/control-native/latest/`、`/downloads/edge-agent/latest/`。
 - 本地文件：先把整包和公钥清单上传到目标机，再用 `--native-package-file <整包绝对路径> --native-trust-file <公钥清单绝对路径>`。
 
 ### 1.2 执行安装

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
 )
 
 type precheckFunc func(context.Context, string, string) error

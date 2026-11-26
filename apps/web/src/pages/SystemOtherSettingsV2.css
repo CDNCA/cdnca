@@ -5,7 +5,7 @@
    !important on those three overrides. */
 
 .sys-setting-v2 .sys-other .sys-other-summary .sys-setting-v2-summary > ul {
-  grid-template-columns: repeat(6, minmax(140px, 1fr));
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
 }
 
 .sys-setting-v2 .sys-other-grid {
@@ -65,6 +65,19 @@
   white-space: nowrap;
 }
 
+/* 访问与网络 holds the CDN origin authentication card (steps, command): a full row. */
+.sys-setting-v2 .sys-other-grid > .sys-other-card-wide {
+  grid-column: 1 / -1;
+}
+
+.sys-setting-v2 .sys-other-subtitle {
+  margin: 0 0 12px;
+  color: var(--cdnca-color-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
 /* Vertical labels; the control takes the card width. */
 .sys-setting-v2 .sys-other-form .ant-form-item {
   margin-bottom: 14px;
@@ -78,12 +91,6 @@
   height: auto;
   color: var(--cdnca-color-text);
   font-weight: 500;
-}
-
-.sys-setting-v2 .sys-other-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0 16px;
 }
 
 .sys-setting-v2 .sys-other-label {

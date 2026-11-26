@@ -32,7 +32,7 @@ func newMaintenanceFixture(t *testing.T, records ...dnsproviderremote.ZoneRecord
 	fixture := &maintenanceFixture{provider: provider, zoneID: zoneID,
 		reconcile: &fakeReconcile{provider: provider, tasks: map[uuid.UUID]dnsreconcile.Task{}},
 		targets: &fakeTargets{tenantID: tenantID, scopeID: scopeID, targets: map[string]RepairTarget{},
-			serving: map[string]cnameallocation.TargetValues{}, claimed: map[string]bool{}},
+			serving: map[string]cnameallocation.TargetValues{}, claimed: map[string]bool{}, plans: map[string]CleanupRecord{}},
 		platform: &fakePlatform{tenant: dnsacme.PlatformTenant{TenantID: tenantID, ScopeID: scopeID},
 			zones: map[uuid.UUID]string{zoneID: "cdn.example.com"}},
 		jobs: &fakeJobs{}}
@@ -143,6 +143,7 @@ func TestCleanupDeletesOnlyUnallocatedRecords(t *testing.T) {
 			t.Fatalf("cleanup item = %q", item)
 		}
 	}
+	fixture.targets.plans = jobs[0].Records
 	// The www record becomes an allocated hostname before the job runs: kept.
 	fixture.targets.claimed["www.cdn.example.com."] = true
 	reports := fixture.run(t, CleanupJobKind, jobs[0].Items...)
@@ -163,18 +164,17 @@ func TestCleanupDeletesOnlyUnallocatedRecords(t *testing.T) {
 	}
 }
 
-func TestCleanupItemRoundTrip(t *testing.T) {
+func TestCleanupItemKeepsIdentityWhenTruncated(t *testing.T) {
 	zoneID := uuid.New()
 	record := CleanupRecord{ZoneID: zoneID, Name: "old.cdn.example.com.", Type: "A", Value: "198.51.100.7", RecordID: "rec-1"}
-	parsed, ok := ParseCleanupItem(CleanupItem(record))
-	if !ok || parsed.ZoneID != zoneID || parsed.Name != record.Name || parsed.Type != "A" || parsed.RecordID != "rec-1" {
-		t.Fatalf("parsed = %+v %t", parsed, ok)
+	if item := CleanupItem(record); item != "删除记录 old.cdn.example.com A 198.51.100.7 #"+zoneID.String()+"/rec-1" {
+		t.Fatalf("item = %q", item)
 	}
 	long := record
 	long.Value = strings.Repeat("v", 400)
 	item := CleanupItem(long)
-	if parsed, ok := ParseCleanupItem(item); !ok || parsed.RecordID != "rec-1" || len([]rune(item)) > 256 {
-		t.Fatalf("long item = %q (%t)", item, ok)
+	if !strings.HasSuffix(item, "… #"+zoneID.String()+"/rec-1") || len([]rune(item)) > 256 {
+		t.Fatalf("long item = %q", item)
 	}
 	if owner, ok := RepairOwner(RepairItem("ABC.cdn.example.com.", []string{"192.0.2.1"}, nil)); !ok || owner != "abc.cdn.example.com" {
 		t.Fatalf("owner = %q", owner)

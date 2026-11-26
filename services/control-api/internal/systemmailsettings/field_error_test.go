@@ -1,11 +1,13 @@
 package systemmailsettings
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/fielderr"
+	"github.com/google/uuid"
 )
 
 // fix-fielderr-be2: a refused mail/SMS setting names the field of the save
@@ -49,4 +51,29 @@ func with(change func(*Settings)) Settings {
 	value := DefaultSettings()
 	change(&value)
 	return value
+}
+
+// a refused test recipient names the body field "to"
+// before any storage is read (a nil pool would panic past this point).
+func TestTestNamesRefusedRecipient(t *testing.T) {
+	actor := Actor{UserID: uuid.New(), ScopeID: uuid.New(), ScopeKind: "platform"}
+	send := func(context.Context, TestTarget) (string, error) { return "", nil }
+	for name, check := range map[string]struct{ to, reason string }{
+		"empty":       {"", fielderr.Required},
+		"no at":       {"ops.example.com", fielderr.InvalidFormat},
+		"space":       {" ops@example.com", fielderr.InvalidFormat},
+		"display":     {"Ops <ops@example.com>", fielderr.InvalidFormat},
+		"empty local": {"@example.com", fielderr.InvalidFormat},
+	} {
+		_, err := (&Service{}).Test(context.Background(), actor, TestRequest{Value: DefaultSettings(), To: check.to, RequestID: "mail-test-to"}, send)
+		located, ok := fielderr.As(err)
+		if !errors.Is(err, ErrInvalidInput) || !ok || located.Field != "to" || located.Reason != check.reason {
+			t.Errorf("%s: %v, want to/%s", name, err, check.reason)
+		}
+	}
+	// settings refused first keep the unlocated answer they had
+	_, err := (&Service{}).Test(context.Background(), actor, TestRequest{Value: with(func(v *Settings) { v.SMTPPort = 0 }), To: "ops", RequestID: "mail-test-to"}, send)
+	if _, ok := fielderr.As(err); !errors.Is(err, ErrInvalidInput) || ok {
+		t.Fatalf("invalid settings: %v", err)
+	}
 }

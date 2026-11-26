@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Pagination, Select, Space, Table, type TableColumnsType } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { Alert, Button, Form, Input, Modal, Select, Space, type TableColumnsType } from 'antd'
+import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, Pagination, Table } from '@cdnca/ui'
 import { Plus, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
@@ -17,10 +17,11 @@ import {
 import { usersApi, type ManagedUser } from '../api/users'
 import { ResourceID } from '../components/ResourceID'
 import { useSessionStore } from '../auth/session'
-import { hasStreamReadPermission } from './streamForm'
+import { hasStreamReadPermission, writeKey } from './streamForm'
 import { useStreamPanelWrites } from './StreamGroupsState'
 import '../i18n/streamPanels'
 import '../i18n/unconfirmedClose'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 interface GroupFormValues extends StreamGroupFields {
   owner_id?: string
@@ -78,6 +79,7 @@ export default function StreamGroupsPanel({
   const { t } = useTranslation('streams')
   const { t: tp } = useTranslation('streamPanels')
   const { t: tu } = useTranslation('unconfirmedClose')
+  const namedRows = useNamedRowSelection()
   const queryClient = useQueryClient()
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
@@ -87,6 +89,9 @@ export default function StreamGroupsPanel({
   const [limit, setLimit] = useState(10)
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [modalOpen, setModalOpen] = useState(false)
+  // 行内「编辑」改名称与备注，带 If-Match 的 PATCH；版本冲突提示并刷新。
+  const [editing, setEditing] = useState<StreamGroup>()
+  const [editPending, setEditPending] = useState(false)
   const [form] = Form.useForm<GroupFormValues>()
   const modalOpenRef = useRef(false)
   modalOpenRef.current = modalOpen
@@ -119,7 +124,7 @@ export default function StreamGroupsPanel({
         if (ownerPage * response.limit >= response.total || response.items.length === 0) return items
       }
     },
-    enabled: isAdmin && modalOpen && canReadOwners(),
+    enabled: isAdmin && modalOpen && !editing && canReadOwners(),
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -132,9 +137,11 @@ export default function StreamGroupsPanel({
     }
   }, [canManageGroups])
 
-  const invalidate = () => queryClient.invalidateQueries({
-    queryKey: ['stream-groups', scopeKind, scopeID, sessionEpoch],
-  })
+  // A group write changes what forwarding rows, details, defaults and the group
+  // pickers of this scope/owner show, so all of them are read again.
+  const invalidate = () => Promise.all([
+    'stream-groups', 'streams', 'stream-detail', 'stream-user-configs', 'stream-default-group-options', 'stream-form-group-options', 'stream-filter-options',
+  ].map((key) => queryClient.invalidateQueries({ queryKey: [key, scopeKind, scopeID, sessionEpoch] })))
 
   const forbidden = query.error instanceof ApiError && query.error.status === 403
   const writes = useStreamPanelWrites<CreateStreamGroupRequest, StreamGroup>({
@@ -153,8 +160,8 @@ export default function StreamGroupsPanel({
   })
   const pending = writes.pending
   const writeError = writes.error
-  const writesLocked = lockWrites || pending || writes.uncertain || query.isFetching || forbidden
-  const ownerUnavailable = isAdmin && (!canReadOwners() || ownerQuery.isError || ownerQuery.isFetching || !ownerQuery.data)
+  const writesLocked = lockWrites || pending || editPending || writes.uncertain || query.isFetching || forbidden
+  const ownerUnavailable = isAdmin && !editing && (!canReadOwners() || ownerQuery.isError || ownerQuery.isFetching || !ownerQuery.data)
 
   useEffect(() => { if (writes.uncertain) setModalOpen(false) }, [writes.uncertain])
   useEffect(() => () => {
@@ -171,17 +178,23 @@ export default function StreamGroupsPanel({
 
   const selectedGroups = (query.data?.items ?? []).filter((item) => selectedRowKeys.includes(item.id))
 
-  const beginDelete = () => {
-    if (selectedGroups.length === 0) return
+  // The dialog names what is deleted: the group (or how many) and the real
+  // number of forwarding rules that reference it.
+  const confirmDelete = (groups: StreamGroup[]) => {
+    if (groups.length === 0) return
+    const single = groups.length === 1 ? groups[0] : undefined
+    const references = groups.reduce((total, group) => total + group.stream_count, 0)
     modalApi.confirm({
-      title: t('groups.deleteTitle'),
-      content: t('groups.deleteDescription'),
+      title: single ? t('groups.deleteTitle', { name: single.name }) : t('groups.deleteTitleMany', { count: groups.length }),
+      content: references > 0
+        ? t(single ? 'groups.deleteReferences' : 'groups.deleteReferencesMany', { count: references })
+        : t(single ? 'groups.deleteNoReferences' : 'groups.deleteNoReferencesMany'),
       okText: t('actions.confirmDelete'),
-      okButtonProps: { danger: true },
+      okButtonProps: { danger: true, 'aria-label': single ? t('groups.deleteConfirmNamed', { name: single.name }) : t('groups.deleteConfirmMany', { count: groups.length }) },
       cancelText: t('actions.cancel'),
       onOk: () => {
         if (!canManage(scopeKind, scopeID, sessionEpoch)) return
-        writes.remove(selectedGroups)
+        writes.remove(groups)
       },
     })
   }
@@ -194,12 +207,13 @@ export default function StreamGroupsPanel({
         <span className="visually-hidden">{item.name}</span>
       </>,
     },
-    {
+    // 普通租户只看自己的分组，不显示用户列；管理员跨用户查看才需要
+    ...(isAdmin ? [{
       title: t('groups.user'), key: 'owner', width: 180,
-      render: (_, item) => <span className={item.owner ? undefined : 'stream-unavailable'}>
+      render: (_: unknown, item: StreamGroup) => <span className={item.owner ? undefined : 'stream-unavailable'}>
         {streamGroupOwnerText(item, t('values.unavailable'))}
       </span>,
-    },
+    }] : []),
     { title: t('groups.name'), dataIndex: 'name', key: 'name' },
     {
       title: t('groups.remark'), key: 'remark',
@@ -207,30 +221,68 @@ export default function StreamGroupsPanel({
     },
     {
       title: t('columns.actions'), key: 'actions', width: 118, fixed: 'right',
-      render: (_, item) => <Button
-        type="link"
-        size="small"
-        danger
-        disabled={!canManageGroups || writesLocked}
-        onClick={() => modalApi.confirm({
-          title: t('groups.deleteTitle'),
-          content: t('groups.deleteDescription'),
-          okText: t('actions.confirmDelete'),
-          okButtonProps: { danger: true },
-          cancelText: t('actions.cancel'),
-          onOk: () => {
-            if (!canManage(scopeKind, scopeID, sessionEpoch)) return
-            writes.remove([item])
-          },
-        })}
-      >
-        {t('groups.delete')}
-      </Button>,
+      render: (_, item) => <Space size={0}>
+        {canManageGroups ? <Button
+          type="link"
+          size="small"
+          aria-label={t('groups.editNamed', { name: item.name })}
+          disabled={writesLocked}
+          onClick={() => openEdit(item)}
+        >
+          {t('groups.edit')}
+        </Button> : null}
+        <Button
+          type="link"
+          size="small"
+          danger
+          disabled={!canManageGroups || writesLocked}
+          onClick={() => confirmDelete([item])}
+        >
+          {t('groups.delete')}
+        </Button>
+      </Space>,
     },
   ]
 
+  const openEdit = (item: StreamGroup) => {
+    writes.clearError()
+    setEditing(item)
+    form.setFieldsValue({ name: item.name, remark: item.remark })
+    setModalOpen(true)
+  }
+
+  const saveEdit = async (item: StreamGroup, values: GroupFormValues) => {
+    setEditPending(true)
+    try {
+      await streamGroupsApi.updateGroup(accessTokenRef.current, item.id, {
+        name: values.name.trim(), remark: (values.remark ?? '').trim(), expected_revision: item.revision,
+      }, writeKey('stream-group-update'))
+      if (!sessionMatches(scopeKind, scopeID, sessionEpoch)) return
+      setModalOpen(false)
+      setEditing(undefined)
+      messageApi.success(t('groups.updated'))
+      await invalidate()
+    } catch (error) {
+      if (!sessionMatches(scopeKind, scopeID, sessionEpoch)) return
+      if (error instanceof ApiError && error.code === 'version_conflict') {
+        setModalOpen(false)
+        setEditing(undefined)
+        messageApi.error(t('groups.editConflict'))
+        await invalidate()
+        return
+      }
+      messageApi.error(error instanceof ApiError ? groupErrorMessage(error, t) : t('errors.requestFailed'))
+    } finally {
+      setEditPending(false)
+    }
+  }
+
   const submit = (values: GroupFormValues) => {
     if (!canManageGroups || writesLocked || ownerUnavailable || !canManage(scopeKind, scopeID, sessionEpoch)) return
+    if (editing) {
+      void saveEdit(editing, values)
+      return
+    }
     const owner = isAdmin ? ownerQuery.data?.find((user) => user.id === values.owner_id) : undefined
     if (isAdmin && !owner) return
     writes.create({
@@ -246,9 +298,9 @@ export default function StreamGroupsPanel({
       {modalContext}
       <div className="stream-panel-toolbar stream-groups-toolbar">
         <div className="stream-toolbar-actions">
-          {canManageGroups ? <Button type="primary" icon={<Plus size={15} />} disabled={writesLocked} onClick={() => { writes.clearError(); form.resetFields(); setModalOpen(true) }}>{t('groups.add')}</Button> : null}
+          {canManageGroups ? <Button type="primary" icon={<Plus size={15} />} disabled={writesLocked} onClick={() => { writes.clearError(); setEditing(undefined); form.resetFields(); setModalOpen(true) }}>{t('groups.add')}</Button> : null}
           <Button icon={<RefreshCw size={15} />} loading={query.isFetching} onClick={() => void query.refetch()}>{t('actions.refresh')}</Button>
-          {canManageGroups ? <Button disabled={writesLocked || selectedGroups.length === 0} onClick={beginDelete}>{t('groups.delete')}</Button> : null}
+          {canManageGroups ? <Button disabled={writesLocked || selectedGroups.length === 0} onClick={() => confirmDelete(selectedGroups)}>{t('groups.delete')}</Button> : null}
         </div>
       </div>
 
@@ -258,7 +310,7 @@ export default function StreamGroupsPanel({
         <Table<StreamGroup>
           rowKey="id"
           size="small"
-          rowSelection={canManageGroups ? { selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys.map(String)) } : undefined}
+          rowSelection={canManageGroups ? namedRows<StreamGroup>({ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys.map(String)) }, (group) => group.name, t('selectionScope.groups')) : undefined}
           columns={columns}
           dataSource={forbidden ? [] : query.data?.items ?? []}
           loading={query.isPending || query.isFetching}
@@ -271,31 +323,32 @@ export default function StreamGroupsPanel({
 
       <Modal
         className="identity-modal stream-modal"
-        title={t('groups.addTitle')}
+        title={editing ? t('groups.editTitle') : t('groups.addTitle')}
         open={canManageGroups && modalOpen}
-        onCancel={() => { if (writesLocked) return; setModalOpen(false) }}
+        onCancel={() => { if (writesLocked) return; setModalOpen(false); setEditing(undefined) }}
         onOk={() => form.submit()}
-        confirmLoading={pending}
+        confirmLoading={pending || editPending}
         okText={t('actions.confirm')}
         cancelText={t('actions.cancel')}
         okButtonProps={{ disabled: writesLocked || ownerUnavailable }}
         destroyOnHidden
       >
-        {isAdmin && (!canReadOwners() || ownerQuery.isError) ? <Alert className="identity-alert" type="error" showIcon message={tp(canReadOwners() ? 'ownersFailed' : 'ownersForbidden')} action={canReadOwners() ? <Button size="small" onClick={() => void ownerQuery.refetch()}>{t('actions.retry')}</Button> : undefined} /> : null}
-        <Form form={form} disabled={pending} layout="horizontal" labelCol={{ flex: '88px' }} wrapperCol={{ flex: 1 }} requiredMark={false} onFinish={submit}>
-          <Form.Item name="owner_id" label={t('groups.user')} rules={isAdmin ? [
+        {isAdmin && !editing && (!canReadOwners() || ownerQuery.isError) ? <Alert className="identity-alert" type="error" showIcon message={tp(canReadOwners() ? 'ownersFailed' : 'ownersForbidden')} action={canReadOwners() ? <Button size="small" onClick={() => void ownerQuery.refetch()}>{t('actions.retry')}</Button> : undefined} /> : null}
+        <Form form={form} disabled={pending || editPending} layout="horizontal" labelCol={{ flex: '88px' }} wrapperCol={{ flex: 1 }} requiredMark={false} onFinish={submit}>
+          {/* 普通租户的归属由服务端会话决定，不显示用户字段 */}
+          {isAdmin && !editing ? <Form.Item name="owner_id" label={t('groups.user')} rules={[
             { required: true, message: t('groups.userRequired') },
             { pattern: uuidPattern, message: t('groups.userInvalid') },
-          ] : []}>
-            {isAdmin ? <Select
+          ]}>
+            <Select
               showSearch
               optionFilterProp="label"
               placeholder={t('groups.user')}
               loading={ownerQuery.isFetching}
               disabled={ownerUnavailable}
               options={(ownerQuery.data ?? []).map((user) => ({ value: user.id, label: user.display_name || user.username }))}
-            /> : <Input disabled placeholder={t('groups.user')} />}
-          </Form.Item>
+            />
+          </Form.Item> : null}
           <Form.Item name="name" label={t('groups.name')} rules={[
             { required: true, whitespace: true, message: t('groups.nameRequired') },
             { max: 128, message: t('groups.nameTooLong') },

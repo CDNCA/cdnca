@@ -234,5 +234,7 @@ func identityVerificationContractPaths() map[string]struct{} {
 		"/v1/identity-verification/provider-callbacks/{provider}":                               {},
 		// 平台管理员跨租户实名申请列表（管理端实名审核入口）。
 		"/v1/identity-verification/admin/cases": {},
+		// 实名认证页按可用方式渲染（GET /methods）。
+		"/v1/identity-verification/methods": {},
 	}
 }

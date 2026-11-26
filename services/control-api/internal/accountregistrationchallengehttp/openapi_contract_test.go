@@ -45,7 +45,7 @@ func TestIAM02RegistrationChallengeOpenAPIContract(t *testing.T) {
 	text := string(source)
 	for _, required := range []string{
 		"Idempotency-Key", "X-Request-ID", "human_token", "challenge_id", "otp", "writeOnly: true",
-		"Set-Cookie", "account_registration_challenge_invalid", "account_registration_challenge_rate_limited",
+		"Set-Cookie", "account_registration_human_invalid", "account_registration_challenge_invalid", "account_registration_challenge_rate_limited",
 		"account_registration_challenge_conflict", "account_registration_challenge_unavailable",
 	} {
 		if !strings.Contains(text, required) {

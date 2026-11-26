@@ -45,6 +45,28 @@ func (s *Store) PrepareCreateRollout(ctx context.Context, actor Actor, identity 
 	var replay RolloutWriteResult
 	var denied bool
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+		intent, replay, denied, _, err = s.prepareCreateRolloutTx(ctx, tx, actor, identity, request, digest, nil)
+		return err
+	})
+	if err != nil {
+		return CreateRolloutIntent{}, RolloutWriteResult{}, fmt.Errorf("prepare control upgrade rollout create: %w", err)
+	}
+	if denied {
+		return CreateRolloutIntent{}, RolloutWriteResult{}, ErrPermissionDenied
+	}
+	return intent, replay, nil
+}
+
+// prepareCreateRolloutTx authorizes the create, replays a completed one from its
+// receipt, resumes the intent under the same idempotency key or reserves a new
+// one. beforeReserve, when set, runs only before a new intent is reserved;
+// reserved reports that this call reserved it. A denial is audited once and
+// reported through denied with a nil error so the audit commits.
+func (s *Store) prepareCreateRolloutTx(ctx context.Context, tx pgx.Tx, actor Actor, identity RolloutIdentity,
+	request CreateRolloutRequest, digest [sha256.Size]byte,
+	beforeReserve func(pgx.Tx) error) (intent CreateRolloutIntent, replay RolloutWriteResult, denied, reserved bool, _ error) {
+	err := func() error {
 		if err := authorizeRolloutTx(ctx, tx, actor, rolloutManagePermission); err != nil {
 			if !errors.Is(err, ErrPermissionDenied) {
 				return err
@@ -92,6 +114,11 @@ func (s *Store) PrepareCreateRollout(ctx context.Context, actor Actor, identity 
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
+		if beforeReserve != nil {
+			if err := beforeReserve(tx); err != nil {
+				return err
+			}
+		}
 		intentID, err := uuid.NewV7()
 		if err != nil {
 			return err
@@ -115,15 +142,10 @@ func (s *Store) PrepareCreateRollout(ctx context.Context, actor Actor, identity 
 		}
 		intent = CreateRolloutIntent{ID: intentID.String(), PlanID: planID.String(),
 			State: createIntentReserved, RequestDigest: digest, RequestID: request.RequestID}
+		reserved = true
 		return nil
-	})
-	if err != nil {
-		return CreateRolloutIntent{}, RolloutWriteResult{}, fmt.Errorf("prepare control upgrade rollout create: %w", err)
-	}
-	if denied {
-		return CreateRolloutIntent{}, RolloutWriteResult{}, ErrPermissionDenied
-	}
-	return intent, replay, nil
+	}()
+	return intent, replay, denied, reserved, err
 }
 
 func (s *Store) AcquireCreateRollout(ctx context.Context, actor Actor, intent CreateRolloutIntent,

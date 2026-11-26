@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Card, Checkbox, Form, Input, InputNumber, Result, Select, Space, Spin, Switch, Table, Tag, Typography } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, PageSection } from '@cdnca/ui'
+import { Alert, Button, Card, Checkbox, Form, Input, InputNumber, Result, Select, Space, Spin, Switch, Tag, Typography } from 'antd'
+import { useFeedbackMessage, FeedbackWhen, PageSection, Table } from '@cdnca/ui'
 import { Check, CheckCircle, RefreshCw, Rocket, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 

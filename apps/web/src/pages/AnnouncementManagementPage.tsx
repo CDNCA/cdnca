@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Result, Select, Space, Spin, Switch, Table, Tag, type TableColumnsType } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, useFormSubmitError } from '@cdnca/ui'
+import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Result, Select, Space, Spin, Switch, Tag, type TableColumnsType } from 'antd'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, useFormSubmitError, Table } from '@cdnca/ui'
 import { CalendarClock, Check, Edit3, Eye, FilePenLine, Plus, RotateCcw, Send, Trash2, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 

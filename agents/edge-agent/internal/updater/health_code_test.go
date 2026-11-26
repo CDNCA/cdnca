@@ -17,8 +17,8 @@ func TestHealthFailureCodeKeepsRuntimeCode(t *testing.T) {
 	cases := map[error]string{
 		ErrHealth: "HEALTH_FAILED",
 		fmt.Errorf("wrapped: %w", codedHealthError{"RUNTIME_PRECHECK_FAILED"}): "RUNTIME_PRECHECK_FAILED",
-		codedHealthError{"lower_case"}: "HEALTH_FAILED",
-		errors.New("plain"):             "HEALTH_FAILED",
+		codedHealthError{"lower_case"}:                                         "HEALTH_FAILED",
+		errors.New("plain"):                                                    "HEALTH_FAILED",
 	}
 	for err, want := range cases {
 		if got := healthFailureCode(err); got != want {

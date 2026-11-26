@@ -128,6 +128,17 @@
   vertical-align: middle;
 }
 
+.dns-page .dns-lines-toggle {
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+}
+
+.dns-page .dns-lines-detail {
+  display: block;
+  margin-top: 2px;
+}
+
 .dns-page .dns-config-form .ant-switch {
   min-width: 44px;
   height: 22px;
@@ -213,6 +224,7 @@
 
 /* CNAME域名 */
 .dns-page .dns-cname-panel {
+  min-width: 0;
   margin-top: -2px;
 }
 
@@ -267,8 +279,9 @@
   font-size: 13px;
 }
 
-.dns-page .dns-cname-table .dns-zone-actions a.ant-typography {
-  color: var(--cdnca-color-primary);
+.dns-page .dns-cname-table .dns-zone-actions .ant-btn {
+  height: auto;
+  padding: 0;
   font-size: 13px;
 }
 

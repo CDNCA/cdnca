@@ -57,17 +57,19 @@ describe('BasicSiteTab origin weight share', () => {
     expect(rowOf('192.0.2.3:80')).toHaveTextContent('权重 5 · 约 6%')
     expect(rowOf('192.0.2.4:80')).toHaveTextContent('权重 20 · 约 23%')
     expect(rowOf('192.0.2.5:80')).toHaveTextContent('权重 40 · 已停用，不分流量')
-    expect(screen.getByText(/权重合计不必等于 100，未分配部分按同样比例分摊。 当前负载方式“轮询”/)).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: '权重与流量占比说明' })).toBeInTheDocument()
-    expect(screen.getByText(/所有主源站都不可用时才启用第 1 个备用源/)).toBeInTheDocument()
+    // 权重、当前负载方式与备用源的说明都在帮助入口里（可访问名称），不再常驻成段落。
+    expect(screen.getByRole('img', { name: /权重合计不必等于 100，未分配部分按同样比例分摊。 当前负载方式“轮询”/ })).toBeInTheDocument()
+    expect(screen.queryByText(/当前负载方式“轮询”/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('备用源')).toHaveAccessibleDescription(expect.stringContaining('所有主源站都不可用时才启用第 1 个备用源'))
+    expect(screen.getByText(/所有主源站都不可用时才启用第 1 个备用源/)).toHaveClass('visually-hidden')
   })
 
   it('describes the hash and least connection methods by what they do', () => {
     const { unmount } = render(<Harness pool={{ ...basePool, balance_method: 'url_hash' }} />)
-    expect(screen.getByText(/当前负载方式“URL 哈希”：同一 URL 固定落到一个源站，整体比例近似权重占比/)).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /当前负载方式“URL 哈希”：同一 URL 固定落到一个源站，整体比例近似权重占比/ })).toBeInTheDocument()
     unmount()
     render(<Harness pool={{ ...basePool, balance_method: 'least_conn' }} />)
-    expect(screen.getByText(/当前负载方式“最少连接”：选当前连接数与权重之比最小的源站/)).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /当前负载方式“最少连接”：选当前连接数与权重之比最小的源站/ })).toBeInTheDocument()
     expect(rowOf('192.0.2.1:80')).toHaveTextContent('权重 50 · 权重占比 59%')
   })
 

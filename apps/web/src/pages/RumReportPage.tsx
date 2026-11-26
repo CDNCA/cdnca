@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Collapse, Segmented, Select, Space, Table, Tabs, type TableColumnsType } from 'antd'
+import { Alert, Button, Collapse, Segmented, Select, Space, type TableColumnsType } from 'antd'
+import { Tabs } from '../components/Tabs'
 import { RefreshCw } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
-import { DataTable, PageHeader, PageSection, StatusTag } from '@cdnca/ui'
+import { Link, useSearchParams } from 'react-router-dom'
+import { DataTable, PageHeader, PageSection, StatusTag, Table } from '@cdnca/ui'
 
 import { getRUMReport, rumMetrics, rumRanges, type RUMBreakdown, type RUMErrorTotal, type RUMMetric, type RUMRange, type RUMReport } from '../api/rum'
+import { ApiError } from '../api/auth'
 import { sitesApi } from '../api/sites'
 import { useSessionStore } from '../auth/session'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
 import '../i18n/rumReport'
 import { themeColor, useThemeRevision } from '../theme/themeColor'
+import { filterParam, useFilterUrl } from './filterUrl'
 import './RumReportPage.css'
 
 // 真实用户体验: one
@@ -176,9 +179,18 @@ export default function RumReportPage() {
   const accessToken = useSessionStore((state) => state.accessToken)
   const principal = useSessionStore((state) => state.principal)
   const admin = principal?.scope_kind === 'platform'
+  const [searchParams] = useSearchParams()
   const [siteSearch, setSiteSearch] = useState('')
-  const [siteID, setSiteID] = useState<string>()
-  const [range, setRange] = useState<RUMRange>('24h')
+  // 已选网站与时间范围写进 URL（site_id、range，默认 24h 不写），刷新后读回。
+  const [siteID, setSiteID] = useState<string | undefined>(() => {
+    const linked = filterParam(searchParams, 'site_id').toLowerCase()
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(linked) ? linked : undefined
+  })
+  const [range, setRange] = useState<RUMRange>(() => {
+    const linked = filterParam(searchParams, 'range')
+    return (rumRanges as readonly string[]).includes(linked) ? linked as RUMRange : '24h'
+  })
+  useFilterUrl({ site_id: siteID, range: range === '24h' ? undefined : range })
   const [metric, setMetric] = useState<RUMMetric>('lcp')
   const sites = useQuery({
     queryKey: ['rum-report-sites', siteSearch],
@@ -186,12 +198,20 @@ export default function RumReportPage() {
     enabled: Boolean(accessToken),
     staleTime: 30_000,
   })
-  // the admin route needs the site's tenant scope (the detail carries it)
+  // the admin route needs the site's tenant scope (the detail carries it); a site opened from the URL takes its label from it
   const detail = useQuery({
     queryKey: ['rum-report-site', siteID],
     queryFn: () => sitesApi.detail(accessToken!, siteID!),
-    enabled: Boolean(accessToken && siteID && admin),
+    enabled: Boolean(accessToken && siteID),
+    retry: false,
   })
+  // a linked site that is gone or not visible to this session falls back to picking one
+  const detailStatus = detail.error instanceof ApiError ? detail.error.status : 0
+  useEffect(() => {
+    if ((detail.isSuccess && detail.data === null) || [400, 403, 404, 422].includes(detailStatus)) setSiteID(undefined)
+  }, [detail.isSuccess, detail.data, detailStatus])
+  const siteOptions = (sites.data ?? []).map((site) => ({ value: site.id, label: site.domain }))
+  if (siteID && detail.data && !siteOptions.some((option) => option.value === siteID)) siteOptions.unshift({ value: siteID, label: detail.data.basic.domains[0] ?? siteID })
   const tenantScopeID = admin ? detail.data?.scope_id : undefined
   const report = useQuery({
     queryKey: ['rum-report', siteID, range, tenantScopeID],
@@ -211,7 +231,7 @@ export default function RumReportPage() {
       <Space wrap className="rum-toolbar">
         <Select showSearch allowClear aria-label={t('site')} placeholder={t('sitePlaceholder')} style={{ width: 240 }}
           filterOption={false} onSearch={setSiteSearch} value={siteID} onChange={setSiteID} loading={sites.isFetching}
-          options={(sites.data ?? []).map((site) => ({ value: site.id, label: site.domain }))} />
+          options={siteOptions} />
         <Segmented aria-label={t('range')} value={range} onChange={(value) => setRange(value as RUMRange)}
           options={rumRanges.map((value) => ({ value, label: t(`ranges.${value}`) }))} />
         <Button icon={<RefreshCw size={14} aria-hidden="true" />} disabled={!siteID} loading={report.isFetching}

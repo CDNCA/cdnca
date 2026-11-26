@@ -1486,6 +1486,7 @@ func certificateRowCountWhere(t *testing.T, pool *pgxpool.Pool, table, column st
 		"certificate_asset_versions":                   {"asset_id": true},
 		"certificate_asset_private_key_envelope_facts": {"version_id": true},
 		"certificate_site_binding_facts":               {"site_id": true},
+		"certificate_asset_activation_facts":           {"asset_id": true},
 	}
 	if !allowed[table][column] {
 		t.Fatalf("refusing count for unexpected %s.%s", table, column)

@@ -13,8 +13,8 @@ func TestL4SourceBindsIdentityAndPublishesDeterministicProto(t *testing.T) {
 	identity := TrustedIdentity{
 		EnrollmentNodeID: nodeOne, TenantID: tenantOne, SiteID: siteOne,
 		ConfigVersionID: "55555555-5555-4555-8555-555555555555",
-		StreamID: "66666666-6666-4666-8666-666666666666",
-		ListenerID: "77777777-7777-4777-8777-777777777777", ConfigRevision: 9,
+		StreamID:        "66666666-6666-4666-8666-666666666666",
+		ListenerID:      "77777777-7777-4777-8777-777777777777", ConfigRevision: 9,
 	}
 	line := []byte("{\"time\":\"2026-08-08T12:00:05Z\",\"connection\":\"42\",\"protocol\":\"TCP\",\"server_port\":\"18080\",\"status\":\"200\",\"bytes_sent\":1200,\"bytes_received\":300,\"session_time\":5.25}")
 	event, err := ParseL4SourceLineBound(line, identity)

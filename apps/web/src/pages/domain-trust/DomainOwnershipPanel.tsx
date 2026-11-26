@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Descriptions, Space, Table, Typography } from 'antd'
+import { Alert, App, Button, Descriptions, Space, Typography } from 'antd'
 import { CheckCircle2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -8,7 +8,8 @@ import { ApiError } from '../../api/auth'
 import { domainOwnershipApi, newDomainTrustKey, type DomainConflict, type DomainOwnership, type OwnershipMethod } from '../../api/domainTrust'
 import { useSessionStore } from '../../auth/session'
 import '../../i18n/domainTrust'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
+import { useNamedRowSelection } from '../../components/namedRowSelection'
 
 function codeOf(error: unknown): string {
   return error instanceof ApiError ? error.code : 'request_failed'
@@ -20,13 +21,16 @@ function codeOf(error: unknown): string {
  * accounts' conflicting sites. Used on the verified domains page and inside
  * the site create form when a write is refused with domain_ownership_required.
  */
-export function DomainOwnershipPanel({ domain, initial, onVerified }: {
+export function DomainOwnershipPanel({ domain, initial, onVerified, onDomainInvalid }: {
   domain: string
   /** A known ownership record (e.g. a listed row) to show instead of starting over. */
   initial?: DomainOwnership
   onVerified?: (item: DomainOwnership) => void
+  /** The server refused the domain itself (validation_error): the caller marks its domain input instead of a dialog. */
+  onDomainInvalid?: () => void
 }) {
   const { t } = useTranslation('domainTrust')
+  const namedRows = useNamedRowSelection()
   const { message } = App.useApp()
   const token = useSessionStore((state) => state.accessToken) ?? ''
   const client = useQueryClient()
@@ -40,6 +44,7 @@ export function DomainOwnershipPanel({ domain, initial, onVerified }: {
       if (value.status === 'verified') onVerified?.(value)
       void client.invalidateQueries({ queryKey: ['domainOwnerships'] })
     },
+    onError: (error) => { if (onDomainInvalid && error instanceof ApiError && error.code === 'validation_error') onDomainInvalid() },
   })
   const check = useMutation({
     mutationFn: () => domainOwnershipApi.check(token, domain),
@@ -68,7 +73,8 @@ export function DomainOwnershipPanel({ domain, initial, onVerified }: {
   })
   const failure = item?.last_failure_code && !verified
     ? t(`user.failures.${item.last_failure_code}`, { defaultValue: item.last_failure_code }) : ''
-  const error = start.error ?? check.error ?? claim.error
+  const domainRefused = Boolean(onDomainInvalid) && start.error instanceof ApiError && start.error.code === 'validation_error'
+  const error = (domainRefused ? null : start.error) ?? check.error ?? claim.error
   return (
     <div className="domain-ownership-panel" data-testid="domain-ownership-panel">
       {error ? <FeedbackWhen title={errorText(error)} /> : null}
@@ -102,8 +108,8 @@ export function DomainOwnershipPanel({ domain, initial, onVerified }: {
           <Typography.Title level={5}>{t('user.conflicts')}</Typography.Title>
           <Typography.Paragraph type="secondary">{item?.method === 'dns_txt' ? t('user.conflictsHint') : t('user.claimNeedsTXT')}</Typography.Paragraph>
           <Table<DomainConflict> rowKey="domain" size="small" pagination={false} dataSource={conflicts.data ?? []}
-            rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]),
-              getCheckboxProps: (row) => ({ disabled: !row.claimable || item?.method !== 'dns_txt' }) }}
+            rowSelection={namedRows<DomainConflict>({ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]),
+              getCheckboxProps: (row) => ({ disabled: !row.claimable || item?.method !== 'dns_txt' }) }, (row) => row.domain, t('user.conflictSelectionScope'))}
             columns={[{ title: t('user.domain'), dataIndex: 'domain' }, { title: t('hits.site'), dataIndex: 'site_count' }]} />
           <Button danger style={{ marginTop: 12 }} disabled={selected.length === 0} loading={claim.isPending} onClick={() => claim.mutate()}>{t('user.claim')}</Button>
         </div>

@@ -1,19 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Alert,
-  Button,
-  Dropdown,
-  Input,
-  InputNumber,
-  Modal,
-  Result,
-  Select,
-  Table,
-  Tooltip,
-  type TableColumnsType,
-} from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { Alert, Button, Dropdown, Input, InputNumber, Modal, Result, Select, Tooltip, type TableColumnsType } from 'antd'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import {
   ArrowLeft,
   ArrowLeftRight,

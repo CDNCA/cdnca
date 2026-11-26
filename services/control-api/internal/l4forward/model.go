@@ -65,6 +65,16 @@ const (
 	EligibilityIneligible EligibilityState = "ineligible"
 )
 
+// Forward.IneligibleReason (omitted otherwise), the site's reasons of the same
+// names (site.PackageUnavailableReason): the package subscription is
+// suspended (publication leaves it out, edgepublish packageInEffectSQL) or
+// cancelled (terminated; it ranks before an earlier suspension and does not
+// come back).
+const (
+	IneligiblePackageSuspended = "package_suspended"
+	IneligiblePackageCancelled = "package_cancelled"
+)
+
 // ErrSharedPortProxyProtocol refuses a PROXY stream on a port shared with
 // other streams or websites, which the node serves behind a dispatcher.
 var ErrSharedPortProxyProtocol = errors.New("layer-four forwarding PROXY protocol on a shared port")
@@ -292,6 +302,7 @@ type Forward struct {
 	PackageName             *string              `json:"package_name"`
 	PackageExpiresAt        *time.Time           `json:"package_expires_at"`
 	EligibilityState        EligibilityState     `json:"eligibility_state"`
+	IneligibleReason        string               `json:"ineligible_reason,omitempty"`
 	Owner                   *OwnerReference      `json:"owner"`
 	Name                    string               `json:"name"`
 	Remark                  string               `json:"remark"`

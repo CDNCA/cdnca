@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, InputNumber, Modal, Radio, Result, Select, Table, Tooltip, type TableColumnsType } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { Alert, Button, Form, Input, InputNumber, Modal, Radio, Result, Select, Tooltip, type TableColumnsType } from 'antd'
+import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import { ChevronLeft, ChevronRight, Plus, Search, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -12,7 +12,9 @@ import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { areaOptions, countryOptions, geoLabel, provinceOptions } from './regionGeo'
+import { regionCatalogQuery } from './NodeRegionSelect'
 import './NodeListPage.locale'
+import { useNamedRowSelection } from '../components/namedRowSelection'
 
 interface RegionFormValues {
   name: string
@@ -216,6 +218,7 @@ function RegionEditorModal({
 
 export default function RegionManagementPanel() {
   const { t, i18n } = useTranslation('nodes')
+  const namedRows = useNamedRowSelection()
   const principal = useSessionStore((state) => state.principal)
   const accessToken = useSessionStore((state) => state.accessToken)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
@@ -335,6 +338,9 @@ export default function RegionManagementPanel() {
       setEditorOpen(false)
       setSelectedKeys([])
       if (attempt.kind === 'delete' && page > 1 && attempt.items.length >= (listQuery.data?.data.length ?? 0)) setPage((value) => value - 1)
+      // The region pickers elsewhere (node forms, line groups, L2, packages,
+      // stream filters) read the same catalog: refetch them too.
+      void queryClient.invalidateQueries({ predicate: (query) => regionCatalogQuery(query.queryKey) })
       await queryClient.invalidateQueries({ queryKey: queryPrefix })
       if (!currentAccess('manage')) return
       const notice = attempt.kind === 'create' ? 'created' : attempt.kind === 'update' ? 'updated' : 'deleted'
@@ -517,11 +523,11 @@ export default function RegionManagementPanel() {
           pagination={false}
           locale={{ emptyText: listQuery.isPending ? ' ' : search ? t('regions.filteredEmpty') : t('regions.empty') }}
           scroll={{ x: 910 }}
-          rowSelection={canManage ? {
+          rowSelection={canManage ? namedRows<RegionRecord>({
             selectedRowKeys: selectedKeys,
             onChange: setSelectedKeys,
-            getCheckboxProps: (item) => ({ disabled: writeLocked || writeMutation.isPending, 'aria-label': item.name }),
-          } : undefined}
+            getCheckboxProps: () => ({ disabled: writeLocked || writeMutation.isPending }),
+          }, (item) => item.name, t('selectionScope.regions')) : undefined}
         />
       </div>
       <div className="node-pagination">

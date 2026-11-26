@@ -201,7 +201,7 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 				ResourceType: "site", ResourceID: request.SiteID.String(), RequestID: request.RequestID, Result: "success",
 				Payload: map[string]any{
 					"ip": request.SourceIP, "actor_scope_kind": actor.ScopeKind, "site_id": request.SiteID.String(),
-					"changes": map[string]any{"apps": map[string]any{"from": from, "to": to}},
+					"changes":               map[string]any{"apps": map[string]any{"from": from, "to": to}},
 					"automatic_publication": automatic,
 				},
 			}); err != nil {
@@ -487,7 +487,7 @@ func EffectiveProfileTx(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUI
 }
 
 // SetAppsSystem sets the site's CRS application types for a market leaf
-//: the subscriber sends the site's managed WAF profile
+// the subscriber sends the site's managed WAF profile
 // and exclusions inside its WAF policy, so only the application types are
 // the site's own override here. Unlike Update it does not need the site's
 // WAF binding yet (the leaf activates the policy after the commit). Every

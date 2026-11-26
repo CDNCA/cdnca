@@ -41,7 +41,8 @@ func openAccountLoginRuntime(
 	issuer *identity.Service,
 	cookieSecure bool,
 	cookieDomain string,
-	registrationMounted bool,
+	// registration: GET /v1/auth/login-methods registration_enabled / mode
+	registration accountloginchallenge.RegistrationSource,
 	// opens the CAPTCHA secrets saved on the settings page
 	cipher systemusersettings.SecretCipher,
 ) (*accountLoginRuntime, error) {
@@ -115,8 +116,8 @@ func openAccountLoginRuntime(
 	}
 	service, err := accountloginchallenge.NewService(pool, accountloginchallenge.Config{
 		DigestKey: config.DigestKey, Policy: settings, Templates: settings, Human: human, Issuer: issuer, Contacts: contacts, AvailableChannels: channels,
-		RegistrationMounted: registrationMounted,
-		RateWindow:          config.RateWindow, SourceLimit: config.SourceLimit, SubjectLimit: config.SubjectLimit,
+		Registration: registration,
+		RateWindow:   config.RateWindow, SourceLimit: config.SourceLimit, SubjectLimit: config.SubjectLimit,
 	})
 	if err != nil {
 		return nil, err

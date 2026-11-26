@@ -34,7 +34,7 @@ paths:
         never reports whether username, email, or phone already existed.
         Two flows share this path. With the registration verification runtime
         (Turnstile plus a contact code) the proof comes from the registration
-        proof cookie. Without it (fresh-install default, login-methods
+        proof cookie of each challenge verification_challenge_ids names. Without it (fresh-install default, login-methods
         registration_mode builtin) the body carries the built-in image CAPTCHA
         from POST /v1/auth/login-captchas; it is spent once whether or not it
         matches, and an exact retry of a completed registration replays without
@@ -117,13 +117,15 @@ components:
     AccountRegistrationRequest:
       type: object
       additionalProperties: false
-      required: [username, password, display_name, email, phone, terms_accepted, terms_version, verification_channel]
+      required: [username, password, display_name, email, phone, verification_channel]
       properties:
         username:
           type: string
-          minLength: 3
           maxLength: 128
-          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'
+          pattern: '^(?:|[A-Za-z0-9][A-Za-z0-9._-]{2,127})$'
+          description: >-
+            Empty only while registration-config username_required is false: the controller then generates one
+            and returns it in the 202 response.
         password:
           type: string
           format: password
@@ -134,8 +136,8 @@ components:
           description: 8 to 1024 printable ASCII characters (no space) with at least two of upper case, lower case, digits and symbols (libs/passwordpolicy); otherwise password_policy_unmet.
         display_name:
           type: string
-          minLength: 1
           maxLength: 128
+          description: 1 to 128 characters; may be empty with a generated username, which it then defaults to.
         email:
           type: string
           format: email
@@ -146,17 +148,38 @@ components:
           minLength: 6
           maxLength: 21
           pattern: '^\+?[0-9]{6,20}$'
+        qq:
+          type: string
+          pattern: '^(?:|[1-9][0-9]{4,11})$'
+          description: >-
+            QQ number, 5 to 12 digits without a leading zero; required while registration-config qq_required is true.
+            Stored as the user's QQ (user management).
         terms_accepted:
           type: boolean
-          const: true
+          description: >-
+            Required (true) while registration-config terms_required is true; otherwise not read and no acceptance
+            is recorded.
         terms_version:
           type: string
-          minLength: 1
+          description: >-
+            While registration-config terms_required is true, must be the current registration-config
+            terms_version; an older one (the terms were edited since the page loaded) or no acceptance is refused
+            with account_registration_terms_required. Not read while terms_required is false.
           maxLength: 128
-          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+          pattern: '^(?:|[A-Za-z0-9][A-Za-z0-9._-]{0,127})$'
         verification_channel:
           type: string
           enum: [email, sms]
+        verification_challenge_ids:
+          type: object
+          additionalProperties: false
+          description: >-
+            The verified challenge (challenge_id of POST /v1/auth/registration-challenges) of each channel whose
+            code was checked: only its proof cookie is spent, so several sign-up tabs of one browser do not use
+            each other's proof. A channel not named uses its only proof cookie, none when the browser holds several.
+          properties:
+            email: {type: string, format: uuid}
+            sms: {type: string, format: uuid}
         captcha:
           type: object
           additionalProperties: false
@@ -177,6 +200,9 @@ components:
           const: true
         replayed:
           type: boolean
+        username:
+          type: string
+          description: The generated username, only when the request left it empty.
     ErrorEnvelope:
       type: object
       additionalProperties: false

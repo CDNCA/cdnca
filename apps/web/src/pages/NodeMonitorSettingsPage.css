@@ -728,3 +728,16 @@
     margin-top: 8px;
   }
 }
+
+/* the full probe decision rule opens on demand under the monitor groups. */
+.node-monitor-decision-details summary {
+  width: max-content;
+  color: var(--cdnca-color-primary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.node-monitor-notification-events {
+  margin: 0 0 16px;
+}

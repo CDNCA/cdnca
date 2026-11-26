@@ -15,6 +15,14 @@ function expiredAccess(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401 && !notExpiry.has(error.code)
 }
 
+// Same margin as SessionRefreshTimer: renew when under 30 seconds are left.
+const renewalMarginMilliseconds = 30_000
+
+function accessDue(): boolean {
+  const { expiresAt, status } = useSessionStore.getState()
+  return status === 'authenticated' && expiresAt !== null && expiresAt - Date.now() < renewalMarginMilliseconds
+}
+
 // createSessionQueryClient: a 401 from an API call while signed in means the
 // short-lived access token ran out (sleeping laptop, background tab, a poll
 // that fired just before the renewal timer). Renew once — concurrent 401s
@@ -45,8 +53,23 @@ export function createSessionQueryClient(): QueryClient {
     context: QueryFunctionContext,
     query: Query,
   ): Promise<unknown> => {
+    // A token known to be (nearly) expired is renewed before the request, so
+    // the browser does not log a 401 first (the renewal timer is throttled in
+    // background tabs and frozen while the machine sleeps). Concurrent queries
+    // share the one refresh; a failed renewal falls through to the 401 path.
+    let run = queryFn
+    if (accessDue() && !infinite(query)) {
+      try {
+        await renew()
+        replayedAt.set(query.queryHash, Date.now())
+        const latest = query.options.queryFn
+        if (typeof latest === 'function') run = latest
+      } catch {
+        // Keep the original query function; the 401 handling below decides.
+      }
+    }
     try {
-      return await queryFn(context)
+      return await run(context)
     } catch (error) {
       if (!expiredAccess(error) || useSessionStore.getState().status !== 'authenticated') throw error
       const now = Date.now()

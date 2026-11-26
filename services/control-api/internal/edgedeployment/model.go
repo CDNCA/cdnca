@@ -28,14 +28,24 @@ var (
 	ErrNodeReconciliationRequired = errors.New("node configuration reconciliation is required")
 	ErrReconciliationNotRequired  = errors.New("node configuration reconciliation is not required")
 	ErrReconciliationSource       = errors.New("node configuration reconciliation source conflict")
-	ErrPermissionDenied           = errors.New("edge deployment permission denied")
-	ErrUnauthenticated            = errors.New("edge deployment authentication required")
-	ErrNotFound                   = errors.New("edge deployment not found")
-	ErrInvalidTransition          = errors.New("invalid edge rollout transition")
-	ErrRevisionConflict           = errors.New("edge rollout revision conflict")
-	ErrRetriesExhausted           = errors.New("edge rollout retries exhausted")
-	ErrDeadlineExpired            = errors.New("edge rollout deadline expired")
-	ErrUnavailable                = errors.New("edge deployment unavailable")
+	// an operator-confirmed rollback_failed
+	// reconciliation naming a version may name only the source deployment's
+	// own version, and only while its configuration artifact can be verified.
+	ErrReconciliationObservedNotSource  = errors.New("operator-confirmed version is not the source deployment's version")
+	ErrReconciliationSourceUnverifiable = errors.New("source deployment configuration artifact cannot be verified")
+	// a supplemental confirmation of
+	// the source version applies only to a reconciliation without a version
+	// of that source attempt that no reconciliation of it has named a version
+	// for since.
+	ErrReconciliationSupplementNotEligible = errors.New("no reconciliation without a version of this source deployment to supplement")
+	ErrPermissionDenied                    = errors.New("edge deployment permission denied")
+	ErrUnauthenticated                     = errors.New("edge deployment authentication required")
+	ErrNotFound                            = errors.New("edge deployment not found")
+	ErrInvalidTransition                   = errors.New("invalid edge rollout transition")
+	ErrRevisionConflict                    = errors.New("edge rollout revision conflict")
+	ErrRetriesExhausted                    = errors.New("edge rollout retries exhausted")
+	ErrDeadlineExpired                     = errors.New("edge rollout deadline expired")
+	ErrUnavailable                         = errors.New("edge deployment unavailable")
 )
 
 const (

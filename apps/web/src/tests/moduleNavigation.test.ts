@@ -77,6 +77,20 @@ describe('fetchGrantedModules', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer token-1')
   })
 
+  // features 列出许可的非模块功能码；缺省时不编造，畸形时拒收。
+  it('reads the lease feature codes and rejects malformed ones', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      status: 'valid', lease_serial: 2, modules: [probe], features: ['nodes.manage', 'packages.manage'],
+    }), { status: 200 })))
+    await expect(fetchGrantedModules('token')).resolves.toEqual({
+      status: 'valid', lease_serial: 2, modules: [probe], features: ['nodes.manage', 'packages.manage'],
+    })
+    for (const features of ['packages.manage', ['Packages.Manage'], [42]]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ status: 'valid', lease_serial: 2, modules: [], features }), { status: 200 })))
+      await expect(fetchGrantedModules('token')).rejects.toMatchObject({ code: 'response_invalid' })
+    }
+  })
+
   it('rejects malformed bodies and non-module codes', async () => {
     for (const body of [{ status: 'valid', lease_serial: 1, modules: ['sites.manage'] }, { status: 'valid' }]) {
       vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })))

@@ -42,6 +42,12 @@ const messages = {
     targetReason_protocol_incompatible: '与当前主控协议不兼容', targetReason_artifact_unverified: '发布包校验未完成',
     targetReason_artifact_unavailable: '版本已撤回或不可用', targetReason_target_not_allowed: '不在授权渠道内',
     targetReasonUnknown: '暂不可选',
+    targetReason_current_schema_unconfirmed: '无法确认当前数据库结构版本，视为不可回退',
+    nativeVersionSchemaUnconfirmed: '未确认（{{reason}}）',
+    currentSchemaReason_current_artifact_unverified: '主控未核验到本机安装包',
+    currentSchemaReason_current_artifact_unregistered: '授权端未登记本机安装包',
+    currentSchemaReason_current_artifact_schema_unknown: '本机安装包未记录数据库结构版本',
+    currentSchemaReasonUnknown: '原因未知',
     nativePhaseVerified: '签名已验证', nativePhaseExpanded: '兼容迁移已完成', nativePhasePreflighted: '预检已完成', nativePhaseDrained: '管理写入已暂停',
     nativePhaseControlStopped: '管理 API 已停止', nativePhaseDatabaseBackedUp: '数据库已备份', nativePhaseDatabaseMigrated: '数据库迁移已完成',
     nativeDatabaseRestored: '数据库已从备份还原', nativeBackupDetail: '备份', nativeMigrationDetail: '执行迁移',
@@ -98,6 +104,8 @@ const messages = {
     reason_control_upgrade_ha_unavailable: '高可用升级所需健康副本数不足',
     reason_control_upgrade_runner_unconfirmed: '签名计划服务已接入，独立升级执行器状态待确认',
     reason_control_upgrade_draining: '主控正在升级维护，暂不接受新的升级',
+    reason_control_upgrade_current_release_unverified: '当前版本文件与签名清单不一致，升级执行器已暂停执行升级',
+    runtimeHint_control_upgrade_current_release_unverified: '请在主控服务器执行 journalctl -u cdnca-native-control-upgrade-runner，在「refusing plans」一行找到不一致的文件，用当前版本的正式发布包恢复该文件或重新安装当前版本。文件恢复一致后执行器会自动转为就绪。',
     reason_node_upgrade_runtime_unavailable: '节点升级执行器未就绪',
     reason_node_disabled: '节点未启用',
     reason_node_offline: '节点不在线',
@@ -125,15 +133,15 @@ const messages = {
     hint_target_unset: '授权端尚未给本主控所在的发布渠道设置主控目标版本。请在授权端「发布渠道」中发布目标版本后刷新。',
     hint_entitlement: '本主控授权当前不可用，无法查询升级候选。请先在页面顶部的授权提示中刷新授权。',
     hint_default: '刷新后仍无法确认时，请查看主控日志中的 upgrade candidate 记录，或在授权端核对本主控的发布渠道与许可证。',
-    system: '系统升级', maintenance: '维护操作', typeLabel: '维护升级类型', controlTitle: '主控升级', controlDescription: '当前主控版本与升级任务状态', viewLogs: '查看日志', currentVersion: '当前版本', latestVersion: '最新版本', versionUpgrade: '版本升级', latest: '当前已经是最新版本', available: '有可用升级', unknown: '授权状态未知',
-    nodeTitle: '节点升级', nodeDescription: '节点版本、升级任务和单节点日志', upgradeNodes: '升级节点', refresh: '刷新', requiredVersion: '要求版本', nodeCount: '节点数',
-    nodeID: '节点ID', nodeName: '节点名称', status: '状态', action: '操作', noUpgrade: '不需要升级', canUpgrade: '可升级', canRerelease: '可升级（同版本重出 {from}→{to}）',
+    system: '系统升级', maintenance: '维护操作', typeLabel: '维护升级类型', controlTitle: '主控升级', viewLogs: '查看日志', currentVersion: '当前版本', latestVersion: '最新版本', versionUpgrade: '版本升级', latest: '当前已经是最新版本', available: '有可用升级', unknown: '授权状态未知',
+    nodeTitle: '节点升级', upgradeNodes: '升级节点', refresh: '刷新', requiredVersion: '要求版本', nodeCount: '节点数',
+    nodeID: '节点ID', nodeName: '节点名称', nodeSelectionScope: '节点', status: '状态', action: '操作', noUpgrade: '不需要升级', canUpgrade: '可升级', canRerelease: '可升级（同版本重出 {from}→{to}）',
     rereleaseManualOnce: '该节点手工升级到最新构建一次后，即可在这里更新同版本的新构建。', versionMissing: '未上报版本', pendingCheck: '待检查', upgrade: '升级', startQueued: '开始升级', startQueuedHint: '升级计划已创建但尚未开始，点「开始升级」继续。', cancelQueued: '取消', cancelQueuedHint: '取消这个尚未开始的升级计划，节点可以重新升级。', cancelQueuedTitle: '取消升级计划', cancelQueuedMessage: '取消后该计划不会再下发任何升级命令，已取消的计划无法恢复。', cancelQueuedConfirm: '取消计划', cancelQueuedKeep: '保留', cancelQueuedDone: '升级计划已取消', cancelPausedHint: '取消这个已暂停的升级计划，节点可以重新升级。', cancelPausedMessage: '取消后该计划不再下发升级命令，已取消的计划无法恢复。已有节点开始安装时无法取消。', logs: '日志', noNodes: '暂无节点', noNodePermission: '当前账号没有节点清单权限，仍可通过发布计划管理升级。', nodeLoadFailed: '节点版本读取失败，请稍后重试。',
     installTitle: '节点安装命令', installDescription: '复制后在节点服务器执行', installCommandPending: '命令模板已显示；生成令牌并完成 CA 校验后会自动替换为可执行命令', installTokenPermissionDenied: '当前账号没有查看节点注册凭据的权限', installTokenError: '节点注册凭据获取失败，请刷新后重试', copy: '复制', copied: '已复制',
     maintenanceDescription: '进入维护设置后可配置维护状态、提示文案和节点自动升级策略。', openConfig: '打开系统配置',
     maintenanceOperationTitle: '节点设置',
     migrationNoticeTitle: '迁移前检查', riskWarning: '风险提示', migrationNoticeNoSearchData: '迁移任务只处理主控和节点配置，不迁移 Elasticsearch 历史数据。', migrationNoticeMaintenanceMode: '开始前请先确认维护模式和备份策略，迁移过程中暂停高风险管理操作。', migrationNoticeSignedTask: '任务由受控服务生成、审批并审计，不会在浏览器中直接连接节点或执行命令。',
-    nodeSettingsTitle: '节点设置', nodeSettingsDescription: '批量更换节点连接主控的地址；其他节点设置请到对应入口处理。', nodeSettingsUnavailableTitle: '其他节点设置：', nodeSettingsPathMaster: '主控整机搬迁：使用上方“迁移主控”。', nodeSettingsPathLogs: '日志与监控：节点 Agent 直接上报主控，不再使用 Elasticsearch / filebeat，无需在节点上配置。', nodeSettingsPathPerNode: '单个节点的名称、区域、IP 等：在节点列表中编辑。', nodeSettingsGateways: '网关管理', nodeSettingsNodeList: '节点列表',
+    nodeSettingsTitle: '节点设置', nodeSettingsDescription: '批量更换节点连接主控的地址；其他节点设置请到对应入口处理。', nodeSettingsUnavailableTitle: '其他节点设置：', nodeSettingsGateways: '网关管理', nodeSettingsNodeList: '节点列表',
     gatewayAddressTitle: '更换主控连接地址', gatewayAddressIntro: '节点用新地址做一次 mTLS 握手（校验网关证书与身份），成功才切换；失败的节点保留旧地址，可重试。',
     gatewayAddressKeepOld: '全部节点切换完成前，请保持旧地址可用。', gatewayAddressAllDone: '全部节点已切换到新地址，现在可以停用旧地址。',
     gatewayAddressAddress: '新连接地址', gatewayAddressAddressHelp: '格式 主机:端口，例如 gateway.cdnca.com:443', gatewayAddressAddressInvalid: '请输入 主机:端口，端口 1–65535',
@@ -153,6 +161,19 @@ const messages = {
     gatewayAddressRequest_gateway_address_unavailable: '主控未配置边缘发布签名或节点消息通道，暂不能下发', gatewayAddressRequest_gateway_address_nothing_to_retry: '没有可重试的失败节点', gatewayAddressRequest_permission_denied: '当前账号没有管理节点的权限', gatewayAddressRequestFailed: '请求失败，请稍后重试',
     gatewayAddressReadOnly: '当前账号只能查看，不能下发新地址。',
     enabled: '已启用', disabled: '未启用',
+    nodeUpgradePreparing_queued: '准备中：等待处理', nodeUpgradePreparing_issuing: '准备中：签发升级授权',
+    nodeUpgradePreparing_downloading: '准备中：下载并校验升级包', nodeUpgradePreparing_finalizing: '准备中：生成升级计划', nodeUpgradePreparing_starting: '准备就绪，正在开始升级',
+    nodeUpgradePrepareFailed: '准备失败', upgradePreparing: '已提交升级，正在准备升级包，就绪后自动开始。',
+    upgradePreparingConflict: '升级包仍在准备中，就绪后才能开始升级。', retryPrepare: '重试', retryPrepareHint: '用这批节点重新准备升级。',
+    prepareFailure_license_unavailable: '授权端暂时不可用', prepareFailure_license_outcome_unknown: '授权端响应结果未知',
+    prepareFailure_license_rejected: '授权端拒绝签发', prepareFailure_grant_invalid: '升级授权校验失败',
+    prepareFailure_artifact_download_failed: '升级包下载失败', prepareFailure_artifact_invalid: '升级包校验失败',
+    prepareFailure_cohort_incompatible: '节点已离线或版本已变化', prepareFailure_permission_denied: '当前账号没有升级权限',
+    prepareFailure_resource_unavailable: '节点身份正在变更，多次重试仍未完成', prepareFailure_internal_error: '主控内部错误',
+    prepareRefusedHttp_400: '授权端认为请求无效（HTTP 400）', prepareRefusedHttp_401: '授权端认证失败（HTTP 401）',
+    prepareRefusedHttp_403: '授权端拒绝签发（HTTP 403）', prepareRefusedHttp_422: '授权端无法处理该请求（HTTP 422）',
+    autoStartFailed: '未能自动开始：{{reason}}。可点「开始升级」重试。', autoStartApprovalRequired: '开始升级需要审批，请点「开始升级」提交审批。',
+    autoStartRefused: '计划状态已变化，未自动开始。',
   },
   'en-US': {
     versionDetails: 'Version details', nodeVersionSummary: 'Node version summary', requiredVersionMixed: 'See individual nodes', nodeCountUnavailable: 'Not loaded', installNewNode: 'Install a new node',
@@ -187,6 +208,12 @@ const messages = {
     targetReason_protocol_incompatible: 'Incompatible with the current control protocol', targetReason_artifact_unverified: 'Package verification is incomplete',
     targetReason_artifact_unavailable: 'Withdrawn or unavailable', targetReason_target_not_allowed: 'Not in the licensed channel',
     targetReasonUnknown: 'Not selectable right now',
+    targetReason_current_schema_unconfirmed: 'The current database schema cannot be confirmed, so it is treated as not reversible',
+    nativeVersionSchemaUnconfirmed: 'Unconfirmed ({{reason}})',
+    currentSchemaReason_current_artifact_unverified: 'the console could not verify its installed package',
+    currentSchemaReason_current_artifact_unregistered: 'the license service has no record of the installed package',
+    currentSchemaReason_current_artifact_schema_unknown: 'the installed package records no database schema',
+    currentSchemaReasonUnknown: 'reason unknown',
     nativeRetry: 'Retry the same publication request', nativeRevisionConflict: 'The release was changed by someone else. Refresh, upload the plan again, and confirm.',
     nativePlanRejected: 'The server rejected the signed plan. Obtain a valid plan again.', nativePublishFailed: 'Could not publish the upgrade plan. Refresh status before retrying.',
     nativePublication: 'Control upgrade publication', nativePublicationReceipt: 'Publication receipt', nativeRevision: 'Publication version', nativePlanID: 'Plan ID',
@@ -251,6 +278,8 @@ const messages = {
     reason_control_upgrade_ha_unavailable: 'Not enough healthy replicas for HA upgrade',
     reason_control_upgrade_runner_unconfirmed: 'Signed plan service connected; independent runner unconfirmed',
     reason_control_upgrade_draining: 'Control-plane upgrade maintenance is in progress',
+    reason_control_upgrade_current_release_unverified: 'The current release files do not match the signed manifest; the upgrade runner has paused upgrades',
+    runtimeHint_control_upgrade_current_release_unverified: 'On the control server, run journalctl -u cdnca-native-control-upgrade-runner and find the mismatched file on the "refusing plans" line. Restore it from the official package of the current version, or reinstall the current version. The runner becomes ready by itself once the files match again.',
     reason_node_upgrade_runtime_unavailable: 'Node upgrade executor is not ready',
     reason_node_disabled: 'Node disabled',
     reason_node_offline: 'Node offline',
@@ -278,15 +307,15 @@ const messages = {
     hint_target_unset: 'The license service has no controller target version for this controller\'s release channel yet. Publish one under release channels on the license service, then refresh.',
     hint_entitlement: 'This controller\'s license is unavailable, so no upgrade candidate can be read. Check the license again from the banner at the top of the page first.',
     hint_default: 'If it stays unconfirmed after a refresh, see the upgrade candidate entries in the controller log, or check this controller\'s channel and license on the license service.',
-    system: 'System upgrade', maintenance: 'Maintenance actions', typeLabel: 'Maintenance and upgrade type', controlTitle: 'Control plane upgrade', controlDescription: 'Current control-plane version and upgrade task status', viewLogs: 'View logs', currentVersion: 'Current version', latestVersion: 'Latest version', versionUpgrade: 'Version upgrade', latest: 'Already on the latest version', available: 'Upgrade available', unknown: 'Authorization status unknown',
-    nodeTitle: 'Node upgrades', nodeDescription: 'Node versions, rollout tasks, and node logs', upgradeNodes: 'Upgrade nodes', refresh: 'Refresh', requiredVersion: 'Required version', nodeCount: 'Nodes',
-    nodeID: 'Node ID', nodeName: 'Node name', status: 'Status', action: 'Actions', noUpgrade: 'No upgrade needed', canUpgrade: 'Upgrade available', canRerelease: 'Upgrade available (same-version re-release {from}→{to})',
+    system: 'System upgrade', maintenance: 'Maintenance actions', typeLabel: 'Maintenance and upgrade type', controlTitle: 'Control plane upgrade', viewLogs: 'View logs', currentVersion: 'Current version', latestVersion: 'Latest version', versionUpgrade: 'Version upgrade', latest: 'Already on the latest version', available: 'Upgrade available', unknown: 'Authorization status unknown',
+    nodeTitle: 'Node upgrades', upgradeNodes: 'Upgrade nodes', refresh: 'Refresh', requiredVersion: 'Required version', nodeCount: 'Nodes',
+    nodeID: 'Node ID', nodeName: 'Node name', nodeSelectionScope: 'nodes', status: 'Status', action: 'Actions', noUpgrade: 'No upgrade needed', canUpgrade: 'Upgrade available', canRerelease: 'Upgrade available (same-version re-release {from}→{to})',
     rereleaseManualOnce: 'Upgrade this node by hand to the latest build once; new builds of the same version can then be applied here.', versionMissing: 'Version not reported', pendingCheck: 'Pending check', upgrade: 'Upgrade', startQueued: 'Start upgrade', startQueuedHint: 'The upgrade plan was created but has not started. Select Start upgrade to continue.', cancelQueued: 'Cancel', cancelQueuedHint: 'Cancel this upgrade plan before it starts; the node can then be upgraded again.', cancelQueuedTitle: 'Cancel upgrade plan', cancelQueuedMessage: 'After cancelling, this plan sends no upgrade command. A cancelled plan cannot be resumed.', cancelQueuedConfirm: 'Cancel plan', cancelQueuedKeep: 'Keep', cancelQueuedDone: 'Upgrade plan cancelled', cancelPausedHint: 'Cancel this paused upgrade plan so the node can be upgraded again.', cancelPausedMessage: 'The plan sends no more upgrade commands once cancelled, and a cancelled plan cannot be resumed. A plan whose nodes started installing cannot be cancelled.', logs: 'Logs', noNodes: 'No nodes', noNodePermission: 'Node list permission is not available; use rollout plans to manage upgrades.', nodeLoadFailed: 'Failed to load node versions. Try again later.',
     installTitle: 'Node install command', installDescription: 'Copy it and run it on the node server', installCommandPending: 'The command template is already shown; it becomes executable after the token and CA checks complete', installTokenPermissionDenied: 'This account cannot view the node registration key', installTokenError: 'Could not load the node registration key. Refresh and retry.', copy: 'Copy', copied: 'Copied',
     maintenanceDescription: 'Configure maintenance mode, its message, and automatic node upgrades from system settings.', openConfig: 'Open system settings',
     maintenanceOperationTitle: 'Node settings',
     migrationNoticeTitle: 'Before migration', riskWarning: 'Risk warning', migrationNoticeNoSearchData: 'The task moves control-plane and node configuration; Elasticsearch history is not migrated.', migrationNoticeMaintenanceMode: 'Confirm maintenance mode and backups first, then pause high-risk administrative actions while the task runs.', migrationNoticeSignedTask: 'The controlled service creates, approves, and audits the task. The browser never connects to nodes or executes commands directly.',
-    nodeSettingsTitle: 'Node settings', nodeSettingsDescription: 'Change the address nodes use to reach the control plane, in bulk. Other node settings have their own entry points.', nodeSettingsUnavailableTitle: 'Other node settings:', nodeSettingsPathMaster: 'Moving the control plane to another server: use Migrate control plane above.', nodeSettingsPathLogs: 'Logs and monitoring: the node Agent reports directly to the control plane. Elasticsearch / filebeat are no longer used and need no node configuration.', nodeSettingsPathPerNode: 'Per-node name, region, and IPs: edit them in the node list.', nodeSettingsGateways: 'Gateway management', nodeSettingsNodeList: 'Node list',
+    nodeSettingsTitle: 'Node settings', nodeSettingsDescription: 'Change the address nodes use to reach the control plane, in bulk. Other node settings have their own entry points.', nodeSettingsUnavailableTitle: 'Other node settings:', nodeSettingsGateways: 'Gateway management', nodeSettingsNodeList: 'Node list',
     gatewayAddressTitle: 'Change the control-plane connection address', gatewayAddressIntro: 'Each node first completes an mTLS handshake with the new address (Gateway certificate and identity checked) and only switches when it succeeds. Nodes that fail keep the old address and can be retried.',
     gatewayAddressKeepOld: 'Keep the old address reachable until every node has switched.', gatewayAddressAllDone: 'Every node has switched to the new address. You can retire the old one now.',
     gatewayAddressAddress: 'New connection address', gatewayAddressAddressHelp: 'host:port, for example gateway.cdnca.com:443', gatewayAddressAddressInvalid: 'Enter host:port with a port from 1 to 65535',
@@ -306,6 +335,19 @@ const messages = {
     gatewayAddressRequest_gateway_address_unavailable: 'The control plane has no edge publication signer or node messaging configured; this cannot be sent yet', gatewayAddressRequest_gateway_address_nothing_to_retry: 'No failed node to retry', gatewayAddressRequest_permission_denied: 'This account cannot manage nodes', gatewayAddressRequestFailed: 'Request failed; try again later',
     gatewayAddressReadOnly: 'This account can view changes but cannot send a new address.',
     enabled: 'Enabled', disabled: 'Disabled',
+    nodeUpgradePreparing_queued: 'Preparing: waiting', nodeUpgradePreparing_issuing: 'Preparing: issuing the upgrade grant',
+    nodeUpgradePreparing_downloading: 'Preparing: downloading and verifying the package', nodeUpgradePreparing_finalizing: 'Preparing: creating the upgrade plan', nodeUpgradePreparing_starting: 'Ready, starting the upgrade',
+    nodeUpgradePrepareFailed: 'Preparation failed', upgradePreparing: 'Upgrade submitted. The package is being prepared and the upgrade starts once it is ready.',
+    upgradePreparingConflict: 'The upgrade package is still being prepared. Start the upgrade once it is ready.', retryPrepare: 'Retry', retryPrepareHint: 'Prepare the upgrade of these nodes again.',
+    prepareFailure_license_unavailable: 'The license service is unavailable', prepareFailure_license_outcome_unknown: 'The license service outcome is unknown',
+    prepareFailure_license_rejected: 'The license service refused to issue', prepareFailure_grant_invalid: 'The upgrade grant failed verification',
+    prepareFailure_artifact_download_failed: 'The upgrade package download failed', prepareFailure_artifact_invalid: 'The upgrade package failed verification',
+    prepareFailure_cohort_incompatible: 'A node went offline or its version changed', prepareFailure_permission_denied: 'This account has no upgrade permission',
+    prepareFailure_resource_unavailable: 'A node identity change did not settle after several attempts', prepareFailure_internal_error: 'Internal control plane error',
+    prepareRefusedHttp_400: 'The license service rejected the request as invalid (HTTP 400)', prepareRefusedHttp_401: 'The license service did not accept the credentials (HTTP 401)',
+    prepareRefusedHttp_403: 'The license service refused to issue (HTTP 403)', prepareRefusedHttp_422: 'The license service could not process the request (HTTP 422)',
+    autoStartFailed: 'The upgrade did not start automatically: {{reason}}. Select Start upgrade to retry.', autoStartApprovalRequired: 'Starting the upgrade needs an approval. Select Start upgrade to submit it.',
+    autoStartRefused: 'The plan changed, so the upgrade did not start automatically.',
   },
 } as const
 
@@ -332,6 +374,32 @@ export function upgradeTargetReasonMessage(language: string, reason: string): st
   return maintenanceUpgradeMessage(language, Object.hasOwn(messages['zh-CN'], key) ? key as Key : 'targetReasonUnknown')
 }
 
+// Why a node upgrade preparation failed; a License refusal names License's reason when known,
+// or the HTTP status of a refusal without one (http_<status>).
+export function preparationFailureMessage(language: string, code: string, reason?: string): string {
+  const key = `prepareFailure_${code}`
+  const text = maintenanceUpgradeMessage(language, Object.hasOwn(messages['zh-CN'], key) ? key as Key : 'prepareFailure_internal_error')
+  if (code !== 'license_rejected' || !reason) return text
+  const httpKey = `prepareRefusedHttp_${reason.replace(/^http_/, '')}`
+  if (reason.startsWith('http_')) return Object.hasOwn(messages['zh-CN'], httpKey) ? maintenanceUpgradeMessage(language, httpKey as Key) : text
+  return `${text}${language.startsWith('zh') ? '：' : ': '}${issueRefusalMessage(language, 'upgrade_target_blocked', reason)}`
+}
+
+// Why a ready plan was not started automatically after its preparation.
+export function autoStartFailureMessage(language: string, code: string, reason?: string): string {
+  if (code === 'approval_required') return maintenanceUpgradeMessage(language, 'autoStartApprovalRequired')
+  if (code === 'start_refused') return maintenanceUpgradeMessage(language, 'autoStartRefused')
+  return maintenanceUpgradeFormat(language, 'autoStartFailed', { reason: preparationFailureMessage(language, code, reason) })
+}
+
+/** The current database schema head on the version picker. Null is unconfirmed, shown with its reason. */
+export function currentSchemaHeadMessage(language: string, head: number | null, reason?: string): string {
+  if (head !== null) return String(head)
+  const key = `currentSchemaReason_${reason ?? ''}`
+  return maintenanceUpgradeFormat(language, 'nativeVersionSchemaUnconfirmed', {
+    reason: maintenanceUpgradeMessage(language, Object.hasOwn(messages['zh-CN'], key) ? key as Key : 'currentSchemaReasonUnknown') })
+}
+
 // Why the license service refused POST /issue: reason_code of upgrade_target_blocked,
 // else the passed-through License code; unknown ones fall back to the target reason text.
 export function issueRefusalMessage(language: string, code: string, reason?: string): string {
@@ -351,6 +419,12 @@ export function maintenanceUpgradeCandidateHint(language: string, reason: string
 export function maintenanceUpgradeReasonMessage(language: string, reason: string): string {
   const key = `reason_${reason}`
   return maintenanceUpgradeMessage(language, Object.hasOwn(messages['zh-CN'], key) ? key as Key : 'reasonUnknown')
+}
+
+// The operator's next step for a control upgrade runner that is not ready, if any.
+export function maintenanceUpgradeRuntimeHint(language: string, reason: string): string | undefined {
+  const key = `runtimeHint_${reason}`
+  return Object.hasOwn(messages['zh-CN'], key) ? maintenanceUpgradeMessage(language, key as Key) : undefined
 }
 
 /** maintenanceUpgradeMessage with interpolation values. */

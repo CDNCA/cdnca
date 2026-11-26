@@ -2122,7 +2122,7 @@ describe('AccountMfaPanel', () => {
       </ConfigProvider>,
     )
 
-    await user.click(await screen.findByRole('button', { name: '立即设置' }))
+    await user.click(await screen.findByRole('button', { name: '两步验证：立即设置' }))
     await user.click(await screen.findByRole('button', { name: '设置身份验证器' }))
     await user.click(screen.getByRole('button', { name: '确认' }))
     expect(await screen.findByDisplayValue(secret)).toBeInTheDocument()
@@ -2337,7 +2337,7 @@ describe('AccountMfaPanel', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountUserPage />, ['/account/user'])
 
-    const emailRow = (await screen.findAllByRole('button', { name: '立即绑定' }))[1]!
+    const emailRow = (await screen.findByRole('button', { name: '邮箱绑定：立即绑定' }))
     await user.click(emailRow)
     const bindForm = within(document.querySelector('.account-user-bind-form') as HTMLElement)
     await user.type(bindForm.getByLabelText('邮箱绑定'), 'old-pending@example.com')
@@ -2390,7 +2390,7 @@ describe('AccountMfaPanel', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountUserPage />, ['/account/user'])
 
-    await user.click((await screen.findAllByRole('button', { name: '立即绑定' }))[1]!)
+    await user.click((await screen.findByRole('button', { name: '邮箱绑定：立即绑定' })))
     const bindForm = within(document.querySelector('.account-user-bind-form') as HTMLElement)
     await user.type(bindForm.getByLabelText('邮箱绑定'), 'old-success@example.com')
     await user.type(bindForm.getByLabelText('当前密码'), 'old-success-password')

@@ -11,6 +11,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountloginchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoverycontext"
+	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/google/uuid"
 )
 
@@ -76,5 +77,38 @@ func TestPasswordChallengeUsesCredentialScopeAndTrustedSourceOnly(t *testing.T) 
 	}
 	if hostCalls != 0 || fake.calls != 1 || fake.input.Source != "192.0.2.1" || fake.input.Login.ScopeID == nil || fake.input.Login.ScopeID.String() != scopeID {
 		t.Fatalf("host calls=%d password calls=%d", hostCalls, fake.calls)
+	}
+}
+
+// the built-in CAPTCHA of a password challenge goes to the
+// service with the browser binding cookie it was issued with.
+func TestPasswordChallengeCaptchaCarriesBindingCookie(t *testing.T) {
+	fake := new(passwordRequestCapture)
+	source, err := accountrecoverycontext.NewSourceIPResolver(nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(fake, TrustedContextResolverFunc(func(*http.Request) (TrustedContext, error) {
+		return TrustedContext{}, nil
+	}), Config{SourceIPResolver: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"username":"alice","password":"secret","captcha":{"id":"22222222-2222-4222-8222-222222222222","answer":"AB2CD"}}`
+	for _, binding := range []string{"browser-binding", ""} {
+		r := httptest.NewRequest("POST", ChallengePath, strings.NewReader(body))
+		r.RemoteAddr = "162.159.2.20:443"
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Idempotency-Key", "password-captcha-"+uuid.NewString())
+		r.Header.Set("X-Request-ID", "password-captcha-request")
+		if binding != "" {
+			r.AddCookie(&http.Cookie{Name: identity.LoginCaptchaBindingCookie, Value: binding})
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		captcha := fake.input.Login.Captcha
+		if w.Code != http.StatusAccepted || captcha == nil || captcha.Answer != "AB2CD" || captcha.Binding != binding {
+			t.Fatalf("binding %q: status=%d captcha=%#v body=%s", binding, w.Code, captcha, w.Body)
+		}
 	}
 }

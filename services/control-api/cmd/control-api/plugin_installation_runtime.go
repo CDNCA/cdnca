@@ -50,6 +50,19 @@ type pluginInstallationRuntime struct {
 	licenseHTTP    *http.Client
 	providerURL    string
 	installationID uuid.UUID
+	// licenseReports replays lifecycle reports the license service has not acknowledged.
+	licenseReports func(context.Context) error
+}
+
+// pluginInstallationLicenseReportInterval is how often pending plugin lifecycle reports are replayed.
+const pluginInstallationLicenseReportInterval = 30 * time.Second
+
+// runLicenseReports runs the background replay until ctx ends; nil runtime: nothing to replay.
+func (runtime *pluginInstallationRuntime) runLicenseReports(ctx context.Context) error {
+	if runtime == nil || runtime.licenseReports == nil {
+		return nil
+	}
+	return runtime.licenseReports(ctx)
 }
 
 func buildPluginInstallationRuntime(ctx context.Context, cfg config.Config, pool *pgxpool.Pool,
@@ -131,7 +144,10 @@ func buildPluginInstallationRuntime(ctx context.Context, cfg config.Config, pool
 			AuthenticateSession: identityService.AuthenticateSession,
 			Domain:              domain,
 		})
-	}, licenseHTTP: httpClient, providerURL: environment.providerURL, installationID: installationID}, nil
+	}, licenseHTTP: httpClient, providerURL: environment.providerURL, installationID: installationID,
+		licenseReports: func(ctx context.Context) error {
+			return domain.RunLicenseReports(ctx, pluginInstallationLicenseReportInterval)
+		}}, nil
 }
 
 // lazyInstallationTransport 在第一次成功取到安装客户端证书时才建 mTLS 传输层（根证书来自该凭据），之后复用；

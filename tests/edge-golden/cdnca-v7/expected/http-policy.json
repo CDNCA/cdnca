@@ -15,6 +15,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -57,6 +58,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -99,6 +101,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -141,6 +144,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -185,6 +189,7 @@
             "date": "<masked>",
             "location": "https://policy.example.test/new-home?keep=1",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -212,6 +217,7 @@
             "date": "<masked>",
             "location": "https://policy.example.test/landing",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -239,6 +245,7 @@
             "date": "<masked>",
             "location": "https://policy.example.test/temp2",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -266,6 +273,7 @@
             "date": "<masked>",
             "location": "https://docs.example.test/page",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -363,6 +371,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -406,6 +415,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -476,6 +486,7 @@
             "content-type": "text/html",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -503,6 +514,7 @@
             "date": "<masked>",
             "location": "https://policy.example.test/new-home",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -566,6 +578,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -608,6 +621,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -651,6 +665,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"
@@ -694,8 +709,9 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
-            "x-cdnca-referer-check": "rejected",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
+            "x-cdnca-referer-check": "rejected",
             "x-edge": "yes",
             "x-replace-me": "edge"
           },
@@ -720,8 +736,9 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
-            "x-cdnca-referer-check": "rejected",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
+            "x-cdnca-referer-check": "rejected",
             "x-edge": "yes",
             "x-replace-me": "edge"
           },
@@ -746,8 +763,9 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
-            "x-cdnca-referer-check": "rejected",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
+            "x-cdnca-referer-check": "rejected",
             "x-edge": "yes",
             "x-replace-me": "edge"
           },
@@ -772,6 +790,7 @@
             "content-type": "text/plain; charset=utf-8",
             "date": "<masked>",
             "server": "openresty",
+            "vary": "Origin",
             "x-cdnca-http-policy-version": "3",
             "x-edge": "yes",
             "x-replace-me": "edge"

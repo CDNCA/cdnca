@@ -28,10 +28,10 @@ func (r *release) server(t *testing.T) *httptest.Server {
 			return
 		}
 		switch req.URL.Path {
-		case "/ce/downloads/edge-agent/latest/SHA256SUMS":
+		case "/ce/edge-agent/latest/SHA256SUMS":
 			sum := sha256.Sum256(r.archive)
 			_, _ = io.WriteString(w, hex.EncodeToString(sum[:])+"  cdnca-edge-agent.tar.gz\n")
-		case "/ce/downloads/edge-agent/latest/cdnca-edge-agent.tar.gz":
+		case "/ce/edge-agent/latest/cdnca-edge-agent.tar.gz":
 			r.archiveGET.Add(1)
 			_, _ = w.Write(r.archive)
 		default:
@@ -224,5 +224,20 @@ func TestVerifyWithTheRealInstallerRefusesAnUnsignedArchive(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "stage")); !os.IsNotExist(err) {
 		t.Fatalf("stage created for a refused archive: %v", err)
+	}
+}
+
+// A release server with a path is the release directory (the official
+// community release server); a bare origin keeps the tarball's /downloads.
+func TestArtifactBase(t *testing.T) {
+	for source, want := range map[string]string{
+		"https://www.cdnca.com/downloads/ce":  "https://www.cdnca.com/downloads/ce",
+		"https://www.cdnca.com/downloads/ce/": "https://www.cdnca.com/downloads/ce",
+		"https://release.example":             "https://release.example/downloads",
+		"https://release.example/":            "https://release.example/downloads",
+	} {
+		if got := ArtifactBase(source); got != want {
+			t.Fatalf("ArtifactBase(%q) = %q want %q", source, got, want)
+		}
 	}
 }

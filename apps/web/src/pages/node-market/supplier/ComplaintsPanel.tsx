@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, App, Button, Descriptions, Modal, Space, Spin, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Descriptions, Modal, Space, Spin, Tag, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { marketSupplierApi, supplierPageSize, type Complaint } from '../../../api/marketSupplier'

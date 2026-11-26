@@ -73,8 +73,12 @@ func (store PostgresStore) ActivePlugins(ctx context.Context) ([]ActivePlugin, e
 	if store.Pool == nil {
 		return nil, errors.New("plugin ui store is not configured")
 	}
-	rows, err := store.Pool.Query(ctx, `SELECT declaration::text,tenant_scope_id,authorization_id FROM plugin_ui_pages
-		WHERE status='active' ORDER BY plugin_id`)
+	// The local head decides at read time: a page paused or uninstalled here leaves the menus, CSP
+	// and proxy on the next read, before artifact sync withdraws the row.
+	rows, err := store.Pool.Query(ctx, `SELECT page.declaration::text,page.tenant_scope_id,page.authorization_id
+		FROM plugin_ui_pages page WHERE page.status='active' AND EXISTS (SELECT 1 FROM plugin_installation_heads head
+		WHERE head.tenant_scope_id=page.tenant_scope_id AND head.authorization_id=page.authorization_id AND
+		head.status='enabled') ORDER BY page.plugin_id`)
 	if err != nil {
 		return nil, err
 	}

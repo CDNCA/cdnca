@@ -140,6 +140,82 @@ Object.assign(enSitePublications.errors as SitePublicationsMessages, {
   rulePackNodes: 'Nodes waiting for rule packs: {{nodes}}',
   rulePackOutOfProfile: "A site mounts a ModSecurity rule pack outside its current CRS profile (a pack can only switch off rules within the profile's attack classes and paranoia level; it cannot add rules, raise the level or change how requests are blocked), so the whole publication was refused. Disable the pack on the site's rule pack page, or move the site to a CRS profile that covers those rules, then publish again.",
 })
+// refusals the scope's own facts decide end
+// the automatic request instead of retrying (edgeautopublish terminal codes).
+Object.assign(zhSitePublications.automaticFailure as SitePublicationsMessages, {
+  package_subscription_inactive: {
+    title: '设置已保存，本次未发布：套餐订阅未生效',
+    description: '源修订 {{revision}} 的自动发布没有下发：有网站或转发仍绑定未生效的套餐订阅（如已取消、未开始或已到期），系统已停止重试。续费、换绑套餐，或停用、删除这些网站或转发后会自动重新发布。',
+  },
+  package_resource_quota_exceeded: {
+    title: '设置已保存，本次未发布：超出套餐额度',
+    description: '源修订 {{revision}} 的自动发布没有下发：网站或转发的域名、端口数量超出了所绑套餐的额度，系统已停止重试。升级套餐，或减少网站、端口并保存后会自动重新发布。',
+  },
+  package_feature_denied: {
+    title: '设置已保存，本次未发布：套餐不含所用功能',
+    description: '源修订 {{revision}} 的自动发布没有下发：有网站使用了所绑套餐不含的功能（如自定义 CC、WAF），系统已停止重试。升级套餐，或关闭该功能并保存后会自动重新发布。',
+  },
+  entitlement_feature_denied: {
+    title: '设置已保存，本次未发布：授权不含所需模块',
+    description: '源修订 {{revision}} 的自动发布没有下发：配置用到了当前授权不含的模块，系统已停止重试。重新获得授权，或去掉相关配置并保存后会自动重新发布。',
+  },
+  site_l2_unavailable: {
+    title: '设置已保存，本次未发布：网站自定义 L2 没有节点',
+    description: '源修订 {{revision}} 的自动发布没有下发：有网站自定义的 L2 配置里没有本次发布目标中的节点，系统已停止重试。为网站改选 L2 配置或改为当前套餐并保存后会自动重新发布。',
+  },
+  rule_pack_out_of_profile: {
+    title: '设置已保存，本次未发布：规则包超出 CRS 档位',
+    description: '源修订 {{revision}} 的自动发布没有下发：有网站挂载的 ModSecurity 规则包超出了它当前的 CRS 防护档位，系统已停止重试。在网站的规则包页停用该包，或调整网站的 CRS 档位并保存后会自动重新发布。',
+  },
+  sdk_shield_port_shared: {
+    title: '设置已保存，本次未发布：SDK 盾端口被共用',
+    description: '源修订 {{revision}} 的自动发布没有下发：SDK 盾转发的端口与其他转发或网站共用，系统已停止重试。调整端口并保存后会自动重新发布。',
+  },
+})
+Object.assign(enSitePublications.automaticFailure as SitePublicationsMessages, {
+  package_subscription_inactive: {
+    title: 'Settings saved, not published: a package subscription is not in effect',
+    description: 'The automatic publication of source revision {{revision}} was not delivered: a site or forward is still bound to a package subscription that is not in effect (cancelled, not started yet or ended), so retries stopped. It is republished automatically after a renewal, a package change, or once those sites or forwards are disabled or deleted.',
+  },
+  package_resource_quota_exceeded: {
+    title: 'Settings saved, not published: over the package quota',
+    description: 'The automatic publication of source revision {{revision}} was not delivered: the domains or ports of the sites or forwards exceed their package quota, so retries stopped. It is republished automatically after a package upgrade, or once sites or ports are removed and saved.',
+  },
+  package_feature_denied: {
+    title: 'Settings saved, not published: the package lacks a feature in use',
+    description: 'The automatic publication of source revision {{revision}} was not delivered: a site uses a feature its package does not include (such as custom CC or WAF), so retries stopped. It is republished automatically after a package upgrade, or once the feature is turned off and saved.',
+  },
+  entitlement_feature_denied: {
+    title: 'Settings saved, not published: the entitlement lacks a module',
+    description: 'The automatic publication of source revision {{revision}} was not delivered: the configuration uses a module the current entitlement does not grant, so retries stopped. It is republished automatically once the module is granted again, or the setting is removed and saved.',
+  },
+  site_l2_unavailable: {
+    title: 'Settings saved, not published: a site\'s custom L2 has no node',
+    description: 'The automatic publication of source revision {{revision}} was not delivered: a site\'s custom L2 configuration has no node in this publication\'s targets, so retries stopped. It is republished automatically once the site uses another L2 configuration or its package\'s and is saved.',
+  },
+  rule_pack_out_of_profile: {
+    title: 'Settings saved, not published: a rule pack is outside the CRS profile',
+    description: 'The automatic publication of source revision {{revision}} was not delivered: a site mounts a ModSecurity rule pack outside its current CRS profile, so retries stopped. It is republished automatically once the pack is disabled on the site\'s rule pack page or the site\'s CRS profile is changed and saved.',
+  },
+  sdk_shield_port_shared: {
+    title: 'Settings saved, not published: an SDK shield port is shared',
+    description: 'The automatic publication of source revision {{revision}} was not delivered: an SDK shield forward shares its port with another forward or site, so retries stopped. It is republished automatically once the port is changed and saved.',
+  },
+})
+// a publication that only renewed the node
+// settings (kind node_settings, content_refusal).
+Object.assign(zhSitePublications, {
+  nodeSettings: {
+    tag: '节点设置更新',
+    description: '本次只更新了节点设置（DoH、节点存储），节点上的网站和规则仍是上次生效的版本。内容未发布的原因：{{reason}}',
+  },
+})
+Object.assign(enSitePublications, {
+  nodeSettings: {
+    tag: 'Node settings update',
+    description: 'Only the node settings (DoH, node storage) were updated; the sites and rules on the nodes stay at the version last in effect. Why the content was not published: {{reason}}',
+  },
+})
 const pseudoSitePublications = pseudoTree(zhSitePublications)
 
 export const sitePublicationsMessages: Record<

@@ -125,6 +125,61 @@ describe('InstallationLockBanner', () => {
     expect(screen.queryByText('授权已换绑到其他服务器')).toBeNull()
     expect(screen.queryByText(/改回本机出口 IP/)).toBeNull()
   })
+
+  // pinned under the header, the banner keeps only its
+  // title and actions on a narrow screen (≤ 767px); the description folds behind 详情.
+  describe('narrow screen', () => {
+    const matchMediaBefore = window.matchMedia
+    const viewport = (narrow: boolean) => {
+      window.matchMedia = (query: string) => ({ ...matchMediaBefore(query), matches: narrow && query === '(max-width: 767px)' })
+    }
+    afterEach(() => { window.matchMedia = matchMediaBefore })
+
+    it('folds the description behind a 详情 toggle and keeps the actions', async () => {
+      viewport(true)
+      vi.stubGlobal('fetch', vi.fn(async () => json(banned)))
+      renderWithProviders(<InstallationLockBanner />)
+      expect(await screen.findByText('本主控授权已被锁定，后台处于只读状态')).toBeVisible()
+      expect(screen.getByRole('button', { name: '重新检查' })).toBeVisible()
+      const toggle = screen.getByRole('button', { name: '展开锁定详情' })
+      expect(toggle).toHaveTextContent('详情')
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      const details = document.getElementById(toggle.getAttribute('aria-controls')!)!
+      expect(details).not.toBeVisible()
+      expect(screen.getByText('授权方已对本主控下发安全封禁 · 原因：违规转售')).not.toBeVisible()
+      // ban_id stays copyable while folded.
+      expect(screen.getByText('ban_id', { exact: true }).closest('.ant-typography')?.querySelector('.ant-typography-copy')).toBeVisible()
+
+      fireEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      expect(toggle).toHaveAccessibleName('收起锁定详情')
+      expect(toggle).toHaveTextContent('收起')
+      expect(details).toBeVisible()
+      expect(screen.getByText(`ban_id ${banned.ban_id}`)).toBeVisible()
+      fireEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(details).not.toBeVisible()
+    })
+
+    it('folds the rebound notice too', async () => {
+      viewport(true)
+      vi.stubGlobal('fetch', vi.fn(async () => json({ locked: false, rebound: true })))
+      renderWithProviders(<InstallationLockBanner />)
+      expect(await screen.findByText('授权已换绑到其他服务器')).toBeVisible()
+      expect(screen.getByRole('button', { name: '展开锁定详情' })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByText(/已在运行的网站不受影响/)).not.toBeVisible()
+    })
+
+    it('shows everything on a wide screen, without the toggle', async () => {
+      viewport(false)
+      vi.stubGlobal('fetch', vi.fn(async () => json(banned)))
+      renderWithProviders(<InstallationLockBanner />)
+      expect(await screen.findByText('授权方已对本主控下发安全封禁 · 原因：违规转售')).toBeVisible()
+      expect(screen.getByText(`ban_id ${banned.ban_id}`)).toBeVisible()
+      expect(screen.queryByRole('button', { name: /锁定详情/ })).toBeNull()
+      expect(document.querySelector('[aria-expanded]')).toBeNull()
+    })
+  })
 })
 
 describe('supply_in_use refusal', () => {

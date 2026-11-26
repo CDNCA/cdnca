@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Timeline, Typography } from 'antd'
+import { Alert, App, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tag, Timeline, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../../api/auth'
@@ -11,7 +11,7 @@ import { formatDateTime } from '../../../i18n/formatters'
 import { formatMinor } from '../../plugin-market/pluginStoreModel'
 import { outcomeUnknown, useIdempotencyKey } from '../../market/idempotency'
 import { useErrorText, useToken } from './hooks'
-import { useFeedback, useFormSubmitError } from '@cdnca/ui'
+import { useFeedback, useFormSubmitError, Table } from '@cdnca/ui'
 import { yuanToMinor } from '@cdnca/ui/offer-terms'
 
 const categories: MarketFeedbackCategory[] = ['outage', 'degraded', 'config', 'billing', 'other']

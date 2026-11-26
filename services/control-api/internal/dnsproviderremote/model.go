@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/acmeworker"
+	"github.com/cdnca/cdnca/services/control-api/internal/dnsapiproxy"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnscustomhttp"
 	"github.com/google/uuid"
 )
@@ -35,6 +36,10 @@ const (
 	CodeRecordMismatch      ErrorCode = "dns_provider_remote_record_mismatch"
 	CodeTimeout             ErrorCode = "dns_provider_remote_timeout"
 	CodeCancelled           ErrorCode = "dns_provider_remote_cancelled"
+	// CodeProxyUnavailable: the platform http代理 could not be used
+	// (unreachable, refused or failed authentication); the request never
+	// reached the provider, so a mutation was not applied.
+	CodeProxyUnavailable ErrorCode = "dns_provider_remote_proxy_unavailable"
 	// CodeLineNotInPlan: the provider account's plan has no such line (the
 	// configured plan tier excludes it, or the provider refused or does not
 	// list it). The line falls back to the default line's answer.
@@ -108,6 +113,15 @@ type Error struct {
 }
 
 func (e *Error) Error() string { return string(e.Code) }
+
+// Unwrap lets callers that cannot import this package (acmeworker) tell a
+// proxy failure by dnsapiproxy.ErrProxyUnavailable.
+func (e *Error) Unwrap() error {
+	if e.Code == CodeProxyUnavailable {
+		return dnsapiproxy.ErrProxyUnavailable
+	}
+	return nil
+}
 
 func (e *Error) Is(target error) bool {
 	switch target {

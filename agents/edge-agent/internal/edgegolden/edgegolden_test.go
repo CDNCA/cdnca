@@ -197,7 +197,7 @@ func (instance *proxyInstance) CacheEntries(context.Context, string) ([]string, 
 func (instance *proxyInstance) Task(context.Context, TaskSpec) (*TaskResult, error) {
 	return &TaskResult{State: "succeeded"}, nil
 }
-func (instance *proxyInstance) Stop(context.Context) error { return instance.server.Close() }
+func (instance *proxyInstance) Stop(context.Context) error                 { return instance.server.Close() }
 func (instance *proxyInstance) Publish(context.Context, Publication) error { return nil }
 
 func freePort(t *testing.T) string {

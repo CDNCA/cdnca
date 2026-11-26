@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, Button, Input, Pagination, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, Select, Tag, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -17,7 +17,7 @@ import './SystemLogPage.css'
 import './SystemSentLogPanel.css'
 import { useSearchParams } from 'react-router-dom'
 import { filterParam, useFilterUrl } from './filterUrl'
-import { AdvancedFilters, FeedbackWhen, useLiveApply } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, useLiveApply, Pagination, Table } from '@cdnca/ui'
 
 const adminSentEventTypes = [
   'package-expiring', 'package-expire', 'traffic-exceeding', 'traffic-exceed', 'cc-switch',
@@ -91,7 +91,6 @@ function SentLogContent({ owner, accessToken }: { owner: string; accessToken: st
       <small>{fact.recipient_address_state === 'masked' ? fact.recipient_address : t('noSnapshot')}</small>
     </span> },
     { title: t('messageID'), dataIndex: 'message_id', width: '10.2%', render: (value: string) => <span className="system-sent-message-id">{value}</span> },
-    { title: t('content'), width: '19.1%', render: () => <span className="system-sent-unavailable">{t('noSnapshot')}</span> },
     { title: t('channel'), dataIndex: 'channel', width: '9.5%', render: (value: string) => i18n.t(`notificationSettings:deliveries.channels.${value}`) },
     { title: t('failureCount'), dataIndex: 'failure_count', width: '8.9%', render: (value: number) => formatNumber(value, language) },
     { title: t('status'), dataIndex: 'state', width: '10.2%', render: (value: NotificationHistoryFact['state']) => <Tag
@@ -115,7 +114,7 @@ function SentLogContent({ owner, accessToken }: { owner: string; accessToken: st
 
   return <div className="system-sent-log-panel">
     <div className="system-sent-log-toolbar">
-      <div className="system-sent-log-summary"><strong>{text('sent')}</strong><small>{t('summary', { count: formatNumber(total, language) })}</small></div>
+      <div className="system-sent-log-summary"><strong>{text('sent')}</strong></div>
       {/* 常显 类型、媒介、状态；用户ID、消息ID 收进高级筛选。条件改了即查（原样），刷新回第一页。 */}
       <AdvancedFilters
         className="system-sent-log-filters"

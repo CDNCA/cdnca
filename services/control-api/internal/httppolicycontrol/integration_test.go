@@ -100,6 +100,10 @@ func TestHTTPPolicyHTTPCRUDIsolationAndRBAC(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), created.ID.String()) {
 		t.Fatalf("list status=%d body=%s", response.Code, response.Body)
 	}
+	// no active system configuration: a site without a policy keeps nginx's 1m
+	if !strings.Contains(response.Body.String(), `"system_max_upload_bytes":1048576`) {
+		t.Fatalf("list lacks the system upload limit: %s", response.Body)
+	}
 	response = fixture.request(t, "owner-a", http.MethodGet, itemPath(fixture.tenantA, created.ID), nil, "", "")
 	if response.Code != http.StatusOK || response.Header().Get("ETag") != `"1"` {
 		t.Fatalf("detail status=%d ETag=%q body=%s", response.Code, response.Header().Get("ETag"), response.Body)

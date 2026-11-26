@@ -75,8 +75,10 @@ describe('StreamListPage own CNAME', () => {
     const row = (await screen.findByText('TCP gateway')).closest('tr')!
     const cell = within(row).getByTestId('stream-cname-failed')
     fireEvent.click(within(cell).getByRole('button'))
-    expect(await screen.findByText(/套餐 CNAME 域名 stream.example 未在 DNS 配置的 CNAME 域名里/u)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '重新生成' }))
+    // 原因句也在失败标记的隐藏说明（aria-describedby）里，按弹窗内的原因区断言。
+    const dialog = await screen.findByRole('dialog', { name: 'CNAME 生成失败' })
+    expect(within(dialog).getByTestId('cname-failure-text')).toHaveTextContent(/套餐 CNAME 域名 stream.example 未在 DNS 配置的 CNAME 域名里/u)
+    fireEvent.click(within(dialog).getByRole('button', { name: '重新生成' }))
     await waitFor(() => {
       const call = fetchSpy.mock.calls.find(([input]) => String(input).includes('/v1/streams/batch-action'))
       expect(call).toBeDefined()

@@ -138,6 +138,7 @@ describe('ge36-waf W2 IP list page', () => {
     expect(await screen.findByText('office')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /添加IP 名单/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /编辑/ })).not.toBeInTheDocument()
+    // 6bbc37799 (menu-ia) admin, 997607e72 tenant: protection pages are in the 安全防护 group for both roles.
     for (const role of ['admin', 'user'] as const) {
       const site = getNavigation(role, undefined, ['security_policies.read']).find((item) => item.key === 'site')
       expect(site?.children?.some((item) => item.key === '/site/lists')).toBe(true)

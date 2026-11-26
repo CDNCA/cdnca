@@ -97,7 +97,7 @@ func TestProductionOffersAndConfirmsPendingMarketAuthorizations(t *testing.T) {
 	if err := mutate(5, waiting.Installation.VerificationID); !errors.Is(err, ErrRevisionConflict) || len(resolver.confirmed) != 0 {
 		t.Fatalf("stale revision err=%v confirms=%d", err, len(resolver.confirmed))
 	}
-	if err := mutate(1, uuid.New()); !errors.Is(err, ErrFactDenied) || len(resolver.confirmed) != 0 {
+	if err := mutate(1, uuid.New()); !errors.Is(err, ErrApprovalStale) || len(resolver.confirmed) != 0 {
 		t.Fatalf("other verification err=%v confirms=%d", err, len(resolver.confirmed))
 	}
 	// The license confirmation goes first; the install then resolves against the confirmed revision.

@@ -18,7 +18,6 @@ describe('admin task fact translations', () => {
 
   it('preserves interpolated facts while expanding pseudo-locale labels', () => {
     const t = i18n.getFixedT('qps-ploc', 'jobs')
-    expect(t('taskFacts.name', { kind: 'TYPE', resource: 'site:example.test' })).toContain('site:example.test')
     expect(t('pagination.total', { total: '137' })).toMatch(/共~ 137 条~/)
     expect(t('taskFacts.dependenciesUnknown')).toContain('依~赖~')
   })

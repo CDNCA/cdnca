@@ -76,7 +76,61 @@ var (
 	ErrPlatformManaged = errors.New("plugin installation managed by the platform administrator")
 	// ErrTargetsInvalid: tenant plugin targets missing, malformed, or naming a scope that is not a tenant.
 	ErrTargetsInvalid = errors.New("plugin installation targets invalid")
+	// ErrRequiredScopesMissing: a pending market authorization is confirmed with only part of the scopes the
+	// platform approved; the license service confirms exactly the approved set (RefusedScopes lists the missing ones).
+	ErrRequiredScopesMissing = errors.New("plugin installation required scopes missing")
+	// ErrScopeNotApproved: the confirmation names scopes the platform did not approve (RefusedScopes lists them).
+	ErrScopeNotApproved = errors.New("plugin installation scope not approved")
+	// ErrApprovalStale: the confirmation is for a version or state the license service no longer waits for.
+	ErrApprovalStale = errors.New("plugin installation approval stale")
 )
+
+// scopeRefusal carries the scope codes of a scope-set refusal (never anything else) to the error response.
+type scopeRefusal struct {
+	err    error
+	scopes []string
+}
+
+func (refusal scopeRefusal) Error() string { return refusal.err.Error() }
+func (refusal scopeRefusal) Unwrap() error { return refusal.err }
+
+// RefusedScopes returns the scope codes of an ErrRequiredScopesMissing / ErrScopeNotApproved refusal, or nil.
+func RefusedScopes(err error) []string {
+	var refusal scopeRefusal
+	if errors.As(err, &refusal) {
+		return append([]string{}, refusal.scopes...)
+	}
+	return nil
+}
+
+// requirePendingApproval checks a confirmation of a pending market authorization against the synced candidate
+// before it goes to the license service, which confirms exactly the approved scope set with the sensitive and new
+// permission confirmations it presents (license plugin_installation_controller_confirm.go).
+func requirePendingApproval(target InstallationView, request MutationRequest) error {
+	approved := target.Installation.ApprovedScopes
+	if extra := scopesNotIn(request.ApprovedScopes, approved); len(extra) > 0 {
+		return scopeRefusal{err: ErrScopeNotApproved, scopes: extra}
+	}
+	if missing := scopesNotIn(approved, request.ApprovedScopes); len(missing) > 0 {
+		return scopeRefusal{err: ErrRequiredScopesMissing, scopes: missing}
+	}
+	if len(target.Installation.SensitiveScopes) > 0 && !request.SensitivePermissionsConfirmed ||
+		len(target.NewScopes) > 0 && !request.NewPermissionsConfirmed {
+		return ErrConsentRequired
+	}
+	return nil
+}
+
+// scopesNotIn returns the scopes of values (canonical order) missing from the canonical set allowed.
+func scopesNotIn(values, allowed []string) []string {
+	var out []string
+	for _, value := range values {
+		if _, found := slices.BinarySearch(allowed, value); !found {
+			out = append(out, value)
+		}
+	}
+	return out
+}
 
 // Targets is the tenants a platform-confirmed tenant plugin is installed for (control migration 636): every
 // tenant (including tenants created later), or the listed tenant scopes.
@@ -217,6 +271,12 @@ func ErrorCode(err error) string {
 		return "plugin_installation_revision_conflict"
 	case errors.Is(err, ErrIdempotencyConflict):
 		return "plugin_installation_idempotency_conflict"
+	case errors.Is(err, ErrRequiredScopesMissing):
+		return "plugin_installation_required_scopes_missing"
+	case errors.Is(err, ErrScopeNotApproved):
+		return "plugin_installation_scope_not_approved"
+	case errors.Is(err, ErrApprovalStale):
+		return "plugin_installation_approval_stale"
 	case errors.Is(err, ErrConsentRequired), errors.Is(err, ErrFactRequired), errors.Is(err, ErrFactDenied):
 		return "plugin_installation_scope_approval_required"
 	case errors.Is(err, ErrPlatformPaused):

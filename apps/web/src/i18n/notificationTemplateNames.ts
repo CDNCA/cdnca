@@ -8,6 +8,7 @@
 export const notificationTemplateNames: Record<string, string> = {
   account_login_verification: '登录验证码',
   account_registration_verification: '注册验证码',
+  account_recovery_email: '找回密码（默认）',
   'acme.http01.epoch_drift': 'HTTP-01 证书验证期间节点暂不参与解析',
   'aggregated_edge.schedule.alert': '聚合边缘调度告警',
   'aggregated_edge.tenant.switch': '网站线路自动切换',
@@ -115,6 +116,7 @@ export const notificationTemplateNames: Record<string, string> = {
   'security.jwt_key_set.fetch_failing': '令牌校验：密钥集拉取失败',
   'security.jwt_key_set.fetch_recovered': '令牌校验：密钥集已恢复拉取',
   'site.origin.failover': '回源切换',
+  'site.origin.failover.hold': '全部源站不可用，保持当前回源级别',
   'site.origin.recovered': '源站已恢复',
   tenant_member_invitation: '账号成员邀请',
   ticket_created: '工单已提交',

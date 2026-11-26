@@ -11,8 +11,8 @@ import (
 
 	"github.com/cdnca/cdnca/libs/edgeconfig/artifactset"
 	"github.com/cdnca/cdnca/libs/entitlement/artifactcatalog"
-	"github.com/cdnca/cdnca/libs/entitlement/ipintel"
 	"github.com/cdnca/cdnca/libs/entitlement/enginemodule"
+	"github.com/cdnca/cdnca/libs/entitlement/ipintel"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/artifactsync"
 	"github.com/google/uuid"

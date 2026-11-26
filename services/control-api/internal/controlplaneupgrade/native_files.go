@@ -25,34 +25,40 @@ func (executor *nativeExecutor) current() (Artifact, NativeManifest, error) {
 	target, err := os.Readlink(filepath.Join(executor.config.ReleaseRoot, "current"))
 	if err != nil || !filepath.IsAbs(target) || filepath.Dir(target) != filepath.Join(executor.config.ReleaseRoot, "releases") ||
 		!digestPattern.MatchString(filepath.Base(target)) || nativeOwnedDirectory(target, executor.owner) != nil {
-		return Artifact{}, NativeManifest{}, ErrTargetMismatch
+		return Artifact{}, NativeManifest{}, nativeReleaseMismatch("current_link", "current")
 	}
 	filename := filepath.Join(executor.config.ReleaseRoot, "artifacts", filepath.Base(target)+".tar")
 	info, err := os.Lstat(filename)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > nativeArchiveLimit {
-		return Artifact{}, NativeManifest{}, ErrTargetMismatch
+		return Artifact{}, NativeManifest{}, nativeReleaseMismatch("archive_missing", filepath.Base(filename))
 	}
 	encoded, err := nativeReadRegular(filepath.Join(target, NativeManifestFilename), executor.owner, nativeManifestLimit)
 	var manifest NativeManifest
 	if err != nil || decodeNativeJSON(encoded, &manifest) != nil {
-		return Artifact{}, NativeManifest{}, ErrTargetMismatch
+		return Artifact{}, NativeManifest{}, nativeReleaseMismatch("manifest_unreadable", NativeManifestFilename)
 	}
 	artifact := Artifact{Version: manifest.Version, Digest: filepath.Base(target), Size: info.Size()}
 	verified, err := executor.verifyArtifact(artifact)
 	return artifact, verified, err
 }
 
+// nativeReleaseMismatch names the first failed check of a release directory
+// for operators; callers still match ErrTargetMismatch with errors.Is.
+func nativeReleaseMismatch(check, path string) error {
+	return fmt.Errorf("%w: %s %s", ErrTargetMismatch, check, filepath.ToSlash(path))
+}
+
 func (executor *nativeExecutor) verifyArtifact(artifact Artifact) (NativeManifest, error) {
 	filename := filepath.Join(executor.config.ReleaseRoot, "artifacts", artifact.Digest+".tar")
 	if !executor.ownedArchive(filename) {
-		return NativeManifest{}, ErrTargetMismatch
+		return NativeManifest{}, nativeReleaseMismatch("archive_not_owned", filepath.Base(filename))
 	}
 	manifest, err := validateNativeReleaseArchive(filename, artifact, executor.platform, executor.config.ArtifactPublicKeys)
 	if err != nil {
-		return NativeManifest{}, err
+		return NativeManifest{}, fmt.Errorf("archive_invalid %s: %w", filepath.Base(filename), err)
 	}
 	if manifest.Schema == NativeManifestSchema && executor.config.SourceGitDirectory == "" {
-		return NativeManifest{}, ErrTargetMismatch
+		return NativeManifest{}, nativeReleaseMismatch("unsigned_without_source", NativeManifestFilename)
 	}
 	if err := executor.verifyDirectory(executor.release(artifact), manifest); err != nil {
 		return NativeManifest{}, err
@@ -98,7 +104,7 @@ func (executor *nativeExecutor) verifyDirectory(directory string, manifest Nativ
 	var physicalManifest NativeManifest
 	if err != nil || manifestErr != nil || manifestInfo.Mode().Perm() != 0o644 ||
 		decodeNativeJSON(encoded, &physicalManifest) != nil || !reflect.DeepEqual(physicalManifest, manifest) {
-		return ErrTargetMismatch
+		return nativeReleaseMismatch("manifest_differs", NativeManifestFilename)
 	}
 	if manifest.Schema == NativeManifestSchema {
 		var members map[string]json.RawMessage
@@ -115,7 +121,7 @@ func (executor *nativeExecutor) verifyDirectory(directory string, manifest Nativ
 		info, statErr := os.Lstat(signaturePath)
 		if err != nil || statErr != nil || info.Mode().Perm() != 0o644 ||
 			verifyNativeManifestSignature(manifest, encoded, signature, executor.config.ArtifactPublicKeys) != nil {
-			return ErrTargetMismatch
+			return nativeReleaseMismatch("signature_invalid", NativeSignatureFilename)
 		}
 	}
 	expected := make(map[string]NativeFile, len(manifest.Files))
@@ -124,15 +130,18 @@ func (executor *nativeExecutor) verifyDirectory(directory string, manifest Nativ
 	}
 	seen := 0
 	err = filepath.WalkDir(directory, func(filename string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil || entry.Type()&os.ModeSymlink != 0 {
-			return ErrTargetMismatch
-		}
-		if entry.IsDir() {
-			return nativeOwnedDirectory(filename, executor.owner)
-		}
 		relative, err := filepath.Rel(directory, filename)
 		if err != nil {
 			return err
+		}
+		if walkErr != nil || entry.Type()&os.ModeSymlink != 0 {
+			return nativeReleaseMismatch("unreadable_or_symlink", relative)
+		}
+		if entry.IsDir() {
+			if nativeOwnedDirectory(filename, executor.owner) != nil {
+				return nativeReleaseMismatch("directory_not_owned", relative)
+			}
+			return nil
 		}
 		if relative == NativeManifestFilename {
 			return nil
@@ -142,28 +151,31 @@ func (executor *nativeExecutor) verifyDirectory(directory string, manifest Nativ
 		}
 		file, exists := expected[filepath.ToSlash(relative)]
 		if !exists {
-			return ErrTargetMismatch
+			return nativeReleaseMismatch("file_not_in_manifest", relative)
 		}
 		info, err := entry.Info()
 		if err != nil || uint32(info.Mode().Perm()) != file.Mode || info.Size() != file.Bytes {
-			return ErrTargetMismatch
+			return nativeReleaseMismatch("file_mode_or_size_differs", relative)
 		}
 		stat, ok := infoSysStat(info)
 		if !ok || stat.Uid != executor.owner || stat.Nlink != 1 || !info.Mode().IsRegular() {
-			return ErrTargetMismatch
+			return nativeReleaseMismatch("file_not_owned", relative)
 		}
 		if file.Bytes == 0 {
 			if file.SHA256 != digestBytes(nil) {
-				return ErrTargetMismatch
+				return nativeReleaseMismatch("file_digest_differs", relative)
 			}
 		} else if digest, size, err := digestRegularFile(filename, file.Bytes); err != nil || size != file.Bytes || digest != file.SHA256 {
-			return ErrTargetMismatch
+			return nativeReleaseMismatch("file_digest_differs", relative)
 		}
 		seen++
 		return nil
 	})
-	if err != nil || seen != len(manifest.Files) {
-		return ErrTargetMismatch
+	if err != nil {
+		return err
+	}
+	if seen != len(manifest.Files) {
+		return nativeReleaseMismatch("manifest_file_missing", ".")
 	}
 	for _, name := range []string{"bin/control-api", "bin/agent-gateway"} {
 		file, err := elf.Open(filepath.Join(directory, name))

@@ -15,6 +15,9 @@ func TestMaintenanceControlRuntimeUsesRealReadOnlyProbe(t *testing.T) {
 		{"unconfirmed", func(context.Context) MaintenanceRuntimeState {
 			return MaintenanceRuntimeState{Reason: "control_upgrade_runner_unconfirmed"}
 		}, MaintenanceRuntimeState{Reason: "control_upgrade_runner_unconfirmed"}},
+		{"current release unverified", func(context.Context) MaintenanceRuntimeState {
+			return MaintenanceRuntimeState{Reason: "control_upgrade_current_release_unverified"}
+		}, MaintenanceRuntimeState{Reason: "control_upgrade_current_release_unverified"}},
 		{"ready", func(context.Context) MaintenanceRuntimeState {
 			return MaintenanceRuntimeState{Ready: true, Reason: "ready"}
 		}, MaintenanceRuntimeState{Ready: true, Reason: "ready"}},

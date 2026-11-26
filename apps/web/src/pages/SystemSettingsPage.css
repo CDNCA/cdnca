@@ -96,6 +96,12 @@
   display: none;
 }
 
+/* 内层页签现在挂在外层（全局/区域）的 tabpanel 里，外层的
+   「.configuration-scope-tabs .ant-tabs-nav::before { display: none }」会连带隐藏内层页签栏的底线，这里恢复。 */
+.configuration-detail-tabset.configuration-detail-tabs > .ant-tabs-nav::before {
+  display: block;
+}
+
 .configuration-section-intro {
   margin: 0 2px 16px;
   padding-left: 10px;
@@ -141,6 +147,11 @@
 @media (min-width: 768px) {
   .system-settings-category-nginx .configuration-detail-tabs + .configuration-section-intro,
   .system-settings-category-resources .configuration-detail-tabs + .configuration-section-intro {
+    margin-top: 20px;
+  }
+
+  /* 小节标题进了内层 tabpanel，不再是页签的相邻兄弟；Nginx/资源配置的标题上边距按面板首个子元素补上。 */
+  .configuration-detail-tabset--intro .ant-tabs-tabpane > .configuration-section-intro:first-child {
     margin-top: 20px;
   }
 
@@ -1458,6 +1469,10 @@
     margin-top: 16px;
   }
 
+  .configuration-detail-tabset--intro .ant-tabs-tabpane > .configuration-section-intro:first-child {
+    margin-top: 16px;
+  }
+
   .system-settings-category-nginx .configuration-card-grid {
     width: calc(100% - 4px);
     margin-inline: 2px;
@@ -1680,4 +1695,15 @@
   display: inline-block;
   min-width: 28px;
   white-space: nowrap;
+}
+
+/* 本分类已保存未生效时的一行状态与启用入口，替代常驻说明横幅。 */
+.configuration-current-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+  color: var(--cdnca-color-text-secondary, #808695);
+  font-size: 13px;
 }

@@ -165,7 +165,7 @@ export function buildNativeUpgradeRunner(source, destination, arch) {
 }
 
 // Static Ed25519 tool: one reproducible build (tools/ed25519-tool/build.sh) whose
-// SHA-256 must equal the pin in the committed installers before it can ship.
+// must equal the pin in the committed installers before it can ship.
 export function nativeEd25519ToolPin(source) {
   const pin = /^readonly CDNCA_ED25519_TOOL_SHA256="([a-f0-9]{64})"$/m.exec(fs.readFileSync(path.join(source, 'scripts/install-node.sh'), 'utf8'))?.[1]
   if (!pin) throw new Error('installer Ed25519 tool pin is missing')

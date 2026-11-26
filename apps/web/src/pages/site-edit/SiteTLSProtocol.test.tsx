@@ -317,7 +317,8 @@ describe('site TLS protocol contract', () => {
       </QueryClientProvider>,
     )
 
-    expect(screen.getByText('正常', { selector: '.ant-tag' })).toBeInTheDocument()
+    // basic.status 是站点开关，不译成“正常”。
+    expect(screen.getByText('站点已启用', { selector: '.ant-tag' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '复制 CNAME' })).not.toBeInTheDocument()
     // 「更改CNAME」已是真实的 CNAME 修改弹窗（需要 DNS 管理权限），不再走 onBlockedAction 占位。
     const changeButton = screen.getByRole('button', { name: '更改CNAME' })

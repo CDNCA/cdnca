@@ -3,7 +3,10 @@ package accountregistrationproof
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const CookieName = "__Host-cdnca_registration_proof"
@@ -48,51 +51,101 @@ func ClearReferenceCookie() *http.Cookie {
 }
 
 // several verifications can be required at once, so each
-// verified channel gets its own cookie (CookieName + "_" + channel); the
-// single legacy cookie is still read as a one-channel proof.
+// verified channel gets its own cookie; the single legacy cookie is still
+// read as a one-channel proof. the cookie is
+// also per challenge (CookieName + "_" + channel + "_" + challenge id), so
+// two sign-up tabs of one browser keep their own proofs, and registration
+// names the challenge of each channel. The per-channel name without a
+// challenge (issued before) is still read.
 
-// ChannelCookieName is the proof cookie of one channel (email / sms).
-func ChannelCookieName(channel string) string { return CookieName + "_" + channel }
+// ChannelCookieName is the proof cookie of one verified challenge.
+func ChannelCookieName(channel string, challengeID uuid.UUID) string {
+	return CookieName + "_" + channel + "_" + challengeID.String()
+}
 
-// NewChannelReferenceCookie is NewReferenceCookie for one channel.
-func NewChannelReferenceCookie(channel, reference string, expiresAt time.Time) (*http.Cookie, error) {
-	if channel != "email" && channel != "sms" {
+// NewChannelReferenceCookie is NewReferenceCookie for one verified challenge.
+func NewChannelReferenceCookie(channel string, challengeID uuid.UUID, reference string, expiresAt time.Time) (*http.Cookie, error) {
+	if channel != "email" && channel != "sms" || challengeID == uuid.Nil {
 		return nil, ErrInvalidReference
 	}
 	cookie, err := NewReferenceCookie(reference, expiresAt)
 	if err != nil {
 		return nil, err
 	}
-	cookie.Name = ChannelCookieName(channel)
+	cookie.Name = ChannelCookieName(channel, challengeID)
 	return cookie, nil
 }
 
+// channelCookie parses a per-channel proof cookie name: its channel and
+// challenge id ("" for the name without one).
+func channelCookie(name string) (channel, challenge string, ok bool) {
+	rest, found := strings.CutPrefix(name, CookieName+"_")
+	if !found {
+		return "", "", false
+	}
+	channel, challenge, _ = strings.Cut(rest, "_")
+	if channel != "email" && channel != "sms" {
+		return "", "", false
+	}
+	if challenge != "" {
+		id, err := uuid.Parse(challenge)
+		if err != nil || id == uuid.Nil || id.String() != challenge {
+			return "", "", false
+		}
+	}
+	return channel, challenge, true
+}
+
 // ResolveProofReferences returns the legacy reference ("" when absent) and
-// the per-channel references. A duplicated or malformed cookie fails; no
-// cookie at all fails too.
-func (CookieReferenceResolver) ResolveProofReferences(request *http.Request) (string, map[string]string, error) {
+// the per-channel references. A channel named in challenges takes the cookie
+// of that challenge only; a channel not named takes its one cookie, none
+// when the browser holds several (another tab's). A duplicated or malformed
+// cookie fails; no cookie at all fails too.
+func (CookieReferenceResolver) ResolveProofReferences(request *http.Request, challenges map[string]uuid.UUID) (string, map[string]string, error) {
 	if request == nil {
 		return "", nil, ErrInvalidReference
 	}
-	names := map[string]string{CookieName: "", ChannelCookieName("email"): "email", ChannelCookieName("sms"): "sms"}
-	seen := map[string]int{}
-	legacy, channels := "", map[string]string{}
+	seen := map[string]bool{}
+	legacy, named, unnamed := "", map[string]string{}, map[string][]string{}
 	for _, cookie := range request.Cookies() {
-		channel, known := names[cookie.Name]
-		if !known {
+		channel, challenge, known := channelCookie(cookie.Name)
+		if !known && cookie.Name != CookieName {
 			continue
 		}
-		if seen[cookie.Name]++; seen[cookie.Name] > 1 || !validReference(cookie.Value) {
+		if seen[cookie.Name] || !validReference(cookie.Value) {
 			return "", nil, ErrInvalidReference
 		}
-		if channel == "" {
+		seen[cookie.Name] = true
+		switch want, ok := challenges[channel]; {
+		case !known:
 			legacy = cookie.Value
-		} else {
-			channels[channel] = cookie.Value
+		case ok:
+			if challenge == want.String() {
+				named[channel] = cookie.Value
+			}
+		default:
+			unnamed[channel] = append(unnamed[channel], cookie.Value)
+		}
+	}
+	channels := named
+	for channel, references := range unnamed {
+		if len(references) == 1 {
+			channels[channel] = references[0]
 		}
 	}
 	if legacy == "" && len(channels) == 0 {
 		return "", nil, ErrInvalidReference
 	}
 	return legacy, channels, nil
+}
+
+// ValidChallengeIDs: the verification_challenge_ids of a registration name
+// only email / sms, each a challenge id.
+func ValidChallengeIDs(challenges map[string]uuid.UUID) bool {
+	for channel, id := range challenges {
+		if channel != "email" && channel != "sms" || id == uuid.Nil {
+			return false
+		}
+	}
+	return true
 }

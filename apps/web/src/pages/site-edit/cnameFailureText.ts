@@ -13,13 +13,14 @@ export function cnameFailureText(
   admin = true,
 ): string {
   if (!admin && cnameFailureNeedsLine(code)) return t('tenantFailures.line')
-  // 原文指向“节点管理 → DNS配置”的平台侧原因；其余原因不含菜单路径，照常显示具体原因。
-  if (!admin && (code === 'dns_provider_not_configured' || code === 'cname_no_default_zone' ||
-    (code === 'cname_zone_not_configured' && !domain))) return t('tenantFailures.platform')
   if (!code) return t('failures.unknown')
-  if (code === 'cname_zone_not_configured' && !domain) return t('failures.cname_zone_not_configured_default')
-  const key = `failures.${code}`
-  return exists(`siteCnameRegeneration:${key}`) ? t(key as 'failures.unknown', { domain: domain ?? '' }) : t('failures.unknown')
+  const key = code === 'cname_zone_not_configured' && !domain ? 'cname_zone_not_configured_default' : code
+  // 平台侧原因给普通用户一句具体原因 + 联系管理员，不写他进不去的菜单路径。
+  if (!admin && cnameFailureNeedsPlatform(code)) {
+    return exists(`siteCnameRegeneration:tenantFailures.${key}`)
+      ? t(`tenantFailures.${key}` as 'tenantFailures.platform', { domain: domain ?? '' }) : t('tenantFailures.platform')
+  }
+  return exists(`siteCnameRegeneration:failures.${key}`) ? t(`failures.${key}` as 'failures.unknown', { domain: domain ?? '' }) : t('failures.unknown')
 }
 
 // Failure codes fixed under 节点管理 > DNS配置 (/node/dns).
@@ -31,10 +32,22 @@ export function cnameFailureNeedsDnsConfig(code: string | null | undefined): boo
 
 export const dnsConfigPath = '/node/dns'
 
+// 套餐没有 CNAME 域名——管理员去套餐管理给套餐选 CNAME 域名。
+export function cnameFailureNeedsPackage(code: string | null | undefined): boolean {
+  return code === 'cname_package_domain_missing'
+}
+
 // FLOW001：缺可用线路（平台默认线路组 / 套餐线路组或其节点）——管理员去线路组处理。
 const lineCodes = new Set(['cname_no_default_line_group', 'node_group_unavailable', 'node_targets_unavailable'])
 // 平台侧 DNS / CNAME 域名缺失——普通用户只能联系管理员。
-const platformCodes = new Set([...dnsConfigCodes, 'cname_no_default_zone', 'platform_dns_sync_failed', 'domain_blocked'])
+const platformCodes = new Set([...dnsConfigCodes, 'cname_package_domain_missing', 'cname_no_default_zone', 'platform_dns_sync_failed', 'domain_blocked'])
+// 管理员改好 DNS 配置或套餐后服务端会自动重新生成（dnsacme CNAMERecoverableFailureCodes、套餐 CNAME 同步），
+// 普通用户重试也只会得到同样的失败——不给他“重新生成”。
+const tenantBlockedCodes = new Set([...dnsConfigCodes, 'cname_package_domain_missing', 'platform_dns_sync_failed'])
+
+export function cnameRegenerateBlockedForTenant(code: string | null | undefined): boolean {
+  return !!code && tenantBlockedCodes.has(code)
+}
 
 export function cnameFailureNeedsLine(code: string | null | undefined): boolean {
   return !!code && lineCodes.has(code)

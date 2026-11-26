@@ -27,8 +27,10 @@ func NewEmailLayout(pool *pgxpool.Pool) *EmailLayout {
 }
 
 // Render returns the themed HTML for subject and a plain-text body, or false.
-// recipientScopeID is the recipient's access scope (uuid.Nil: platform theme).
-func (layout *EmailLayout) Render(ctx context.Context, recipientScopeID uuid.UUID, subject, body string) ([]byte, bool) {
+// recipientScopeID is the recipient's access scope (uuid.Nil: platform theme);
+// action is the link the mail carries (zero: none), passed to the
+// template apart from the body.
+func (layout *EmailLayout) Render(ctx context.Context, recipientScopeID uuid.UUID, subject, body string, action EmailAction) ([]byte, bool) {
 	if layout == nil || layout.pool == nil {
 		return nil, false
 	}
@@ -37,7 +39,7 @@ func (layout *EmailLayout) Render(ctx context.Context, recipientScopeID uuid.UUI
 		return nil, false
 	}
 	lines := strings.Split(strings.ReplaceAll(strings.ReplaceAll(body, "\r\n", "\n"), "\r", "\n"), "\n")
-	page, err := rendered.RenderEmail(subject, lines)
+	page, err := rendered.RenderEmailAction(subject, lines, action)
 	if err != nil {
 		return nil, false
 	}

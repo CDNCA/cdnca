@@ -240,6 +240,6 @@ func (p *Publisher) trustedRecord(publication eventspool.Publication, summary ev
 		Kind: summary.Type, MessageID: publication.MessageID,
 		FirstSequence: publication.FirstSequence, LastSequence: publication.LastSequence,
 		LastEventID: publication.LastEventID, EventCount: publication.EventCount,
-		Payload: append([]byte(nil), publication.Payload...), siteID: summary.SiteID, trusted: true,
+		Payload: append([]byte(nil), publication.Payload...), siteID: summary.SiteID, configVersionID: summary.ConfigVersionID, trusted: true,
 	}, nil
 }

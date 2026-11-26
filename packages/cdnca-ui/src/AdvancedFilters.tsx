@@ -17,6 +17,8 @@ export interface AdvancedFilterItem {
   applied?: string
   /** Takes two grid columns (e.g. match mode + value). */
   wide?: boolean
+  /** The field shows its own visible label (a checkbox): the grid does not repeat it above. */
+  selfLabelled?: boolean
 }
 
 export interface AdvancedFiltersProps {
@@ -45,6 +47,10 @@ export interface AdvancedFiltersProps {
   /** The query button's text and icon when the page calls it something else (e.g. 刷新 on a live list). */
   queryText?: ReactNode
   queryIcon?: ReactNode
+  /** Keys of items whose field shows an error: the panel opens in the same render so the error can be read and focused. */
+  invalid?: readonly string[]
+  /** The page applies each advanced field as it changes: the panel has no 应用 button (only 清空高级条件). */
+  instant?: boolean
 }
 
 const texts = {
@@ -87,7 +93,7 @@ function CloseIcon() {
 }
 
 export function AdvancedFilters({
-  primary, items, onQuery, onReset, onClearAdvanced, onRemove, extra, storageKey, columns = 3, className, queryLoading, queryDisabled, queryText, queryIcon, defaultOpen, onOpenChange,
+  primary, items, onQuery, onReset, onClearAdvanced, onRemove, extra, storageKey, columns = 3, className, queryLoading, queryDisabled, queryText, queryIcon, defaultOpen, onOpenChange, invalid, instant,
 }: AdvancedFiltersProps) {
   const text = useTexts()
   const panelId = useId()
@@ -96,6 +102,13 @@ export function AdvancedFilters({
   const panelRef = useRef<HTMLDivElement>(null)
   const focusPanel = useRef(false)
   const active = items.filter((item) => item.applied?.trim())
+  const forced = Boolean(invalid?.some((key) => items.some((item) => item.key === key)))
+  // An invalid field keeps the panel open; it stays open after the field is corrected.
+  useEffect(() => {
+    if (forced && !open) changeOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forced])
+  const shown = open || forced
 
   const changeOpen = (next: boolean) => {
     setOpen(next)
@@ -126,7 +139,7 @@ export function AdvancedFilters({
   }
 
   return (
-    <div className={['cdnca-adv-filters', open ? 'is-open' : '', className].filter(Boolean).join(' ')}>
+    <div className={['cdnca-adv-filters', shown ? 'is-open' : '', className].filter(Boolean).join(' ')}>
       <div className="cdnca-adv-filters-bar">
         <div className="cdnca-adv-filters-primary">{primary}</div>
         <div className="cdnca-adv-filters-actions">
@@ -137,9 +150,9 @@ export function AdvancedFilters({
             ref={toggleRef}
             type="button"
             className={['cdnca-adv-filters-toggle', active.length ? 'has-active' : ''].filter(Boolean).join(' ')}
-            aria-expanded={open}
+            aria-expanded={shown}
             aria-controls={panelId}
-            onClick={() => { focusPanel.current = !open; changeOpen(!open) }}
+            onClick={() => { focusPanel.current = !shown; changeOpen(!shown) }}
           >
             <span>{active.length ? `${text.advanced} · ${active.length}` : text.advanced}</span>
             <ChevronIcon />
@@ -147,18 +160,24 @@ export function AdvancedFilters({
         </div>
         {extra ? <div className="cdnca-adv-filters-extra">{extra}</div> : null}
       </div>
-      <div ref={panelRef} id={panelId} role="group" aria-label={text.advanced} className="cdnca-adv-filters-panel" hidden={!open || !items.length} onKeyDown={onPanelKeyDown}>
+      <div ref={panelRef} id={panelId} role="group" aria-label={text.advanced} className="cdnca-adv-filters-panel" hidden={!shown || !items.length} onKeyDown={onPanelKeyDown}>
         <div className={`cdnca-adv-filters-grid cdnca-adv-filters-grid-${columns}`}>
           {items.map((item) => (
             <div key={item.key} className={item.wide ? 'cdnca-adv-filters-field is-wide' : 'cdnca-adv-filters-field'}>
-              <span className="cdnca-adv-filters-label">{item.label}</span>
+              {item.selfLabelled ? null : <span className="cdnca-adv-filters-label">{item.label}</span>}
               {item.field}
             </div>
           ))}
         </div>
         <div className="cdnca-adv-filters-panel-footer">
-          <Button type="link" disabled={!active.length} onClick={onClearAdvanced}>{text.clear}</Button>
-          <Button type="primary" disabled={queryDisabled} onClick={onQuery}>{text.apply}</Button>
+          {/* The button disables once nothing is applied: focus goes to the first editable field, not BODY
+             . */}
+          <Button type="link" disabled={!active.length} onClick={() => {
+            onClearAdvanced()
+            const first = panelRef.current?.querySelector('.cdnca-adv-filters-grid')?.querySelector<HTMLElement>(focusable)
+            if (first) first.focus(); else toggleRef.current?.focus()
+          }}>{text.clear}</Button>
+          {instant ? null : <Button type="primary" disabled={queryDisabled} onClick={onQuery}>{text.apply}</Button>}
         </div>
       </div>
       {active.length ? (

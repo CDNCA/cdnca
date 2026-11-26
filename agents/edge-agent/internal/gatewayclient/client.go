@@ -150,6 +150,11 @@ type Client struct {
 	// stableSession: how long an established session must stay up before
 	// its end resets the reconnect backoff (defaultStableSession)
 	stableSession time.Duration
+	// runCtx is Run's context (the client's lifetime): a dynamic routing
+	// activation follows it, not the Gateway session (activationContext).
+	runCtx context.Context
+	// sessionLossGrace bounds an activation a lost session left running.
+	sessionLossGrace time.Duration
 
 	// siteObjects is the object store of site_runtime 9 deployments.
 	siteObjects       *objectstore.Store
@@ -274,7 +279,7 @@ func New(config Config, dialer Dialer, manager DeploymentManager, trust *TrustSt
 		jitter: func(duration time.Duration) time.Duration {
 			return time.Duration(float64(duration) * (0.8 + rand.Float64()*0.4))
 		},
-		stableSession: defaultStableSession,
+		stableSession: defaultStableSession, sessionLossGrace: defaultSessionLossGrace,
 	}
 	for _, option := range options {
 		if option == nil {
@@ -1344,6 +1349,7 @@ func (c *Client) Run(ctx context.Context) error {
 	c.running = true
 	c.runCancel = cancel
 	c.runDone = done
+	c.runCtx = runCtx
 	c.lifecycleMu.Unlock()
 	defer func() {
 		cancel()
@@ -1994,10 +2000,19 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 	}
 	heartbeatEvents := make(map[string]heartbeatEvent)
 	var heartbeatCausationID string
+	// a live capability change while the worker
+	// runs a deployment (the first skeleton makes ACME_HTTP01_OVERLAY ready
+	// during the activation that wrote it) is declared once that deployment's
+	// terminal statuses are sent: nothing new is dispatched meanwhile, and
+	// the activation is not cut off by the reconnect. The next item is only
+	// dispatched once the previous one's result was read here: workResults
+	// buffers one result, so the worker could otherwise start B before A's
+	// result cleared workerBusy, leaving B's activation unprotected.
+	workerBusy, redeclarePending := false, false
 	for {
 		var nextWork chan workItem
 		var nextItem workItem
-		if len(pending) > 0 {
+		if len(pending) > 0 && !redeclarePending && !workerBusy {
 			nextWork = work
 			nextItem = pending[0]
 		}
@@ -2018,15 +2033,24 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			return true, ctx.Err()
 		case <-c.liveCapabilityChanged():
 			if c.liveCapabilityStale() {
+				if workerBusy {
+					redeclarePending = true
+					continue
+				}
 				// The hello no longer says what the node runs: reconnect now
 				// (unfinished work stays in the journal and is resumed).
 				return true, errLiveCapabilityChanged
 			}
 		case <-livePoll:
 			if c.liveCapabilityStale() {
+				if workerBusy {
+					redeclarePending = true
+					continue
+				}
 				return true, errLiveCapabilityChanged
 			}
 		case nextWork <- nextItem:
+			workerBusy = true
 			pending = pending[1:]
 			if _, scoped := pendingScopeKeys[nextItem]; scoped {
 				delete(pendingScopeKeys, nextItem)
@@ -2039,6 +2063,7 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 		case nextUpgradeWork <- nextUpgradeItem:
 			upgradePending = upgradePending[1:]
 		case result := <-workResults:
+			workerBusy = false
 			delete(inFlight, result.item)
 			if result.err != nil {
 				return true, result.err
@@ -2068,6 +2093,12 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			}
 			if err != nil {
 				return true, err
+			}
+			if redeclarePending {
+				if c.liveCapabilityStale() {
+					return true, errLiveCapabilityChanged
+				}
+				redeclarePending = false
 			}
 		case result := <-cacheWorkResults:
 			delete(cacheInFlight, result.item)

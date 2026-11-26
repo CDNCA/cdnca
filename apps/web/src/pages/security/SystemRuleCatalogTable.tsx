@@ -1,8 +1,8 @@
 import { useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Input, Select, Switch, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, Select, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useSearchParams } from 'react-router-dom'
-import { useFeedbackMessage, useFeedback } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -50,8 +50,21 @@ export function useSystemRules(accessToken: string, kind: SystemRuleKind, cacheK
 
 // CCWAF-09: the catalog is folded by default; the open state lives in the URL
 // (survives a refresh, can be linked) instead of local storage.
-const catalogParam = 'system_rules'
+export const catalogParam = 'system_rules'
 const pageSize = 10
+
+/** The page's filters applied to the catalog block (CC 规则组): name/ID search and
+ * 显示/禁用, where enabled is what /v1/cc-rule-groups/summary counts as visible. */
+export type SystemRuleFilter = { search: string; id: string; enabled?: boolean }
+
+export function filterSystemRules(rules: SystemRule[], filter: SystemRuleFilter): SystemRule[] {
+  const needle = filter.search.trim().toLowerCase()
+  const id = filter.id.trim().toLowerCase()
+  return rules.filter((rule) =>
+    (!needle || [rule.name, rule.legacy_id, rule.system_key].some((value) => value?.toLowerCase().includes(needle))) &&
+    (!id || [rule.legacy_id, rule.system_key].some((value) => value?.toLowerCase().includes(id))) &&
+    (filter.enabled === undefined || rule.enabled === filter.enabled))
+}
 
 /**
  * Show-to picker for platform admins: searches tenants by name (or display
@@ -103,12 +116,16 @@ function ShowToSelect({ accessToken, cacheKey, value, disabled, ariaLabel, onCha
  * to whom) it is shown. Withdrawn rules stay listed, frozen, and cannot be
  * newly enabled.
  */
-export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, isAdmin, canManage }: {
+export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, isAdmin, canManage, filter: pageFilter, open: pageOpen, onOpenChange }: {
   accessToken: string
   kind: SystemRuleKind
   cacheKey: string
   isAdmin: boolean
   canManage: boolean
+  filter?: SystemRuleFilter
+  /** Page-held open state (the page writes it to the URL with its filters). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const { t, i18n } = useTranslation('securityPolicies')
   const tokenRef = useRef(accessToken)
@@ -118,8 +135,9 @@ export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, is
   const feedback = useFeedback()
   const query = useSystemRules(accessToken, kind, cacheKey)
   const [searchParams, setSearchParams] = useSearchParams()
-  const open = searchParams.get(catalogParam) === 'open'
+  const open = pageOpen ?? searchParams.get(catalogParam) === 'open'
   const setOpen = (next: boolean) => {
+    if (onOpenChange) return onOpenChange(next)
     const params = new URLSearchParams(searchParams)
     if (next) params.set(catalogParam, 'open')
     else params.delete(catalogParam)
@@ -128,6 +146,10 @@ export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, is
   const bodyID = useId()
   const [filter, setFilter] = useState('')
   const [page, setPage] = useState(1)
+  // A page filter change starts over at the first page.
+  const pageFilterKey = JSON.stringify(pageFilter ?? null)
+  const [shownFor, setShownFor] = useState(pageFilterKey)
+  if (shownFor !== pageFilterKey) { setShownFor(pageFilterKey); setPage(1) }
   const references = useQuery({
     queryKey: ['security-system-rules', cacheKey, 'references'],
     enabled: kind === 'cc_rule_group',
@@ -163,9 +185,12 @@ export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, is
       securitySystemRulesApi.setVisibility(tokenRef.current, rule.system_key, visible, showTo),
     onSuccess: onSaved, onError,
   })
-  const status = (rule: SystemRule) => rule.status === 'active'
-    ? <Tag color="success">{t('systemRules.values.active')}</Tag>
-    : <Tooltip title={t('systemRules.values.withdrawnHint')}><Tag color="default">{t('systemRules.values.withdrawn')}</Tag></Tooltip>
+  // a row hidden from users is what the summary counts as 禁用; say so in place.
+  const status = (rule: SystemRule) => rule.status !== 'active'
+    ? <Tooltip title={t('systemRules.values.withdrawnHint')}><Tag color="default">{t('systemRules.values.withdrawn')}</Tag></Tooltip>
+    : isAdmin && rule.visibility?.visible === false
+      ? <Tag color="default">{t('systemRules.values.hidden')}</Tag>
+      : <Tag color="success">{t('systemRules.values.active')}</Tag>
   const columns: TableColumnsType<SystemRule> = [
     { title: t('systemRules.columns.id'), dataIndex: 'legacy_id', width: 80, render: (value: string, rule) => value || rule.system_key },
     { title: t('systemRules.columns.name'), dataIndex: 'name', width: 200, render: (value: string, rule) => <span className="system-rule-name" title={rule.description || undefined}>
@@ -203,10 +228,10 @@ export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, is
     { title: t('systemRules.columns.mode'), dataIndex: 'mode', render: (value: string) => t(`systemRules.values.${value}`) },
   ]
   const rows = [...(query.data ?? [])].sort((left, right) => left.sort - right.sort || left.system_key.localeCompare(right.system_key))
-  const needle = filter.trim().toLowerCase()
-  const shown = needle ? rows.filter((rule) => [rule.name, rule.legacy_id, rule.system_key].some((value) => value?.toLowerCase().includes(needle))) : rows
+  const needle = pageFilter ? pageFilter.search.trim() : filter.trim()
+  const shown = filterSystemRules(rows, pageFilter ?? { search: filter, id: '' })
   const empty = !query.isLoading && rows.length === 0
-  const notice = t(kind === 'waf_rule_set' ? 'systemRules.wafSignatureNotice' : 'systemRules.enforcementPending')
+  const notice = kind === 'waf_rule_set' ? t('systemRules.wafSignatureNotice') : undefined
   const detail = (rule: SystemRule) => {
     const summary = systemRuleSummary(rule, t as never)
     const entries = rule.body.cc_rule_group?.entries ?? []
@@ -223,6 +248,7 @@ export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, is
       <Alert type="info" showIcon className="system-rule-catalog-notice"
         message={<>
           {empty ? t('systemRules.empty')
+            : pageFilter ? t('systemRules.count', { count: shown.length })
             : `${t('systemRules.count', { count: rows.length })} · ${t(isAdmin ? 'systemRules.adminNotice' : 'systemRules.notice')}`}
           {/* Only while a republication is actually running; gone once it finishes (10-25). */}
           {republication.data?.pending ? <Tooltip title={t('crsRepublish:republishingDetail')} trigger={['hover', 'focus']}>
@@ -234,10 +260,12 @@ export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, is
         action={rows.length ? <Button size="small" type="link" aria-expanded={open} aria-controls={bodyID} onClick={() => setOpen(!open)}>
           {t(open ? 'systemRules.collapse' : 'systemRules.expand')}</Button> : undefined} />
       {open && rows.length ? <div id={bodyID} className="system-rule-catalog-body">
-        <Input type="search" size="small" allowClear className="system-rule-catalog-search" aria-label={t('systemRules.searchLabel')}
-          placeholder={t('systemRules.searchPlaceholder')} value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1) }} />
+        {/* The page's own search box filters this block too when it passes filter. */}
+        {pageFilter ? null : <Input type="search" size="small" allowClear className="system-rule-catalog-search" aria-label={t('systemRules.searchLabel')}
+          placeholder={t('systemRules.searchPlaceholder')} value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1) }} />}
         <Table<SystemRule> rowKey="system_key" size="small" loading={query.isLoading} columns={columns} dataSource={shown}
-          pagination={{ current: page, pageSize, size: 'small', hideOnSinglePage: true, showSizeChanger: false, onChange: setPage }}
+          pagination={{ current: page, pageSize, size: 'small', hideOnSinglePage: !pageFilter, showSizeChanger: false, onChange: setPage,
+            showTotal: pageFilter ? (total) => t('cc.pagination.total', { count: total }) : undefined }}
           locale={{ emptyText: t(needle ? 'systemRules.noMatch' : 'systemRules.empty') }} scroll={{ x: 900 }}
           rowClassName={(rule) => rule.status === 'withdrawn' ? 'system-rule-withdrawn' : ''}
           expandable={{ expandedRowRender: detail }} />
@@ -252,12 +280,15 @@ export default function SystemRuleCatalogTable({ accessToken, kind, cacheKey, is
  * as such). A failed read is not an empty catalog (SEC-ACCOUNT-03): the block
  * stays with the reason and an in-place retry, for both roles.
  */
-export function SystemRuleCatalogSection({ accessToken, kind, cacheKey, isAdmin, canManage }: {
+export function SystemRuleCatalogSection({ accessToken, kind, cacheKey, isAdmin, canManage, filter, open, onOpenChange }: {
   accessToken: string
   kind: SystemRuleKind
   cacheKey: string
   isAdmin: boolean
   canManage: boolean
+  filter?: SystemRuleFilter
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const { t } = useTranslation('securityPolicies')
   const query = useSystemRules(accessToken, kind, cacheKey)
@@ -271,5 +302,5 @@ export function SystemRuleCatalogSection({ accessToken, kind, cacheKey, isAdmin,
     )
   }
   if (!isAdmin && (query.data ?? []).length === 0) return null
-  return <SystemRuleCatalogTable accessToken={accessToken} kind={kind} cacheKey={cacheKey} isAdmin={isAdmin} canManage={canManage} />
+  return <SystemRuleCatalogTable accessToken={accessToken} kind={kind} cacheKey={cacheKey} isAdmin={isAdmin} canManage={canManage} filter={filter} open={open} onOpenChange={onOpenChange} />
 }

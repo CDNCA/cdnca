@@ -3,11 +3,14 @@
 package systemothersettings
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
+	"github.com/cdnca/cdnca/services/control-api/internal/fielderr"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -76,4 +79,55 @@ func seedOtherSettingsActor(t *testing.T, pool *pgxpool.Pool) Actor {
 		t.Fatal(err)
 	}
 	return Actor{UserID: userID, ScopeID: scopeID, ScopeKind: "platform"}
+}
+
+// G2 http代理: the read masks the password, a save sending the mask back
+// keeps it, the live value gets the real password, and a mask with another
+// proxy host is refused.
+func TestPostgresOtherSettingsHTTPProxyPasswordNotEchoed(t *testing.T) {
+	pool := databasetest.ClonedMigratedPool(t, nil)
+	if pool == nil {
+		pool = databasetest.MigratedPool(t, nil)
+	}
+	actor := seedOtherSettingsActor(t, pool)
+	now := time.Date(2026, 11, 25, 1, 2, 3, 0, time.UTC)
+	service, err := NewService(pool, audit.NewWithClock(pool, func() time.Time { return now }), func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var applied []string
+	service.WithSaved(func(value Settings) { applied = append(applied, value.HTTPProxy) })
+	value := DefaultSettings()
+	value.HTTPProxy = "http://ops:s3cret@proxy.example:3128"
+	saved, err := service.Save(t.Context(), actor, SaveRequest{ExpectedRevision: 0, Value: value, IdempotencyKey: "proxy-set", RequestID: "proxy-set"})
+	if err != nil || saved.Value.HTTPProxy != "http://ops:********@proxy.example:3128" {
+		t.Fatalf("save=(%q,%v)", saved.Value.HTTPProxy, err)
+	}
+	loaded, err := service.Get(t.Context(), actor)
+	if err != nil || loaded.Value.HTTPProxy != "http://ops:********@proxy.example:3128" {
+		t.Fatalf("get=(%q,%v)", loaded.Value.HTTPProxy, err)
+	}
+	resend := loaded.Value
+	resend.SyncBatch = 500
+	if _, err := service.Save(t.Context(), actor, SaveRequest{ExpectedRevision: 1, Value: resend, IdempotencyKey: "proxy-keep", RequestID: "proxy-keep"}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := HTTPProxy(t.Context(), pool)
+	if err != nil || stored != "http://ops:s3cret@proxy.example:3128" {
+		t.Fatalf("stored proxy=(%q,%v), want the original password kept", stored, err)
+	}
+	if len(applied) != 2 || applied[0] != stored || applied[1] != stored {
+		t.Fatalf("applied=%q", applied)
+	}
+	moved := resend
+	moved.HTTPProxy = "http://ops:********@other.example:3128"
+	if _, err := service.Save(t.Context(), actor, SaveRequest{ExpectedRevision: 2, Value: moved, IdempotencyKey: "proxy-moved", RequestID: "proxy-moved"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("mask on another host: %v, want ErrInvalidInput", err)
+	} else if located, ok := fielderr.As(err); !ok || located.Field != "value.http_proxy" {
+		t.Fatalf("mask on another host field = %v", err)
+	}
+	var raw string
+	if err := pool.QueryRow(t.Context(), `SELECT response_body::text FROM platform_system_other_settings_write_requests WHERE idempotency_key='proxy-set'`).Scan(&raw); err != nil || strings.Contains(raw, "s3cret") {
+		t.Fatalf("stored save response=(%q,%v) must not carry the password", raw, err)
+	}
 }

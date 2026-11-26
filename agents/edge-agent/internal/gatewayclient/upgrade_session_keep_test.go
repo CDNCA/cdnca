@@ -2,7 +2,6 @@ package gatewayclient
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -23,7 +22,7 @@ func TestRunSessionKeepsSessionWhenUpgradeRecoveryFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
 	established, runErr, _ := runUpgradeNegotiationSession(t, ctx, client, enabled, nil)
-	if !established || !errors.Is(runErr, context.DeadlineExceeded) {
+	if !established || !sessionEndedByDeadline(ctx, runErr) {
 		t.Fatalf("session = (established=%t, err=%v), want kept until the context ended", established, runErr)
 	}
 	if recoveries := runtime.recoveryCount(); recoveries < 2 {

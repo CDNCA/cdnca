@@ -112,6 +112,16 @@ components:
             code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
             message: {type: string}
             request_id: {type: string}
+            details:
+              description: >-
+                Only on a publish refused with 403 entitlement_feature_denied:
+                the feature code the local license lease does not grant
+                (packages.manage). The server check is unchanged.
+              type: object
+              additionalProperties: false
+              required: [required_feature]
+              properties:
+                required_feature: {type: string, enum: [packages.manage]}
   responses:
     PublicationOK:
       description: Current durable publication head or identical committed replay.

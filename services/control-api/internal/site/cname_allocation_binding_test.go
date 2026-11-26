@@ -25,7 +25,7 @@ func TestSiteWriteContractCarriesSoldSubscriptionAndCNAMEProjection(t *testing.T
 			t.Errorf("store.go missing %q", required)
 		}
 	}
-	for _, required := range []string{"product_snapshot->'spec'->'cname'", "dns.cname.intent", "sites.manage", "dns.manage"} {
+	for _, required := range []string{"current_product.snapshot->'spec'->'cname'", "dns.cname.intent", "sites.manage", "dns.manage"} {
 		if !strings.Contains(string(store), required) {
 			t.Errorf("store.go missing durable CNAME authority %q", required)
 		}
@@ -38,10 +38,10 @@ func TestSiteWriteContractRejectsSubscriptionFromAnotherProductOrOwner(t *testin
 		t.Fatal(err)
 	}
 	for _, required := range []string{
-		"SELECT subscription.product_id",
+		"SELECT package_subscription_current_product_id(subscription.id,now()),subscription.product_id",
 		"owner.owner_user_id=$3",
 		"*fields.PackageID != subscriptionProductID",
-		"fields.PackageID = &subscriptionProductID",
+		"fields.PackageID = &purchasedProductID",
 	} {
 		if !strings.Contains(string(store), required) {
 			t.Errorf("store.go missing subscription binding guard %q", required)

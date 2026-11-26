@@ -443,6 +443,12 @@
      "in": "query",
      "type": "string",
      "description": "Platform-only owner filter."
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Only rows of this tenant scope (a CC policy editor lists those of the policy's scope); a tenant identity may only name its own scope."
     }
    ],
    "responses": [
@@ -830,6 +836,7 @@
     "apiKey",
     "bearer"
    ],
+   "description": "A content edit re-expands, in the same write, every live CC policy whose rules use it (SecurityPolicyCCReference); disabling it while in use is 409 cc_reference_in_use, and content a using policy cannot run is a validation_error naming type / parameters with reason unsupported or the rule refusal reason.",
    "permissions": [
     "security_policies.manage"
    ],
@@ -1021,6 +1028,7 @@
     "apiKey",
     "bearer"
    ],
+   "description": "Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.",
    "permissions": [
     "security_policies.manage"
    ],
@@ -1087,6 +1095,7 @@
     "apiKey",
     "bearer"
    ],
+   "description": "Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.",
    "permissions": [
     "security_policies.manage"
    ],
@@ -1443,6 +1452,12 @@
      "in": "query",
      "type": "string",
      "description": "Platform-only owner filter."
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Only rows of this tenant scope (a CC policy editor lists those of the policy's scope); a tenant identity may only name its own scope."
     }
    ],
    "responses": [
@@ -1846,6 +1861,7 @@
     "apiKey",
     "bearer"
    ],
+   "description": "A content edit re-expands, in the same write, every live CC policy whose rules use it (SecurityPolicyCCReference); disabling it while in use is 409 cc_reference_in_use, and content a using policy cannot run is a validation_error naming operator / values with reason unsupported or the rule refusal reason.",
    "permissions": [
     "security_policies.manage"
    ],
@@ -2046,6 +2062,7 @@
     "apiKey",
     "bearer"
    ],
+   "description": "Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.",
    "permissions": [
     "security_policies.manage"
    ],
@@ -2112,6 +2129,7 @@
     "apiKey",
     "bearer"
    ],
+   "description": "Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.",
    "permissions": [
     "security_policies.manage"
    ],

@@ -38,10 +38,13 @@ export interface AnalyticsSummary {
   status_3xx: number
   status_4xx: number
   status_5xx: number
-  /** Security events in requests (an aggregated CC challenge / 429 event counts its requests). */
-  security_events: number
-  /** Security event records (an aggregated event is one). */
-  security_event_rows: number
+  /**
+   * Security events in requests (an aggregated CC challenge / 429 event counts its requests).
+   * Summary only: null when narrowed by domain or listen port (the security facts carry neither).
+   */
+  security_events: number | null
+  /** Security event records (an aggregated event is one); null like security_events. */
+  security_event_rows: number | null
   /** Requests answered from the edge cache; hit ratio = cache_hit_requests / request_count. */
   cache_hit_requests: number
   cache_hit_bytes: number
@@ -115,6 +118,8 @@ export interface AnalyticsWAFOverviewResponse {
 
 export interface AnalyticsTrendPoint extends AnalyticsSummary {
   hour: string
+  security_events: number
+  security_event_rows: number
 }
 
 export interface AnalyticsTrendResponse {
@@ -260,19 +265,21 @@ const summaryKeys = [
   'unique_client_ips',
 ]
 
-function hasSummaryValues(value: Record<string, unknown>): boolean {
+function hasSummaryValues(value: Record<string, unknown>, allowNullSecurity = false): boolean {
   if (value.metric_version !== 1) return false
   return isCount(value.request_count) && isCount(value.request_bytes) &&
     isCount(value.response_bytes) && isCount(value.total_bytes) &&
     isMetric(value.average_bandwidth_bps) && isCount(value.status_2xx) &&
     isCount(value.status_3xx) && isCount(value.status_4xx) &&
-    isCount(value.status_5xx) && isCount(value.security_events) && isCount(value.security_event_rows) &&
+    isCount(value.status_5xx) &&
+    (isCount(value.security_events) && isCount(value.security_event_rows) ||
+      allowNullSecurity && value.security_events === null && value.security_event_rows === null) &&
     isCount(value.cache_hit_requests) && isCount(value.cache_hit_bytes) && isCount(value.unique_client_ips) &&
     value.cache_hit_requests <= value.request_count && value.unique_client_ips <= value.request_count
 }
 
 function isSummary(value: unknown): value is AnalyticsSummary {
-  return isRecord(value) && hasExactKeys(value, summaryKeys) && hasSummaryValues(value)
+  return isRecord(value) && hasExactKeys(value, summaryKeys) && hasSummaryValues(value, true)
 }
 
 function isMetadata(value: unknown): value is AnalyticsQueryMetadata {
@@ -401,7 +408,7 @@ async function summary<A extends AnalyticsAudience>(
   audience: A,
   filters: AnalyticsFilters<NoInfer<A>>,
 ): Promise<AnalyticsSummaryResponse> {
-  const raw = await request(`${basePath(audience)}/summary?${queryString(audience, filters)}`, accessToken)
+  const raw = await request(`${basePath(audience)}/summary?${queryString(audience, filters, { includeDomain: true, includeListenPort: true })}`, accessToken)
   return parseSummary(raw)
 }
 

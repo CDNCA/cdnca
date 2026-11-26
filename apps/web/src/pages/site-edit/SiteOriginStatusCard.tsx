@@ -7,6 +7,7 @@ import { siteOriginStatusApi, type OriginProbeStatus } from '../../api/siteOrigi
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/siteOriginForwarding'
 import { FeedbackWhen } from '@cdnca/ui'
+import { HelpTip } from './SiteEditFields'
 
 const statusColor: Record<OriginProbeStatus, string> = { healthy: 'success', unhealthy: 'error', unknown: 'default' }
 
@@ -48,9 +49,10 @@ export function SiteOriginStatusCard({ siteId, accessToken, canManage }: {
   const errorCode = failback.error instanceof ApiError ? failback.error.code : ''
   return <section className="site-basic-section site-origin-status" aria-labelledby="site-origin-status-title">
     <div className="site-basic-section-heading">
-      <div>
+      {/* 拨测频率说明进帮助入口，不再常驻一段。 */}
+      <div className="site-basic-title-line">
         <h3 id="site-origin-status-title">{t('failover.statusTitle')}</h3>
-        <p>{t('failover.statusHelp')}</p>
+        <HelpTip tip={t('failover.statusHelp')} />
       </div>
       {status.failback_mode === 'manual' && status.active_level > 0 ? (
         <Button type="primary" disabled={!canManage || !target || failback.isPending} loading={failback.isPending}

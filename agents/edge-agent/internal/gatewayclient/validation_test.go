@@ -46,6 +46,15 @@ func TestUnsupportedCommandsFailClosed(t *testing.T) {
 		{name: "expired", change: func(value *agentv1.DeploymentCommand) {
 			value.DeadlineTime = timestamppb.New(time.Now().Add(-time.Second))
 		}},
+		//
+		{name: "non-UUID released version", change: func(value *agentv1.DeploymentCommand) {
+			value.ReleasedConfigVersionIds = []string{"cfg-v0"}
+		}},
+		{name: "too many released versions", change: func(value *agentv1.DeploymentCommand) {
+			for range 65 {
+				value.ReleasedConfigVersionIds = append(value.ReleasedConfigVersionIds, uuid.NewString())
+			}
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -55,6 +64,11 @@ func TestUnsupportedCommandsFailClosed(t *testing.T) {
 				t.Fatal("validateCommand() accepted unsupported input")
 			}
 		})
+	}
+	released := proto.Clone(command).(*agentv1.DeploymentCommand)
+	released.ReleasedConfigVersionIds = []string{uuid.NewString()}
+	if err := validateRoutedCommand(released, config, time.Now()); err != nil {
+		t.Fatalf("validateCommand() refused a released version: %v", err)
 	}
 }
 

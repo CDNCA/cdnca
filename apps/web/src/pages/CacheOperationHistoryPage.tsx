@@ -5,12 +5,11 @@ import {
   Button,
   Descriptions,
   Drawer,
-  Input,
+  Grid,
   Result,
   Select,
   Space,
   Spin,
-  Table,
   Tag,
   type TableColumnsType,
 } from 'antd'
@@ -39,7 +38,11 @@ import '../i18n/cacheOperations'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
 import './CacheOperationHistoryPage.css'
 import { cacheWriteIdentity, cacheWriteOwner, pendingCacheWriteKey, rememberCacheWrite, sendCacheWrite, settleCacheWrite } from './cacheWriteJournal'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
+import { useNamedRowSelection } from '../components/namedRowSelection'
+import { SearchInput } from '../components/SearchInput'
+import { useSearchParams } from 'react-router-dom'
+import { filterParam, useFilterUrl } from './filterUrl'
 
 const pageSize = 20
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -57,6 +60,21 @@ type OperationKind = keyof typeof kinds
 type StatePill = 'all' | 'done' | 'failed' | 'processing'
 const pillStates: Record<Exclude<StatePill, 'all'>, readonly CacheOperationState[]> = {
   done: ['succeeded'], failed: ['failed', 'partial_failed'], processing: ['queued', 'running'],
+}
+
+// 已生效的类型（kind）、状态（state）与搜索（q）写进 URL，刷新与书签读回；
+// 非法值回到默认。带查询串、片段或用户信息的搜索词可能含签名或口令，只留在本页不写进地址。
+const urlSafeSearch = (value?: string) => value && !/[?#@]/.test(value) ? value : undefined
+function historyFiltersFromUrl(params: URLSearchParams) {
+  const kind = filterParam(params, 'kind')
+  const state = filterParam(params, 'state')
+  const search = filterParam(params, 'q').slice(0, 128)
+  return {
+    kind: Object.hasOwn(kinds, kind) ? kind as OperationKind : undefined,
+    pill: (Object.hasOwn(pillStates, state) ? state : 'all') as StatePill,
+    // eslint-disable-next-line no-control-regex
+    search: urlSafeSearch(search) && !/[\u0000-\u001f\u007f]/.test(search) ? search : '',
+  }
 }
 
 function operationKind(item: { action: CacheOperationSummary['action']; target_type: CacheTargetType }): OperationKind {
@@ -158,16 +176,22 @@ function CacheOperationHistoryOwned({
   owner: HistoryOwner
 }) {
   const { t, i18n } = useTranslation('cacheOperations')
+  // md 以下不固定操作列：300px 固定列会盖住编号、类型与状态
+  const compactTable = Grid.useBreakpoint().md === false
+  const namedRows = useNamedRowSelection()
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
   const queryClient = useQueryClient()
   const tokenRef = useRef(accessToken)
   tokenRef.current = accessToken
   const ownerRef = useRef(owner)
   ownerRef.current = owner
-  const [searchDraft, setSearchDraft] = useState('')
-  const [filters, setFilters] = useState<CacheOperationListParams>({})
-  const [kind, setKind] = useState<OperationKind>()
-  const [pill, setPill] = useState<StatePill>('all')
+  const [initialParams] = useSearchParams()
+  const [initial] = useState(() => historyFiltersFromUrl(initialParams))
+  const [searchDraft, setSearchDraft] = useState(initial.search)
+  const [filters, setFilters] = useState<CacheOperationListParams>(() => ({ ...(initial.kind ? kinds[initial.kind] : {}), search: initial.search || undefined }))
+  const [kind, setKind] = useState<OperationKind | undefined>(initial.kind)
+  const [pill, setPill] = useState<StatePill>(initial.pill)
+  useFilterUrl({ kind, state: pill === 'all' ? undefined : pill, q: urlSafeSearch(filters.search) })
   const [selectedIDs, setSelectedIDs] = useState<string[]>([])
   const [resubmitting, setResubmitting] = useState(false)
   const [resubmitOutcome, setResubmitOutcome] = useState<ResubmitOutcome | null>(null)
@@ -380,9 +404,9 @@ function CacheOperationHistoryOwned({
 
   const terminal = (state: CacheOperationState) => !pillStates.processing.includes(state)
 
-  const operationColumns: TableColumnsType<HistoryRow> = [
+  const operationColumnsInOrder: TableColumnsType<HistoryRow> = [
     {
-      title: t('history.table.id'), dataIndex: 'display_id', key: 'id', width: 150,
+      title: t('history.table.id'), dataIndex: 'display_id', key: 'id', width: compactTable ? 72 : 150,
       render: (value: string, item) => (
         <Space size={4}>
           <span title={item.id}>{value}</span>
@@ -392,7 +416,7 @@ function CacheOperationHistoryOwned({
       ),
     },
     {
-      title: t('history.table.type'), key: 'type', width: 100,
+      title: t('history.table.type'), key: 'type', width: compactTable ? 96 : 100,
       render: (_value, item) => t(`history.kinds.${operationKind(item)}`),
     },
     {
@@ -417,7 +441,7 @@ function CacheOperationHistoryOwned({
       render: (value: string) => formatDateTime(value, locale),
     },
     {
-      title: t('history.table.actions'), key: 'actions', width: 300, fixed: 'right',
+      title: t('history.table.actions'), key: 'actions', width: 300, fixed: compactTable ? undefined : 'right',
       render: (_value, item) => (
         <Space size={4} wrap>
           <Button
@@ -452,6 +476,10 @@ function CacheOperationHistoryOwned({
       ),
     },
   ]
+  // md 以下把状态排到 URL 前并收窄编号/类型：390px 首屏可见编号、类型、状态
+  const operationColumns: TableColumnsType<HistoryRow> = compactTable
+    ? ['id', 'type', 'state', 'target', 'created_at', 'actions'].map((key) => operationColumnsInOrder.find((column) => column.key === key)!)
+    : operationColumnsInOrder
 
   const nodeColumns: TableColumnsType<CacheNodeProjection> = [
     {
@@ -511,7 +539,7 @@ function CacheOperationHistoryOwned({
                 value={kind}
                 onChange={changeKind}
               />
-              <Input.Search
+              <SearchInput
                 allowClear
                 aria-label={t('history.filter')}
                 value={searchDraft}
@@ -598,11 +626,11 @@ function CacheOperationHistoryOwned({
             expandable={{ childrenColumnName: 'children', indentSize: 16 }}
             pagination={false}
             locale={{ emptyText: hasList ? t('history.empty') : ' ' }}
-            rowSelection={{
+            rowSelection={namedRows<HistoryRow>({
               selectedRowKeys: selectedIDs,
               onChange: (keys) => setSelectedIDs(keys.map(String)),
-              getCheckboxProps: (item) => ({ disabled: !terminal(item.state), 'aria-label': item.display_id }),
-            }}
+              getCheckboxProps: (item) => ({ disabled: !terminal(item.state) }),
+            }, (item) => item.display_id, t('selectionScope'))}
             scroll={{ x: 1092 }}
           /> : null}
           {hasList ? <div className="cache-operation-history-pagination" aria-label={t('pagination.label')}>

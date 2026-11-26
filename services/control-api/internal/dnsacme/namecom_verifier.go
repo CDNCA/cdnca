@@ -27,9 +27,7 @@ type NameComProviderVerifier struct {
 }
 
 func NewNameComProviderVerifier() *NameComProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newNameComProviderVerifier("", &http.Client{Transport: transport}, nameComVerifyTimeout)
+	return newNameComProviderVerifier("", providerAPIClient(), nameComVerifyTimeout)
 }
 
 func newNameComProviderVerifier(testEndpoint string, client *http.Client, timeout time.Duration) *NameComProviderVerifier {

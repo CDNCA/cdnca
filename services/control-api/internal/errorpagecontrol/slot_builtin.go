@@ -64,15 +64,26 @@ func SlotReachesNodes(key string) bool {
 }
 
 // slotBuiltinText words the built-in page of a slot no theme page covers,
-// rendered with the theme's error page template.
-var slotBuiltinText = map[string][3]string{
-	SlotBlacklist:       {"403", "403 访问被拒绝 / Access denied", "您的 IP 已被列入黑名单，无法访问本站。 Your IP address is blocked from this website."},
-	SlotHTTP403:         {"403", "403 禁止访问 / Forbidden", "您没有权限访问该页面。 You do not have permission to access this page."},
-	SlotTrafficExceeded: {"509", "网站流量已超出限制 / Traffic limit exceeded", "本网站的流量已超出限制，请联系网站管理员。 The traffic of this website has exceeded its limit. Please contact the website administrator."},
-	SlotPackageExpired:  {"403", "套餐已到期 / Plan expired", "本网站所属套餐已到期，请联系网站管理员续费。 The plan of this website has expired. Please contact the website administrator."},
-	SlotSiteLocked:      {"403", "网站已被锁定 / Website locked", "本网站已被锁定，暂时无法访问。 This website is locked and temporarily unavailable."},
-	SlotNodeIPAccess:    {"403", "403 禁止直接访问 / Direct access denied", "不允许通过节点 IP 直接访问。 Direct access by node IP address is not allowed."},
-	SlotConnectionLimit: {"503", "503 连接数超限 / Too many connections", "当前连接数过多，请稍后重试。 Too many connections. Please try again later."},
+// rendered with the theme's error page template in one language
+// (themepack.DefaultErrorPageLocale).
+var slotBuiltinText = map[string]struct {
+	Status         string
+	Title, Message themepack.I18nText
+}{
+	SlotBlacklist: {"403", themepack.I18nText{"zh-CN": "403 访问被拒绝", "en-US": "403 Access denied"},
+		themepack.I18nText{"zh-CN": "您的 IP 已被列入黑名单，无法访问本站。", "en-US": "Your IP address is blocked from this website."}},
+	SlotHTTP403: {"403", themepack.I18nText{"zh-CN": "403 禁止访问", "en-US": "403 Forbidden"},
+		themepack.I18nText{"zh-CN": "您没有权限访问该页面。", "en-US": "You do not have permission to access this page."}},
+	SlotTrafficExceeded: {"509", themepack.I18nText{"zh-CN": "网站流量已超出限制", "en-US": "Traffic limit exceeded"},
+		themepack.I18nText{"zh-CN": "本网站的流量已超出限制，请联系网站管理员。", "en-US": "The traffic of this website has exceeded its limit. Please contact the website administrator."}},
+	SlotPackageExpired: {"403", themepack.I18nText{"zh-CN": "套餐已到期", "en-US": "Plan expired"},
+		themepack.I18nText{"zh-CN": "本网站所属套餐已到期，请联系网站管理员续费。", "en-US": "The plan of this website has expired. Please contact the website administrator."}},
+	SlotSiteLocked: {"403", themepack.I18nText{"zh-CN": "网站已被锁定", "en-US": "Website locked"},
+		themepack.I18nText{"zh-CN": "本网站已被锁定，暂时无法访问。", "en-US": "This website is locked and temporarily unavailable."}},
+	SlotNodeIPAccess: {"403", themepack.I18nText{"zh-CN": "403 禁止直接访问", "en-US": "403 Direct access denied"},
+		themepack.I18nText{"zh-CN": "不允许通过节点 IP 直接访问。", "en-US": "Direct access by node IP address is not allowed."}},
+	SlotConnectionLimit: {"503", themepack.I18nText{"zh-CN": "503 连接数超限", "en-US": "503 Too many connections"},
+		themepack.I18nText{"zh-CN": "当前连接数过多，请稍后重试。", "en-US": "Too many connections. Please try again later."}},
 }
 
 // builtinSlotContent is the page a slot shows while unbound and what a node
@@ -117,7 +128,8 @@ func slotPageFrom(rendered themepack.Rendered, key string, themed bool) ([]byte,
 	if !ok {
 		return nil, "", ErrInvalidInput
 	}
-	body, err := rendered.RenderErrorPage(text[0], text[1], text[2])
+	locale := themepack.DefaultErrorPageLocale
+	body, err := rendered.RenderErrorPage(text.Status, text.Title.In(locale), text.Message.In(locale))
 	if err != nil {
 		return nil, "", ErrConflict
 	}

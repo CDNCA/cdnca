@@ -717,6 +717,72 @@
    ]
   },
   {
+   "operation_id": "getMyIdentityVerificationMethods",
+   "method": "GET",
+   "path": "/v1/identity-verification/methods",
+   "summary": "Read the verification methods the authenticated user may start",
+   "summary_zh": "读取当前可发起的实名认证方式",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Read-only. Reports whether the one KYC service configured on the system user settings page (kyc_* fields, each falling back to IDENTITY_VERIFICATION_KYC_*) is ready, its name (the provider of a new provider session) and the kinds the saved identity policy allows. No endpoint, key, credential or object store fact is returned. A service that is not configured, has no credentials yet, or has every kind turned off answers configured false with no kinds. Requires the same live identity_verification.self.manage check as the status.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The verification methods the authenticated user may start.",
+     "fields": [
+      {
+       "name": "configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "provider_display_name",
+       "type": "string",
+       "required": true,
+       "description": "Name of the configured service; sent back as provider when starting a session. Empty when configured is false."
+      },
+      {
+       "name": "kinds",
+       "type": "array<string: personal_initial / personal_reverification / enterprise>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
    "operation_id": "acceptIdentityVerificationProviderCallback",
    "method": "POST",
    "path": "/v1/identity-verification/provider-callbacks/{provider}",

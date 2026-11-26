@@ -90,6 +90,9 @@ type Gateway struct {
 	// ControlInternal/Redis/NATS accept from this Gateway (default SourceIP).
 	SourceIP   *string  `json:"source_ip"`
 	AllowedIPs []string `json:"allowed_ips"`
+	// NodesOnline: connected nodes whose current session came through it
+	// (filled by Overview).
+	NodesOnline int `json:"nodes_online"`
 }
 
 // CreateInput is the "add Gateway" form.

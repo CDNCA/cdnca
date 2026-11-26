@@ -311,15 +311,6 @@
     width: 100%;
   }
 
-  .cache-operation-history-table .ant-table-cell-fix-right {
-    position: static !important;
-  }
-
-  .cache-operation-history-table .ant-table-cell-fix-right-first::after,
-  .cache-operation-history-table .ant-table-cell-fix-right-last::after {
-    box-shadow: none !important;
-  }
-
   .cache-operation-history-pagination {
     justify-content: flex-start;
     overflow-x: auto;

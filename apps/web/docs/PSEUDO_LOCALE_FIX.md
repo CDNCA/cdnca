@@ -15,7 +15,7 @@ ReferenceError: pseudo is not defined
 import { enUS, pseudoCN, zhCN } from './resources'
 ```
 
-而生产构建的转换器 (`productionPseudoLocaleTransform.ts`) 会删除 `resources.ts` 中的 `pseudoCN` 导出和相关函数定义，导致：
+而当时设计的生产构建转换器 (`productionPseudoLocaleTransform.ts`，后未接入构建，已删除) 会删除 `resources.ts` 中的 `pseudoCN` 导出和相关函数定义，导致：
 1. `resources.ts` 中 `export const pseudoCN` 被删除
 2. `index.ts` 仍然试图导入已被删除的 `pseudoCN`
 3. Rollup 构建失败或产生悬空引用
@@ -58,20 +58,9 @@ if (testOnlyResources) {
 - 静态 `import` 在构建时会被 Rollup 处理，当 `pseudoCN` 被转换器删除后会导致构建失败
 - 动态 `import()` 只在运行时条件满足时执行，生产构建时由于 `testOnlyResources = false`，这段代码会被 tree-shaking 移除
 
-### 修改 2: `src/i18n/productionPseudoLocaleTransform.ts`
+### 修改 2（已移除）: `src/i18n/productionPseudoLocaleTransform.ts`
 
-添加对 `index.ts` 的跳过处理（可选优化）：
-
-```typescript
-export function stripProductionPseudoResources(code: string, id: string): { code: string; map: null } | null {
-  const isPseudoResourceModule = id.includes('/src/i18n/') ||
-    id.includes('/src/pages/node-scheduling/messages.') ||
-    id.includes('/src/pages/site-protocols/i18n.')
-  if (!isPseudoResourceModule || !id.endsWith('.ts') || id.endsWith('.test.ts')) return null
-
-  // Don't transform index.ts - it already guards pseudoCN with import.meta.env.MODE === 'test'
-  if (id.endsWith('/i18n/index.ts')) return null
-```
+该转换器自加入起从未接入 `vite.config.ts`，生产构建不经过它，代码库里也没有调用方。现已删除该文件；生产包内伪语言资源的排除依靠 `src/i18n/index.ts` 的条件动态导入与 tree-shaking。
 
 ## 验证结果
 
@@ -102,13 +91,12 @@ pnpm test NodeListPage
 
 - `src/i18n/index.ts` - i18n 初始化入口
 - `src/i18n/resources.ts` - 翻译资源定义（包含 pseudoCN）
-- `src/i18n/productionPseudoLocaleTransform.ts` - 生产构建转换器
 - `vite.config.ts` - Vite 构建配置
 
 ## 技术要点
 
 1. **Pseudo-locale** 是测试专用的伪本地化功能，通过在文本周围添加特殊字符来测试 UI 是否支持文本扩展
-2. **生产构建优化**：通过转换器删除 pseudo 相关代码，减小 bundle 大小
+2. **生产构建优化**：生产构建不加载伪语言资源，减小 bundle 大小（原计划的转换器未接入构建，已删除）
 3. **条件导入**：使用动态 `import()` + 条件判断，确保测试代码不进入生产 bundle
 4. **Tree-shaking**：现代打包工具会自动移除永远不会执行的代码分支
 

@@ -363,6 +363,7 @@
 
 .admin-overview .dashboard-rank-tablist { flex: 1; }
 .admin-overview .dashboard-rank-tablist button { flex: 0 0 auto; }
+.admin-overview .dashboard-rank-tabtrack { display: flex; width: max-content; flex: 0 0 auto; }
 
 .admin-overview .dashboard-rank-tab-arrow {
   display: inline-flex;
@@ -831,11 +832,4 @@
     min-height: 200px;
   }
   .admin-overview .dashboard-reference-network .dashboard-metric-band { padding: 14px; }
-}
-
-/* fix-overview：结算水位落后时的卡片提示（只提示，不拦截展示） */
-.dashboard-analytics-settling {
-  padding: 2px 0 6px;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
 }

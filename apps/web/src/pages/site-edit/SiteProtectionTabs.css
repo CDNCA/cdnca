@@ -358,10 +358,6 @@
   margin-left: 20px;
 }
 
-.site-waf-protection > .site-protection-feature-card {
-  width: calc(100% - 40px);
-}
-
 .site-protection-feature-card {
   margin-bottom: 14px;
 }
@@ -683,4 +679,32 @@
 
 .site-protection-more-rules > span {
   color: var(--cdnca-color-text-secondary);
+}
+
+/* without a library the switch card and the libraries to apply are one entry. */
+.site-waf-library-entry {
+  margin-bottom: 14px;
+}
+
+.site-waf-library-entry > .site-protection-feature-card {
+  margin-bottom: 0;
+}
+
+.site-waf-library-entry > .site-protection-library-grid {
+  margin-top: 10px;
+}
+
+.site-protection-library-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 760px) {
+  .site-waf-library-entry > .site-protection-feature-card {
+    flex-wrap: wrap;
+  }
+
+  .site-waf-library-entry .site-protection-feature-state {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
 }

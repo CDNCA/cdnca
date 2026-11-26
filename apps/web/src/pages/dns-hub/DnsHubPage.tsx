@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Alert, Button, Checkbox, Empty, Input, Result, Select, Space, Table, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
+import { App, Alert, Button, Checkbox, Empty, Input, Result, Select, Space, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
 import { Layers, Pencil, Plus, RefreshCw, RotateCw, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { PageSection } from '@cdnca/ui'
+import { PageSection, Table } from '@cdnca/ui'
 import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../../api/auth'
@@ -29,10 +29,12 @@ export default function DnsHubPage() {
   if (principal.scope_kind !== 'tenant' || !principal.permissions.includes('dns.read')) {
     return <Result status="403" title={t('errors.forbiddenTitle')} subTitle={t('errors.forbiddenDescription')} />
   }
-  return <DnsHubContent key={`${principal.scope_id}:${principal.user_id}`} canManage={principal.permissions.includes('dns.manage')} />
+  // 刷新域名清单与后端 hubWritePermissions 一致
+  const canRefresh = principal.permissions.includes('dns.manage') || principal.permissions.includes('dns.records.manage')
+  return <DnsHubContent key={`${principal.scope_id}:${principal.user_id}`} canManage={principal.permissions.includes('dns.manage')} canRefresh={canRefresh} />
 }
 
-function DnsHubContent({ canManage }: { canManage: boolean }) {
+function DnsHubContent({ canManage, canRefresh }: { canManage: boolean; canRefresh: boolean }) {
   const { t, i18n } = useTranslation('dnsHub')
   const { t: tp } = useTranslation('dnsProviders')
   const { message, modal } = App.useApp()
@@ -49,6 +51,10 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
   const [editing, setEditing] = useState<{ record?: DNSHubRecord } | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  // 自动首次刷新：已发起过的账号（ref 去重、state 供渲染），请求本身失败时就地显示并可重试
+  const autoRefreshStarted = useRef(new Set<string>())
+  const [autoRefreshed, setAutoRefreshed] = useState<ReadonlySet<string>>(new Set())
+  const [refreshError, setRefreshError] = useState<string>()
 
   const providers = useQuery({ queryKey: ['dns-hub', 'providers'], queryFn: () => dnsApi.list(token()).then((list) => ownDNSProviders(list.items)) })
   const providerByID = useMemo(() => new Map((providers.data ?? []).map((item) => [item.id, item])), [providers.data])
@@ -64,7 +70,12 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
   })
   const domainItems = useMemo(() => domains.data?.pages.flatMap((page) => page.items) ?? [], [domains.data])
   // 账号可选线路/权重来自域名列表的 accounts（契约 v1，每页都返回全部账号）
-  const accountByID = useMemo(() => new Map((domains.data?.pages[0]?.accounts ?? []).map((item) => [item.provider_id, item])), [domains.data])
+  const hubAccounts = useMemo(() => domains.data?.pages[0]?.accounts ?? [], [domains.data])
+  const accountByID = useMemo(() => new Map(hubAccounts.map((item) => [item.provider_id, item])), [hubAccounts])
+  // 已验证但从未拉取过域名清单（last_listed_at 为空）的账号
+  const unlistedIDs = useMemo(() => canRefresh
+    ? hubAccounts.filter((item) => item.status === 'verified' && !item.last_listed_at).map((item) => item.provider_id)
+    : [], [canRefresh, hubAccounts])
 
   const records = useQuery({
     queryKey: ['dns-hub', 'records', selected?.provider_id, selected?.apex],
@@ -87,10 +98,18 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
     message.error(t(key))
   }
 
-  async function refreshDomains() {
+  // auto：首次自动刷新的账号，结果不弹提示，由域名清单的 last_listed_at/list_error 呈现
+  async function refreshDomains(auto?: string[]) {
     setRefreshing(true)
     try {
+      if (auto) {
+        await Promise.all(auto.map((id) => dnsHubApi.refresh(token(), id)))
+        setRefreshError(undefined)
+        await queryClient.invalidateQueries({ queryKey: ['dns-hub', 'domains'] })
+        return
+      }
       const result = await dnsHubApi.refresh(token(), providerFilter || undefined)
+      setRefreshError(undefined)
       const failed = result.results.filter((item) => item.state === 'failed').length
       const throttled = result.results.find((item) => item.state === 'throttled')
       if (failed) message.warning(t('refresh.partial', { failed }))
@@ -99,12 +118,31 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
       } else message.success(t('refresh.done'))
       await queryClient.invalidateQueries({ queryKey: ['dns-hub', 'domains'] })
     } catch (error) {
-      if (error instanceof ApiError && error.status === 429) message.info(t('refresh.throttled', { seconds: 60 }))
+      if (auto) {
+        if (!(error instanceof ApiError && error.status === 429)) setRefreshError(dnsHubErrorKey(error))
+        await queryClient.invalidateQueries({ queryKey: ['dns-hub', 'domains'] })
+      } else if (error instanceof ApiError && error.status === 429) message.info(t('refresh.throttled', { seconds: 60 }))
       else showError(error)
     } finally {
       setRefreshing(false)
     }
   }
+
+  useEffect(() => {
+    const pending = unlistedIDs.filter((id) => !autoRefreshStarted.current.has(id))
+    if (!pending.length) return
+    pending.forEach((id) => autoRefreshStarted.current.add(id))
+    setAutoRefreshed((current) => new Set([...current, ...pending]))
+    void refreshDomains(pending)
+    // 只随账号清单变化触发；refreshDomains 每次渲染都是新函数
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unlistedIDs])
+
+  // 首次刷新进行中沿用加载态；刷新失败（请求失败或账号 list_error）不显示空态而是就地重试
+  const firstListing = refreshing || unlistedIDs.some((id) => !autoRefreshed.has(id))
+  const failedAccount = hubAccounts.find((item) => item.list_error)
+  const listFailure = refreshError ? t(refreshError)
+    : failedAccount ? t('errors.listError', { reason: t(providerCodeKey(failedAccount.list_error)) }) : undefined
 
   async function saveRecord(input: DNSHubRecordValue, confirmManaged: boolean) {
     if (!selected) return
@@ -202,7 +240,10 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
               {t('batch.open')}{checked.size ? ` (${checked.size})` : ''}
             </Button>
           ) : null}
-          <Button icon={<RefreshCw size={16} aria-hidden="true" />} loading={refreshing} onClick={() => void refreshDomains()}>{t('refresh.action')}</Button>
+          {/* Refresh needs dns.manage or dns.records.manage (hubWritePermissions); a read-only member would be refused. */}
+          {canRefresh ? (
+            <Button icon={<RefreshCw size={16} aria-hidden="true" />} loading={refreshing} onClick={() => void refreshDomains()}>{t('refresh.action')}</Button>
+          ) : null}
         </Space>
       ) : null}
     </header>
@@ -248,10 +289,15 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
               <Button type="link" size="small" onClick={() => setChecked(new Map())}>{t('domains.clearSelection')}</Button>
             </div>
           ) : null}
+          {domainItems.length > 0 && listFailure && !refreshing ? (
+            <DataState status="error" message={listFailure} onRetry={canRefresh ? () => void refreshDomains() : undefined} />
+          ) : null}
           {domains.isPending ? <DataState status="loading" /> : domains.isError ? (
             <DataState status="error" message={t(dnsHubErrorKey(domains.error))} onRetry={() => void domains.refetch()} />
           ) : !domainItems.length ? (
-            <DataState status="empty" message={t(domainQuery ? 'domains.emptyFiltered' : 'domains.empty')} />
+            firstListing ? <DataState status="loading" />
+              : listFailure ? <DataState status="error" message={listFailure} onRetry={canRefresh ? () => void refreshDomains() : undefined} />
+                : <DataState status="empty" message={t(domainQuery ? 'domains.emptyFiltered' : 'domains.empty')} />
           ) : (
             <ul className="dns-hub-domain-list">
               {domainItems.map((domain) => {

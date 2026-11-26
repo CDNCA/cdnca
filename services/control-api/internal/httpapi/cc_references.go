@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/ccreference"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
+	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/google/uuid"
 )
 
@@ -104,7 +106,7 @@ func (s *Server) handleUpdateCCReference(w http.ResponseWriter, r *http.Request,
 	}
 	result, err := s.ccReferences.Update(r.Context(), securityPolicyCCReferenceActor(principal), request)
 	if err != nil {
-		s.writeError(w, r, err)
+		s.writeCCReferenceError(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(result.Item.Revision))
@@ -127,7 +129,7 @@ func (s *Server) handleDeleteCCReference(w http.ResponseWriter, r *http.Request,
 	}
 	result, err := s.ccReferences.Delete(r.Context(), securityPolicyCCReferenceActor(principal), ccreference.DeleteRequest{Kind: kind, ID: id, ExpectedRevision: revision, IdempotencyKey: key, RequestID: ccReferenceRequestID(r)})
 	if err != nil {
-		s.writeError(w, r, err)
+		s.writeCCReferenceError(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(result.Revision))
@@ -150,7 +152,7 @@ func (s *Server) handleSetCCReferenceEnabled(w http.ResponseWriter, r *http.Requ
 	}
 	result, err := s.ccReferences.SetEnabled(r.Context(), securityPolicyCCReferenceActor(principal), kind, id, revision, enabled, key, ccReferenceRequestID(r))
 	if err != nil {
-		s.writeError(w, r, err)
+		s.writeCCReferenceError(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(result.Item.Revision))
@@ -178,4 +180,22 @@ func ccReferenceRequestID(r *http.Request) string {
 		return value
 	}
 	return uuid.NewString()
+}
+
+// ccReferenceInUseDetails name the CC rule groups (CC policies) still using
+// a matcher / filter that was to be deleted or disabled.
+type ccReferenceInUseDetails struct {
+	Policies []securitypolicy.CCReferenceUser `json:"policies"`
+}
+
+func (s *Server) writeCCReferenceError(w http.ResponseWriter, r *http.Request, err error) {
+	var inUse *ccreference.InUseError
+	if errors.As(err, &inUse) {
+		s.logClientError(r, http.StatusConflict, "cc_reference_in_use")
+		writeJSONStatus(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "cc_reference_in_use",
+			Message: "a CC rule group still uses the CC matcher or filter", RequestID: requestID(r.Context()),
+			Details: ccReferenceInUseDetails{Policies: inUse.Policies}}})
+		return
+	}
+	s.writeError(w, r, err)
 }

@@ -75,6 +75,7 @@ func init() {
 		e("edge_secret_rollout.create", CategoryNode, "向节点下发新密钥 {resource}", "started secret rollout {resource}"),
 		e("edge_secret_rollout.replace", CategoryNode, "替换节点密钥 {resource}", "replaced secret rollout {resource}"),
 		e("edge_config.reconcile", CategoryNode, "核对节点配置", "reconciled node configuration"),
+		e("edge_config.reconcile_supplement", CategoryNode, "补充确认节点仍在服务原发布（管理员已在节点核实）", "supplementally confirmed the node still serves the original release (verified on the node by an administrator)"),
 
 		// 系统
 		e("system_settings.update", CategorySystem, "修改系统设置{changes}", "updated system settings{changes}"),

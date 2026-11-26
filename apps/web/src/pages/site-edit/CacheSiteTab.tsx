@@ -12,7 +12,6 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tooltip,
   type TableColumnsType,
 } from 'antd'
@@ -77,7 +76,7 @@ import { formatDateTime } from '../../i18n/formatters'
 import './CacheSiteTab.css'
 import CacheRuleDialog from './CacheRuleDialog'
 import { ruleScope, ruleSliceBytes } from './cacheRuleScope'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import SiteEditState from './SiteEditState'
 import CacheSettingRow, { cacheSettingBriefId } from './CacheSettingRow'
 import { useCommitRequest, useInstantFeedback } from './instantSave'

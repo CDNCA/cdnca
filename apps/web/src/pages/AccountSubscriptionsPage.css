@@ -21,7 +21,7 @@
   min-width: 0;
 }
 
-/* tp-b7：左侧蓝条标题 + 副标题，右侧"提醒项 / 手机开启 / 邮件开启"计数胶囊。 */
+/* 左侧蓝条标题 + 副标题。 */
 .account-subscriptions-header {
   display: flex;
   flex-wrap: wrap;
@@ -50,21 +50,6 @@
   color: var(--cdnca-color-text-secondary);
   font-size: 12px;
   line-height: 20px;
-}
-
-.account-subscriptions-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.account-subscriptions-stats > span {
-  padding: 2px 10px;
-  color: var(--cdnca-color-text);
-  font-size: 12px;
-  line-height: 20px;
-  border: 1px solid var(--cdnca-color-border-secondary);
-  border-radius: 999px;
 }
 
 .account-subscription-item {
@@ -144,10 +129,18 @@
   background: var(--cdnca-color-bg-subtle, #f8fbff);
 }
 
-/* 提醒项列自适应，开关列定宽；窄屏横向滚动而不是压缩文字。 */
-.account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th:nth-child(1),
+/* 表格在容器内，不横向滚动。提醒项列占余下宽度并可换行，
+   开关列按表头宽；窄屏表头换成短名（data-short），完整列名仍是可访问名称。 */
 .account-subscriptions-page .identity-table-scroll .ant-table-tbody > tr > td:nth-child(1) {
-  min-width: 280px;
+  overflow-wrap: anywhere;
+}
+
+.account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th:not(:first-child) {
+  width: 120px;
+}
+
+.account-subscriptions-col {
+  position: relative;
 }
 
 /* fix-notifsub：表下方"更多消息类型"折叠区，默认收起。 */
@@ -189,9 +182,26 @@
     padding: 12px;
   }
 
-  .account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th:nth-child(1),
-  .account-subscriptions-page .identity-table-scroll .ant-table-tbody > tr > td:nth-child(1) {
-    min-width: 240px;
+  .account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th:not(:first-child) {
+    width: auto;
+  }
+
+  .account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th,
+  .account-subscriptions-page .identity-table-scroll .ant-table-tbody > tr > td {
+    padding: 0 8px !important;
+  }
+
+  .account-subscriptions-col-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .account-subscriptions-col::after {
+    content: attr(data-short) / "";
   }
 
   .account-subscriptions-page .ant-alert-action {

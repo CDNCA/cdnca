@@ -7,6 +7,7 @@ export type StreamSettingScope = 'global' | 'group'
 export type StreamPublicationState = 'unknown' | 'pending' | 'leased' | 'retrying' | 'reconciling' | 'succeeded' | 'failed' | 'superseded'
 export type StreamGeoAction = 'allow' | 'block'
 export type StreamEligibilityState = 'eligible' | 'ineligible'
+export type StreamIneligibleReason = 'package_suspended' | 'package_cancelled'
 
 export interface StreamAdditionalListener {
   id: string
@@ -230,6 +231,8 @@ export interface Stream extends StreamResponseFields {
   package_name?: string | null
   package_expires_at?: string | null
   eligibility_state: StreamEligibilityState
+  /** With ineligible: the package subscription is suspended (not published until resumed) or cancelled (terminated), as a site. */
+  ineligible_reason?: StreamIneligibleReason
   owner: { id: string; display_name: string } | null
   origins: StreamOrigin[]
   listen_ipv6: boolean
@@ -588,6 +591,8 @@ function parseStream(value: unknown): Stream {
     ![item.cname, item.cname_domain, item.cname_hostname, item.cname_state, item.cname_failure_code].every((entry) =>
       entry === undefined || entry === null || typeof entry === 'string') ||
     (item.eligibility_state !== 'eligible' && item.eligibility_state !== 'ineligible') ||
+    (item.ineligible_reason !== undefined && ((item.ineligible_reason !== 'package_suspended' && item.ineligible_reason !== 'package_cancelled') ||
+      item.eligibility_state !== 'ineligible')) ||
     typeof item.name !== 'string' || typeof item.remark !== 'string' ||
     (item.protocol !== 'tcp' && item.protocol !== 'udp') || item.listen_address !== '*' || !integer(item.listen_port, 1, 65535) ||
     !validAdditionalListeners(item.additional_listeners, item.id as string, item.protocol, item.listen_port) ||

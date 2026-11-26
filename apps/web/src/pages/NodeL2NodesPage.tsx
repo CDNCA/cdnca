@@ -5,17 +5,15 @@ import {
   Button,
   Dropdown,
   Form,
-  Input,
   InputNumber,
   Modal,
   Result,
   Select,
   Switch,
-  Table,
   Tag,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -55,6 +53,8 @@ import {
 } from './l2RetryRecord'
 import './NodeSchedulingPage.css'
 import './NodeL2TopologyPage.css'
+import { useNamedRowSelection } from '../components/namedRowSelection'
+import { SearchInput } from '../components/SearchInput'
 
 export default function NodeL2NodesPage() {
   const { t } = useTranslation('nodeScheduling')
@@ -121,6 +121,7 @@ function L2NodesContent({
 }) {
   const { t } = useTranslation('nodeScheduling')
   const { t: l2T } = useTranslation('nodeL2Topology')
+  const namedRows = useNamedRowSelection()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = useFeedbackMessage()
@@ -498,7 +499,7 @@ function L2NodesContent({
             >
               {l2T('nodes.add')}
             </Button>
-            <Input.Search
+            <SearchInput
               aria-label={l2T('nodes.availableSearch')}
               placeholder={l2T('nodes.search')}
               value={availableSearch}
@@ -516,11 +517,11 @@ function L2NodesContent({
             loading={query.isLoading}
             pagination={false}
             scroll={{ x: 480 }}
-            rowSelection={{
+            rowSelection={namedRows<L2NodeCandidate>({
               selectedRowKeys: availableIDs,
               onChange: (keys) => setAvailableIDs(keys.map(String)),
               getCheckboxProps: () => ({ disabled: !canManage || busy }),
-            }}
+            }, (node) => node.name, l2T('selectionScope.nodes'))}
             locale={{ emptyText: l2T('empty.topology') }}
           />
         </section>
@@ -576,7 +577,7 @@ function L2NodesContent({
                 <ChevronDown size={12} />
               </Button>
             </Dropdown>
-            <Input.Search
+            <SearchInput
               aria-label={l2T('nodes.configuredSearch')}
               placeholder={l2T('nodes.search')}
               value={configuredSearch}
@@ -593,11 +594,11 @@ function L2NodesContent({
             loading={query.isLoading}
             pagination={false}
             scroll={{ x: 600 }}
-            rowSelection={{
+            rowSelection={namedRows<L2Node>({
               selectedRowKeys: selectedIDs,
               onChange: (keys) => setSelectedIDs(keys.map(String)),
               getCheckboxProps: () => ({ disabled: !canManage || busy }),
-            }}
+            }, (node) => node.name, l2T('selectionScope.nodes'))}
             locale={{ emptyText: l2T('empty.topology') }}
             columns={[
               {

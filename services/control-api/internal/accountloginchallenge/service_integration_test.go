@@ -2,7 +2,7 @@ package accountloginchallenge
 
 import (
 	"context"
- "encoding/json"
+	"encoding/json"
 	"errors"
 	"os"
 	"regexp"
@@ -48,12 +48,14 @@ func TestPostgresLoginChallengeCreatesOneTimeVerifiedSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
- issuer.SetLoginChallengeConsumer(service)
- settings := systemusersettings.DefaultSettings()
- settings.EmailCodeLoginEnabled, settings.SMSCodeLoginEnabled = true, true
- rawSettings, _ := json.Marshal(settings)
- if _, err := pool.Exec(t.Context(), `INSERT INTO platform_system_user_settings(platform_scope_id,revision,settings,updated_by_user_id,updated_at) VALUES($1,1,$2,$3,now())`, scopeID, rawSettings, userID); err != nil { t.Fatal(err) }
-	// code login is in effect only with its notification channel on
+	issuer.SetLoginChallengeConsumer(service)
+	settings := systemusersettings.DefaultSettings()
+	settings.EmailCodeLoginEnabled, settings.SMSCodeLoginEnabled = true, true
+	rawSettings, _ := json.Marshal(settings)
+	if _, err := pool.Exec(t.Context(), `INSERT INTO platform_system_user_settings(platform_scope_id,revision,settings,updated_by_user_id,updated_at) VALUES($1,1,$2,$3,now())`, scopeID, rawSettings, userID); err != nil {
+		t.Fatal(err)
+	}
+	// code login is in effect only with its notification channel on (user)
 	if _, err := pool.Exec(t.Context(), `UPDATE notification_channel_settings SET email_enabled=true,sms_enabled=true WHERE singleton`); err != nil {
 		t.Fatal(err)
 	}

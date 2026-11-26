@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// 无套餐网站真的不下发，写好未跑：
+// 社区版：没绑套餐的网站照常下发；绑了的套餐停用或删除，网站随之撤下。
 //
 //	TEST_DATABASE_URL=... TEST_DATABASE_TEMPLATE=... go -C services/control-api test -tags integration -count=1 -p 1 -v \
 //	  -run 'TestNoPackage' ./internal/edgepublish/
@@ -28,9 +28,8 @@ func noPackagePublishedSites(t *testing.T, scope *SystemRepublishScope) map[uuid
 	return sites
 }
 
-// A site without a package is not in the publication facts; a site on a
-// valid package is.
-func TestNoPackageSiteIsNotPublished(t *testing.T) {
+// A site without a package is published like a site on a valid package.
+func TestNoPackageSiteIsPublished(t *testing.T) {
 	scope := NewSystemRepublishScope(t)
 	plain := scope.AddSite(t, "nopkg-plain.example.com", 18082)
 	scope.fixture.unbindSitePackage(t, plain)
@@ -38,13 +37,13 @@ func TestNoPackageSiteIsNotPublished(t *testing.T) {
 	if err := scope.PublishManually(t, "nopkg-first", node); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	if sites := noPackagePublishedSites(t, scope); !sites[scope.SiteID] || sites[plain] || len(sites) != 1 {
-		t.Fatalf("published sites %v, want only the packaged %s", sites, scope.SiteID)
+	if sites := noPackagePublishedSites(t, scope); !sites[scope.SiteID] || !sites[plain] || len(sites) != 2 {
+		t.Fatalf("published sites %v, want the packaged %s and the plain %s", sites, scope.SiteID, plain)
 	}
 }
 
-// has → has not: the next publication withdraws the site.
-func TestNoPackageSiteWithdrawnAfterUnbinding(t *testing.T) {
+// has → has not: the next publication still carries the site.
+func TestNoPackageSiteKeptAfterUnbinding(t *testing.T) {
 	scope := NewSystemRepublishScope(t)
 	other := scope.AddSite(t, "nopkg-other.example.com", 18082)
 	node := scope.AddNode(t, 6)
@@ -60,8 +59,8 @@ func TestNoPackageSiteWithdrawnAfterUnbinding(t *testing.T) {
 	if err := scope.PublishManually(t, "nopkg-unbound", node); err != nil {
 		t.Fatalf("publish after unbinding: %v", err)
 	}
-	if sites := noPackagePublishedSites(t, scope); !sites[scope.SiteID] || sites[other] {
-		t.Fatalf("after unbinding sites %v, want %s withdrawn", sites, other)
+	if sites := noPackagePublishedSites(t, scope); !sites[scope.SiteID] || !sites[other] {
+		t.Fatalf("after unbinding sites %v, want %s kept", sites, other)
 	}
 }
 

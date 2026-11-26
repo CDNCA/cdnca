@@ -221,7 +221,7 @@ func (s *Service) SyncPlatformTenants(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	if doc.ProviderType == "" {
-		return 0, nil
+		return 0, s.store.disablePlatformCopies(ctx)
 	}
 	boundCipher, ok := s.cipher.(BoundCredentialCipher)
 	if !ok {
@@ -249,6 +249,44 @@ func (s *Service) SyncPlatformTenants(ctx context.Context) (int, error) {
 		}
 	}
 	return synced, s.store.recordPlatformSync(ctx, firstFailure)
+}
+
+// disablePlatformCopies disables the enabled tenant provider copies of a
+// platform without a DNS provider (断开 DNS 服务商): the copy's credential is
+// revoked (migration 106) and allocation, 记录修复 and DNS-01 see no usable
+// provider; its zones and the records written stay. A copy held by an
+// in-flight DNS mutation claim (migration 089) is left for the next
+// synchronisation and reported as platform_sync_retry.
+func (s *Store) disablePlatformCopies(ctx context.Context) error {
+	scopes, err := tenantScopes(ctx, s.pool)
+	if err != nil {
+		return err
+	}
+	copies := make([]uuid.UUID, len(scopes))
+	for index, scope := range scopes {
+		copies[index] = PlatformProviderCopyID(scope)
+	}
+	rows, err := s.pool.Query(ctx, `SELECT scope_id, id FROM dns_providers
+		WHERE (managed_by='platform' OR id = ANY($1)) AND status<>'disabled' ORDER BY scope_id`, copies)
+	if err != nil {
+		return fmt.Errorf("list platform DNS provider copies: %w", err)
+	}
+	type copyRow struct{ scopeID, id uuid.UUID }
+	enabled, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (copyRow, error) {
+		var value copyRow
+		return value, row.Scan(&value.scopeID, &value.id)
+	})
+	if err != nil || len(enabled) == 0 {
+		return err
+	}
+	failure := ""
+	for _, item := range enabled {
+		if _, err := s.pool.Exec(ctx, `UPDATE dns_providers SET status='disabled', revision=revision+1, updated_at=now()
+			WHERE scope_id=$1 AND id=$2 AND status<>'disabled'`, item.scopeID, item.id); err != nil && failure == "" {
+			failure = "platform_sync_retry"
+		}
+	}
+	return s.recordPlatformSync(ctx, failure)
 }
 
 var (

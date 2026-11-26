@@ -1,7 +1,7 @@
 import i18n from './index'
 
 const zhCN = {
-  recipient: '收件人', messageID: '消息ID', content: '标题/内容', channel: '媒介', failureCount: '失败次数', status: '状态', reason: '原因', initiatedAt: '发送时间', notRecorded: '未记录', recordedTime: '记录时间：{{time}}', summary: '共 {{count}} 条记录',
+  recipient: '收件人', messageID: '消息ID', channel: '媒介', failureCount: '失败次数', status: '状态', reason: '原因', initiatedAt: '发送时间', notRecorded: '未记录', recordedTime: '记录时间：{{time}}',
   messagePlaceholder: '请输入消息ID', allTypes: '所有类型', allChannels: '所有媒介', allStates: '所有状态', success: '成功', failure: '失败',
   empty: '暂无数据', noSnapshot: '暂无历史快照', user: '用户 {{id}}', anonymous: '匿名收件人', unknownRecipient: '未记录用户', unknownReason: '原因未识别（{{code}}）',
   invalidMessage: '请输入规范的小写消息 UUID', loadFailed: '发信日志加载失败，请刷新重试', permissionDenied: '没有发信日志查看权限',
@@ -11,7 +11,7 @@ const zhCN = {
 }
 
 const zhTW = {
-  recipient: '收件人', messageID: '訊息ID', content: '標題/內容', channel: '媒介', failureCount: '失敗次數', status: '狀態', reason: '原因', initiatedAt: '發送時間', notRecorded: '未記錄', recordedTime: '記錄時間：{{time}}', summary: '共 {{count}} 條記錄',
+  recipient: '收件人', messageID: '訊息ID', channel: '媒介', failureCount: '失敗次數', status: '狀態', reason: '原因', initiatedAt: '發送時間', notRecorded: '未記錄', recordedTime: '記錄時間：{{time}}',
   messagePlaceholder: '請輸入訊息ID', allTypes: '所有類型', allChannels: '所有媒介', allStates: '所有狀態', success: '成功', failure: '失敗',
   empty: '暫無資料', noSnapshot: '暫無歷史快照', user: '使用者 {{id}}', anonymous: '匿名收件人', unknownRecipient: '未記錄使用者', unknownReason: '原因未識別（{{code}}）',
   invalidMessage: '請輸入規範的小寫訊息 UUID', loadFailed: '發信日誌載入失敗，請重新整理後重試', permissionDenied: '沒有發信日誌檢視權限',
@@ -21,7 +21,7 @@ const zhTW = {
 }
 
 const enUS = {
-  recipient: 'Recipient', messageID: 'Message ID', content: 'Title/content', channel: 'Channel', failureCount: 'Failures', status: 'Status', reason: 'Reason', initiatedAt: 'Sent at', notRecorded: 'Not recorded', recordedTime: 'Recorded at: {{time}}', summary: '{{count}} records',
+  recipient: 'Recipient', messageID: 'Message ID', channel: 'Channel', failureCount: 'Failures', status: 'Status', reason: 'Reason', initiatedAt: 'Sent at', notRecorded: 'Not recorded', recordedTime: 'Recorded at: {{time}}',
   messagePlaceholder: 'Enter message ID', allTypes: 'All types', allChannels: 'All channels', allStates: 'All statuses', success: 'Succeeded', failure: 'Failed',
   empty: 'No data', noSnapshot: 'Historical snapshot unavailable', user: 'User {{id}}', anonymous: 'Anonymous recipient', unknownRecipient: 'User not recorded', unknownReason: 'Unrecognized reason ({{code}})',
   invalidMessage: 'Enter a canonical lowercase message UUID', loadFailed: 'Sent logs could not be loaded. Refresh to retry.', permissionDenied: 'You cannot view sent logs',

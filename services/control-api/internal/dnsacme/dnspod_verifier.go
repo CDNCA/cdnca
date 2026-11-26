@@ -29,7 +29,7 @@ type DNSPodProviderVerifier struct {
 }
 
 func NewDNSPodProviderVerifier() *DNSPodProviderVerifier {
-	return newDNSPodProviderVerifier("", http.DefaultClient, dnspodVerifyTimeout)
+	return newDNSPodProviderVerifier("", providerAPIClient(), dnspodVerifyTimeout)
 }
 
 func newDNSPodProviderVerifier(

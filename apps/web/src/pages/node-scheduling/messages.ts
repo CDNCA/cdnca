@@ -1,6 +1,7 @@
 type TranslationTree = { [key: string]: string | TranslationTree }
 
 export const zhCNNodeScheduling = {
+  selectionScope: '线路分组',
   titles: {
     lineGroups: '线路分组',
     l2Topology: 'L2 配置',
@@ -29,7 +30,7 @@ export const zhCNNodeScheduling = {
     create: '创建',
     edit: '编辑',
     configureResolution: '配置解析',
-    deleteLineGroup: '删除线路分组',
+    deleteLineGroup: '删除线路组{{name}}',
     setPlatformDefault: '设为平台默认',
     unsetPlatformDefault: '取消平台默认',
     save: '保存',
@@ -93,6 +94,7 @@ export const zhCNNodeScheduling = {
     placeholder: '—',
     unavailable: '未提供',
     deleteUnavailable: '当前接口未提供删除能力',
+    lineGroupNameWithID: '{{name}}（编号 {{id}}）',
     selectBeforeDelete: '请选择线路分组!',
     ipCount: '{{count}} 个 IP',
     healthyCount: '健康 {{count}}',
@@ -248,6 +250,7 @@ export const zhCNNodeScheduling = {
   dialogs: {
     deleteTitle: '删除确认',
     deleteDescription: '是否删除线路分组 id:{{ids}}',
+    deleteOne: '删除线路组「{{name}}」？',
   },
   notices: {
     created: '线路组已创建',
@@ -431,6 +434,7 @@ export const zhCNNodeScheduling = {
 } satisfies TranslationTree
 
 export const enUSNodeScheduling = {
+  selectionScope: 'line groups',
   titles: {
     lineGroups: 'Line Groups',
     l2Topology: 'L2 Configuration',
@@ -459,7 +463,7 @@ export const enUSNodeScheduling = {
     create: 'Create',
     edit: 'Edit',
     configureResolution: 'Set Resolution',
-    deleteLineGroup: 'Delete Line Group',
+    deleteLineGroup: 'Delete line group {{name}}',
     setPlatformDefault: 'Set as Platform Default',
     unsetPlatformDefault: 'Unset Platform Default',
     save: 'Save',
@@ -523,6 +527,7 @@ export const enUSNodeScheduling = {
     placeholder: '—',
     unavailable: 'Not provided',
     deleteUnavailable: 'The current API does not provide delete capability',
+    lineGroupNameWithID: '{{name}} (#{{id}})',
     selectBeforeDelete: 'Select at least one line group to delete',
     ipCount: '{{count}} IPs',
     healthyCount: '{{count}} healthy',
@@ -678,6 +683,7 @@ export const enUSNodeScheduling = {
   dialogs: {
     deleteTitle: 'Delete Confirmation',
     deleteDescription: 'Delete line group id:{{ids}}?',
+    deleteOne: 'Delete line group "{{name}}"?',
   },
   notices: {
     created: 'Line group created',

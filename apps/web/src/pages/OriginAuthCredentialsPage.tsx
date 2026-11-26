@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Descriptions, Drawer, Form, Input, Modal, Result, Select, Space, Table, Tag, Typography, type FormInstance, type TableColumnsType } from 'antd'
+import { App, Button, Descriptions, Drawer, Form, Input, Modal, Result, Select, Space, Tag, Typography, type FormInstance, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, Eye, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -19,7 +19,7 @@ import { DataState } from '../components/DataState'
 import { isFeatureDisabled } from '../i18n/apiError'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/originAuthCredentials'
-import { OutcomeUnknown } from '@cdnca/ui'
+import { OutcomeUnknown, Table } from '@cdnca/ui'
 
 const readPermission = 'origin_auth.read'
 const managePermission = 'origin_auth.manage'

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"net/netip"
+
+	"github.com/cdnca/cdnca/services/control-api/internal/clientip"
 )
 
 var (
@@ -44,6 +46,10 @@ func NewSourceIPResolver(trustedProxyCIDRs []string, maxProxyHops int) (*SourceI
 func (resolver *SourceIPResolver) ResolveSourceIP(request *http.Request) (netip.Addr, error) {
 	if resolver == nil || request == nil {
 		return netip.Addr{}, ErrSourceIPInvalid
+	}
+	// The visitor address the 源IP请求头 setting gave (httpapi WithClientSourceIP).
+	if visitor, ok := clientip.Visitor(request.Context()); ok {
+		return visitor, nil
 	}
 	peer, err := remotePeer(request.RemoteAddr)
 	if err != nil {

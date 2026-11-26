@@ -79,6 +79,14 @@ export interface IdentityVerificationSelfStatus {
   }
 }
 
+// GET /v1/identity-verification/methods：平台配置的那一个认证服务是否可用、它的名称（发起会话时作为 provider）
+// 与已开通的认证类型；不含端点与密钥。
+export interface IdentityVerificationMethods {
+  configured: boolean
+  provider_display_name: string
+  kinds: IdentityVerificationKind[]
+}
+
 export interface IdentityVerificationCreateInput {
   kind: IdentityVerificationKind
   evidence_token: string
@@ -312,6 +320,16 @@ function isSelfStatus(value: unknown): value is IdentityVerificationSelfStatus {
   return latest === undefined || ['draft', 'withdrawn', 'expired'].includes(latest.status)
 }
 
+function isMethods(value: unknown): value is IdentityVerificationMethods {
+  if (!isRecord(value) || !exactKeys(value, ['configured', 'provider_display_name', 'kinds'])) return false
+  if (typeof value.configured !== 'boolean' || typeof value.provider_display_name !== 'string' || !Array.isArray(value.kinds)) return false
+  const listed = value.kinds as unknown[]
+  if (new Set(listed).size !== listed.length || !listed.every((kind) => typeof kind === 'string' && kinds.has(kind as IdentityVerificationKind))) return false
+  return value.configured
+    ? providerPattern.test(value.provider_display_name) && listed.length > 0
+    : value.provider_display_name === '' && listed.length === 0
+}
+
 function isProviderSession(value: unknown): value is IdentityVerificationProviderSession {
   if (!isRecord(value) || !exactKeys(value, [
     'id', 'kind', 'provider', 'state', 'revision', 'expires_at', 'updated_at', 'replayed',
@@ -535,6 +553,14 @@ export const identityVerificationApi = {
       '/v1/identity-verification/status',
       { method: 'GET', signal },
       isSelfStatus,
+    )
+  },
+  getMethods(accessToken: string, signal?: AbortSignal) {
+    return sendProvider(
+      accessToken,
+      '/v1/identity-verification/methods',
+      { method: 'GET', signal },
+      isMethods,
     )
   },
   startProviderSession(

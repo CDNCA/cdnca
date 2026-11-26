@@ -1,7 +1,7 @@
 {
   "schema": "cdnca.theme/v1",
   "id": "default",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": {"zh-CN": "默认主题", "zh-TW": "預設主題", "en-US": "Default"},
   "description": {"zh-CN": "平台默认外观。", "zh-TW": "平台預設外觀。", "en-US": "The platform's default look."},
   "layout_slots": {
@@ -19,6 +19,6 @@
       {"selector": ".cf-line", "declarations": {"margin": "8px 0 0"}}
     ],
     "error_page": "<!doctype html><html><head><title>{{title}}</title></head><body><main class=\"cf-page\"><p class=\"cf-status\">{{status}}</p><h1 class=\"cf-title\">{{title}}</h1><p class=\"cf-message\">{{message}}</p>{{#footer_text}}<p class=\"cf-footer\">{{footer_text}}</p>{{/footer_text}}</main></body></html>",
-    "email": "<!doctype html><html><head><title>{{subject}}</title></head><body><main class=\"cf-page\"><h1 class=\"cf-title\">{{subject}}</h1>{{#lines}}<p class=\"cf-line\">{{.}}</p>{{/lines}}{{#footer_text}}<p class=\"cf-footer\">{{footer_text}}</p>{{/footer_text}}</main></body></html>"
+    "email": "<!doctype html><html><head><title>{{subject}}</title></head><body><main class=\"cf-page\"><h1 class=\"cf-title\">{{subject}}</h1>{{#lines}}<p class=\"cf-line\">{{.}}</p>{{/lines}}{{#action_url}}<p class=\"cf-line\"><a href=\"{{action_url}}\">{{action_label}}</a></p><p class=\"cf-line\">{{action_url}}</p>{{/action_url}}{{#footer_text}}<p class=\"cf-footer\">{{footer_text}}</p>{{/footer_text}}</main></body></html>"
   }
 }

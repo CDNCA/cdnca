@@ -80,8 +80,8 @@ type Report struct {
 	Std        *StdSource `json:"std,omitempty"` // 带通用数据集时：样本排在语料之后，ID 以 StdPrefix 开头
 	// Mode 为空 = CRS 档位包回放（逐档 p/b/c/e 是节点应答）；ModeMark = 规则情报只打标包（system/scanner-signatures、
 	// system/autodefense-intel）回放：唯一一"档"是该包，b = 请求被该包打标（命中），p = 未命中。
-	Mode string `json:"mode,omitempty"`
-	Results    []Result   `json:"results"`
+	Mode    string   `json:"mode,omitempty"`
+	Results []Result `json:"results"`
 }
 
 // Request 是一条语料请求（评测语料文件一行一条 JSON，与 cdnca-waf-check 的 evalRequest 同形）：

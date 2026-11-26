@@ -65,8 +65,22 @@ const zhCN = {
       ip_tag: '一行一个：idc:cn（国内机房）、idc:global（境外机房）',
     },
     singleValue: '“等于/不等于”只能填一个值，多个请选“在列表内/不在列表内”',
+    valuesRequired: '请输入匹配值', ipInvalid: '请输入有效的 IP 地址或网段', valuesSelect: '请选择匹配值', ipListRequired: '请选择 IP 名单', headerRequired: '请输入请求头名称', browserRequired: '请选择浏览器',
     ja4Invalid: 'JA4 指纹格式不对：{{values}}。应形如 t13d1516h2_8daaf6152771_b186095e22b6，可从访问日志复制',
     nodeHint: 'JA4 条件需要节点启用 JA4 模块，“不在列表内”还需节点支持 WAF_JA4_NEGATION；地理与网络条件需要节点已同步 IP 情报库。不满足的节点会拒绝发布并提示“节点版本过低”。',
+    // 只在需要节点能力的条件下就地说明；版本细节在“诊断详情”里。
+    capability: {
+      needs: '此条件需要节点支持{{need}}。',
+      kinds: { ja4: 'TLS 指纹（JA4）识别', ja4Negation: 'TLS 指纹（JA4）“不在列表内”匹配', ipIntel: 'IP 情报库',
+        wafV4: '内容类型、HTTP 版本与 IP 名单匹配', wafV6: '字符串集合、浏览器、设备与请求时间匹配' },
+      ipIntelReady: '主控 IP 情报库已就绪（第 {{revision}} 版），节点同步后按此条件匹配。',
+      ipIntelMissing: '主控还没有 IP 情报库，同步后节点才能按此条件匹配。',
+      siteWaiting: '本站有 {{count}} 个节点等待升级后才会下发：{{nodes}}。',
+      askAdmin: '请联系平台升级这些节点。',
+      upgrade: '去升级节点',
+      onPublish: '发布时按目标节点逐个检查，需要升级的节点会在发布结果中列出。',
+      diagnostics: '诊断详情',
+    },
   },
 }
 
@@ -135,8 +149,21 @@ const enUS: Messages = {
       ip_tag: 'One per line: idc:cn (China data centers), idc:global (elsewhere)',
     },
     singleValue: 'Equals / not equals take one value; choose in list / not in list for several',
+    valuesRequired: 'Enter a match value', ipInvalid: 'Enter a valid IP address or network', valuesSelect: 'Choose a match value', ipListRequired: 'Choose an IP list', headerRequired: 'Enter the header name', browserRequired: 'Choose a browser',
     ja4Invalid: 'Not a JA4 fingerprint: {{values}}. Expected the form t13d1516h2_8daaf6152771_b186095e22b6; copy it from the access log',
     nodeHint: 'JA4 conditions need nodes with the JA4 module, "not in list" also WAF_JA4_NEGATION; geo and network conditions need nodes that synced the IP intelligence library. Other nodes refuse the release as "node version too old".',
+    capability: {
+      needs: 'This condition needs nodes that support {{need}}.',
+      kinds: { ja4: 'TLS fingerprint (JA4) matching', ja4Negation: 'TLS fingerprint (JA4) "not in list" matching', ipIntel: 'the IP intelligence library',
+        wafV4: 'content type, HTTP version and IP list matching', wafV6: 'string set, browser, device and request time matching' },
+      ipIntelReady: 'The control plane has the IP intelligence library (revision {{revision}}); nodes match this condition once synced.',
+      ipIntelMissing: 'The control plane has no IP intelligence library yet; nodes match this condition once it is synced.',
+      siteWaiting: '{{count}} nodes of this site are published to once upgraded: {{nodes}}.',
+      askAdmin: 'Ask the platform to upgrade these nodes.',
+      upgrade: 'Upgrade nodes',
+      onPublish: 'Publishing checks every target node and lists the ones to upgrade in the result.',
+      diagnostics: 'Diagnostic details',
+    },
   },
 }
 

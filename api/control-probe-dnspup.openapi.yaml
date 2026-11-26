@@ -5,9 +5,12 @@ info:
   description: >-
     docs/architecture/probe-dnspup-unified.md. Admin routes need a platform session with
     system.probe_dnspup.manage (or platform.admin). Plugin routes accept only a tenant API key bound to an
-    enabled plugin installation (`Authorization: CdncaKey <key_id>.<secret>`) holding probes.dnspup.request;
+    enabled plugin installation that covers the key's tenant (the tenant's own, or one the platform installed
+    for this tenant) (`Authorization: CdncaKey <key_id>.<secret>`) holding probes.dnspup.request;
     the control plane runs the probe with the platform's dnspup key pair and quota and answers the result to
-    the installation that created it only (anything else reads 404). Errors use the control-api ErrorEnvelope;
+    the installation and tenant that created it only (anything else reads 404). Idempotency-Key replays within
+    the installation and tenant; the per-minute limit counts the installation, the monthly quota each tenant.
+    Errors use the control-api ErrorEnvelope;
     plugin codes: probe_dnspup_plugin_identity_required 403, probe_dnspup_not_installed 409,
     probe_dnspup_not_configured 409, probe_dnspup_paused 503, probe_dnspup_rate_limited 429,
     probe_dnspup_quota_exceeded 429, probe_dnspup_target_restricted 422.

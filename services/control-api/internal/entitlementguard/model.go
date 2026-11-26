@@ -45,6 +45,18 @@ var (
 	ErrQuotaExceeded         = errors.New("entitlement quota exceeded")
 )
 
+// FeatureDeniedError is ErrFeatureDenied naming the feature code the local
+// lease does not grant, so the HTTP answer can carry it as
+// details.required_feature.
+// errors.Is(err, ErrFeatureDenied) holds.
+type FeatureDeniedError struct {
+	Feature string
+}
+
+func (err *FeatureDeniedError) Error() string { return ErrFeatureDenied.Error() + ": " + err.Feature }
+
+func (err *FeatureDeniedError) Is(target error) bool { return target == ErrFeatureDenied }
+
 type VerificationKey struct {
 	KeyID       string
 	PublicKey   ed25519.PublicKey

@@ -1,0 +1,5 @@
+/* rc-tabs 在聚焦的页签里硬编码 aria-live「Tab N of M」且无 locale 接口；
+   读屏原生会报 tablist 内位置与选中态，这里让它退出可访问树。 */
+.cdnca-tabs .ant-tabs-tab [aria-live] {
+  display: none;
+}

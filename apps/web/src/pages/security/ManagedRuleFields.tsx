@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Alert, Button, Form, Input, InputNumber, Select, Space, Switch, type FormInstance } from 'antd'
 import { useTranslation } from 'react-i18next'
 
@@ -34,47 +35,106 @@ export function challengeFieldsFor(type: string | undefined, logOnly: boolean) {
 // every unpassed request; both set challenges only a client over the limit.
 const triggerFields = [['trigger_window_seconds', 1, 3600], ['trigger_max_requests', 1, 1_000_000]] as const
 
+// the plain view holds the trigger,
+// record-only and what the type itself needs (the PoW difficulty of the JS /
+// 5秒盾 page, the 5秒盾 wait); the other parameters keep their defaults under
+// 高级设置, which stays mounted while collapsed so they are still submitted.
+const powChallengeTypes = new Set(['js', 'five_second'])
+
+/** Whether a challenge parameter is in the plain view (the rest are under 高级设置). */
+export function basicChallengeField(field: string, type: string | undefined) {
+  return field === 'delay_seconds' || (field === 'pow_bits' && powChallengeTypes.has(type ?? ''))
+}
+
+const thresholdFields = {
+  rate_limit: ['window_seconds', 'max_requests'],
+  challenge: ['trigger_window_seconds', 'trigger_max_requests'],
+} as const
+
+/**
+ * Changing a rule's action between 限速 and 挑战 keeps the threshold the user
+ * set (rate_limit window_seconds / max_requests <-> challenge
+ * trigger_window_seconds / trigger_max_requests: both count more requests
+ * than the limit within the window). Only a complete pair is carried and only
+ * into an empty one, so nothing the user did not type is filled in.
+ */
+export function carryActionThreshold(form: FormInstance, ruleName: number, next: string) {
+  if (next !== 'challenge' && next !== 'rate_limit') return
+  const source = next === 'challenge' ? 'rate_limit' : 'challenge'
+  const path = (section: string, field: string) => ['rules', ruleName, 'action_config', section, field]
+  const read = (section: keyof typeof thresholdFields) =>
+    thresholdFields[section].map((field) => form.getFieldValue(path(section, field)) as number | null | undefined)
+  const from = read(source)
+  if (from.some((value) => value == null) || read(next).some((value) => value != null)) return
+  thresholdFields[next].forEach((field, index) => form.setFieldValue(path(next, field), from[index]))
+}
+
 /** Challenge parameters of one CC rule (Form.List item `ruleName`). */
 export function ChallengeFields({ ruleName, form }: { ruleName: number; form: FormInstance }) {
   const { t } = useTranslation('managedRules')
   const challengePath = (field: string) => ['rules', ruleName, 'action_config', 'challenge', field]
+  // undefined until the user toggles: a rule with its own advanced values opens with them shown.
+  const [advancedOpen, setAdvancedOpen] = useState<boolean>()
+  const advancedID = useId()
+  const numberField = ([field, min, max, initial]: (typeof challengeFields)[number]) => (
+    // preserve={false}: a field hidden by the type / log-only switch must be
+    // omitted (the server requires 0 there) and is prefilled again when it comes back.
+    <Form.Item key={field} name={[ruleName, 'action_config', 'challenge', field]} label={t(`challenge.${field}`)}
+      tooltip={t(`challenge.${field}Help`)} initialValue={initial} preserve={false}
+      rules={[{ required: true, type: 'number', min, max }]}>
+      <InputNumber aria-label={t(`challenge.${field}`)} min={min} max={max} precision={0} style={{ width: 130 }} />
+    </Form.Item>
+  )
   return (
     <Form.Item noStyle shouldUpdate>
       {() => {
         const type = form.getFieldValue(['rules', ruleName, 'action_config', 'challenge', 'type']) as string | undefined
         const logOnly = Boolean(form.getFieldValue(['rules', ruleName, 'action_config', 'challenge', 'log_only']))
+        const fields = challengeFieldsFor(type, logOnly)
+        const advanced = fields.filter(([field]) => !basicChallengeField(field, type))
+        const customized = advanced.some(([field, , , initial]) => {
+          const value = form.getFieldValue(challengePath(field)) as number | null | undefined
+          return value != null && value !== initial
+        })
+        const invalid = form.getFieldsError(advanced.map(([field]) => challengePath(field))).some((item) => item.errors.length > 0)
+        const expanded = invalid || (advancedOpen ?? customized)
         return (
-          <Space size={10} wrap align="start">
-            <Form.Item name={[ruleName, 'action_config', 'challenge', 'log_only']} label={t('challenge.log_only')} valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            {/* preserve={false}: a field hidden by the type / log-only switch must
-                be omitted (the server requires 0 there) and is prefilled again
-                when it comes back. */}
-            {challengeFieldsFor(type, logOnly).map(([field, min, max, initial]) => (
-              <Form.Item key={field} name={[ruleName, 'action_config', 'challenge', field]} label={t(`challenge.${field}`)}
-                tooltip={t(`challenge.${field}Help`)} initialValue={initial} preserve={false}
-                rules={[{ required: true, type: 'number', min, max }]}>
-                <InputNumber aria-label={t(`challenge.${field}`)} min={min} max={max} precision={0} style={{ width: 130 }} />
+          <div className="challenge-fields">
+            <Space size={10} wrap align="start">
+              {triggerFields.map(([field, min, max], index) => {
+                const other = triggerFields[1 - index][0]
+                return (
+                  <Form.Item key={field} name={[ruleName, 'action_config', 'challenge', field]} label={t(`challenge.${field}`)}
+                    tooltip={t('challenge.triggerHelp')} dependencies={[challengePath(other)]}
+                    rules={[{ type: 'number', min, max }, {
+                      validator: (_, value: number | null | undefined) => {
+                        const otherValue = form.getFieldValue(challengePath(other)) as number | null | undefined
+                        return (value == null) && otherValue != null
+                          ? Promise.reject(new Error(t('challenge.triggerPair'))) : Promise.resolve()
+                      },
+                    }]}>
+                    <InputNumber aria-label={t(`challenge.${field}`)} min={min} max={max} precision={0} placeholder={t('challenge.triggerEmpty')} style={{ width: 130 }} />
+                  </Form.Item>
+                )
+              })}
+              <Form.Item name={[ruleName, 'action_config', 'challenge', 'log_only']} label={t('challenge.log_only')} valuePropName="checked">
+                <Switch />
               </Form.Item>
-            ))}
-            {triggerFields.map(([field, min, max], index) => {
-              const other = triggerFields[1 - index][0]
-              return (
-                <Form.Item key={field} name={[ruleName, 'action_config', 'challenge', field]} label={t(`challenge.${field}`)}
-                  tooltip={t('challenge.triggerHelp')} dependencies={[challengePath(other)]}
-                  rules={[{ type: 'number', min, max }, {
-                    validator: (_, value: number | null | undefined) => {
-                      const otherValue = form.getFieldValue(challengePath(other)) as number | null | undefined
-                      return (value == null) && otherValue != null
-                        ? Promise.reject(new Error(t('challenge.triggerPair'))) : Promise.resolve()
-                    },
-                  }]}>
-                  <InputNumber aria-label={t(`challenge.${field}`)} min={min} max={max} precision={0} placeholder={t('challenge.triggerEmpty')} style={{ width: 130 }} />
-                </Form.Item>
-              )
-            })}
-          </Space>
+              {fields.filter(([field]) => basicChallengeField(field, type)).map(numberField)}
+            </Space>
+            {advanced.length ? (
+              <>
+                <Button type="link" size="small" className="challenge-advanced-toggle" aria-expanded={expanded} aria-controls={advancedID}
+                  icon={expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                  onClick={() => setAdvancedOpen(!expanded)}>
+                  {t('challenge.advanced')}{customized ? <span className="challenge-advanced-customized"> · {t('challenge.advancedCustomized')}</span> : null}
+                </Button>
+                <div id={advancedID} hidden={!expanded}>
+                  <Space size={10} wrap align="start">{advanced.map(numberField)}</Space>
+                </div>
+              </>
+            ) : null}
+          </div>
         )
       }}
     </Form.Item>

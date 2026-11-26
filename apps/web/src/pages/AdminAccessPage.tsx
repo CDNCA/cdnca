@@ -9,6 +9,7 @@ import { DataState } from '../components/DataState'
 import { localizedApiError } from '../i18n/apiError'
 import { adminAccessMessages } from '../i18n/adminAccess'
 import { FeedbackWhen, PageSection } from '@cdnca/ui'
+import { isIPAddress, validCIDR } from './streamForm'
 
 // Platform administration access allowlist: who may
 // reach the console, with the "do not lock yourself out" rules spelled out.
@@ -56,14 +57,29 @@ export default function AdminAccessPage() {
       setBusy(false)
     }
   }
+  // 与已读策略按规范化草稿比较，没改动不能保存；无效条目就地标在输入框并聚焦，
+  // 不进入危险确认。
+  const draft = parseAllowlist(text)
+  const dirty = Boolean(policy) && (enabled !== policy!.enabled ||
+    [...draft].sort().join('\n') !== [...policy!.allowlist].sort().join('\n'))
+  const [invalidEntry, setInvalidEntry] = useState<string>()
   // W4: saving can lock the operator out, so it always asks first and names
-  // the current IP that the allowlist must contain.
-  const confirmSave = () => void modal.confirm({
-    title: t('confirmTitle'),
-    content: t('confirmContent', { ip: policy?.current_ip || t('confirmUnknownIP') }),
-    okText: t('confirmOk'), cancelText: t('confirmCancel'), okButtonProps: { danger: true },
-    onOk: () => save(),
-  })
+  // the current IP that the allowlist must contain; the safe choice (取消) has the focus.
+  const confirmSave = () => {
+    const invalid = draft.find((entry) => !isIPAddress(entry) && !validCIDR(entry))
+    setInvalidEntry(invalid)
+    if (invalid) {
+      document.getElementById('admin-access-allowlist')?.focus()
+      return
+    }
+    void modal.confirm({
+      title: t('confirmTitle'),
+      content: t('confirmContent', { ip: policy?.current_ip || t('confirmUnknownIP') }),
+      okText: t('confirmOk'), cancelText: t('confirmCancel'), okButtonProps: { danger: true },
+      autoFocusButton: 'cancel',
+      onOk: () => save(),
+    })
+  }
   const addCurrent = () => {
     if (policy?.current_ip && !parseAllowlist(text).includes(policy.current_ip)) {
       setText(value => (value.trim() ? `${value.trim()}\n` : '') + policy.current_ip)
@@ -85,10 +101,14 @@ export default function AdminAccessPage() {
             </Space>
             <label htmlFor="admin-access-allowlist">{t('allowlist')}</label>
             <Input.TextArea id="admin-access-allowlist" rows={6} value={text} disabled={!canManage || busy}
-              placeholder={t('allowlistPlaceholder')} onChange={event => setText(event.target.value)} />
+              status={invalidEntry ? 'error' : undefined} aria-invalid={invalidEntry ? true : undefined}
+              aria-describedby={invalidEntry ? 'admin-access-allowlist-error' : undefined}
+              placeholder={t('allowlistPlaceholder')} onChange={event => { setInvalidEntry(undefined); setText(event.target.value) }} />
+            {invalidEntry ? <div id="admin-access-allowlist-error" className="ant-form-item-explain-error" role="alert">
+              {t('invalidEntry', { entry: invalidEntry })}</div> : null}
             <Space>
               <Button disabled={!canManage || busy || !policy.current_ip} onClick={addCurrent}>{t('addCurrent')}</Button>
-              <Button type="primary" loading={busy} disabled={!canManage} onClick={confirmSave}>{t('save')}</Button>
+              <Button type="primary" loading={busy} disabled={!canManage || !dirty} onClick={confirmSave}>{t('save')}</Button>
             </Space>
             {saveError ? <FeedbackWhen title={errorText(saveError)} /> : null}
             <Alert type="info" showIcon message={t('recoveryTitle')} description={<>

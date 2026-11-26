@@ -19,3 +19,16 @@ it.each([
   expect(error).not.toHaveProperty('params')
   expect(JSON.stringify(error)).not.toContain('raw-private-secret')
 })
+
+// 403 entitlement_feature_denied 的 details.required_feature 读成 requiredFeature。
+it.each([
+  [{ required_feature: 'packages.manage' }, 'packages.manage'],
+  [{ required_feature: 'Packages Manage' }, undefined],
+  [undefined, undefined],
+])('reads the required license feature of an entitlement refusal: %j', async (details, feature) => {
+  const error = await responseApiError(new Response(JSON.stringify({ error: {
+    code: 'entitlement_feature_denied', message: 'private detail', request_id: 'safe-request', details,
+  } }), { status: 403, headers: { 'Content-Type': 'application/json' } }))
+  expect(error.code).toBe('entitlement_feature_denied')
+  expect(error.requiredFeature).toBe(feature)
+})

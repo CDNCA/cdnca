@@ -132,6 +132,22 @@ describe('SiteDefaultsPanel', () => {
     }
   })
 
+  it('names the setting, its value and scope in the single delete confirmation', async () => {
+    signIn(['sites.read', 'sites.manage'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ items: [
+      row(1, { scope_name: 'group', group_id: '019a1b00-0000-7000-8000-0000000000aa', group_name: '<b>分组甲</b>' }),
+    ], total: 1, page: 1, limit: 10 }))
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteDefaultsPanel />)
+    await user.click(await screen.findByRole('button', { name: '删除 开启Websocket' }))
+    const tooltip = await screen.findByRole('tooltip')
+    expect(within(tooltip).getByText('删除默认设置「开启Websocket」？')).toBeInTheDocument()
+    expect(tooltip).toHaveTextContent('设置值：开启')
+    expect(tooltip).toHaveTextContent('生效范围：网站分组：<b>分组甲</b>')
+    expect(tooltip.querySelector('b')).toBeNull()
+    expect(within(tooltip).getByRole('button', { name: '删除默认设置 开启Websocket' })).toBeInTheDocument()
+  })
+
   it('lists a rule document default by its rule count', async () => {
     signIn(['sites.read', 'sites.manage'])
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ items: [
@@ -328,10 +344,16 @@ describe('SiteDefaultsPanel', () => {
     renderWithProviders(<SiteDefaultsPanel />)
     await user.click(await screen.findByRole('button', { name: /新增设置/ }))
     const dialog = dialogs()[0]
-    for (const section of ['配置对象', '设置内容', '生效范围']) expect(within(dialog).getByText(section)).toBeInTheDocument()
-    expect(within(dialog).getByText('请选择设置项后编辑默认值。')).toBeInTheDocument()
+    // 不分三段标题，未选设置项时不展开设置值和范围，也没有占位说明
+    for (const section of ['配置对象', '设置内容', '生效范围']) expect(within(dialog).queryByText(section)).toBeNull()
+    expect(within(dialog).queryByText('请选择设置项后编辑默认值。')).toBeNull()
+    expect(within(dialog).queryByRole('radio', { name: '本账号全部新建网站' })).toBeNull()
     expect(within(dialog).queryByRole('combobox', { name: '用户' })).toBeNull()
     await chooseSetting(user, dialog, 'ssl_protocols')
+    // 租户的范围写明是本账号的新建网站，不写「全局」
+    expect(within(dialog).getByRole('radio', { name: '本账号全部新建网站' })).toBeChecked()
+    expect(within(dialog).getByRole('radio', { name: '指定分组的新建网站' })).toBeInTheDocument()
+    expect(within(dialog).queryByText('全局')).toBeNull()
     const protocols = within(dialog).getAllByRole('checkbox').map((item) => item.closest('label')?.textContent)
     expect(protocols).toEqual(['TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3'])
     // 初值 TLSv1.2 TLSv1.3；去掉 1.2、加上 1.1 不连续，被就地拒绝
@@ -400,7 +422,8 @@ describe('SiteDefaultsPanel', () => {
     await user.click(await screen.findByText(/jason（27）/, { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
     await chooseSetting(user, dialog, '回源协议')
     await user.click(within(dialog).getByRole('radio', { name: /跟随协议和端口/ }))
-    await user.click(within(dialog).getByText('网站分组', { selector: '.ant-radio-button-wrapper span' }))
+    expect(within(dialog).getByRole('radio', { name: 'jason 的全部新建网站' })).toBeChecked()
+    await user.click(within(dialog).getByText('jason 指定分组的新建网站', { selector: '.ant-radio-button-wrapper span' }))
     await user.click(within(dialog).getByRole('combobox', { name: '网站分组' }))
     await user.click(await screen.findByText('默认分组', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
@@ -408,6 +431,26 @@ describe('SiteDefaultsPanel', () => {
     const body = JSON.parse(String(fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST')![1]?.body))
     expect(body).toEqual({ target_scope_id: scope, owner_id: userID, setting_name: 'origin_protocol', setting_value: 'follow_port',
       scope_name: 'group', group_id: groupID })
+  })
+
+  it('shows the setting and scope read-only when editing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [row(1), row(2, { setting_name: 'gzip_enable', scope_name: 'group',
+      group_id: '33333333-3333-4333-8333-333333333333', group_name: '华东站点' })], total: 2, page: 1, limit: 10 }))
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteDefaultsPanel />)
+    expect(await screen.findByText('全部新建网站')).toBeInTheDocument()
+    expect(screen.getByText('网站分组：华东站点')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '编辑 开启Websocket' }))
+    let dialog = dialogs()[0]
+    expect(within(dialog).queryByRole('combobox', { name: '设置项' })).toBeNull()
+    expect(within(dialog).getAllByText('开启Websocket').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('本账号全部新建网站').length).toBeGreaterThan(0)
+    expect(within(dialog).queryByRole('radio', { name: '指定分组的新建网站' })).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    await user.click(screen.getByRole('button', { name: '编辑 开启Gzip' }))
+    dialog = dialogs()[0]
+    expect(within(dialog).getByText('网站分组：华东站点')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('combobox', { name: '网站分组' })).toBeNull()
   })
 
   it('rejects an invalid port in the field before any write (SITE-CURRENT-08)', async () => {

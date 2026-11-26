@@ -18,6 +18,8 @@ export interface CnameLabelEditorProps {
   disabled?: boolean
   /** 保存成功（网站名称一改就会重新生成 CNAME）后，让页面重新读取。 */
   onSaved?: () => void
+  /** 输入框的可访问名称（默认「主机名」/「前缀」）；同一页另有只读主机名时用它区分。 */
+  label?: string
 }
 
 // 与服务端 cnameallocation.validateLabel 一致：小写字母、数字、连字符，不以连字符开头结尾。
@@ -36,7 +38,7 @@ export function cnameLabelPreview(mode: 'full' | 'prefix', label: string, domain
   return domain ? `${host}.${domain}` : host
 }
 
-export default function CnameLabelEditor({ kind, subjectID, mode, domain = '', disabled = false, onSaved }: CnameLabelEditorProps) {
+export default function CnameLabelEditor({ kind, subjectID, mode, domain = '', disabled = false, onSaved, label }: CnameLabelEditorProps) {
   const { t } = useTranslation('cnameLabel')
   const { t: tErrors } = useTranslation('errors')
   const { message } = App.useApp()
@@ -110,7 +112,7 @@ export default function CnameLabelEditor({ kind, subjectID, mode, domain = '', d
     }
   }
 
-  const fieldLabel = mode === 'full' ? t('hostname') : t('prefix')
+  const fieldLabel = label ?? (mode === 'full' ? t('hostname') : t('prefix'))
   return (
     <div className="cname-label-editor">
       <div className="cname-label-editor-row">

@@ -77,6 +77,28 @@ func nodeStorageFor(advertised []*agentv1.Capability, storage siteobject.NodeSto
 	return nil
 }
 
+// loadNodeFactsAt is the database clock in Unix microseconds, read before a
+// publication reads the node facts its key documents carry.
+func loadNodeFactsAt(ctx context.Context, tx pgx.Tx) (int64, error) {
+	var at int64
+	if err := tx.QueryRow(ctx, `SELECT (extract(epoch FROM clock_timestamp())*1000000)::bigint`).Scan(&at); err != nil || at < 1 {
+		return 0, fmt.Errorf("%w: read node facts time", ErrPersistence)
+	}
+	return at, nil
+}
+
+// nodeFactsAtFor is the key document's NodeFactsAt: only for an Agent
+// declaring NODE_STORAGE v2 (an older one refuses the unknown field).
+func nodeFactsAtFor(advertised []*agentv1.Capability, at int64) int64 {
+	for _, capability := range advertised {
+		if capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_NODE_STORAGE &&
+			capability.GetApiVersion() >= siteobject.NodeStorageNodeFactsAPIVersion {
+			return at
+		}
+	}
+	return 0
+}
+
 // NodeStorageDigestTx digests every live node's storage settings, in node
 // order: the watcher republishes when it moves.
 func NodeStorageDigestTx(ctx context.Context, tx pgx.Tx) ([]byte, error) {

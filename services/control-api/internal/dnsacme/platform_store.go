@@ -132,7 +132,10 @@ func (s *Store) PlatformConfig(ctx context.Context) (PlatformConfig, error) {
 	if err != nil {
 		return PlatformConfig{}, err
 	}
-	result.Sync.Tenants = len(tenants)
+	if doc.ProviderType != "" {
+		// After 断开 DNS 服务商 the remaining copies are disabled.
+		result.Sync.Tenants = len(tenants)
+	}
 	if doc.SyncError != "" && doc.SyncedAt != nil {
 		result.LastError = &PlatformDNSError{Source: "platform_sync", Code: doc.SyncError, At: doc.SyncedAt.UTC()}
 		return result, nil
@@ -233,6 +236,42 @@ func (s *Store) SavePlatformConfig(ctx context.Context, actor Actor, request Sav
 			return err
 		}
 		return completeWrite(ctx, tx, actor, "dns.platform.config", request.IdempotencyKey, uuid.Nil,
+			map[string]int64{"version": doc.Revision})
+	})
+}
+
+// DisconnectPlatformConfig removes the provider and its credential ciphertext
+// from the platform document; the CNAME domains, TTL and IP weight stay.
+func (s *Store) DisconnectPlatformConfig(ctx context.Context, actor Actor, request DisconnectPlatformConfigRequest,
+	digest [32]byte) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		replay, err := reserveWrite(ctx, tx, actor, actor.ScopeID, "dns.platform.disconnect", request.IdempotencyKey, digest)
+		if err != nil || replay != nil {
+			return err
+		}
+		scopeID, doc, err := loadPlatformDocument(ctx, tx, true)
+		if err != nil {
+			return err
+		}
+		if doc.Revision != request.ExpectedRevision {
+			return ErrRevisionConflict
+		}
+		previous := doc.ProviderType
+		if previous != "" || len(doc.Ciphertext) > 0 {
+			now := time.Now().UTC()
+			doc.ProviderType, doc.Identifiers = "", map[string]string{}
+			doc.BindingID, doc.KeyID, doc.Ciphertext = uuid.Nil, "", nil
+			doc.CredentialVersion++
+			doc.Revision, doc.UpdatedAt = doc.Revision+1, &now
+			if err := savePlatformDocument(ctx, tx, scopeID, doc); err != nil {
+				return err
+			}
+			if err := s.appendAudit(ctx, tx, actor, actor.ScopeID, request.RequestID, "dns.platform.config.disconnect",
+				"dns_platform_config", uuid.Nil, map[string]any{"provider_type": previous, "version": doc.Revision}); err != nil {
+				return err
+			}
+		}
+		return completeWrite(ctx, tx, actor, "dns.platform.disconnect", request.IdempotencyKey, uuid.Nil,
 			map[string]int64{"version": doc.Revision})
 	})
 }

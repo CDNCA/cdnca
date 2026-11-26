@@ -329,8 +329,6 @@ func addonSiteInsertPackageProductVersionCNAMEMode(t *testing.T, pool *pgxpool.P
 	revision, domains, traffic int64, cnameMode, cnameDomain, cnameHostname string,
 ) uuid.UUID {
 	t.Helper()
-	productID := uuid.New()
-	now := time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC)
 	name := "Business"
 	if cnameDomain != "cdn.example.com" {
 		name = "Business " + cnameDomain
@@ -338,6 +336,17 @@ func addonSiteInsertPackageProductVersionCNAMEMode(t *testing.T, pool *pgxpool.P
 	if cnameMode != "per_site" {
 		name += " " + cnameMode
 	}
+	return addonSiteInsertNamedPackageProductVersion(t, pool, actor, name, revision, domains, traffic, cnameMode, cnameDomain, cnameHostname)
+}
+
+// addonSiteInsertNamedPackageProductVersion inserts the product under an
+// explicit name (product names are unique per owner, 481).
+func addonSiteInsertNamedPackageProductVersion(t *testing.T, pool *pgxpool.Pool, actor packagesubscription.Actor,
+	name string, revision, domains, traffic int64, cnameMode, cnameDomain, cnameHostname string,
+) uuid.UUID {
+	t.Helper()
+	productID := uuid.New()
+	now := time.Date(2026, time.July, 22, 0, 0, 0, 0, time.UTC)
 	spec := []byte(`{"name":"` + name + `","limits":{"domains":` + strconv.FormatInt(domains, 10) +
 		`,"root_domains":1,"http_ports":1,"monthly_traffic_bytes":` + strconv.FormatInt(traffic, 10) +
 		`},"cname":{"mode":"` + cnameMode + `","domain":"` + cnameDomain + `","hostname":"` + cnameHostname +

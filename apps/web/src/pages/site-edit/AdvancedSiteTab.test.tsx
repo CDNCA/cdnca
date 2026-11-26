@@ -19,7 +19,7 @@ vi.mock('../../api/httpPolicies', async (importOriginal) => ({
   emptyHttpPolicyConfig: () => ({ max_upload_bytes: 0, request_headers: [], response_headers: [], rewrites: [], redirect_allowed_hosts: [], redirects: [], cors: null, referer_check: null }),
   configFromHttpPolicy: (value: HttpPolicy) => ({ max_upload_bytes: value.max_upload_bytes, request_headers: value.request_headers, response_headers: value.response_headers, rewrites: value.rewrites, redirect_allowed_hosts: value.redirect_allowed_hosts, redirects: value.redirects, cors: value.cors }),
   httpPoliciesApi: {
-    list: vi.fn().mockResolvedValue({ items: [] }),
+    list: vi.fn().mockResolvedValue({ items: [], system_max_upload_bytes: 104857600 }),
     preview: vi.fn().mockResolvedValue({ state: 'preview', sha256: 'a'.repeat(64), snapshot: { schema_version: 'cdnca.edge.http-policy/v1', policy_version: 1, sites: [] } }),
     create: vi.fn(), update: vi.fn(), setEnabled: vi.fn(), delete: vi.fn(),
   },
@@ -31,7 +31,7 @@ vi.mock('../../api/siteSchedule302', async (importOriginal) => ({
       extensions: [], path_prefixes: [], min_size_bytes: 0 } }), replace: vi.fn() },
 }))
 vi.mock('../../api/errorPages', () => ({
-  errorPagesApi: { listAssets: vi.fn().mockResolvedValue({ items: [] }), listRules: vi.fn().mockResolvedValue({ items: [] }), initiateAsset: vi.fn(), uploadAssetContent: vi.fn(), finalizeAsset: vi.fn(), deleteAsset: vi.fn(), getAssetContent: vi.fn(), createRule: vi.fn(), updateRule: vi.fn(), setRuleEnabled: vi.fn(), deleteRule: vi.fn() },
+  errorPagesApi: { listAssets: vi.fn().mockResolvedValue({ items: [], system_max_upload_bytes: 104857600 }), listRules: vi.fn().mockResolvedValue({ items: [] }), initiateAsset: vi.fn(), uploadAssetContent: vi.fn(), finalizeAsset: vi.fn(), deleteAsset: vi.fn(), getAssetContent: vi.fn(), createRule: vi.fn(), updateRule: vi.fn(), setRuleEnabled: vi.fn(), deleteRule: vi.fn() },
 }))
 const siteTrafficLimitInitial = {
   site_id: '55555555-5555-4555-8555-555555555555', version: 3,
@@ -51,7 +51,7 @@ beforeEach(() => {
   session.principal = tenantPrincipal
   vi.restoreAllMocks()
   vi.clearAllMocks()
-  vi.mocked(httpPoliciesApi.list).mockReset().mockResolvedValue({ items: [] })
+  vi.mocked(httpPoliciesApi.list).mockReset().mockResolvedValue({ items: [], system_max_upload_bytes: 104857600 })
   vi.mocked(httpPoliciesApi.create).mockReset()
   vi.mocked(httpPoliciesApi.update).mockReset()
   vi.mocked(httpPoliciesApi.setEnabled).mockReset()
@@ -143,6 +143,8 @@ describe('AdvancedSiteTab', () => {
     ])
     expect(await screen.findByText('暂无自定义错误页')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '新增页面' })).not.toBeInTheDocument()
+    // no policy: the summary shows the system limit the node applies
+    expect((await screen.findAllByText('系统默认（100 MB）')).length).toBeGreaterThan(0)
   })
 
   it('does not request when local policy permissions are absent', async () => {
@@ -204,7 +206,7 @@ describe('AdvancedSiteTab', () => {
   })
 
   it('shows localized terminal 403 feedback for a state mutation without retrying', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     vi.mocked(httpPoliciesApi.setEnabled).mockRejectedValue(new ApiError('raw server message', 403, 'permission_denied'))
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={client}><AdvancedSiteTab siteId="55555555-5555-4555-8555-555555555555" accessToken="token" scopeKind="tenant" scopeId="22222222-2222-4222-8222-222222222222" tenantId="22222222-2222-4222-8222-222222222222" userId="44444444-4444-4444-8444-444444444444" sessionEpoch={1} permissions={['http_policies.read', 'http_policies.manage']} canManage lockedForTenant={false} /></QueryClientProvider>)
@@ -245,7 +247,7 @@ describe('AdvancedSiteTab', () => {
   })
 
   it('retries policy update and toggle with their original revision, body, and idempotency key', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     vi.mocked(httpPoliciesApi.update)
       .mockRejectedValueOnce(new ApiError('raw timeout', 408, 'request_failed'))
       .mockResolvedValueOnce({ ...policy, max_upload_bytes: 2048, revision: 8 })
@@ -276,7 +278,7 @@ describe('AdvancedSiteTab', () => {
   })
 
   it('saves internal rewrites and fixed redirects in the exact HTTP policy config', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     vi.mocked(httpPoliciesApi.update).mockImplementation(async (_token, _scope, _id, revision, config) => ({ ...policy, ...config, revision: revision + 1 }))
     const user = userEvent.setup()
     renderTab(['http_policies.read', 'http_policies.manage'])

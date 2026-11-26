@@ -333,7 +333,7 @@ components:
             ready: {type: boolean}
             reason:
               type: string
-              enum: [ready, control_upgrade_runner_unconfirmed, control_upgrade_draining, execution_unavailable]
+              enum: [ready, control_upgrade_runner_unconfirmed, control_upgrade_current_release_unverified, control_upgrade_draining, execution_unavailable]
     NativeExecutionStatus:
       type: object
       additionalProperties: false
@@ -568,7 +568,19 @@ components:
         installation_id: {type: string}
         component: {type: string}
         current_version: {type: string}
-        current_schema_head: {type: [integer, 'null']}
+        current_schema_head:
+          type: [integer, 'null']
+          description: |
+            Schema head of the installed build, identified by the runner-verified digest of its signed release.
+            Null when unconfirmed (current_schema_head_reason says why); never the highest head among builds
+            of the same version.
+        current_schema_head_reason:
+          type: string
+          enum: [current_artifact_unverified, current_artifact_unregistered, current_artifact_schema_unknown]
+          description: |
+            Present only when current_schema_head is null. current_artifact_unverified: the runner has no verified
+            installed release; current_artifact_unregistered: License has no published build of this version with
+            that digest; current_artifact_schema_unknown: the matching build records no schema head.
         target_mode: {type: string}
         items:
           type: [array, 'null']

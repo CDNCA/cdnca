@@ -137,8 +137,26 @@ var MatrixWindows = map[string][2]time.Duration{
 // ErrMatrixSubject: unknown subject, id or window.
 var ErrMatrixSubject = errors.New("dnspup matrix: invalid subject, id or window")
 
+const (
+	matrixNodeFrom   = "node_dnspup_probe_results source"
+	matrixNodeFilter = "source.node_id=$1"
+	matrixEdgeFrom   = "probe_dnspup_observations source"
+	matrixEdgeFilter = "source.consumer='edge' AND source.subject=$1"
+)
+
 const matrixCheckpoints = `CROSS JOIN LATERAL jsonb_array_elements(source.checkpoints) point
 	WHERE source.observed_at>$2`
+
+// matrixStatement reads the checkpoints of one subject's rows ($1 key, $2 since, $3 bucket seconds). In plugin
+// mode it runs through data.tx, so the manifest must grant every table and column it names.
+func matrixStatement(from, filter string) string {
+	return `SELECT to_timestamp(floor(extract(epoch FROM source.observed_at)/$3)*$3) AS bucket,
+		CASE WHEN point->>'region'='cn' THEN COALESCE(point->>'province','') ELSE COALESCE(point->>'region','') END AS area,
+		COALESCE(NULLIF(point->>'line',''),NULLIF(point->>'carrier',''),'other') AS carrier,
+		COALESCE((point->>'ok')::boolean,false) AS ok, COALESCE(point->>'failure','') AS failure,
+		COALESCE((point->>'latency_ms')::int,0) AS latency
+		FROM ` + from + ` ` + matrixCheckpoints + ` AND ` + filter + ` LIMIT 200000`
+}
 
 // ReadMatrix aggregates the checkpoints of subject id in window (dnspup
 // manage permission): node = a node's availability rows (every probed
@@ -156,19 +174,14 @@ func (service *Service) ReadMatrix(ctx context.Context, actor Actor, subject, id
 		if err != nil {
 			return matrix, ErrMatrixSubject
 		}
-		from, filter, key = "node_dnspup_probe_results source", "source.node_id=$1", node
+		from, filter, key = matrixNodeFrom, matrixNodeFilter, node
 	case subject == SubjectEdge && id != "" && len(id) <= 300:
-		from, filter, key = "probe_dnspup_observations source", "source.consumer='edge' AND source.subject=$1", id
+		from, filter, key = matrixEdgeFrom, matrixEdgeFilter, id
 	default:
 		return matrix, ErrMatrixSubject
 	}
 	now := service.now()
-	statement := `SELECT to_timestamp(floor(extract(epoch FROM source.observed_at)/$3)*$3) AS bucket,
-		CASE WHEN point->>'region'='cn' THEN COALESCE(point->>'province','') ELSE COALESCE(point->>'region','') END AS area,
-		COALESCE(NULLIF(point->>'line',''),NULLIF(point->>'carrier',''),'other') AS carrier,
-		COALESCE((point->>'ok')::boolean,false) AS ok, COALESCE(point->>'failure','') AS failure,
-		COALESCE((point->>'latency_ms')::int,0) AS latency
-		FROM ` + from + ` ` + matrixCheckpoints + ` AND ` + filter + ` LIMIT 200000`
+	statement := matrixStatement(from, filter)
 	type cellKey struct{ area, carrier string }
 	type accumulator struct {
 		total, ok, latencySum, latencyCount int

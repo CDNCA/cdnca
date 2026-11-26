@@ -90,7 +90,7 @@ func TestIAM02RegistrationHTTPUniformAcceptedContract(t *testing.T) {
 	if input.Username != "Alice" || input.Password != "Correct-horse-battery-staple" ||
 		input.DisplayName != "Alice Example" || input.Email != "alice@example.com" ||
 		input.Phone != "+8613800138000" || !input.TermsAccepted || input.TermsVersion != "terms-2026-08" ||
-		input.VerificationChannel != accountregistration.VerificationEmail ||
+		input.CurrentTermsVersion != "terms-2026-08" || input.VerificationChannel != accountregistration.VerificationEmail ||
 		input.IdempotencyKey != "registration-http-1" || input.RequestID != "request-registration-1" ||
 		input.Source != "203.0.113.8" || input.ProofReference != proofs.reference {
 		t.Fatalf("application input = %+v", input)
@@ -157,8 +157,8 @@ func TestIAM02RegistrationHTTPStrictRequestBoundary(t *testing.T) {
 		"duplicate key":         {body: strings.Replace(validRegistrationHTTPBody(), `"username":"Alice"`, `"username":"Alice","username":"Bob"`, 1), wantStatus: 422, wantCode: "account_registration_invalid_input"},
 		"trailing value":        {body: validRegistrationHTTPBody() + `{}`, wantStatus: 422, wantCode: "account_registration_invalid_input"},
 		"oversized":             {body: `{"username":"` + strings.Repeat("a", 2048) + `"}`, wantStatus: 422, wantCode: "account_registration_invalid_input"},
-		"terms false":           {body: strings.Replace(validRegistrationHTTPBody(), `"terms_accepted":true`, `"terms_accepted":false`, 1), wantStatus: 422, wantCode: "account_registration_terms_required"},
-		"terms stale":           {body: strings.Replace(validRegistrationHTTPBody(), "terms-2026-08", "terms-2025-01", 1), wantStatus: 422, wantCode: "account_registration_terms_required"},
+		// / the terms acceptance is the service's to check after the replay read
+		// (TestRegistrationHTTPCurrentTermsVersionAndQQ); the handler passes the version in force.
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

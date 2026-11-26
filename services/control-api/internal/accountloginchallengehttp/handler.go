@@ -180,8 +180,8 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 			return
 		}
 		handler.writeJSON(writer, http.StatusOK, map[string]any{"data": map[string]any{
-			"registration_enabled": methods.RegistrationEnabled,
-			"email_enabled":        methods.EmailEnabled, "sms_enabled": methods.SMSEnabled,
+			"registration_enabled": methods.RegistrationEnabled, "registration_mode": methods.RegistrationMode,
+			"email_enabled": methods.EmailEnabled, "sms_enabled": methods.SMSEnabled,
 			"email_anti_abuse_mode": methods.EmailAntiAbuseMode, "sms_anti_abuse_mode": methods.SMSAntiAbuseMode,
 			"captcha_provider": methods.CaptchaProvider, "captcha_app_id": methods.CaptchaAppID,
 		}})

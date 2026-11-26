@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { vi } from 'vitest'
 
 import { ApiError } from '../api/auth'
@@ -49,14 +51,18 @@ describe('NotificationDeliveryPolicyPanel', () => {
     expect(screen.getByRole('button', { name: /公告发布/ })).toHaveAttribute('aria-expanded', 'false')
     const user = await openEvents()
     expect(screen.getByRole('button', { name: /公告发布/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent('公告发布通知已开启邮件')
+    // 标题不带「通知」尾字，开启时只写通知方式，不再逐行重复「已开启」
+    expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent(/^公告发布邮件$/)
     await user.click(screen.getByRole('checkbox', { name: '公告发布 短信' }))
     expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent('邮件 / 短信')
     await user.click(screen.getByRole('switch', { name: '公告发布 开关' }))
     expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent('已关闭')
     await user.click(screen.getByRole('checkbox', { name: '公告发布 邮件' }))
     await user.click(screen.getByRole('checkbox', { name: '公告发布 短信' }))
-    expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent('未选择通知渠道')
+    // a disabled event shows only 已关闭; its channels are shown once it is on
+    expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent(/^公告发布已关闭$/)
+    await user.click(screen.getByRole('switch', { name: '公告发布 开关' }))
+    expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent(/^公告发布未选择通知渠道$/)
     expect(screen.getByRole('button', { name: /证书已过期/ })).not.toHaveTextContent('已开启')
     expect(screen.getByRole('switch', { name: '证书已过期 开关' })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: '证书已过期 邮件' })).toBeDisabled()
@@ -65,6 +71,51 @@ describe('NotificationDeliveryPolicyPanel', () => {
     expect(read).toHaveBeenCalledWith('policy-token')
     await user.click(screen.getByRole('button', { name: '全部收起' }))
     expect(screen.getByRole('button', { name: /公告发布/ })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  // 全局短信不可用时，摘要不把短信列为已开启，同一行写明「短信未配置」，复选框标「当前不可用」且不可操作，
+  // 但事件里的短信偏好原样保留并随保存提交（重新开启短信后照旧生效）。
+  it('marks a globally unavailable channel without dropping the saved event preference', async () => {
+    authenticate()
+    const both = { ...policy, events: [{ ...policy.events[0], sms_enabled: true, email_enabled: true }, policy.events[1]] }
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue(both)
+    const put = vi.spyOn(notificationsApi, 'putDeliveryPolicy').mockResolvedValue({ ...both, revision: 5, changed: true })
+    renderWithProviders(<NotificationDeliveryPolicyPanel channelAvailability={{ email: 'ready', sms: 'not_configured' }} />)
+    const heading = await screen.findByRole('button', { name: /公告发布/ })
+    expect(heading).toHaveTextContent(/^公告发布邮件 · 短信未配置$/)
+    const user = await openEvents()
+    const sms = screen.getByRole('checkbox', { name: '公告发布 短信' })
+    expect(sms).toBeChecked()
+    expect(sms).toBeDisabled()
+    expect(screen.getByTestId('policy-sms-unavailable-announcement.published')).toHaveTextContent('当前不可用')
+    expect(screen.queryByTestId('policy-email-unavailable-announcement.published')).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '公告发布 邮件' })).toBeEnabled()
+
+    await user.click(screen.getByRole('checkbox', { name: '公告发布 邮件' }))
+    expect(screen.getByRole('button', { name: /公告发布/ })).toHaveTextContent(/^公告发布短信未配置$/)
+    await user.click(screen.getByRole('checkbox', { name: '公告发布 邮件' }))
+    expect(screen.getByRole('button', { name: '保存通知策略' })).toBeDisabled()
+    fireEvent.change(screen.getByRole('spinbutton', { name: '公告发布 连续通知次数' }), { target: { value: '2' } })
+    await user.click(screen.getByRole('button', { name: '保存通知策略' }))
+    await waitFor(() => expect(put).toHaveBeenCalledOnce())
+    expect(put.mock.calls[0]![1].events[0]).toMatchObject({ event_type: 'announcement.published', sms_enabled: true, email_enabled: true, repeat_count: 2 })
+  })
+
+  it('names why each selected channel cannot deliver: turned off or not configured', async () => {
+    authenticate()
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, events: [{ ...policy.events[0], sms_enabled: true, email_enabled: true }, policy.events[1]] })
+    renderWithProviders(<NotificationDeliveryPolicyPanel channelAvailability={{ email: 'off', sms: 'unavailable' }} />)
+    expect(await screen.findByRole('button', { name: /公告发布/ })).toHaveTextContent(/^公告发布邮件已停用 · 短信不可用$/)
+  })
+
+  it('lists every selected channel again once it is available', async () => {
+    authenticate()
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, events: [{ ...policy.events[0], sms_enabled: true }, policy.events[1]] })
+    renderWithProviders(<NotificationDeliveryPolicyPanel channelAvailability={{ email: 'ready', sms: 'ready' }} />)
+    expect(await screen.findByRole('button', { name: /公告发布/ })).toHaveTextContent('邮件 / 短信')
+    await openEvents()
+    expect(screen.getByRole('checkbox', { name: '公告发布 短信' })).toBeEnabled()
+    expect(screen.queryByText('当前不可用')).not.toBeInTheDocument()
   })
 
   it('saves custom hours and event switches/counts with the original revision, then reads persisted changes', async () => {
@@ -314,6 +365,69 @@ describe('notification policy HTTP contract and time boundaries', () => {
     expect(put).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ window_mode: 'all_day', window_start: '00:00', window_end: '23:59' }), 4, expect.any(String))
   })
 
+  // 按实际会保存的值判断是否有改动，改回原值后保存禁用。
+  it('disables saving again after switching hours to custom and back to all day', async () => {
+    authenticate()
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue(policy)
+    const user = userEvent.setup()
+    renderWithProviders(<NotificationDeliveryPolicyPanel />)
+    const save = async () => screen.findByRole('button', { name: '保存通知策略' })
+    expect(await save()).toBeDisabled()
+    await user.click(screen.getByRole('radio', { name: '自定义' }).closest('label')!)
+    expect(await save()).toBeEnabled()
+    await user.click(screen.getByRole('radio', { name: '全天' }).closest('label')!)
+    expect(await save()).toBeDisabled()
+  })
+
+  it('compares a cross-midnight window by its parsed bounds', async () => {
+    authenticate()
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, window_mode: 'custom', window_start: '22:00', window_end: '06:00' })
+    renderWithProviders(<NotificationDeliveryPolicyPanel />)
+    const window = await screen.findByRole('textbox', { name: '通知时间段' })
+    const save = () => screen.getByRole('button', { name: '保存通知策略' })
+    expect(window).toHaveValue('22-6')
+    fireEvent.change(window, { target: { value: '22-7' } })
+    expect(save()).toBeEnabled()
+    fireEvent.change(window, { target: { value: '22:00-06:00' } })
+    expect(save()).toBeDisabled()
+    fireEvent.change(window, { target: { value: '22-' } })
+    expect(save()).toBeEnabled()
+  })
+
+  it('counts event edits together with the hours and settles when both are reverted', async () => {
+    authenticate()
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue(policy)
+    renderWithProviders(<NotificationDeliveryPolicyPanel />)
+    const user = await openEvents()
+    const save = () => screen.getByRole('button', { name: '保存通知策略' })
+    await user.click(screen.getByRole('radio', { name: '自定义' }).closest('label')!)
+    await user.click(screen.getByRole('checkbox', { name: '公告发布 短信' }))
+    await user.click(screen.getByRole('radio', { name: '全天' }).closest('label')!)
+    expect(save()).toBeEnabled()
+    await user.click(screen.getByRole('checkbox', { name: '公告发布 短信' }))
+    expect(save()).toBeDisabled()
+    fireEvent.change(screen.getByRole('spinbutton', { name: '公告发布 连续通知次数' }), { target: { value: '2' } })
+    expect(save()).toBeEnabled()
+    fireEvent.change(screen.getByRole('spinbutton', { name: '公告发布 连续通知次数' }), { target: { value: '1' } })
+    expect(save()).toBeDisabled()
+  })
+
+  // 事件折叠按钮的名称只有事件与渠道，展开状态只经 aria-expanded 表达。
+  it('names event toggles without the English collapsed/expanded icon label', async () => {
+    authenticate()
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, events: [{ ...policy.events[0], sms_enabled: true }, policy.events[1]] })
+    const user = userEvent.setup()
+    renderWithProviders(<NotificationDeliveryPolicyPanel />)
+    const toggle = await screen.findByRole('button', { name: /^公告发布\s*邮件 \/ 短信$/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle.querySelector('[role="img"][aria-label]')).toBeNull()
+    await user.click(toggle)
+    expect(screen.getByRole('button', { name: /^公告发布\s*邮件 \/ 短信$/ })).toHaveAttribute('aria-expanded', 'true')
+    for (const button of screen.getAllByRole('button', { expanded: true }).concat(screen.getAllByRole('button', { expanded: false }))) {
+      expect(button).not.toHaveAccessibleName(/collapsed|expanded/)
+    }
+  })
+
   it('shows an empty policy without inventing event rows or permitting a write', async () => {
     authenticate()
     vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, events: [] })
@@ -391,9 +505,99 @@ describe('notification policy HTTP contract and time boundaries', () => {
       { event_type, enabled: true, sms_enabled: false, email_enabled: true, repeat_count: 1, interval_hours: 24, supported: true })) })
     renderWithProviders(<NotificationDeliveryPolicyPanel />)
     await openEvents()
-    for (const name of ['回源级别自动切换', '源站已恢复（可手动切回）', '直结充值到账报告被市场拒收', '账号已迁移到新平台']) {
+    for (const name of ['回源级别自动判定', '源站已恢复（可手动切回）', '直结充值到账报告被市场拒收', '账号已迁移到新平台']) {
       expect(screen.getByRole('switch', { name: `${name} 开关` })).toBeInTheDocument()
     }
     expect(screen.queryByText(/其它通知事件/)).not.toBeInTheDocument()
+  })
+
+  // 主控迁移登记的每个通知事件都有名称，内部码只在展开后的可复制诊断里。
+  it('names every seeded event and shows event codes only in the copyable diagnostic', async () => {
+    authenticate()
+    const migrations = resolve(__dirname, '../../../../services/control-api/migrations')
+    const seeded = new Set<string>()
+    for (const file of readdirSync(migrations).filter((name) => name.endsWith('.up.sql'))) {
+      const sql = readFileSync(join(migrations, file), 'utf8')
+      for (const insert of sql.matchAll(/INSERT INTO notification_event_policies\s*\([^)]*\)\s*(?:VALUES|SELECT)([\s\S]*?);/g)) {
+        for (const row of insert[1].matchAll(/\(\s*'([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)'\s*,/g)) seeded.add(row[1])
+      }
+    }
+    expect(seeded.size).toBeGreaterThanOrEqual(108)
+    for (const code of ['aggregated_edge.tenant.switch', 'node.dnspup.line_unreachable', 'probe.dnspup.balance_low', 'security.escalate.blackhole']) expect(seeded).toContain(code)
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, events: [...seeded].sort().map((event_type) => (
+      { event_type, enabled: true, sms_enabled: false, email_enabled: true, repeat_count: 1, interval_hours: 24, supported: true })) })
+    renderWithProviders(<NotificationDeliveryPolicyPanel />)
+    const panel = await screen.findByTestId('notification-delivery-policy')
+    expect(screen.queryByText(/未登记的通知事件|其它通知事件/)).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /其它\s*\d+ 项$/ })).not.toBeInTheDocument()
+    // collapsed: no internal code anywhere on the page
+    for (const code of seeded) expect(panel.textContent).not.toContain(code)
+    expect(panel.textContent).not.toMatch(/通知已开启|已开启邮件/)
+    await openEvents()
+    const code = screen.getByTestId('policy-code-security.escalate.blackhole')
+    expect(code).toHaveTextContent('事件代码 security.escalate.blackhole')
+    expect(within(code).getByRole('button', { name: /复制|Copy/ })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: '攻击自动升级：站点进入黑洞 开关' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: '网站线路自动切换 开关' })).toBeInTheDocument()
+  })
+
+  it('lists the events under collapsible groups and filters them by name, channel and state', async () => {
+    authenticate()
+    const event = (event_type: string, change: Partial<NotificationDeliveryPolicy['events'][number]> = {}) =>
+      ({ event_type, enabled: true, sms_enabled: false, email_enabled: true, repeat_count: 1, interval_hours: 24, supported: true, ...change })
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, events: [
+      event('announcement.published'), event('ticket.created', { enabled: false }), event('security.attack.detected', { sms_enabled: true }),
+      event('node.availability.offline', { email_enabled: false }), event('package.auto_renew.failed'), event('certificate.expired', { supported: false, enabled: false }),
+      event('market.limit.reached'), event('probe.dnspup.degraded'),
+    ] })
+    const user = userEvent.setup()
+    renderWithProviders(<NotificationDeliveryPolicyPanel />)
+    const panel = await screen.findByTestId('notification-delivery-policy')
+    const counts = { 账户: 2, 网站安全: 1, 节点: 1, 计费套餐: 1, 证书: 1, 市场: 1, 插件: 1 } as const
+    // the group header's accessible name is "expanded|collapsed <group> <n> 项" (antd's arrow icon is labelled)
+    const group = (name: keyof typeof counts) => within(panel).getByRole('button', { name: new RegExp(`${name}\\s*${counts[name]} 项$`) })
+    for (const name of Object.keys(counts) as (keyof typeof counts)[]) expect(group(name)).toHaveAttribute('aria-expanded', 'true')
+    expect(within(panel).getByRole('button', { name: /工单已提交/ })).toHaveTextContent(/^工单已提交已关闭$/)
+    expect(within(panel).getByRole('button', { name: /节点监控离线/ })).toHaveTextContent(/^节点监控离线未选择通知渠道$/)
+    // a group folds on its own
+    await user.click(group('账户'))
+    expect(group('账户')).toHaveAttribute('aria-expanded', 'false')
+    await user.click(within(panel).getByRole('button', { name: '全部展开' }))
+    expect(group('账户')).toHaveAttribute('aria-expanded', 'true')
+
+    await user.type(within(panel).getByRole('textbox', { name: '按名称筛选' }), '工单')
+    expect(within(panel).getByRole('button', { name: /工单已提交/ })).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /公告发布/ })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /网站安全\s*\d+ 项$/ })).not.toBeInTheDocument()
+    await user.clear(within(panel).getByRole('textbox', { name: '按名称筛选' }))
+
+    await user.click(within(panel).getByRole('combobox', { name: '按通知方式筛选' }))
+    await user.click(await screen.findByTitle('短信'))
+    expect(within(panel).getByRole('button', { name: /网站攻击告警/ })).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /公告发布/ })).not.toBeInTheDocument()
+    await user.click(within(panel).getByRole('combobox', { name: '按通知方式筛选' }))
+    await user.click(await screen.findByTitle('全部通知方式'))
+
+    await user.click(within(panel).getByRole('combobox', { name: '按状态筛选' }))
+    await user.click(await screen.findByTitle('未接入'))
+    expect(within(panel).getByRole('button', { name: /证书已过期/ })).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /工单已提交/ })).not.toBeInTheDocument()
+    await user.type(within(panel).getByRole('textbox', { name: '按名称筛选' }), '公告')
+    expect(within(panel).getByText('没有符合条件的通知事件')).toBeInTheDocument()
+  })
+
+  it('reads an unregistered event back under 其它 without showing its code until it is opened', async () => {
+    authenticate()
+    vi.spyOn(notificationsApi, 'getDeliveryPolicy').mockResolvedValue({ ...policy, events: [
+      { event_type: 'future.unknown.kind', enabled: true, sms_enabled: false, email_enabled: true, repeat_count: 1, interval_hours: 24, supported: false },
+    ] })
+    renderWithProviders(<NotificationDeliveryPolicyPanel />)
+    const panel = await screen.findByTestId('notification-delivery-policy')
+    expect(within(panel).getByRole('button', { name: /其它\s*1 项$/ })).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: /未登记的通知事件/ })).toBeInTheDocument()
+    expect(panel.textContent).not.toContain('future.unknown.kind')
+    await openEvents()
+    expect(screen.getByTestId('policy-code-future.unknown.kind')).toHaveTextContent('future.unknown.kind')
+    expect(screen.getByRole('switch', { name: '未登记的通知事件 future.unknown.kind 开关' })).toBeDisabled()
   })
 })

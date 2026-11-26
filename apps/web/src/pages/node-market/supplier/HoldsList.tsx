@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, Space, Table, Tag, Typography } from 'antd'
+import { Button, Space, Tag, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { marketSupplierApi, type HoldRow } from '../../../api/marketSupplier'

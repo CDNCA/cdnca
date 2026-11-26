@@ -10,7 +10,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type recordingHTTPPolicies struct{ writes []httppolicycontrol.SystemSiteWrite }
+type recordingHTTPPolicies struct {
+	writes []httppolicycontrol.SystemSiteWrite
+}
 
 func (r *recordingHTTPPolicies) SetSiteSystem(_ context.Context, request httppolicycontrol.SystemSiteWrite) (bool, error) {
 	r.writes = append(r.writes, request)

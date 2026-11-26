@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Modal, Result, Space, Table, Tag, Typography, type TableColumnsType } from 'antd'
+import { Button, Modal, Result, Space, Tag, Typography, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, RefreshCw, ShieldOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -17,7 +17,7 @@ import { DataState } from '../components/DataState'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/identitySessions'
 import './IdentitySessionsPage.css'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, Table } from '@cdnca/ui'
 
 type Owner = readonly [Principal['scope_kind'], string, string | null, string, number]
 
@@ -168,7 +168,6 @@ function IdentitySessionsContent({ owner }: { owner: Owner }) {
     },
     { title: t('columns.network'), dataIndex: 'ip_prefix', width: 180, render: (value) => value ?? t('values.unknownNetwork') },
     { title: t('columns.lastActive'), dataIndex: 'last_used_at', width: 190, render: (value) => formatDateTime(value, locale) },
-    { title: t('columns.sessions'), dataIndex: 'session_count', width: 100, render: (value) => t('values.count', { count: value }) },
     {
       title: t('columns.status'), key: 'status', width: 110,
       render: (_, item) => item.revoked_at || !item.active
@@ -176,9 +175,11 @@ function IdentitySessionsContent({ owner }: { owner: Owner }) {
         : <Tag color="green">{t('values.active')}</Tag>,
     },
     {
-      title: t('columns.actions'), key: 'actions', width: 130,
+      // 窄屏操作列固定在右侧，不用横滚到底；可访问名称带设备名区分多行
+      title: t('columns.actions'), key: 'actions', width: 130, fixed: 'right',
       render: (_, item) => <Button
         danger size="small" icon={<ShieldOff size={15} aria-hidden="true" />}
+        aria-label={t('actions.revokeNamed', { device: deviceLabel(item.device_label) })}
         disabled={writesLocked || !item.active} onClick={() => setConfirmFamily(item)}
       >{t('actions.revoke')}</Button>,
     },
@@ -206,7 +207,7 @@ function IdentitySessionsContent({ owner }: { owner: Owner }) {
         <DataState status="error" message={t(errorKey(query.error))} onRetry={() => void query.refetch()} />
       ) : query.data.items.length === 0 ? <DataState status="empty" message={t('empty')} /> : (
         <div className="identity-table-scroll identity-sessions-table-scroll">
-          <Table rowKey="family_id" size="small" pagination={false} dataSource={query.data.items} columns={columns} scroll={{ x: 920 }} />
+          <Table rowKey="family_id" size="small" pagination={false} dataSource={query.data.items} columns={columns} scroll={{ x: 820 }} />
           <Space className="identity-sessions-pagination">
             <Button icon={<ChevronLeft size={16} aria-hidden="true" />} disabled={writesLocked || cursors.length === 1} onClick={() => setCursors((value) => value.slice(0, -1))}>{t('actions.previous')}</Button>
             <Button icon={<ChevronRight size={16} aria-hidden="true" />} disabled={writesLocked || !query.data.next_cursor} onClick={() => query.data.next_cursor && setCursors((value) => [...value, query.data.next_cursor])}>{t('actions.next')}</Button>

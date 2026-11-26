@@ -140,7 +140,7 @@ printf '\ninclude /etc/redis/cdnca-gateway/redis-gateway.conf\n' >>/etc/redis/re
 nft add table inet cdnca_gateway_access
 # 2. 原命令重跑：被拒并提示。
 out=$(bash "$S" --master-host 203.0.113.9 2>&1 || true)
-grep -q 'run install-control.sh --cleanup-failed first' <<<"$out" || fail "rerun hint: $out"
+  grep -qF 'run first: bash /root/install-control.sh --cleanup-failed' <<<"$out" || fail "rerun hint: $out"
 # 3. 无终端、无 --yes：列清单后拒绝，不改任何东西。
 out=$(bash "$S" --cleanup-failed </dev/null 2>&1 || true)
 grep -q 'cleanup needs confirmation' <<<"$out" || fail "confirm: $out"

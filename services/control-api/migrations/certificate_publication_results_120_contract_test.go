@@ -12,8 +12,8 @@ func TestCertificatePublicationResultsMigration120Contract47(t *testing.T) {
 	up := certificatePublicationMigration120(t, "up")
 	for _, required := range []string{
 		"migration 120 requires the exact verified 119 release head",
-            "2a7e7b88433941e3e9eae3567476d261efb5382d9a1dca4900e852a2dcd6b318",
-            "06305ea2ffdf4260a788a475e803a037f449b5ae939449632c8967d269992b22",
+		"2a7e7b88433941e3e9eae3567476d261efb5382d9a1dca4900e852a2dcd6b318",
+		"06305ea2ffdf4260a788a475e803a037f449b5ae939449632c8967d269992b22",
 		"actor_session_id uuid",
 		"actor_scope_kind text",
 		"actor_user_revision bigint",

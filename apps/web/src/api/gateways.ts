@@ -22,6 +22,25 @@ export interface Gateway {
   /** Address the binding came from; allowed_ips defaults to it (GW-09 allow-list). */
   source_ip?: string | null
   allowed_ips?: string[]
+  /** Connected nodes whose current session came through this Gateway. */
+  nodes_online?: number
+}
+
+/**
+ * The co-located Gateway: what it last presented to the control plane since
+ * control-api started (not_reported: nothing yet). nodes_online counts the
+ * connected nodes not on a standalone Gateway.
+ */
+export interface LocalGateway {
+  address: string
+  server_name: string
+  status: 'online' | 'offline' | 'not_reported'
+  instance_id: string
+  version: string
+  ready_at: string | null
+  last_seen_at: string | null
+  certificate_expires_at: string | null
+  nodes_online: number
 }
 
 export interface GatewayTrustedProxy { cidr: string; header: string }
@@ -36,6 +55,7 @@ export interface VersionedGatewaySettings { settings: GatewaySettings; etag: str
 
 export interface GatewayList {
   items: Gateway[]
+  local?: LocalGateway
   installation_id: string
   /** false: install-control.sh did not run with --mode control; binding is refused. */
   standalone_access_open: boolean
@@ -125,6 +145,12 @@ export function parseEntrypoints(text: string): GatewayEntrypoint[] | null {
   return out
 }
 
+/** 1-based number of the first line a parser refuses (0: none); blank lines count. */
+export function firstInvalidLine(text: string, parse: (line: string) => unknown[] | null): number {
+  const index = text.split('\n').findIndex((line) => line.trim() !== '' && parse(line) === null)
+  return index + 1
+}
+
 /** "cidr[=Header]" per line; no header binds X-Forwarded-For. */
 export function parseTrustedProxies(text: string): GatewayTrustedProxy[] | null {
   const out: GatewayTrustedProxy[] = []
@@ -132,6 +158,7 @@ export function parseTrustedProxies(text: string): GatewayTrustedProxy[] | null 
     const [cidr, header = ''] = line.split('=').map((item) => item.trim())
     const [address, bits, ...rest] = (cidr ?? '').split('/')
     if (!address || !bits || rest.length || !/^\d{1,3}$/.test(bits) || !isIPAddress(address) || (header && !/^[A-Za-z0-9-]{1,64}$/.test(header))) return null
+    if (Number(bits) > (ipv4.test(address) ? 32 : 128)) return null
     out.push({ cidr, header })
   }
   return out

@@ -117,10 +117,18 @@ type controlUpgradeRolloutDetailResponse struct {
 }
 
 type controlUpgradeListResponse struct {
-	Data     []controlUpgradeRolloutSummaryResponse `json:"data"`
-	Page     int                                    `json:"page"`
-	PageSize int                                    `json:"page_size"`
-	Total    int64                                  `json:"total"`
+	Data         []controlUpgradeRolloutSummaryResponse `json:"data"`
+	Page         int                                    `json:"page"`
+	PageSize     int                                    `json:"page_size"`
+	Total        int64                                  `json:"total"`
+	Preparations []controlupgrade.RolloutPreparation    `json:"preparations"`
+}
+
+// controlUpgradePreparationResponse answers a create: the plan is prepared in
+// the background.
+type controlUpgradePreparationResponse struct {
+	Data     controlupgrade.RolloutPreparation `json:"data"`
+	Replayed bool                              `json:"replayed"`
 }
 
 type controlUpgradeActionBodyRequest struct {
@@ -181,8 +189,8 @@ func (s *Server) handleCreateControlUpgradeRollout(w http.ResponseWriter, r *htt
 		s.writeControlUpgradeError(w, r, err)
 		return
 	}
-	writeJSONStatus(w, http.StatusCreated,
-		controlUpgradeWriteResponse{Data: controlUpgradeRolloutDetail(result.Detail), Replayed: result.Replayed})
+	writeJSONStatus(w, http.StatusAccepted,
+		controlUpgradePreparationResponse{Data: result.Preparation, Replayed: result.Replayed})
 }
 
 func (s *Server) handleListControlUpgradeRollouts(w http.ResponseWriter, r *http.Request) {
@@ -476,7 +484,10 @@ func controlUpgradeStatusReceipt(receipt controlupgrade.RolloutStatusReceipt) co
 
 func controlUpgradeRolloutList(response controlupgrade.ListRolloutsResponse) controlUpgradeListResponse {
 	result := controlUpgradeListResponse{Data: make([]controlUpgradeRolloutSummaryResponse, 0, len(response.Data)),
-		Page: response.Page, PageSize: response.PageSize, Total: response.Total}
+		Page: response.Page, PageSize: response.PageSize, Total: response.Total, Preparations: response.Preparations}
+	if result.Preparations == nil {
+		result.Preparations = []controlupgrade.RolloutPreparation{}
+	}
 	for _, summary := range response.Data {
 		result.Data = append(result.Data, controlUpgradeRolloutSummary(summary))
 	}
@@ -568,6 +579,9 @@ func (s *Server) writeControlUpgradeError(w http.ResponseWriter, r *http.Request
 	case errors.Is(err, controlupgrade.ErrPlanBlocked):
 		s.writeAPIError(w, r, http.StatusConflict, "control_upgrade_rollout_blocked",
 			"control upgrade rollout is blocked")
+	case errors.Is(err, controlupgrade.ErrRolloutPreparing):
+		s.writeAPIError(w, r, http.StatusConflict, "control_upgrade_rollout_preparing",
+			"control upgrade rollout artifacts are still being prepared")
 	case errors.Is(err, controlupgrade.ErrPlanCancelNodesStarted):
 		s.writeAPIError(w, r, http.StatusConflict, "control_upgrade_rollout_nodes_started",
 			"control upgrade rollout has nodes that started the upgrade")

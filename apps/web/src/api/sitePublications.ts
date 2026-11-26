@@ -23,6 +23,12 @@ export type AdminPublicationTarget =
       resolved_sha256: string
     }
 
+/** Content refusals a node settings redelivery is made for (AutomaticPublicationFailure codes). */
+const contentRefusals = [
+  'site_config_invalid', 'package_subscription_inactive', 'package_resource_quota_exceeded', 'package_feature_denied',
+  'entitlement_feature_denied', 'site_l2_unavailable', 'rule_pack_out_of_profile', 'sdk_shield_port_shared',
+] as const
+
 interface PublicationBase {
   id: string
   source_revision: number
@@ -30,6 +36,10 @@ interface PublicationBase {
   rollout_id: string
   node_count: number
   created_at: string
+  /** node_settings (节点设置更新): the release in effect again with new node settings; omitted for content. */
+  kind?: 'node_settings'
+  /** With kind node_settings: why the scope's content was not published. */
+  content_refusal?: typeof contentRefusals[number]
 }
 
 export interface TenantSitePublication extends PublicationBase {
@@ -59,8 +69,15 @@ export interface PendingModule {
  * its line groups, or every target node lacks what the release needs. It is
  * republished automatically once that changes.
  */
+const automaticFailureReasons = [
+  'no_target_nodes', 'node_capability_unavailable', 'node_artifacts_syncing', 'node_scope_conflict', 'site_config_invalid',
+  // Refusals the scope's own package, entitlement or site facts decide (the manual publication's codes).
+  'package_subscription_inactive', 'package_resource_quota_exceeded', 'package_feature_denied', 'entitlement_feature_denied',
+  'site_l2_unavailable', 'rule_pack_out_of_profile', 'sdk_shield_port_shared',
+] as const
+
 export interface AutomaticPublicationFailure {
-  reason: 'no_target_nodes' | 'node_capability_unavailable' | 'node_artifacts_syncing' | 'node_scope_conflict' | 'site_config_invalid'
+  reason: typeof automaticFailureReasons[number]
   source_revision: number
   failed_at: string
   /** node_artifacts_syncing: segments the refused nodes have received of their node artifact sets; omitted before any node has one. */
@@ -363,9 +380,16 @@ function parseAdminTarget(value: unknown): AdminPublicationTarget {
   throw invalidResponse()
 }
 
+/** kind and content_refusal come together (a node settings redelivery) or not at all. */
+function validPublicationKind(value: Record<string, unknown>): boolean {
+  return value.kind === undefined
+    ? value.content_refusal === undefined
+    : value.kind === 'node_settings' && (contentRefusals as readonly unknown[]).includes(value.content_refusal)
+}
+
 function parseTenantPublication(value: unknown): TenantSitePublication {
   const required = ['id', 'source_revision', 'config_version_id', 'rollout_id', 'target', 'node_count', 'created_at']
-  if (!record(value) || !exactKeys(value, required) || !canonicalUUID(value.id) ||
+  if (!record(value) || !exactKeys(value, required, ['kind', 'content_refusal']) || !validPublicationKind(value) || !canonicalUUID(value.id) ||
     !uint(value.source_revision, 1) || !canonicalUUID(value.config_version_id) ||
     !canonicalUUID(value.rollout_id) || !uint(value.node_count, 1, 10_000) || !timestamp(value.created_at)) {
     throw invalidResponse()
@@ -389,7 +413,8 @@ function parseAdminPublication(
     'canonical_source_sha256', 'artifact_sha256', 'target', 'node_count', 'created_at',
   ]
   if (!record(value) || !exactKeys(value, required,
-    ['replayed', 'key_envelope_oversized_node_ids', 'site_selection_unsupported_node_ids']) || !canonicalUUID(value.id) ||
+    ['replayed', 'key_envelope_oversized_node_ids', 'site_selection_unsupported_node_ids', 'kind', 'content_refusal']) ||
+    !validPublicationKind(value) || !canonicalUUID(value.id) ||
     !optionalNodeIDs(value.key_envelope_oversized_node_ids) ||
     !optionalNodeIDs(value.site_selection_unsupported_node_ids) ||
     !canonicalUUID(value.configuration_scope_id) || !uint(value.source_revision, 1) ||
@@ -464,6 +489,7 @@ function parseDeployment(value: unknown, platform: boolean): TenantSiteDeploymen
     typeof value.state !== 'string' || !deploymentStates.has(value.state as DeploymentState) ||
     (value.error_code !== undefined && (typeof value.error_code !== 'string' || !errorCodePattern.test(value.error_code))) ||
     (value.error_message !== undefined && (typeof value.error_message !== 'string' || value.error_message.length === 0 ||
+      // eslint-disable-next-line no-control-regex
       new TextEncoder().encode(value.error_message).length > 512 || /[\u0000-\u001f\u007f]/.test(value.error_message))) ||
     !timestamp(value.created_at) || !timestamp(value.updated_at) || typeof value.can_retry !== 'boolean' ||
     (value.superseded !== undefined && (value.superseded !== true || value.state !== 'failed' || value.can_retry !== false)) ||
@@ -504,9 +530,7 @@ function parsePage<T>(
 
 function automaticFailure(value: unknown): value is AutomaticPublicationFailure {
   return record(value) && exactKeys(value, ['reason', 'source_revision', 'failed_at'], ['artifact_sync']) &&
-    (value.reason === 'no_target_nodes' || value.reason === 'node_capability_unavailable' ||
-      value.reason === 'node_artifacts_syncing' || value.reason === 'node_scope_conflict' ||
-      value.reason === 'site_config_invalid') &&
+    (automaticFailureReasons as readonly unknown[]).includes(value.reason) &&
     uint(value.source_revision, 1) && timestamp(value.failed_at) &&
     (value.artifact_sync === undefined || (value.reason === 'node_artifacts_syncing' && artifactSync(value.artifact_sync)))
 }

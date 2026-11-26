@@ -1,4 +1,5 @@
-import { Alert, Button, Input, Modal, Space, Tabs } from 'antd'
+import { Alert, Button, Input, Modal, Space } from 'antd'
+import { Tabs } from '../components/Tabs'
 import type { TextAreaRef } from 'antd/es/input/TextArea'
 import { Copy, RefreshCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -11,14 +12,24 @@ export interface UpgradeLogSection {
   notice?: string
 }
 
+// The state shown above both tabs: what the runner is doing and, when it cannot
+// run upgrades, why and where to look.
+export interface UpgradeLogStatus {
+  label: string
+  type: 'success' | 'warning'
+  message: string
+  description?: string
+}
+
 // Plain-text upgrade log in two tabs: the step-by-step script output and the
 // services' program log. Read-only, copyable, and kept scrolled to the newest
 // line while the caller refreshes it.
-export default function UpgradeLogModal({ title, open, sections, loading, error, contentLabel, refreshLabel, copyLabel, copiedLabel,
+export default function UpgradeLogModal({ title, open, sections, status, loading, error, contentLabel, refreshLabel, copyLabel, copiedLabel,
   copyFailedLabel, onRefresh, onClose }: {
   title: string
   open: boolean
   sections: UpgradeLogSection[]
+  status?: UpgradeLogStatus
   loading: boolean
   error?: string
   contentLabel: string
@@ -56,6 +67,9 @@ export default function UpgradeLogModal({ title, open, sections, loading, error,
   }
   return <Modal title={title} open={open} onCancel={onClose} footer={null} width={860} className="upgrade-log-modal" destroyOnHidden>
     {error ? <Alert type="error" showIcon message={error} /> : null}
+    {status ? <section className="upgrade-log-status" aria-label={status.label}>
+      <Alert type={status.type} showIcon message={status.message} description={status.description} />
+    </section> : null}
     <Tabs size="small" activeKey={section?.key} onChange={(key) => setActive(key as UpgradeLogSection['key'])}
       tabBarExtraContent={<Space size={8}>
         <Button size="small" icon={<Copy size={13} />} disabled={!section || section.lines.length === 0} onClick={() => void copy()}>

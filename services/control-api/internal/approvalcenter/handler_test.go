@@ -21,15 +21,19 @@ type fakeService struct {
 	stepUpToken string
 }
 
-func (f *fakeService) Settings(context.Context) (Settings, error) { return Settings{Rules: []string{}}, nil }
+func (f *fakeService) Settings(context.Context) (Settings, error) {
+	return Settings{Rules: []string{}}, nil
+}
 func (f *fakeService) SaveSettings(_ context.Context, _ Session, input Settings, _ string) (Settings, error) {
 	return input, nil
 }
 func (f *fakeService) List(context.Context, Session, string, int) ([]Request, error) {
 	return []Request{f.request}, nil
 }
-func (f *fakeService) Get(context.Context, Session, uuid.UUID) (Request, error) { return f.request, nil }
-func (f *fakeService) MFAActive(context.Context, Session) (bool, error)         { return true, nil }
+func (f *fakeService) Get(context.Context, Session, uuid.UUID) (Request, error) {
+	return f.request, nil
+}
+func (f *fakeService) MFAActive(context.Context, Session) (bool, error) { return true, nil }
 func (f *fakeService) Approve(_ context.Context, actor Session, _ uuid.UUID, _ int64, _, token, _ string) (Request, error) {
 	f.approvedBy, f.stepUpToken = actor, token
 	if f.approveErr != nil {

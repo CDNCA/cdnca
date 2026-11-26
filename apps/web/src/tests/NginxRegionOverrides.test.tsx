@@ -157,6 +157,92 @@ describe('Nginx 区域及节点配置 新增设置', () => {
       .toEqual([expect.objectContaining({ scope: 'region', scope_id: '8', values: { http: { proxy_read_timeout_ms: 90_000 } } })])
   })
 
+  // 未选目标按确定，错误挂在当前类型的选择器上并聚焦它，选好后清除。
+  it('未选节点或区域按确定：错误关联到当前选择器并聚焦，选好后清除，不发请求', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [node(nodeA, 'edge-a', '10.0.0.1', '101')] })
+    vi.spyOn(regionsApi, 'list').mockResolvedValue({ count: 1, data: [region('7', '华东', 1)] })
+    const put = vi.spyOn(systemConfigurationApi, 'put')
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage />)
+    const dialog = await openAddDialog(user)
+    const message = '请选择或输入有效的区域或节点标识。'
+
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    const nodeSelect = within(dialog).getByRole('combobox', { name: '节点选择' })
+    expect(nodeSelect).toHaveAttribute('aria-invalid', 'true')
+    expect(nodeSelect).toHaveAccessibleDescription(message)
+    await waitFor(() => expect(nodeSelect).toHaveFocus())
+    await chooseNode(user, dialog, 'edge-a (10.0.0.1) #101')
+    expect(within(dialog).queryByText(message)).toBeNull()
+    expect(nodeSelect).not.toHaveAttribute('aria-invalid')
+
+    fireEvent.click(within(dialog).getByRole('radio', { name: '区域' }))
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    const regionSelect = within(dialog).getByRole('combobox', { name: '区域选择' })
+    expect(regionSelect).toHaveAttribute('aria-invalid', 'true')
+    expect(regionSelect).toHaveAccessibleDescription(message)
+    await waitFor(() => expect(regionSelect).toHaveFocus())
+    fireEvent.mouseDown(regionSelect)
+    fireEvent.click(await screen.findByText('华东', { selector: '.ant-select-item-option-content' }))
+    expect(within(dialog).queryByText(message)).toBeNull()
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  // 补证：一项配置都没选时，错误挂在「配置项」选择器上并聚焦，选上后清除，不发请求。
+  it('未选配置项按确定：错误关联到配置项选择器并聚焦，选上后清除，不发请求', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [node(nodeA, 'edge-a', '10.0.0.1', '101')] })
+    vi.spyOn(regionsApi, 'list').mockResolvedValue({ count: 0, data: [] })
+    const put = vi.spyOn(systemConfigurationApi, 'put')
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage />)
+    const dialog = await openAddDialog(user)
+    await chooseNode(user, dialog, 'edge-a (10.0.0.1) #101')
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    const message = '请至少选择一个配置项。'
+    const settingSelect = within(dialog).getByRole('combobox', { name: '配置项' })
+    expect(settingSelect).toHaveAttribute('aria-invalid', 'true')
+    expect(settingSelect).toHaveAccessibleDescription(message)
+    await waitFor(() => expect(settingSelect).toHaveFocus())
+    expect(dialog.querySelector('.ant-alert')).toBeNull()
+    await chooseSetting(dialog, 'Gzip 压缩级别（gzip_comp_level）')
+    expect(within(dialog).queryByText(message)).toBeNull()
+    expect(within(dialog).getByRole('combobox', { name: '配置项' })).not.toHaveAttribute('aria-invalid')
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  // 补证：设置值无效时错误挂在该值输入上并聚焦，不发请求；改回有效值后清除。
+  it('设置值无效按确定：错误关联到该值输入并聚焦，改正后清除，不发请求', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [node(nodeA, 'edge-a', '10.0.0.1', '101')] })
+    vi.spyOn(regionsApi, 'list').mockResolvedValue({ count: 0, data: [] })
+    const put = vi.spyOn(systemConfigurationApi, 'put')
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage />)
+    const dialog = await openAddDialog(user)
+    await chooseNode(user, dialog, 'edge-a (10.0.0.1) #101')
+    const label = 'Gzip 压缩级别（gzip_comp_level）'
+    await chooseSetting(dialog, label)
+    const box = within(dialog).getByRole('textbox', { name: label })
+    await user.clear(box)
+    await user.type(box, '99')
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    const message = '设置值无效，请检查格式和范围。'
+    expect(box).toHaveAttribute('aria-invalid', 'true')
+    expect(box).toHaveAccessibleDescription(message)
+    await waitFor(() => expect(box).toHaveFocus())
+    expect(dialog.querySelector('.ant-alert')).toBeNull()
+    await user.clear(box)
+    await user.type(box, '6')
+    expect(box).not.toHaveAttribute('aria-invalid')
+    expect(within(dialog).queryByText(message)).toBeNull()
+    expect(put).not.toHaveBeenCalled()
+  })
+
   it('全部 30 个配置项（日志目录与 Stream 超时不下发，已去掉）：中文名称、说明，逐个写入与服务端一致的结构', async () => {
     authenticate()
     vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())

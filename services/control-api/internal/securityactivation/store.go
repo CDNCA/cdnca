@@ -291,6 +291,9 @@ func (store *Store) Status(
 			if result.FailureReasons, err = loadFailureReasons(ctx, tx, candidate.ID); err != nil {
 				return err
 			}
+			if result.PromotionFailure, err = loadPromotionFailure(ctx, tx, binding, candidate); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

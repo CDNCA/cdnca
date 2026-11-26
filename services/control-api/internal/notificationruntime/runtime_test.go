@@ -190,8 +190,7 @@ func TestRuntimeReadyRequiresFirstSuccessfulBatch(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("first batch did not start")
 	}
-	if err := runtime.Ready(context.Background(), notification.ChannelSwitches{Email: true});
-		!errors.Is(err, ErrWorkerNotRunning) {
+	if err := runtime.Ready(context.Background(), notification.ChannelSwitches{Email: true}); !errors.Is(err, ErrWorkerNotRunning) {
 		t.Fatalf("Ready() before first successful batch = %v", err)
 	}
 
@@ -221,8 +220,7 @@ func TestRuntimeReadyNeverPassesAfterFirstBatchStoreError(t *testing.T) {
 	}
 	close(processor.release)
 	waitFor(t, time.Second, func() bool { return runtime.Health().State == StateBackoff })
-	if err := runtime.Ready(context.Background(), notification.ChannelSwitches{Email: true});
-		!errors.Is(err, ErrWorkerNotRunning) {
+	if err := runtime.Ready(context.Background(), notification.ChannelSwitches{Email: true}); !errors.Is(err, ErrWorkerNotRunning) {
 		t.Fatalf("Ready() after first store error = %v", err)
 	}
 	cancel()

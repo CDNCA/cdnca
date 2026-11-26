@@ -129,3 +129,18 @@ func TestOBSUsageASecretSegmentFinalAuthorityMatrix(t *testing.T) {
 		})
 	}
 }
+
+// 与网关同一读法，";" 查询按对检查。
+func TestCapturePathSafeSemicolonQueries(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/index.php?p=1;s=2&x=%3E%3E": true,
+		"/a?x=%zz&y=1":                true,
+		"/a?q=1;token=%5BREDACTED%5D": true,
+		"/a?q=1;token=raw-secret":     false,
+		"/a?q=1&tok%65n=raw-secret":   false,
+	} {
+		if got := capturePathSafe(path); got != want {
+			t.Errorf("capturePathSafe(%q) = %v, want %v", path, got, want)
+		}
+	}
+}

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 
 import { ApiError, type Principal } from '../../api/auth'
 import {
+  bindableVersion,
   certificatesApi,
   type CertificateAsset,
   type CertificateAssetBinding,
@@ -141,10 +142,8 @@ async function loadCertificateState(
       if (detail.asset.id !== asset.id || detail.asset.tenant_scope_id !== expectedScopeID) {
         throw invalidCertificateResponse()
       }
-      const active = detail.versions
-        .filter((version) => version.status === 'active')
-        .sort((left, right) => right.version - left.version)[0]
-      return active ? { asset: detail.asset, version: active } : null
+      const bindable = bindableVersion(detail.versions)
+      return bindable ? { asset: detail.asset, version: bindable } : null
     }))
     for (const choice of batch) {
       if (choice) choices.push(choice)
@@ -380,6 +379,11 @@ export default function HttpsSiteTab({
       tls_cipher_suites: preset === 'custom' ? value.tls_cipher_suites ?? [...siteTLSCustomCipherSuites.slice(0, 6)] : undefined })
   }
   const siteConfigurationReadOnly = readOnly
+  // the site's current package leaves HTTP/3
+  // out, so the switch shows what goes out (off) and the saved choice
+  // (http3_enabled) stays for a package that includes it.
+  const http3PackageExcluded = value.http3_unavailable_reason === 'package_feature_denied'
+  const http3On = !http3PackageExcluded && (value.http3_enabled ?? true)
 
   // fix-certinstant: choosing a certificate binds it, clearing the choice unbinds. useCommitRequest
   // sends once the previous write and its re-read are done, with the latest choice only.
@@ -457,7 +461,6 @@ export default function HttpsSiteTab({
           <Space.Compact className="site-https-certificate-control">
             <Select
               aria-label={t('certificate.label')}
-              allowClear
               loading={query.isLoading || query.isFetching || bindingMutation.isPending}
               disabled={readOnly || !canManageCertificates || bindingMutation.isPending || bindingAttempt !== null}
               value={selectedVersionID || undefined}
@@ -469,6 +472,15 @@ export default function HttpsSiteTab({
               }))}
               onChange={onCertificateChange}
             />
+            {/* 解除绑定用可键盘到达的按钮，不再只靠选择框的清除图标；走同一解绑与 HTTPS 确认逻辑 */}
+            {query.data?.binding && selectedVersionID && !readOnly && canManageCertificates ? (
+              <Button
+                disabled={bindingMutation.isPending || bindingAttempt !== null}
+                onClick={() => onCertificateChange(undefined)}
+              >
+                {t('certificate.unbind')}
+              </Button>
+            ) : null}
           </Space.Compact>
           <div className="site-https-certificate-meta">
             {query.data?.binding ? (
@@ -526,8 +538,8 @@ export default function HttpsSiteTab({
             value: tlsVersionPreset ? t(`siteTLS:versions.${tlsVersionPreset}`) : tlsProtocols.join(' ') || tV4('summary.none') },
           { key: 'http2', label: 'HTTP/2', target: 'site-https-versions', tone: ((value.http2_enabled ?? true) ? 'on' : 'off') as 'on' | 'off',
             value: (value.http2_enabled ?? true) ? tV4('summary.on') : tV4('summary.off') },
-          { key: 'http3', label: 'HTTP/3', target: 'site-https-versions', tone: ((value.http3_enabled ?? true) ? 'on' : 'off') as 'on' | 'off',
-            value: (value.http3_enabled ?? true) ? tV4('summary.on') : tV4('summary.off') },
+          { key: 'http3', label: 'HTTP/3', target: 'site-https-versions', tone: (http3On ? 'on' : 'off') as 'on' | 'off',
+            value: http3On ? tV4('summary.on') : tV4('summary.off') },
         ] : []),
       ]} />
       <SettingSection title={t('title')} id="site-https-access">
@@ -716,12 +728,18 @@ export default function HttpsSiteTab({
             <SettingRow label={t('siteTLS:http3.label')} help={t('siteTLS:http3.help')}>
               <Switch
                 aria-label={t('siteTLS:http3.label')}
-                checked={value.http3_enabled ?? true}
-                disabled={siteConfigurationReadOnly}
+                aria-describedby={http3PackageExcluded ? 'site-https-http3-package' : undefined}
+                checked={http3On}
+                disabled={siteConfigurationReadOnly || http3PackageExcluded}
                 onChange={(checked) => {
-                  if (!siteConfigurationReadOnly) onChange({ ...value, http3_enabled: checked })
+                  if (!siteConfigurationReadOnly && !http3PackageExcluded) onChange({ ...value, http3_enabled: checked })
                 }}
               />
+              {http3PackageExcluded ? (
+                <div className="site-https-http3-package" id="site-https-http3-package" data-testid="site-https-http3-package">
+                  {t('siteTLS:http3.packageExcluded')}
+                </div>
+              ) : null}
             </SettingRow>
 
             <SettingRow label={t('siteTLS:clientAuth.label')} help={t('siteTLS:clientAuth.help')}>

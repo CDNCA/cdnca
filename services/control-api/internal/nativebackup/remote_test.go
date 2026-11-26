@@ -180,3 +180,52 @@ func TestSFTPUploadDownloadRoundTripWithPinnedHostKey(t *testing.T) {
 		t.Fatalf("remote backup must be gone: %v", err)
 	}
 }
+
+// every structural rule of
+// Validate names its request field, so the console can mark that input.
+func TestTargetInvalidFieldNamesTheRefusedInput(t *testing.T) {
+	s3 := Target{Name: "offsite", Kind: "s3", Endpoint: "https://s3.example.com", Region: "us-east-1", Bucket: "cdnca-backups",
+		Prefix: "control/", AccessKey: "AKIAEXAMPLE", SecretKey: "secret-value-123"}
+	sftp := Target{Name: "nas", Kind: "sftp", Host: "nas.example.test", Port: 22, Username: "backup", RemoteDir: "/srv/cdnca",
+		HostKeySHA256: "SHA256:" + strings.Repeat("Q", 43), Password: "ssh-password"}
+	if field := s3.InvalidField(); field != "" {
+		t.Fatalf("valid s3 field = %q", field)
+	}
+	if field := sftp.InvalidField(); field != "" {
+		t.Fatalf("valid sftp field = %q", field)
+	}
+	for _, test := range []struct {
+		base   Target
+		mutate func(*Target)
+		field  string
+	}{
+		{s3, func(target *Target) { target.Name = "Bad Name" }, "name"},
+		{s3, func(target *Target) { target.Endpoint = "http://s3.example.com" }, "endpoint"},
+		{s3, func(target *Target) { target.Region = "" }, "region"},
+		{s3, func(target *Target) { target.Bucket = "" }, "bucket"},
+		{s3, func(target *Target) { target.Prefix = "control" }, "prefix"},
+		{s3, func(target *Target) { target.Prefix = "../" }, "prefix"},
+		{s3, func(target *Target) { target.AccessKey = "" }, "access_key"},
+		{s3, func(target *Target) { target.SecretKey = "" }, "secret_key"},
+		{s3, func(target *Target) { target.CACertificate = "not a pem" }, "ca_certificate"},
+		{sftp, func(target *Target) { target.Host = "" }, "host"},
+		{sftp, func(target *Target) { target.Port = 0 }, "port"},
+		{sftp, func(target *Target) { target.Username = "" }, "username"},
+		{sftp, func(target *Target) { target.RemoteDir = "srv/cdnca" }, "remote_dir"},
+		{sftp, func(target *Target) { target.RemoteDir = "/srv/../cdnca" }, "remote_dir"},
+		{sftp, func(target *Target) { target.HostKeySHA256 = "" }, "host_key_sha256"},
+		{sftp, func(target *Target) { target.Password = "" }, "password"},
+		{sftp, func(target *Target) { target.PrivateKey = "key" }, "password"},
+		{sftp, func(target *Target) { target.Password, target.PrivateKey = "", "key" }, ""},
+		{s3, func(target *Target) { target.Kind = "ftp" }, "kind"},
+	} {
+		target := test.base
+		test.mutate(&target)
+		if field := target.InvalidField(); field != test.field {
+			t.Fatalf("%+v field = %q, want %q", target.Name+"/"+target.Kind, field, test.field)
+		}
+		if (target.Validate() == nil) != (test.field == "") {
+			t.Fatalf("%s: Validate and InvalidField disagree (field %q)", target.Kind, test.field)
+		}
+	}
+}

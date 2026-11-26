@@ -31,7 +31,7 @@ type captchaStub struct {
 	calls []identity.LoginCaptchaProof
 }
 
-func (captcha *captchaStub) ConsumeCaptcha(_ context.Context, proof identity.LoginCaptchaProof, _ string) error {
+func (captcha *captchaStub) ConsumeCaptcha(_ context.Context, proof identity.LoginCaptchaProof) error {
 	captcha.calls = append(captcha.calls, proof)
 	return captcha.err
 }
@@ -51,6 +51,10 @@ func newBuiltIn(t *testing.T, settings systemusersettings.PublicSettings) (*Buil
 	t.Helper()
 	store := &builtInStoreStub{registrationStoreStub: registrationStoreStub{byKey: map[string]RegistrationRecord{}}}
 	captcha := &captchaStub{}
+	if settings.TermsVersion == "" {
+		// the version the inputs of these tests accept
+		settings.TermsVersion = "terms-2026-08"
+	}
 	service, err := NewBuiltInService(store, &registrationPolicyStub{settings: settings}, captcha, make([]byte, 32))
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +99,8 @@ func TestBuiltInRegistrationRefusals(t *testing.T) {
 		{"no captcha", systemusersettings.PublicSettings{RegistrationEnabled: true}, func(input *BuiltInInput) { input.Captcha = identity.LoginCaptchaProof{} }, nil, ErrCaptchaInvalid},
 		{"wrong captcha", systemusersettings.PublicSettings{RegistrationEnabled: true}, nil, identity.ErrLoginCaptchaInvalid, ErrCaptchaInvalid},
 		{"weak password", systemusersettings.PublicSettings{RegistrationEnabled: true}, func(input *BuiltInInput) { input.Password = "short" }, nil, ErrInvalidInput},
-		{"terms", systemusersettings.PublicSettings{RegistrationEnabled: true}, func(input *BuiltInInput) { input.TermsAccepted = false }, nil, ErrInvalidInput},
+		// required terms not accepted is the terms refusal (account_registration_terms_required)
+		{"terms", systemusersettings.PublicSettings{RegistrationEnabled: true}, func(input *BuiltInInput) { input.TermsAccepted = false }, nil, ErrTermsOutdated},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {

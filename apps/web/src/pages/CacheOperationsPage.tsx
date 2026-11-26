@@ -5,16 +5,16 @@ import {
   Button,
   Descriptions,
   Drawer,
+  Grid,
   Popconfirm,
   Progress,
   Result,
   Select,
   Space,
-  Table,
   Tag,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, IdOrNameInput, OutcomeUnknown, useLiveApply } from '@cdnca/ui'
+import { useFeedbackMessage, FeedbackWhen, IdOrNameInput, OutcomeUnknown, useLiveApply, Table } from '@cdnca/ui'
 import {
   Ban,
   ChevronLeft,
@@ -59,6 +59,7 @@ import TenantScopeSelect, { canonicalScopeUUIDPattern } from '../components/Tena
 import '../i18n/cacheOperations'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
 import { siteSearch } from './idNameSources'
+import { filterParam, useFilterUrl } from './filterUrl'
 import './CacheOperationsPage.css'
 import { cacheWriteIdentity, cacheWriteOwner, pendingCacheWriteKey, rememberCacheWrite, sendCacheWrite, settleCacheWrite } from './cacheWriteJournal'
 
@@ -76,6 +77,27 @@ interface FilterValues {
   action?: CacheOperationAction
   target_type?: CacheTargetType
   state?: CacheOperationState
+}
+
+// 管理员「操作记录」已生效的目标租户与筛选写进 URL
+// （scope/site 只写 UUID，不写搜索词或邮箱），刷新或前进后退时读回；读回值逐项校验，非法项丢弃，
+// 目标租户不合法时整组不读（不出现无目标的筛选）。权限仍由服务端按当前身份校验，无权时页面照常显示拒绝。
+function linkedHistory(searchParams: URLSearchParams): { scopeID: string; filters: FilterValues } | null {
+  const scopeID = filterParam(searchParams, 'scope').toLowerCase()
+  if (!uuidPattern.test(scopeID)) return null
+  const site = filterParam(searchParams, 'site').toLowerCase()
+  const action = filterParam(searchParams, 'action') as CacheOperationAction
+  const targetType = filterParam(searchParams, 'target_type') as CacheTargetType
+  const state = filterParam(searchParams, 'state') as CacheOperationState
+  return {
+    scopeID,
+    filters: {
+      ...(uuidPattern.test(site) ? { site_id: site } : {}),
+      ...(operationActions.includes(action) ? { action } : {}),
+      ...(targetTypes.includes(targetType) ? { target_type: targetType } : {}),
+      ...(operationStates.includes(state) ? { state } : {}),
+    },
+  }
 }
 
 // 主区直接提交，没有创建弹窗。URL/目录按每条
@@ -484,6 +506,8 @@ function CacheOperationsPageSession({
   canManage: boolean
   canListTenants?: boolean
 }) {
+  // 手机宽度下不把 300px 的操作列固定在右侧，任务编号、类型、状态在首屏可见，操作随表格横滚到达
+  const compactTable = Grid.useBreakpoint().md === false
   const { t, i18n } = useTranslation('cacheOperations')
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
   const accessTokenRef = useRef(accessToken)
@@ -497,10 +521,11 @@ function CacheOperationsPageSession({
   const [searchParams, setSearchParams] = useSearchParams()
   const showRecords = isAdmin && searchParams.get('tab') === 'history'
   const [stateOwnerKey, setStateOwnerKey] = useState(ownerKey)
-  const [scopeDraft, setScopeDraft] = useState('')
-  const [adminScopeID, setAdminScopeID] = useState<string | null>(null)
-  const [filters, setFilters] = useState<FilterValues>({})
-  const [appliedFilters, setAppliedFilters] = useState<FilterValues>({})
+  const [linkedRecords] = useState(() => showRecords ? linkedHistory(searchParams) : null)
+  const [scopeDraft, setScopeDraft] = useState(linkedRecords?.scopeID ?? '')
+  const [adminScopeID, setAdminScopeID] = useState<string | null>(linkedRecords?.scopeID ?? null)
+  const [filters, setFilters] = useState<FilterValues>(linkedRecords?.filters ?? {})
+  const [appliedFilters, setAppliedFilters] = useState<FilterValues>(linkedRecords?.filters ?? {})
   const [validationError, setValidationError] = useState<string | null>(null)
   const [pageIndex, setPageIndex] = useState(0)
   const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([undefined])
@@ -559,6 +584,11 @@ function CacheOperationsPageSession({
     setGroupLoading(false)
   }
   const ownerStateCurrent = stateOwnerKey === ownerKey
+  const linkedValues = showRecords && ownerStateCurrent ? appliedFilters : {}
+  useFilterUrl({
+    scope: showRecords && ownerStateCurrent ? adminScopeID : undefined,
+    site: linkedValues.site_id, action: linkedValues.action, target_type: linkedValues.target_type, state: linkedValues.state,
+  })
 
   useEffect(() => {
     if (messageOwnerKeyRef.current === ownerKey) return
@@ -1084,7 +1114,7 @@ function CacheOperationsPageSession({
       render: (value: string) => formatDateTime(value, locale),
     },
     {
-      title: t('columns.actions'), key: 'actions', fixed: 'right', width: 325,
+      title: t('columns.actions'), key: 'actions', fixed: compactTable ? undefined : 'right', width: 325,
       render: (_, operation) => (
         <Space size={4} wrap={false}>
           <Button
@@ -1205,7 +1235,7 @@ function CacheOperationsPageSession({
   const siteCount = taskCount
   const mainSubmitDisabled = !canManage || groupsRunning || errorCount > 0 ||
     (mainMode === 'site' ? !mainSite?.scope : mainLines.length === 0)
-  const listCopy = t(`baseline.lists.${mainMode === 'site' ? 'url' : mainMode}`, { returnObjects: true }) as { title: string; description: string }
+  const listCopy = t(`baseline.lists.${mainMode === 'site' ? 'url' : mainMode}`, { returnObjects: true }) as { title: string; description?: string }
   const shownErrors = lineErrors.slice(0, 20)
   const errorLines = [...localCheck.listErrors, ...shownErrors.map((item) => t('lineIssues.line', {
     line: formatNumber(item.line, locale), target: item.target, reason: item.reason,
@@ -1225,9 +1255,10 @@ function CacheOperationsPageSession({
             <div className="cache-baseline-section-head">
               <div className="cache-baseline-title-wrap">
                 <h2>{t('baseline.operationType')}</h2>
-                <p>{t('baseline.operationDescription')}</p>
+                {/* 管理员代提交不受账户日限额约束，豁免只在右侧「今日额度」讲（
+                    ）；租户看真实的限额规则。 */}
+                {isAdmin ? null : <p>{t('baseline.operationDescription')}</p>}
               </div>
-              <span className="cache-baseline-current">{t('baseline.current', { value: modeLabel(mainMode) })}</span>
             </div>
             <div className="cache-baseline-mode-actions" role="group" aria-label={t('baseline.operationType')}>
               {mainModes.map((mode) => (
@@ -1248,7 +1279,7 @@ function CacheOperationsPageSession({
             <div className="cache-baseline-input-head">
               <div className="cache-baseline-title-wrap">
                 <h2>{mainMode === 'site' ? t('baseline.siteTitle') : listCopy.title}</h2>
-                <p>{mainMode === 'site' ? t('baseline.siteDescription') : listCopy.description}</p>
+                {mainMode === 'site' ? <p>{t('baseline.siteDescription')}</p> : listCopy.description ? <p>{listCopy.description}</p> : null}
               </div>
               {mainMode === 'site' ? null : (
                 <span className={errorCount > 0 ? 'cache-baseline-count is-error' : 'cache-baseline-count'} aria-live="polite">
@@ -1459,7 +1490,6 @@ function CacheOperationsPageSession({
           <section className="cache-baseline-status-panel">
             <h2>{t('baseline.submitStatus')}</h2>
             <strong className={`cache-baseline-submit-status cache-replica-status-${mainStatus}`}>{t(`baseline.status.${mainStatus}`)}</strong>
-            <p>{t('baseline.statusDescription')}</p>
           </section>
         </aside>
       </section>

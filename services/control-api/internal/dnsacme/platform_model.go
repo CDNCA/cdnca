@@ -131,6 +131,15 @@ type SavePlatformConfigRequest struct {
 	RequestID        string
 }
 
+// DisconnectPlatformConfigRequest is 断开 DNS 服务商: the platform credentials
+// are removed and every tenant copy of the provider is disabled; the CNAME
+// domains, the TTL and the records already written stay.
+type DisconnectPlatformConfigRequest struct {
+	ExpectedRevision int64
+	IdempotencyKey   string
+	RequestID        string
+}
+
 type PlatformZone struct {
 	ID        uuid.UUID `json:"id"`
 	DisplayID int64     `json:"display_id"`

@@ -177,8 +177,8 @@ FROM
     FROM
     (
         SELECT argMax(
-            tuple(occurred_at, site_id, node_id, status_code, request_bytes, response_bytes, cache_status, client_ip),
-            tuple(ingested_at, occurred_at, site_id, node_id, status_code, request_bytes, response_bytes, cache_status, client_ip)
+            tuple(occurred_at, site_id, node_id, status_code, request_bytes, response_bytes, cache_status, client_ip, host, listen_port),
+            tuple(ingested_at, occurred_at, site_id, node_id, status_code, request_bytes, response_bytes, cache_status, client_ip, host, listen_port)
         ) AS latest
         FROM access_hourly_facts_v1
         WHERE metric_version = 1
@@ -190,6 +190,8 @@ FROM
         AND tupleElement(latest, 1) < fromUnixTimestamp64Milli({to_ms:UInt64}, 'UTC')
         AND ({has_site:UInt8} = 0 OR tupleElement(latest, 2) = toUUID({site_id:String}))
         AND ({has_node:UInt8} = 0 OR tupleElement(latest, 3) = toUUID({node_id:String}))
+        AND ({has_domain:UInt8} = 0 OR has(splitByChar(' ', {domain:String}), lower(tupleElement(latest, 9))))
+        AND ({has_listen_port:UInt8} = 0 OR tupleElement(latest, 10) = {listen_port:UInt16})
     UNION ALL
     SELECT
         toUInt64(0), toUInt64(0), toUInt64(0), toUInt64(0), toUInt64(0), toUInt64(0), toUInt64(0),
@@ -210,6 +212,9 @@ FROM
         AND tupleElement(latest, 1) < fromUnixTimestamp64Milli({to_ms:UInt64}, 'UTC')
         AND ({has_site:UInt8} = 0 OR tupleElement(latest, 2) = toUUID({site_id:String}))
         AND ({has_node:UInt8} = 0 OR tupleElement(latest, 3) = toUUID({node_id:String}))
+        -- No host or port on the security facts: a domain or port narrowed
+        -- summary counts no security events (the API reports them as null).
+        AND {has_domain:UInt8} = 0 AND {has_listen_port:UInt8} = 0
 )
 FORMAT JSONEachRow`
 
@@ -652,7 +657,7 @@ func (row topResponseRow) item() (TopItem, bool) {
 }
 
 func (client *Client) Summary(ctx context.Context, scope Scope, filter Filter) (Summary, error) {
-	parameters, err := queryParametersWithValidation(scope, filter, validateSummaryScopeFilter)
+	parameters, err := rankQueryParameters(scope, filter)
 	if err != nil {
 		return Summary{}, err
 	}

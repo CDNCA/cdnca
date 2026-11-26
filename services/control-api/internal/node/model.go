@@ -110,18 +110,18 @@ type NodeAutoDisableSettings struct {
 }
 
 type NodeManagementSettings struct {
-	SchemaVersion  int                     `json:"schema_version"`
-	Sort           int                     `json:"sort"`
-	NodeType       string                  `json:"node_type"`
-	CacheDirectory string                  `json:"cache_directory"`
-	CacheLimitGB   uint64                  `json:"cache_limit_gb"`
-	LogDirectory   string                  `json:"log_directory"`
-	IPLocation     NodeIPLocation          `json:"ip_location"`
+	SchemaVersion  int            `json:"schema_version"`
+	Sort           int            `json:"sort"`
+	NodeType       string         `json:"node_type"`
+	CacheDirectory string         `json:"cache_directory"`
+	CacheLimitGB   uint64         `json:"cache_limit_gb"`
+	LogDirectory   string         `json:"log_directory"`
+	IPLocation     NodeIPLocation `json:"ip_location"`
 	// IPLocationManual lists the ip_location fields an administrator set;
 	// the others follow the automatic resolution (iplocation.go, 547).
 	IPLocationManual []string                `json:"ip_location_manual,omitempty"`
 	AutoDisable      NodeAutoDisableSettings `json:"auto_disable"`
-	SecondaryIPs   []string                `json:"secondary_ips"`
+	SecondaryIPs     []string                `json:"secondary_ips"`
 	// ExternalProbe: the node votes as a peer in external probing of other
 	// nodes (nodeprobe). The Agent runs probe-only by default (installer);
 	// turning this off stops asking it. It never joins the node market.

@@ -114,9 +114,7 @@ describe('role navigation', () => {
         '/monitor/site/access-log',
         '/monitor/site/attack-log',
         '/monitor/stream/realtime',
-        '/monitor/site/block-event-log',
-        '/monitor/stream/access-log',
-        '/monitor/stream/live-connections',
+        'monitor-diagnostics',
       ] },
       { key: 'site', children: [
         '/site/list',
@@ -138,9 +136,11 @@ describe('role navigation', () => {
         '/account/message',
         '/account/subscribe',
         '/account/api',
+        '/account/tickets',
+      ] },
+      { key: 'team', children: [
         '/account/members',
         '/account/custom-roles',
-        '/account/tickets',
       ] },
     ])
 
@@ -207,12 +207,14 @@ describe('role navigation', () => {
       { key: 'site', label: '网站管理' },
       { key: 'stream', label: '四层转发' },
       { key: 'account', label: '账户中心' },
+      { key: 'team', label: '团队管理' },
     ])
     expect(getNavigation('user').map((item) => item.icon)).toEqual([
       'overview',
       'analytics',
       'sites',
       'stream',
+      'account',
       'account',
     ])
     expect(getNavigation('user').find((item) => item.key === 'monitor')?.children?.map((item) => item.label)).toEqual([
@@ -223,6 +225,9 @@ describe('role navigation', () => {
       '访问日志',
       'WAF日志',
       '四层实时监控',
+      '诊断',
+    ])
+    expect(getNavigation('user').find((item) => item.key === 'monitor')?.children?.find((item) => item.key === 'monitor-diagnostics')?.children?.map((item) => item.label)).toEqual([
       '拦截事件明细',
       '四层访问日志',
       '四层实时连接',
@@ -233,9 +238,11 @@ describe('role navigation', () => {
       '/account/message',
       '/account/subscribe',
       '/account/api',
+      '/account/tickets',
+    ])
+    expect(getNavigation('user').find((item) => item.key === 'team')?.children?.map((item) => item.key)).toEqual([
       '/account/members',
       '/account/custom-roles',
-      '/account/tickets',
     ])
     // 社区版：账户中心不再有余额与消费记录；套餐页面全部删除。
     expect(isImplementedPath('user', '/account/balance', ['billing.account.read'])).toBe(false)
@@ -247,7 +254,7 @@ describe('role navigation', () => {
 
   it('keeps the observed icon for each tenant top-level section', () => {
     expect(getNavigation('user').map((item) => item.icon)).toEqual([
-      'overview', 'analytics', 'sites', 'stream', 'account',
+      'overview', 'analytics', 'sites', 'stream', 'account', 'account',
     ])
   })
 
@@ -621,7 +628,7 @@ describe('role navigation', () => {
     expect(isImplementedPath('admin', '/node/realtime', ['nodes.manage'])).toBe(false)
     expect(isImplementedPath('user', '/node/realtime', ['nodes.read'])).toBe(false)
     expect(getBreadcrumbLabels('admin', '/node/realtime')).toEqual([
-      '首页', '节点管理', '实时监控',
+      '首页', '节点管理', '节点实时监控',
     ])
 
     expect(isImplementedPath('user', '/account/verification', ['identity_verification.self.manage'])).toBe(true)
@@ -784,9 +791,11 @@ describe('role navigation', () => {
       expect(isImplementedPath('user', path, ['sites.read'])).toBe(true)
       expect(isImplementedPath('admin', path, [])).toBe(false)
       expect(isImplementedPath('user', path, [])).toBe(false)
-      expect(getParentNavigationKey('user', path)).toBe('monitor')
+      // 租户的拦截事件明细在「统计分析 › 诊断」下。
+      expect(getParentNavigationKey('user', path)).toBe(path === '/monitor/site/block-event-log' ? 'monitor-diagnostics' : 'monitor')
     }
     expect(getBreadcrumbLabels('user', '/monitor/site/access-log')).toEqual(['首页', '统计分析', '访问日志'])
+    expect(getBreadcrumbLabels('user', '/monitor/site/block-event-log')).toEqual(['首页', '统计分析', '诊断', '拦截事件明细'])
     expect(getBreadcrumbLabels('admin', '/monitor/site/block-log')).toEqual(['首页', '统计分析', '拉黑日志'])
     expect(getBreadcrumbLabels('admin', '/monitor/site/block-event-log')).toEqual(['首页', '统计分析', '拦截事件明细'])
     expect(getBreadcrumbLabels('admin', '/monitor/site/cc-coordination')).toEqual(['首页', '统计分析', '跨节点 CC 状态'])
@@ -811,7 +820,9 @@ describe('role navigation', () => {
     expect(isImplementedPath('user', '/account/custom-roles', all, [], ['custom_rbac'])).toBe(true)
     expect(isImplementedPath('admin', '/sys/log-center', ['platform.admin'])).toBe(true)
     expect(getNavigation('user', undefined, [...all, 'package_subscriptions.read']).find((item) => item.key === 'account')?.children?.map((item) => item.label))
-      .toEqual(['个人资料', '日志查询', '消息查询', '消息订阅', 'API密钥', '团队成员', '自定义角色', '工单'])
+      .toEqual(['个人资料', '日志查询', '消息查询', '消息订阅', 'API密钥', '工单'])
+    expect(getNavigation('user', undefined, all, [], ['custom_rbac']).find((item) => item.key === 'team')?.children?.map((item) => item.label))
+      .toEqual(['团队成员', '自定义角色'])
     expect(getNavigation('user', undefined, ['package_subscriptions.read', 'traffic_packages.read']).some((item) => item.key === 'user-package')).toBe(false)
   })
 

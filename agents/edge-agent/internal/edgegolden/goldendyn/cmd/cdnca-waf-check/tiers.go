@@ -91,7 +91,9 @@ func tierSamples() (map[string][]string, []string) {
 	return attacks, benign
 }
 
-func detectorHost(detector string) string { return strings.ReplaceAll(detector, "_", "-") + ".waf.test" }
+func detectorHost(detector string) string {
+	return strings.ReplaceAll(detector, "_", "-") + ".waf.test"
+}
 
 var auditRuleID = regexp.MustCompile(`"ruleId":"(9[0-9]{5})"`)
 
@@ -110,7 +112,7 @@ func auditRules(offset int64) (map[string]int, int64) {
 // detectorPolicy blocks on one node detector (args: query and body values).
 func detectorPolicy(detector string) edgesite.RulePlan {
 	rule, err := edgeconfig.NormalizeSecurityRule(edgeconfig.WAFRule{RuleID: "0d110000-0000-4000-8000-0000000000a1",
-		Match: edgeconfig.WAFMatch{Inspect: []edgeconfig.WAFInspect{{Target: "args", Operator: "detect", Values: []string{detector}}}},
+		Match:  edgeconfig.WAFMatch{Inspect: []edgeconfig.WAFInspect{{Target: "args", Operator: "detect", Values: []string{detector}}}},
 		Action: edgeconfig.WAFBlock, Control: edgeconfig.WAFStop})
 	if err != nil {
 		panic(err)

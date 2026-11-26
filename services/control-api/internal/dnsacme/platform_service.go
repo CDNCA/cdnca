@@ -91,6 +91,32 @@ func (s *Service) SavePlatformConfig(ctx context.Context, actor Actor, request S
 	return s.store.PlatformConfig(ctx)
 }
 
+// DisconnectPlatformConfig is 断开 DNS 服务商: the saved credentials are
+// removed from the platform document (version checked, idempotent) and the
+// tenant provider copies are disabled by the synchronisation that follows, so
+// CNAME allocation, 记录修复 and DNS-01 report the provider as not configured.
+// The CNAME domains, their tenant zone copies and the written records stay. A
+// platform without a provider is left unchanged.
+func (s *Service) DisconnectPlatformConfig(ctx context.Context, actor Actor, request DisconnectPlatformConfigRequest) (PlatformConfig, error) {
+	if !platformActor(actor) {
+		return PlatformConfig{}, ErrPlatformOnly
+	}
+	if request.ExpectedRevision < 1 || !validMetadata(request.IdempotencyKey, request.RequestID) {
+		return PlatformConfig{}, ErrInvalidInput
+	}
+	digest, err := digestRequest(struct {
+		Revision int64 `json:"revision"`
+	}{request.ExpectedRevision})
+	if err != nil {
+		return PlatformConfig{}, err
+	}
+	if err := s.store.DisconnectPlatformConfig(ctx, actor, request, digest); err != nil {
+		return PlatformConfig{}, err
+	}
+	_, _ = s.SyncPlatformTenants(ctx)
+	return s.store.PlatformConfig(ctx)
+}
+
 // TestPlatformConnection (连接测试) checks credentials against the provider
 // without saving anything or writing any record: the same verification as a
 // save, then for each CNAME domain whether the account hosts it (the domain

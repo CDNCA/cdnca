@@ -3009,6 +3009,18 @@
      "name": "node_id",
      "in": "query",
      "type": "string(uuid)"
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string",
+     "description": "Summary and ranking only. Up to 64 space-separated domains (case-insensitive, a trailing dot ignored); only requests to these hosts are counted. The summary and the ranking narrow by the same set."
+    },
+    {
+     "name": "listen_port",
+     "in": "query",
+     "type": "integer",
+     "description": "Summary and ranking only. Only requests received on this server port are counted."
     }
    ],
    "responses": [
@@ -3112,6 +3124,18 @@
      "name": "node_id",
      "in": "query",
      "type": "string(uuid)"
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string",
+     "description": "Summary and ranking only. Up to 64 space-separated domains (case-insensitive, a trailing dot ignored); only requests to these hosts are counted. The summary and the ranking narrow by the same set."
+    },
+    {
+     "name": "listen_port",
+     "in": "query",
+     "type": "integer",
+     "description": "Summary and ranking only. Only requests received on this server port are counted."
     },
     {
      "name": "limit",

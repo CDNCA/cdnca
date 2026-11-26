@@ -3,13 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Checkbox, Descriptions, Form, InputNumber, Select, Skeleton, Switch, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
-import { ApiError } from '../../api/auth'
 import { newIdempotencyKey } from '../../api/market'
 import {
   dnspupMonitorGroups, dnspupNodeIntervals, dnspupNodeMonitoringApi, estimateDNSPupNodeRequests, nodeProbeTypes,
-  type DNSPupNodeMonitoringSettings, type DNSPupNodeMonitoringStatus,
+  type DNSPupNodeMonitoringSettings, type DNSPupNodeMonitoringStatus, type ProbeDNSPupStatus,
 } from '../../api/probeDNSPup'
 import { SelectionFields, selectionOf, valuesOf, type SelectionValues } from './SelectionFields'
+import { useProbeReason } from './probeErrors'
 import '../../i18n/probeDNSPup'
 import { useFeedback, FeedbackWhen, PageSection, useFormSubmitError } from '@cdnca/ui'
 
@@ -32,7 +32,16 @@ function settingsOf(values: NodeForm): DNSPupNodeMonitoringSettings {
 // Node availability probing from dnspup checkpoints: the
 // settings, the request estimate (dnspup meters one request per node IP and
 // round, any checkpoint count) next to the dnspup balance.
-export function NodeProbeCard({ token }: { token: string }) {
+// 停用提示只说当前真正成立的那一个原因（按连接设置的实际状态）。
+export function inactiveReason(connection: ProbeDNSPupStatus): 'unlicensed' | 'disabled' | 'paused' | 'noKey' | 'unknown' {
+  if (!connection.licensed) return 'unlicensed'
+  if (!connection.enabled) return 'disabled'
+  if (connection.paused_until) return 'paused'
+  if (!connection.api_key || !connection.secret_configured) return 'noKey'
+  return 'unknown'
+}
+
+export function NodeProbeCard({ token, connection }: { token: string; connection: ProbeDNSPupStatus }) {
   const { t, i18n } = useTranslation('probeDNSPup')
   const { message } = App.useApp()
   const feedback = useFeedback()
@@ -42,8 +51,7 @@ export function NodeProbeCard({ token }: { token: string }) {
   const status = useQuery({ queryKey, queryFn: () => dnspupNodeMonitoringApi.status(token), enabled: Boolean(token) })
   const interval = Form.useWatch('interval_seconds', form)
   const number = (value: number) => new Intl.NumberFormat(i18n.resolvedLanguage ?? i18n.language).format(value)
-  const reason = (error: unknown) => error instanceof ApiError && i18n.exists(`probeDNSPup:errors.${error.code}`)
-    ? t(`errors.${error.code}`) : t('errors.request_failed')
+  const reason = useProbeReason()
 
   useEffect(() => {
     if (status.data) form.setFieldsValue(formOf(status.data))
@@ -66,12 +74,12 @@ export function NodeProbeCard({ token }: { token: string }) {
   const intervalOptions = dnspupNodeIntervals.map((value) => ({ value,
     label: value === 0 ? t('node.intervals.off') : t('node.intervals.every', { minutes: value / 60 }) }))
 
-  // Estimate and balance side by side as one strip, every setting on the density grid
+  // estimate and balance side by side as one strip, every setting on the density grid
   // (numbers stay narrow), the selection fields join the same grid, save right under the last row.
   return <PageSection title={t('node.title')}>
     {status.isLoading ? <Skeleton active /> : <div className="probe-dnspup-section-body">
       <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('node.intro')}</Typography.Paragraph>
-      {data && !data.plugin_active ? <Alert type="warning" showIcon message={t('node.inactive')} /> : null}
+      {data && !data.plugin_active ? <Alert type="warning" showIcon message={t('node.inactive', { reason: t(`node.inactiveReasons.${inactiveReason(connection)}`) })} /> : null}
       {data?.budget_state === 'low' ? <Alert type="warning" showIcon
         message={t('node.budgetLow', { minutes: data.effective_interval_seconds / 60 })} /> : null}
       {data?.budget_state === 'exhausted' ? <Alert type="error" showIcon message={t('node.budgetExhausted')} /> : null}
@@ -88,7 +96,7 @@ export function NodeProbeCard({ token }: { token: string }) {
         </Typography.Text>
       </div>
       <Form form={form} layout="vertical" disabled={!data} requiredMark={false}>
-        <div className="density-form-grid">
+        <div className="density-form-grid probe-dnspup-form-grid">
           <Form.Item name="interval_seconds" label={t('node.interval')}>
             <Select options={intervalOptions} aria-label={t('node.interval')} />
           </Form.Item>

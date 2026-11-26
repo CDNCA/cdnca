@@ -149,6 +149,18 @@ async function sendTest(accessToken: string, value: PlatformSystemMailSettings, 
       body: JSON.stringify({ value, to, ...(mailSecret ? { mail_secret: mailSecret } : {}) }),
     })
   } catch { throw networkApiError() }
+  if (response.status === 422 || response.status === 502) {
+    // a test that did not send: 422 config_incomplete (details.missing), 502 provider failure (details.reason)
+    const failure = await response.clone().json().catch(() => null) as { error?: { code?: unknown, details?: Record<string, unknown> } } | null
+    const details = failure?.error?.details
+    const provider = typeof details?.provider === 'string' ? details.provider : ''
+    if (response.status === 422 && failure?.error?.code === 'system_mail_settings_config_incomplete' && Array.isArray(details?.missing) && details.missing.every((item) => typeof item === 'string')) {
+      return { ok: false, provider, code: 'config_incomplete', missing: details.missing as string[] }
+    }
+    if (response.status === 502 && failure?.error?.code === 'system_mail_settings_test_failed' && typeof details?.reason === 'string') {
+      return { ok: false, provider, code: details.reason }
+    }
+  }
   if (!response.ok) throw await responseApiError(response)
   let body: unknown
   try { body = await response.json() } catch { throw new ApiError('Invalid API response', 0, 'system_mail_settings_invalid_response') }

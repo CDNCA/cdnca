@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Result, Spin, Table, Tag } from 'antd'
+import { Alert, Button, Result, Spin, Tag } from 'antd'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -14,7 +14,7 @@ import {
 } from '../api/qualityDiagnostics'
 import '../i18n/qualityDiagnostics'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
 
 interface SiteQualityDiagnosticsProps {
   accessToken: string

@@ -238,6 +238,10 @@ describe('FirewallPoliciesPage', () => {
 
   it('confirms before restoring the recommended WAF limits (W4)', async () => {
     const user = userEvent.setup()
+    // Restoring values that are already the recommended ones writes nothing, so start from a changed limit.
+    vi.mocked(openrestySecurityApi.getGlobal).mockResolvedValue({
+      ...globalDocument, config: { ...globalDocument.config, waf_resource_limits: { ...globalDocument.config.waf_resource_limits!, json_max_depth: 32 } },
+    })
     renderPage()
     await user.click(await screen.findByRole('tab', { name: 'WAF全局配置' }))
     await user.click(await screen.findByRole('button', { name: '恢复推荐值' }))
@@ -396,6 +400,25 @@ describe('FirewallPoliciesPage', () => {
     await waitFor(() => expect(openrestySecurityApi.getEffective).toHaveBeenCalledWith('token', '55555555-5555-4555-8555-555555555555'))
     expect(await within(panel).findByText('总请求达 50/秒时切换到规则组 10003，120 秒后恢复')).toBeInTheDocument()
     expect(within(panel).getByText('区域')).toBeInTheDocument()
+  })
+
+  // 空确认在弹窗里分别提示目标与配置项，关联到选择框并聚焦首错，不发请求、不弹保存失败。
+  it('marks a missing target and configuration item on their selects without a write', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('CC 防护策略')
+    await user.click(screen.getByRole('tab', { name: '区域及节点配置' }))
+    await user.click(await screen.findByRole('button', { name: '新增设置' }))
+    const dialog = await screen.findByRole('dialog', { name: '新增设置' })
+    await user.click(within(dialog).getByRole('button', { name: /确\s*定/ }))
+    expect(await within(dialog).findByText('请选择节点')).toHaveAttribute('role', 'alert')
+    expect(within(dialog).getByText('请添加至少一个配置项')).toHaveAttribute('role', 'alert')
+    const target = within(dialog).getByRole('combobox', { name: '节点选择' })
+    expect(target).toHaveAttribute('aria-invalid', 'true')
+    expect(target).toHaveAccessibleDescription('请选择节点')
+    await waitFor(() => expect(target).toHaveFocus())
+    expect(openrestySecurityApi.createOverride).not.toHaveBeenCalled()
+    expect(document.querySelector('.cdnca-feedback')).toBeNull()
   })
 
   it('adds one override field at a time, restores the placeholder, removes it, and submits the edited value', async () => {

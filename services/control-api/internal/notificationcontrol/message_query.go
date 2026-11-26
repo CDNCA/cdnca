@@ -33,7 +33,7 @@ const (
 	messagePackageKeywordSQL = `($%[1]d::text='' OR EXISTS (SELECT 1 FROM package_subscriptions keyword_package
 		JOIN package_subscription_display_ids keyword_package_display ON keyword_package_display.subscription_id=keyword_package.id
 		WHERE keyword_package.id=%[2]s AND (keyword_package_display.display_id::text=$%[1]d OR
-		position(lower($%[1]d) in lower(COALESCE(keyword_package.product_snapshot->>'name','')))>0)))`
+		position(lower($%[1]d) in lower(COALESCE(package_subscription_current_product_snapshot(keyword_package.id,now())->>'name','')))>0)))`
 	messageSiteKeywordSQL = `($%[1]d::text='' OR EXISTS (SELECT 1 FROM sites keyword_site WHERE keyword_site.id=%[2]s AND (
 		keyword_site.display_id::text=$%[1]d OR position(lower($%[1]d) in lower(keyword_site.domain))>0)))`
 )
@@ -167,7 +167,7 @@ func (s *Store) ListMessages(ctx context.Context, actor Actor, raw MessageQuery)
 			CASE WHEN email.id IS NOT NULL THEN COALESCE(email_settlement.state,'pending') END,
 			CASE WHEN sms.id IS NOT NULL THEN COALESCE(sms_settlement.state,'pending') END,
 			recipient.display_id,recipient.username,recipient.display_name,site.domain,
-			subscription.product_snapshot->>'name'
+			package_subscription_current_product_snapshot(subscription.id,now())->>'name'
 			FROM message_candidates event
 			LEFT JOIN users recipient ON recipient.id=event.recipient_user_id
 			LEFT JOIN sites site ON site.id::text=event.site_id

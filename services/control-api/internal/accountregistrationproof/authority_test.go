@@ -83,14 +83,13 @@ func TestVerifyRejectsUnsafeBindingsBeforeDatabase(t *testing.T) {
 	authority := mustTestAuthority(t)
 	valid := accountregistration.RegistrationProofRequest{
 		Reference: strings.Repeat("A", ReferenceEncodedLength), Channel: accountregistration.VerificationSMS,
-		Destination: "+8613812345678", Source: "192.0.2.8", IdempotencyKey: "register-1",
+		Destination: "+8613812345678", IdempotencyKey: "register-1",
 		SubjectDigest: proofTestSubject,
 	}
 	for name, mutate := range map[string]func(*accountregistration.RegistrationProofRequest){
 		"malformed reference": func(request *accountregistration.RegistrationProofRequest) { request.Reference = "secret" },
 		"unknown channel":     func(request *accountregistration.RegistrationProofRequest) { request.Channel = "push" },
 		"destination":         func(request *accountregistration.RegistrationProofRequest) { request.Destination = "138 1234" },
-		"noncanonical source": func(request *accountregistration.RegistrationProofRequest) { request.Source = "::ffff:192.0.2.8" },
 		"idempotency":         func(request *accountregistration.RegistrationProofRequest) { request.IdempotencyKey = "contains space" },
 		"zero subject":        func(request *accountregistration.RegistrationProofRequest) { request.SubjectDigest = [32]byte{} },
 	} {

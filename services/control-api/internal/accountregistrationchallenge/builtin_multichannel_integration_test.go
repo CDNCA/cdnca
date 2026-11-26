@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
@@ -34,7 +35,9 @@ func (zeroEntropy) Read(buffer []byte) (int, error) {
 	return len(buffer), nil
 }
 
-type fixedPolicy struct{ settings systemusersettings.PublicSettings }
+type fixedPolicy struct {
+	settings systemusersettings.PublicSettings
+}
 
 func (policy fixedPolicy) GetPublic(context.Context, uuid.UUID) (systemusersettings.PublicSettings, error) {
 	return policy.settings, nil
@@ -46,7 +49,7 @@ func (human *acceptHuman) Verify(context.Context, HumanVerification) error { hum
 
 type unusedCaptcha struct{}
 
-func (unusedCaptcha) ConsumeCaptcha(context.Context, identity.LoginCaptchaProof, string) error {
+func (unusedCaptcha) ConsumeCaptcha(context.Context, identity.LoginCaptchaProof) error {
 	return errors.New("the CAPTCHA must not be asked for at registration")
 }
 
@@ -90,7 +93,7 @@ func TestBuiltInRegistrationBothChannelsPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	policy := fixedPolicy{systemusersettings.PublicSettings{RegistrationEnabled: true, EmailRequired: true,
-		EmailVerificationRequired: true, PhoneRequired: true, PhoneVerificationRequired: true}}
+		EmailVerificationRequired: true, PhoneRequired: true, PhoneVerificationRequired: true, TermsVersion: "terms-2026-08"}}
 	human := &acceptHuman{}
 	challenges, err := NewService(pool, human, sender, authority, keys("proof-v1", 0x43),
 		Config{DigestKey: digestKey, PublicSettings: policy, Entropy: zeroEntropy{}})
@@ -106,9 +109,19 @@ func TestBuiltInRegistrationBothChannelsPostgres(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create %s: %v (outbox: %v)", channel, err, outbox.err)
 		}
-		verified, err := challenges.Verify(ctx, VerifyInput{ScopeID: scope, ChallengeID: created.ChallengeID, Username: username,
-			Email: email, Phone: phone, Channel: channel, Source: source, OTP: "000000",
-			IdempotencyKey: "verify-" + channel, RequestID: "request-verify-" + channel})
+		verify := func(binding, key string) (VerifyResult, error) {
+			// the code is checked through another CDN edge than it was sent through
+			return challenges.Verify(ctx, VerifyInput{ScopeID: scope, ChallengeID: created.ChallengeID, Username: username,
+				Email: email, Phone: phone, Channel: channel, Source: "162.159.2.20", Binding: binding, OTP: "000000",
+				IdempotencyKey: key, RequestID: "request-verify-" + channel})
+		}
+		// without the browser binding cookie, or with another challenge's, the right code is refused
+		for name, binding := range map[string]string{"no cookie": "", "other cookie": challenges.browserBinding(uuid.New())} {
+			if _, err := verify(binding, "verify-"+channel+"-"+strings.ReplaceAll(name, " ", "-")); !errors.Is(err, ErrOTPInvalid) {
+				t.Fatalf("verify %s with %s: %v", channel, name, err)
+			}
+		}
+		verified, err := verify(created.Binding, "verify-"+channel)
 		if err != nil {
 			t.Fatalf("verify %s: %v", channel, err)
 		}
@@ -126,7 +139,7 @@ func TestBuiltInRegistrationBothChannelsPostgres(t *testing.T) {
 	input := accountregistration.BuiltInInput{RegisterInput: accountregistration.RegisterInput{
 		Username: username, Password: "Correct-horse-battery-staple", DisplayName: "Both", Email: email, Phone: phone,
 		TermsAccepted: true, TermsVersion: "terms-2026-08", IdempotencyKey: "register-both", RequestID: "request-register",
-		Source: source,
+		Source: "104.23.1.10", // the sign-up comes through yet another edge
 	}}
 	input.ProofReferences = map[string]string{accountregistration.VerificationEmail: prove(accountregistration.VerificationEmail)}
 	if _, err := builtIn.Register(ctx, input); !errors.Is(err, accountregistration.ErrProofInvalid) {

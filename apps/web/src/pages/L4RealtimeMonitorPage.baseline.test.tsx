@@ -80,9 +80,11 @@ describe('L4RealtimeMonitorPage canonical baseline', () => {
     expect(screen.queryByLabelText('站点 ID')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('流 ID')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '刷新' })).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '带宽' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '流量' })).toBeInTheDocument()
-    expect(screen.queryByText(/来源水位|已结算至|当前筛选范围内暂无/)).not.toBeInTheDocument()
+    // a successful read with no points: one empty state, no zero-scale charts
+    expect(await screen.findByText('当前筛选范围内暂无四层实时数据')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '带宽' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '流量' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/来源水位|已结算至/)).not.toBeInTheDocument()
   })
 
   it('keeps the traffic toolbar and sends the selected range and port filters', async () => {

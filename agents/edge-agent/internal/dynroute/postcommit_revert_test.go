@@ -8,9 +8,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -79,6 +82,12 @@ func (node *revertNode) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	case "/commit":
 		committed, _ := strconv.ParseUint(request.URL.Query().Get("gen"), 10, 64)
 		node.prev, node.generation, node.tagsGen = node.generation, committed, committed
+		_, _ = writer.Write([]byte("{}"))
+	case "/rebuild":
+		// a cold start: the node loads the agent's current index file
+		index, _, _ := node.files.Current()
+		node.generation, node.prev, node.tagsGen = index.Generation, 0, 0
+		node.maxGen = max(node.maxGen, index.Generation)
 		_, _ = writer.Write([]byte("{}"))
 	case "/rollback":
 		node.rollbacks++
@@ -240,5 +249,108 @@ func TestApplyReportsAFailedRevertAfterActivation(t *testing.T) {
 	}
 	if node.generation != 2 || node.rollbacks == 0 {
 		t.Fatalf("node generation %d rollbacks %d", node.generation, node.rollbacks)
+	}
+}
+
+// newColdRuntime is a runtime that never activated a generation (a new
+// node): OpenResty "runs" (a fake master; openresty is a script that accepts
+// every check and reloads the master) without any site.
+func newColdRuntime(t *testing.T, node *revertNode) *Runtime {
+	t.Helper()
+	root, err := os.MkdirTemp("/tmp", "cold") // short: sun_path limit
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(root) })
+	// The skeleton changes, so Apply reloads OpenResty and, on Linux, waits
+	// for the master's workers to switch (waitNewWorkers reads the master's
+	// /proc children). This process as the master has no worker that ever
+	// switches (30 s "workers did not switch" on linux/arm64); the fake
+	// master runs one worker and replaces it on SIGHUP, as a reload does.
+	master := exec.Command("/bin/sh", "-c",
+		`sleep 600 & worker=$!; trap 'kill $worker; sleep 600 & worker=$!' HUP; trap 'kill $worker; exit 0' TERM; while :; do wait; done`)
+	if err := master.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = master.Process.Signal(syscall.SIGTERM); _ = master.Wait() })
+	pidFile := filepath.Join(root, "shared", "nginx.pid")
+	script := "#!/bin/sh\nfor arg; do [ \"$arg\" = reload ] && kill -HUP \"$(cat " + pidFile + ")\"; done\nexit 0\n"
+	openresty := filepath.Join(root, "openresty")
+	if err := os.WriteFile(openresty, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := New(Config{StateRoot: filepath.Join(root, "node"), SharedRoot: filepath.Join(root, "shared"),
+		LuaRoot: root, OpenResty: openresty, WorkerGID: -1, HealthTimeout: 300 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.files = runtime.activator.Files
+	socket := filepath.Join(runtime.config.StateRoot, edgeskeleton.ControlSocket)
+	if err := os.MkdirAll(filepath.Dir(socket), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: node}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+	if err := os.MkdirAll(runtime.config.SharedRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(master.Process.Pid)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return runtime
+}
+
+// the first site on a new node was
+// activated as generation 1, failed its health check, and the compensation
+// found no generation to return to ("generation 1 has no single-step
+// rollback"): rollback_failed, generation 1 kept serving while the agent
+// recorded no release. A failed first generation now returns the node to an
+// empty routing table: reverted, nothing routable, the skeleton rendered for
+// no site, a restart recovers that state and the retry activates normally.
+func TestApplyRevertsAFailedFirstGenerationToAnEmptyTable(t *testing.T) {
+	var healthy atomic.Bool
+	node := &revertNode{unhealthy: func(generation uint64) (bool, bool) { return !healthy.Load() && generation == 1, false }}
+	runtime := newColdRuntime(t, node)
+	first := revertObject(t, revertSite("192.0.2.1"))
+	_, err := runtime.Apply(context.Background(), Input{Objects: []siteindex.Object{first}})
+	var reverted *RevertedError
+	if !errors.As(err, &reverted) || reverted.Generation != 1 || reverted.RevertedTo != 2 {
+		t.Fatalf("Apply error %v, want RevertedError 1 -> 2 (empty)", err)
+	}
+	var failed *RollbackFailedError
+	if errors.As(err, &failed) {
+		t.Fatalf("first generation reported as rollback failed: %v", err)
+	}
+	if node.generation != 2 {
+		t.Fatalf("node generation %d, want the empty generation 2", node.generation)
+	}
+	current, ok, err := runtime.activator.Files.Current()
+	if err != nil || !ok || current.Generation != 2 || len(current.Entries) != 0 {
+		t.Fatalf("current index %+v %v %v, want empty generation 2", current, ok, err)
+	}
+	if runtime.Generation() != 2 || len(runtime.Sites()) != 0 {
+		t.Fatalf("runtime generation %d sites %d", runtime.Generation(), len(runtime.Sites()))
+	}
+	conf, err := runtime.render(nil, dynwaf.Result{}, nil, nil, nil, nil)
+	if err != nil || runtime.state.Skeleton != skeletonDigest(conf) {
+		t.Fatalf("skeleton %s is not the one for no site (%v)", runtime.state.Skeleton, err)
+	}
+	restarted, err := New(runtime.config)
+	if err != nil || restarted.Generation() != 2 {
+		t.Fatalf("restarted generation %d %v", restarted.Generation(), err)
+	}
+	// the retry (a new deployment) activates from the empty table
+	healthy.Store(true)
+	if _, err := runtime.Apply(context.Background(), Input{Objects: []siteindex.Object{first}}); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	current, _, _ = runtime.activator.Files.Current()
+	if node.generation != 3 || current.Generation != 3 || len(current.Entries) == 0 || len(runtime.Sites()) != 1 {
+		t.Fatalf("retry node generation %d index %+v sites %d", node.generation, current, len(runtime.Sites()))
 	}
 }

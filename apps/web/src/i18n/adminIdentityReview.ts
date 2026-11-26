@@ -6,7 +6,6 @@ export const adminIdentityReviewNamespace = 'adminIdentityReview'
 
 const zhCN = {
   title: '实名审核',
-  description: '查看全部租户的实名认证申请，开始审核后可通过或驳回。操作以你的管理员身份记入审计。',
   tabs: { submitted: '待审核', reviewing: '审核中', approved: '已通过', rejected: '已驳回' },
   states: {
     draft: '草稿', submitted: '待审核', reviewing: '审核中', approved: '已通过',
@@ -39,7 +38,6 @@ const zhCN = {
 
 const enUS: typeof zhCN = {
   title: 'Identity review',
-  description: 'Every tenant\'s identity verification requests. Start a review, then approve or reject; actions are audited as you.',
   tabs: { submitted: 'Pending', reviewing: 'In review', approved: 'Approved', rejected: 'Rejected' },
   states: {
     draft: 'Draft', submitted: 'Pending', reviewing: 'In review', approved: 'Approved',

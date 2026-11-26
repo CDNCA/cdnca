@@ -80,6 +80,18 @@
   display: none;
 }
 
+/* 筛选与正文进了当前 tabpanel，页签不再定高、不再隐藏面板；
+   原来页签下方的 16px 改成面板上边距，页面底部不多留白。 */
+.node-realtime-tabset.node-realtime-tabs {
+  height: auto;
+  margin-bottom: 0;
+}
+
+.node-realtime-tabset.node-realtime-tabs > .ant-tabs-content-holder {
+  display: block;
+  padding-top: 16px;
+}
+
 .node-realtime-network-selection {
   display: flex;
   flex-wrap: wrap;
@@ -526,20 +538,8 @@
     align-items: flex-start;
   }
 
-  .node-realtime-tabs .ant-tabs-nav-wrap {
-    overflow: visible !important;
-  }
-
-  .node-realtime-tabs .ant-tabs-nav-operations {
-    display: none !important;
-  }
-
-  .node-realtime-tabs .ant-tabs-nav-list {
-    width: max-content;
-    min-width: 100%;
-    transform: none !important;
-    white-space: nowrap;
-  }
+  /* 窄屏不再强关 rc-tabs 的平移与「更多」（原先 overflow visible + transform none +
+     隐藏更多，320px 选中的「节点流量」被卡边裁掉、无法移入可见区）。rc-tabs 自己按可见宽度平移并支持触摸横滑。 */
 
   .node-realtime-control-group {
     max-width: 100%;
@@ -556,5 +556,11 @@
 
   .node-realtime-chart {
     height: 350px;
+  }
+
+  /* 320px 时类型标题占 80px，「出站流量」「入站流量」放不下一行，被卡片裁掉 34px；
+     宽度不够时第二项换到下一行，顺序与点击区不变。 */
+  .node-realtime-controls .node-realtime-traffic-types {
+    flex-wrap: wrap;
   }
 }

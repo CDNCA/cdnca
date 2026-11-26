@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Input, Select, Space, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
+import { Button, Select, Space, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
 import { Eye, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -19,6 +19,7 @@ import {
 } from '@cdnca/ui'
 import { ReferencesModal } from './ReferencesModal'
 import { StringSetDrawer } from './StringSetDrawer'
+import { SearchInput } from '../../components/SearchInput'
 
 /** 字符串集合 tab. */
 export function StringSetsTab({ audience, accessToken, canManage }: {
@@ -120,7 +121,7 @@ export function StringSetsTab({ audience, accessToken, canManage }: {
         filters={<>
           <Select aria-label={t('columns.mode')} style={{ width: TOOLBAR_SELECT_WIDTH }} value={mode} onChange={setMode}
             options={[{ value: '', label: t('mode.all') }, ...stringSetMatchModes.map((value) => ({ value, label: t(`mode.${value}`) }))]} />
-          <Input.Search aria-label={t('search')} placeholder={t('search')} allowClear style={{ width: TOOLBAR_SEARCH_WIDTH }}
+          <SearchInput aria-label={t('search')} placeholder={t('search')} allowClear style={{ width: TOOLBAR_SEARCH_WIDTH }}
             onChange={(event) => setSearch(event.target.value)} />
         </>} />
       {query.isError ? <FeedbackWhen title={t('errors.load')} action={<Button onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}

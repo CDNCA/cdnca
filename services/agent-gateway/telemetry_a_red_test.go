@@ -107,3 +107,27 @@ func TestOBSUsageASecretSegmentAuthorityMatrix(t *testing.T) {
 		})
 	}
 }
+
+// url.ParseQuery 拒收 ";"
+// 分隔的查询串，整批被判 invalid、遥测卡在队首。";" 查询按对检查：无敏感参数或已打码的接受，带原始密钥的仍拒。
+func TestTelemetryCapturePathAcceptsSemicolonQueries(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/index.php?p=1;s=2&x=%3E%3E":                        true,
+		"/a?b=1;c=2":                                         true,
+		"/a?x=%zz&y=1":                                       true,
+		"/a?q=1;token=%5BREDACTED%5D":                        true,
+		"/a?q=1;token=raw-secret":                            false,
+		"/a?q=1&tok%65n=raw-secret":                          false,
+		"/a?%zz;client_secret=raw-secret":                    false,
+		"/callback?client_secret=%5BREDACTED%5D;secretary=x": true,
+	} {
+		if got := telemetryCapturePathSafe(path); got != want {
+			t.Errorf("telemetryCapturePathSafe(%q) = %v, want %v", path, got, want)
+		}
+	}
+	if _, err := validateTelemetryBatch(telemetryCaptureBatch(t, agentv1.TelemetryKind_TELEMETRY_KIND_ACCESS_V1,
+		map[string]any{"path": "/index.php?p=1;s=2"}), 1, nodeIdentity{NodeID: testNodeID}, telemetryTestAuthorization(),
+		DefaultTelemetryConfig(), time.Now()); err != nil {
+		t.Fatalf("a semicolon query without secrets failed the batch: %v", err)
+	}
+}

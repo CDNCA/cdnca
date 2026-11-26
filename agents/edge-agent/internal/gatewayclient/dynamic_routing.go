@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -23,6 +24,13 @@ import (
 type DynamicRoutingRelease struct {
 	ConfigurationScopeID string
 	ConfigVersionID      string
+	// PreviousConfigVersionID is the command's: the version the control
+	// plane records as in effect on the node for the scope ("" = none).
+	PreviousConfigVersionID string
+	// ReleasedConfigVersionIDs is the command's: versions of the scope an
+	// operator reconciliation confirmed the node served, whose held
+	// telemetry may go.
+	ReleasedConfigVersionIDs []string
 	// RootSHA256 is the signed root's digest (the node's active identity).
 	RootSHA256 string
 	// Sites: site object digest -> plaintext (cdnca.edge.site/v2).
@@ -51,6 +59,10 @@ type DynamicRoutingRelease struct {
 	// NodeStorage: this node's storage settings from its key document
 	// (NODE_STORAGE; nil = none: the node's defaults).
 	NodeStorage *siteobject.NodeStorage
+	// NodeFactsAt: when control read NodeRegion and NodeStorage for this
+	// release (NODE_STORAGE v2, Unix microseconds; 0 = a key document
+	// without it). The node takes both from the release with the largest.
+	NodeFactsAt int64
 }
 
 // DynamicRoutingApplier activates releases on the node (the daemon's
@@ -96,16 +108,63 @@ func (c *Client) executeDynamicRoutingRecord(ctx context.Context, gateway agentv
 		return fail(err)
 	}
 	defer unstage()
-	result, err := c.dynamicRouting.ApplyDynamicRouting(ctx, command.DeploymentId, command.Attempt, release)
-	if err != nil && ctx.Err() != nil {
+	applyCtx, stopActivation := c.activationContext(ctx)
+	defer stopActivation()
+	result, err := c.dynamicRouting.ApplyDynamicRouting(applyCtx, command.DeploymentId, command.Attempt, release)
+	if err != nil && applyCtx.Err() != nil {
 		return err
 	}
-	if err == nil && result.State == deployment.StateHealthy {
+	// A rollback_failed release its manager kept as current because it still
+	// serves owns its objects like a healthy
+	// one: later applies of every scope load the scope's current release.
+	if err == nil && (result.State == deployment.StateHealthy ||
+		result.State == deployment.StateRollbackFailed && c.servingAfterRollbackFailure(record)) {
 		if commitErr := c.siteObjects.Commit(siteObjectOwner(command.GetConfigurationScopeId()), digests); commitErr == nil {
 			_, _ = c.siteObjects.Collect()
 		}
 	}
 	return c.completeDeploymentProcessResult(record.RecordKey, command, result, err, activeIdentityEnabled)
+}
+
+// defaultSessionLossGrace: how long an activation may still run after the
+// Gateway session that delivered it ended (above dynroute's 30 s health
+// wait and an OpenResty start), before it is cancelled and compensated.
+const defaultSessionLossGrace = 2 * time.Minute
+
+// activationContext is the context a dynamic routing activation runs under
+// the command's deadline and the client's
+// lifetime, not the Gateway session. On a test node the session ended (a live
+// capability reconnect) while generation 1 awaited its health check; the
+// cancelled session context failed a healthy first generation. A session
+// that ends now leaves the activation sessionLossGrace to reach its
+// terminal state, which the journal keeps and the next session replays.
+func (c *Client) activationContext(session context.Context) (context.Context, context.CancelFunc) {
+	base := context.WithoutCancel(session)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if deadline, ok := session.Deadline(); ok {
+		ctx, cancel = context.WithDeadline(base, deadline) // the command's deadline still holds
+	} else {
+		ctx, cancel = context.WithCancel(base)
+	}
+	c.lifecycleMu.Lock()
+	lifetime, grace := c.runCtx, c.sessionLossGrace
+	c.lifecycleMu.Unlock()
+	var stops []func() bool
+	if lifetime != nil {
+		stops = append(stops, context.AfterFunc(lifetime, cancel))
+	}
+	stops = append(stops, context.AfterFunc(session, func() {
+		if ctx.Err() == nil {
+			time.AfterFunc(grace, cancel)
+		}
+	}))
+	return ctx, func() {
+		for _, stop := range stops {
+			stop()
+		}
+		cancel()
+	}
 }
 
 // DynamicRoutingResult is the deployment journal a dynamic routing apply
@@ -288,10 +347,13 @@ func (c *Client) fetchDynamicRoutingRelease(ctx context.Context, gateway agentv1
 	}
 	release = DynamicRoutingRelease{
 		ConfigurationScopeID: root.ConfigurationScopeID, ConfigVersionID: root.ConfigVersionID, RootSHA256: rootSHA256,
-		Sites: make(map[string][]byte, len(sites)), Referenced: make(map[string][]byte, len(scope.Objects)),
+		PreviousConfigVersionID:  command.GetPreviousConfigVersionId(),
+		ReleasedConfigVersionIDs: slices.Clone(command.GetReleasedConfigVersionIds()),
+		Sites:                    make(map[string][]byte, len(sites)), Referenced: make(map[string][]byte, len(scope.Objects)),
 		ScopeFiles: make(map[string][]byte, len(scope.Files)), System: scope.System,
 		SourceRevision: root.SourceRevision, NodePages: scope.NodePages,
 		InstallationID: scope.InstallationID, TrafficStop: key.TrafficStopStreams, NodeRegion: key.NodeRegion, NodeStorage: key.NodeStorage,
+		NodeFactsAt: key.NodeFactsAt,
 	}
 	// L4_STREAM_SELECTION: this node's key document names the forwards
 	// none of whose line groups has it.

@@ -1,8 +1,11 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
+import { sitesApi, type SiteListResponse } from '../api/sites'
+import { usersApi } from '../api/users'
 import { useSessionStore } from '../auth/session'
 import CCCoordinationPage from '../pages/CCCoordinationPage'
+import { clearFilterUrlMemory } from '../pages/filterUrl'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
 
@@ -66,7 +69,11 @@ describe('CCCoordinationPage', () => {
     const initialURL = new URL(String(fetchSpy.mock.calls[0][0]), 'https://cdnca.test')
     expect(initialURL.searchParams.has('site_id')).toBe(false)
     expect(initialURL.searchParams.has('tenant_id')).toBe(false)
-    await user.type(screen.getByLabelText('站点 ID'), siteId)
+    vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [{ id: siteId, display_id: '7', domain: 'cdn.example.test', owner: null }], total: 1, page: 1, limit: 10 } as unknown as SiteListResponse)
+    const site = screen.getByRole('combobox', { name: '站点' })
+    await user.click(site)
+    await user.type(site, 'cdn')
+    await user.click(await screen.findByTitle('cdn.example.test（7）'))
     await user.click(screen.getByRole('button', { name: '查询' }))
     await waitFor(() => expect(fetchSpy.mock.calls.filter(([input]) => String(input).includes('/cc-coordination?'))).toHaveLength(2))
     expect(screen.getByText('POST cdn.example.test:443/login')).toBeInTheDocument()
@@ -143,5 +150,49 @@ describe('CCCoordinationPage', () => {
     expect(releaseURL.pathname).toBe('/v1/admin/analytics/logs/cc-coordination/018f0000-0000-7000-8000-000000000071/release')
     expect(releaseURL.searchParams.get('tenant_id')).toBe(otherTenant)
     expect(releaseURL.searchParams.get('site_id')).toBe(siteId)
+  })
+
+  // 已生效的租户与站点在 URL 里，刷新后首条请求原样带上；
+  // 链接里的站点不属于该租户或值无效时不查询，错误挂在字段上并给焦点。
+  const platformActor = () => {
+    clearFilterUrlMemory()
+    const actor = principal({ scope_kind: 'platform', scope_id: 'platform', tenant_id: null, permissions: ['sites.read', 'platform.admin'] })
+    useSessionStore.getState().setSession(authResponse(actor), actor)
+  }
+  const ownerID = '018f0000-0000-7000-8000-000000000090'
+  const coordinationCalls = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map(([input]) => new URL(String(input), 'https://cdnca.test'))
+    .filter((url) => url.pathname.endsWith('/cc-coordination'))
+
+  it('reads the linked tenant and site on the first request', async () => {
+    platformActor()
+    vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [{ id: siteId, display_id: '7', domain: 'cdn.example.test', owner: { id: ownerID, display_name: 'QA' } }], total: 1, page: 1, limit: 1 } as unknown as SiteListResponse)
+    vi.spyOn(usersApi, 'get').mockResolvedValue({ id: ownerID, tenant_id: tenantId } as unknown as Awaited<ReturnType<typeof usersApi.get>>)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ items: [] })))
+    renderWithProviders(<CCCoordinationPage />, [`/monitor/site/cc-coordination?tenant_id=${tenantId}&site_id=${siteId}`])
+
+    await waitFor(() => expect(coordinationCalls(fetchSpy)).toHaveLength(1))
+    expect(coordinationCalls(fetchSpy)[0].searchParams.get('tenant_id')).toBe(tenantId)
+    expect(coordinationCalls(fetchSpy)[0].searchParams.get('site_id')).toBe(siteId)
+  })
+
+  it('does not widen to the platform when the linked site is outside the tenant or invalid', async () => {
+    platformActor()
+    vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [{ id: siteId, display_id: '7', domain: 'cdn.example.test', owner: { id: ownerID, display_name: 'QA' } }], total: 1, page: 1, limit: 1 } as unknown as SiteListResponse)
+    vi.spyOn(usersApi, 'get').mockResolvedValue({ id: ownerID, tenant_id: '018f0000-0000-7000-8000-000000000099' } as unknown as Awaited<ReturnType<typeof usersApi.get>>)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ items: [] })))
+    const view = renderWithProviders(<CCCoordinationPage />, [`/monitor/site/cc-coordination?tenant_id=${tenantId}&site_id=${siteId}`])
+
+    const site = await screen.findByRole('combobox', { name: '站点' })
+    await waitFor(() => expect(site).toHaveAccessibleDescription('该站点不属于所选租户，请重新选择站点。'))
+    expect(site).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(site).toHaveFocus())
+    expect(coordinationCalls(fetchSpy)).toHaveLength(0)
+    view.unmount()
+
+    renderWithProviders(<CCCoordinationPage />, ['/monitor/site/cc-coordination?tenant_id=not-a-uuid'])
+    const tenant = await screen.findByRole('combobox', { name: '租户' })
+    expect(tenant).toHaveAccessibleDescription('链接里的租户无效，请重新选择租户。')
+    await waitFor(() => expect(tenant).toHaveFocus())
+    expect(coordinationCalls(fetchSpy)).toHaveLength(0)
   })
 })

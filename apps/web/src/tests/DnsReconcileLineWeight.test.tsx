@@ -5,9 +5,9 @@ import { App as AntApp, ConfigProvider } from 'antd'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 
-import { dnsApi } from '../api/dns'
+import { dnsHubApi } from '../api/dnsHub'
 import { dnsReconcileApi } from '../api/dnsReconcile'
-import { dnsZonesApi } from '../api/dnsZones'
+import { sitesApi } from '../api/sites'
 import { useSessionStore } from '../auth/session'
 import i18n from '../i18n'
 import DnsReconcilePage from '../pages/DnsReconcilePage'
@@ -29,13 +29,13 @@ describe('DNS-02 line and weight contract', () => {
 
   it('submits and displays current and previous line and weight', async () => {
     const providerID = '55555555-5555-4555-8555-555555555555'
-    vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [{ id: providerID, scope_id: tenantID }] } as unknown as Awaited<ReturnType<typeof dnsApi.list>>)
-    vi.spyOn(dnsZonesApi, 'listZones').mockResolvedValue({ items: [{
-      id: zoneID, scope_id: tenantID, provider_id: providerID, name: 'example.test', status: 'draft', version: 7,
-      created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:00:00Z',
+    vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [{ id: siteID, display_id: '1', domain: 'www.example.test', cname: '', auto_dns: null }],
+      total: 1, page: 1, limit: 1 } as unknown as Awaited<ReturnType<typeof sitesApi.list>>)
+    vi.spyOn(dnsHubApi, 'domains').mockResolvedValue({ accounts: [], next_cursor: '', items: [{
+      provider_id: providerID, provider_name: 'own', provider_type: 'cloudflare', apex: 'example.test', record_count: null,
     }] })
     const dnsCheck = {
-      siteID, siteDisplayID: '1', domain: 'www.example.test', cname: '', provider: null, task: null, resolve: 'none',
+      siteID, siteDisplayID: '1', domain: 'www.example.test', cname: '', provider: { id: providerID, name: 'own' }, task: null, resolve: 'none',
       back: { filter: 'all', page: 1, limit: 10, search: { domain: '', siteIds: '' } },
     }
     const dryRun = vi.spyOn(dnsReconcileApi, 'dryRun').mockResolvedValue({
@@ -51,7 +51,7 @@ describe('DNS-02 line and weight contract', () => {
       },
       status: 'dry_run', replayed: false, started_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:00:00Z',
       initial_revision: 7, provider_revision: 7, operations: [], deferred_deletes: [], compensation_plan: [],
-      propagation: [], error_class: '', error_code: '',
+      propagation: [], error_class: '', error_code: '', provider: { zone_id: zoneID, revision: 7, records: [] },
     })
     render(
       <ConfigProvider button={{ autoInsertSpace: false }}><AntApp>
@@ -73,7 +73,7 @@ describe('DNS-02 line and weight contract', () => {
 
     await waitFor(() => expect(dryRun).toHaveBeenCalledTimes(1))
     expect(dryRun.mock.calls[0][2]).toMatchObject({ line: '境外', weight: 80 })
-    expect(dryRun.mock.calls[0][2]).toMatchObject({ expected: [{ type: 'A', values: ['192.0.2.10'] }], provider: { zone_id: zoneID, revision: 7 } })
+    expect(dryRun.mock.calls[0][2]).toMatchObject({ expected: [{ type: 'A', values: ['192.0.2.10'] }] })
     expect(await screen.findByText('线路：默认 → 境外')).toBeInTheDocument()
     expect(screen.getByText('权重：20 → 80')).toBeInTheDocument()
   })

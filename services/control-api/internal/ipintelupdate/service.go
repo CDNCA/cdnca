@@ -185,6 +185,9 @@ func normalize(input *SettingsInput, schedule bool) error {
 // --- authentication, idempotency ---
 
 // authenticate rechecks the session and permission inside tx.
+// Same session rule as identity.Store.PrincipalForSession: a session the console's token refresh
+// replaced still counts until it expires (another tab's refresh must not turn this write into 401 while
+// reads pass); logout, refresh token replay and suspension revoke the whole family.
 func authenticate(ctx context.Context, tx pgx.Tx, actor Actor, now time.Time) error {
 	if actor.UserID == uuid.Nil || actor.ScopeID == uuid.Nil || actor.SessionID == uuid.Nil {
 		return ErrUnauthenticated
@@ -195,7 +198,7 @@ func authenticate(ctx context.Context, tx pgx.Tx, actor Actor, now time.Time) er
 		JOIN memberships membership ON membership.scope_id=session.scope_id AND membership.user_id=session.user_id AND membership.status='active'
 		JOIN access_scopes scope ON scope.id=session.scope_id AND scope.kind='platform'
 		WHERE session.id=$1 AND session.scope_id=$2 AND session.user_id=$3 AND session.revoked_at IS NULL
-		AND session.replaced_by_id IS NULL AND session.expires_at>$4),
+		AND session.expires_at>$4),
 		EXISTS(SELECT 1 FROM role_assignments assignment JOIN role_permissions grant_row ON grant_row.role_id=assignment.role_id
 		WHERE assignment.scope_id=$2 AND assignment.user_id=$3 AND grant_row.permission_name IN ($5,'platform.admin'))`,
 		actor.SessionID, actor.ScopeID, actor.UserID, now, PermissionManage).Scan(&authenticated, &permitted)

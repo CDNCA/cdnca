@@ -380,7 +380,7 @@ func assertRankHandlerQueries(
 	response := rankGET(t, tenantHandler, "/v1/analytics/summary", base)
 	var summaryResponse analyticsSummaryResponse
 	rankDecodeOK(t, response, &summaryResponse)
-	assertRankSummary(t, summaryResponse.Data, wantSummary)
+	assertRankSummary(t, summaryFromResponse(t, summaryResponse.Data), wantSummary)
 	if summaryResponse.Meta.Timezone != "UTC" || summaryResponse.Meta.From != from.Format(time.RFC3339) {
 		t.Fatalf("summary metadata = %#v", summaryResponse.Meta)
 	}
@@ -398,13 +398,13 @@ func assertRankHandlerQueries(
 	response = rankGET(t, platformHandler, "/v1/admin/analytics/summary", adminValues)
 	var targeted analyticsSummaryResponse
 	rankDecodeOK(t, response, &targeted)
-	assertRankSummary(t, targeted.Data, wantSummary)
+	assertRankSummary(t, summaryFromResponse(t, targeted.Data), wantSummary)
 
 	response = rankGET(t, platformHandler, "/v1/admin/analytics/summary", rankQueryValues(from, to))
 	var all analyticsSummaryResponse
 	rankDecodeOK(t, response, &all)
-	if all.Data.RequestCount != 5 || all.Data.ResponseBytes != 12300 || all.Data.SecurityEvents != 3 {
-		t.Fatalf("platform summary = %#v", all.Data)
+	if all := summaryFromResponse(t, all.Data); all.RequestCount != 5 || all.ResponseBytes != 12300 || all.SecurityEvents != 3 {
+		t.Fatalf("platform summary = %#v", all)
 	}
 
 	for key, value := range map[string]string{"site_id": rankSiteB, "node_id": rankNodeB} {
@@ -413,8 +413,8 @@ func assertRankHandlerQueries(
 		response = rankGET(t, tenantHandler, "/v1/analytics/summary", values)
 		var isolated analyticsSummaryResponse
 		rankDecodeOK(t, response, &isolated)
-		if isolated.Data.RequestCount != 0 || isolated.Data.SecurityEvents != 0 {
-			t.Fatalf("tenant query with foreign %s leaked data: %#v", key, isolated.Data)
+		if isolated := summaryFromResponse(t, isolated.Data); isolated.RequestCount != 0 || isolated.SecurityEvents != 0 {
+			t.Fatalf("tenant query with foreign %s leaked data: %#v", key, isolated)
 		}
 	}
 
@@ -424,8 +424,8 @@ func assertRankHandlerQueries(
 	response = rankGET(t, tenantHandler, "/v1/analytics/summary", values)
 	var filtered analyticsSummaryResponse
 	rankDecodeOK(t, response, &filtered)
-	if filtered.Data.RequestCount != 3 || filtered.Data.ResponseBytes != 2600 || filtered.Data.SecurityEvents != 1 {
-		t.Fatalf("site/node filtered summary = %#v", filtered.Data)
+	if filtered := summaryFromResponse(t, filtered.Data); filtered.RequestCount != 3 || filtered.ResponseBytes != 2600 || filtered.SecurityEvents != 1 {
+		t.Fatalf("site/node filtered summary = %#v", filtered)
 	}
 
 	dimensions := []struct {

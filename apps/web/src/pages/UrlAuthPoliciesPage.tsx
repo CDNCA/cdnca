@@ -7,18 +7,16 @@ import {
   Input,
   InputNumber,
   Modal,
-  Pagination,
   Popconfirm,
   Result,
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   Tooltip,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, fieldReasonText, useFormSubmitError, type FormErrorMap, type SubmitFieldError } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, fieldReasonText, useFormSubmitError, type FormErrorMap, type SubmitFieldError, Pagination, Table } from '@cdnca/ui'
 import type { TFunction } from 'i18next'
 import { Copy, KeyRound, Pencil, Plus, Power, RefreshCw, ShieldOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'

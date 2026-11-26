@@ -155,6 +155,186 @@ func TestNodeConfigurationScopesShowsEveryTenantOnASharedNode(t *testing.T) {
 	if first.TelemetryExcluded != "" || second.TelemetryExcluded != "" {
 		t.Fatalf("exclusions without a reader: %+v", result.Scopes)
 	}
+	// a scope waiting for reconciliation names the
+	// deployment that left it unknown and what the node's heartbeat reports
+	// for the scope (its scoped identity, else the node's own report).
+	if first.Reconciliation != nil || second.Reconciliation != nil {
+		t.Fatalf("reconciliation without a wait: %+v %+v", first.Reconciliation, second.Reconciliation)
+	}
+	setReconciliation := func(required bool) {
+		t.Helper()
+		if err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx, `SET LOCAL session_replication_role = replica`); err != nil {
+				return err
+			}
+			for scope, deployment := range map[uuid.UUID]uuid.UUID{alpha: alphaDeployment, beta: betaDeployment} {
+				var reason, source, attempt, requestedAt any
+				if required {
+					reason, source, attempt, requestedAt = "rollback_failed", deployment, 1, now
+				}
+				if _, err := tx.Exec(ctx, `UPDATE node_config_state SET reconciliation_required=$3, reconciliation_reason=$4,
+					reconciliation_deployment_id=$5, reconciliation_deployment_attempt=$6, reconciliation_requested_at=$7,
+					revision=revision+1 WHERE node_id=$1 AND configuration_scope_id=$2`,
+					nodeID, scope, required, reason, source, attempt, requestedAt); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx, `SET LOCAL session_replication_role = replica`); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, query, args...)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	observe := func(step string) (alphaView, betaView *ScopeReconciliation) {
+		t.Helper()
+		waiting, err := inventory.ConfigurationScopes(ctx, platform, nodeID)
+		if err != nil || waiting.Scopes[0].Reconciliation == nil || waiting.Scopes[1].Reconciliation == nil {
+			t.Fatalf("%s: %+v %v", step, waiting.Scopes, err)
+		}
+		return waiting.Scopes[0].Reconciliation, waiting.Scopes[1].Reconciliation
+	}
+	unconfirmed := func(step string, view *ScopeReconciliation, reason string) {
+		t.Helper()
+		if view.Observation != "unconfirmed" || view.UnconfirmedReason == nil || *view.UnconfirmedReason != reason ||
+			view.ReportedConfigVersionID != nil || view.ReportedAt != nil {
+			t.Fatalf("%s: %+v, want unconfirmed %s", step, view, reason)
+		}
+	}
+	// the rollback failed a minute before Beta's scoped report (projected at now)
+	setReconciliation(true)
+	exec(`UPDATE node_config_state SET reconciliation_requested_at=$2 WHERE node_id=$1`, nodeID, now.Add(-time.Minute))
+	alphaView, betaView := observe("offline node")
+	if alphaView.Reason != "rollback_failed" || alphaView.SourceDeploymentID != alphaDeployment || alphaView.SourceDeploymentAttempt != 1 {
+		t.Fatalf("alpha reconciliation %+v", alphaView)
+	}
+	unconfirmed("alpha without a scoped report (the node-wide heartbeat does not count)", alphaView, "no_scope_report")
+	unconfirmed("beta on an offline node", betaView, "stale_report")
+	exec(`UPDATE node_presence SET status='online', offline_since=NULL, online_since=projected_at,
+		confirmed_session_epoch=session_epoch, confirmed_heartbeat_sequence=heartbeat_sequence, confirmed_event_id=event_id,
+		confirmed_request_id=request_id, confirmed_payload_digest=payload_digest, last_seen_at=projected_at WHERE node_id=$1`, nodeID)
+	if _, betaView = observe("explicit version"); betaView.Observation != "confirmed" || betaView.ReportedConfigVersionID == nil ||
+		*betaView.ReportedConfigVersionID != betaVersion || betaView.ReportedAt == nil || !betaView.ReportedAt.Equal(now) {
+		t.Fatalf("beta reporting its version: %+v", betaView)
+	}
+	exec(`UPDATE node_config_state SET reconciliation_requested_at=$2 WHERE node_id=$1`, nodeID, now.Add(time.Minute))
+	_, betaView = observe("report before the failure")
+	unconfirmed("beta reported before the failure", betaView, "stale_report")
+	exec(`UPDATE node_config_state SET reconciliation_requested_at=$2 WHERE node_id=$1`, nodeID, now.Add(-time.Minute))
+	exec(`UPDATE node_presence SET session_epoch=2 WHERE node_id=$1`, nodeID)
+	_, betaView = observe("older session")
+	unconfirmed("beta reported on an older session", betaView, "stale_report")
+	exec(`UPDATE node_presence SET session_epoch=1 WHERE node_id=$1`, nodeID)
+	// no configuration in the journal while OpenResty serves
+	exec(`UPDATE node_presence_scope_identities SET current_config_version_id=NULL WHERE node_id=$1`, nodeID)
+	_, betaView = observe("still serving")
+	unconfirmed("beta empty while OpenResty runs", betaView, "contradicting_report")
+	exec(`UPDATE node_presence_scope_identities SET current_config_version_id=$2, last_apply_state='rollback_failed',
+		last_apply_error_code='ROLLBACK_RESTORE_FAILED'
+		WHERE node_id=$1`, nodeID, betaVersion)
+	_, betaView = observe("rollback failed still reported")
+	unconfirmed("beta still naming the failed rollback", betaView, "contradicting_report")
+	// the agent keeps the release whose
+	// compensation failed as current because it still serves: next to the
+	// rollback_failed result it reports the source deployment's own version
+	// and configuration artifact digest. That report is consistent.
+	servingWire := []byte("beta generation 1")
+	servingDigest := sha256.Sum256(servingWire)
+	servingArtifact := uuid.New()
+	exec(`INSERT INTO configuration_artifacts(id,config_version_id,ordinal,kind,wire_bytes,size_bytes,sha256,signature,
+		signing_key_id,signature_algorithm,compression,media_type,encryption_algorithm,recipient_key_id,created_at)
+		VALUES($1,$2,1,'configuration',$3,$4,$5,$6,'scopes-test-key','ed25519','none','application/octet-stream','none',NULL,$7)`,
+		servingArtifact, betaVersion, servingWire, len(servingWire), servingDigest[:], make([]byte, 64), now)
+	exec(`INSERT INTO node_deployment_artifacts(deployment_id,deployment_attempt,config_version_id,artifact_id,ordinal)
+		VALUES($1,1,$2,$3,1)`, betaDeployment, betaVersion, servingArtifact)
+	exec(`UPDATE node_presence_scope_identities SET current_config_artifact_sha256=$2 WHERE node_id=$1`, nodeID, digest[:])
+	_, betaView = observe("rollback failed with another digest")
+	unconfirmed("beta naming the failed rollback with another artifact", betaView, "contradicting_report")
+	exec(`UPDATE node_presence_scope_identities SET current_config_artifact_sha256=$2 WHERE node_id=$1`, nodeID, servingDigest[:])
+	if _, betaView = observe("serving after the failed rollback"); betaView.Observation != "confirmed" ||
+		betaView.ReportedConfigVersionID == nil || *betaView.ReportedConfigVersionID != betaVersion {
+		t.Fatalf("beta still serving the source release: %+v", betaView)
+	}
+	exec(`UPDATE node_presence_scope_identities SET current_config_artifact_sha256=NULL WHERE node_id=$1`, nodeID)
+	exec(`UPDATE node_presence_scope_identities SET current_config_version_id=NULL, last_apply_state='reverted', last_apply_error_code=NULL WHERE node_id=$1`, nodeID)
+	exec(`UPDATE node_presence SET openresty_state='stopped' WHERE node_id=$1`, nodeID)
+	if _, betaView = observe("explicit empty"); betaView.Observation != "confirmed" || betaView.ReportedConfigVersionID != nil ||
+		betaView.ReportedAt == nil {
+		t.Fatalf("beta explicitly back to an empty configuration: %+v", betaView)
+	}
+	exec(`UPDATE node_presence_scope_identities SET current_config_version_id=$2, last_apply_state='superseded', last_apply_error_code=NULL WHERE node_id=$1`,
+		nodeID, betaVersion)
+	exec(`UPDATE node_presence SET status='offline', offline_since=$2, openresty_state='running' WHERE node_id=$1`, nodeID, now)
+	setReconciliation(false)
+	// Beta's rollback_failed first
+	// apply (artifact bound above) was reconciled without a version. The
+	// scope offers the source version for a supplemental confirmation until
+	// a later reconciliation of the scope; a later deployment (current
+	// version set by it) does not end the offer.
+	sourceConfirmation := func(step string) *ScopeSourceConfirmation {
+		t.Helper()
+		read, err := inventory.ConfigurationScopes(ctx, platform, nodeID)
+		if err != nil || read.Scopes[0].SourceConfirmation != nil {
+			t.Fatalf("%s: %+v %v", step, read.Scopes, err)
+		}
+		return read.Scopes[1].SourceConfirmation
+	}
+	if got := sourceConfirmation("no reconciliation"); got != nil {
+		t.Fatalf("source confirmation without a reconciliation: %+v", got)
+	}
+	exec(`UPDATE node_deployments SET state='rollback_failed' WHERE id=$1`, betaDeployment)
+	exec(`UPDATE node_config_state SET current_config_version_id=NULL WHERE node_id=$1 AND configuration_scope_id=$2`, nodeID, beta)
+	reconciliationFact := func(observed any, at time.Time) {
+		exec(`INSERT INTO node_config_reconciliations(id,request_id,request_digest,node_id,configuration_scope_id,
+			source_deployment_id,source_deployment_attempt,previous_config_version_id,observed_config_version_id,
+			resolution,evidence,reconciled_at) VALUES($1,$2,$3,$4,$5,$6,1,NULL,$7,'operator_confirmed','operator confirmed',$8)`,
+			uuid.New(), uuid.New(), digest[:], nodeID, beta, betaDeployment, observed, at)
+	}
+	reconciliationFact(nil, now)
+	if got := sourceConfirmation("reconciled without a version"); got == nil || got.SourceDeploymentID != betaDeployment ||
+		got.SourceDeploymentAttempt != 1 || got.ConfigVersionID != betaVersion || !got.ReconciledAt.Equal(now) {
+		t.Fatalf("source confirmation after a reconciliation without a version: %+v", got)
+	}
+	later := uuid.New()
+	exec(`INSERT INTO node_deployments(id,rollout_id,node_id,attempt,config_version_id,action,state,configuration_scope_id,
+		command_event_id,command_bytes,command_sha256,deadline_at,created_at,updated_at,queued_per_scope)
+		VALUES($1,$2,$3,9,$4,'apply','queued',$5,$6,'\x01',$7,$8::timestamptz+interval '1 hour',$8::timestamptz+interval '1 second',$8,true)`,
+		later, betaRollout, nodeID, betaVersion, beta, uuid.New(), digest[:], now)
+	exec(`UPDATE node_config_state SET current_config_version_id=$3 WHERE node_id=$1 AND configuration_scope_id=$2`, nodeID, beta, betaVersion)
+	if got := sourceConfirmation("later deployment"); got == nil || got.SourceDeploymentID != betaDeployment ||
+		got.ConfigVersionID != betaVersion {
+		t.Fatalf("source confirmation after a later deployment: %+v", got)
+	}
+	// the later deployment failed its
+	// rollback too and was reconciled with its own version; that
+	// reconciliation of another source does not end the offer for Beta's
+	// first source. (It is then moved out of the way of the reads below.)
+	exec(`UPDATE node_deployments SET state='rollback_failed' WHERE id=$1`, later)
+	exec(`INSERT INTO node_config_reconciliations(id,request_id,request_digest,node_id,configuration_scope_id,
+		source_deployment_id,source_deployment_attempt,previous_config_version_id,observed_config_version_id,
+		resolution,evidence,reconciled_at) VALUES($1,$2,$3,$4,$5,$6,9,NULL,$7,'operator_confirmed','operator confirmed',$8)`,
+		uuid.New(), uuid.New(), digest[:], nodeID, beta, later, betaVersion, now.Add(time.Second))
+	if got := sourceConfirmation("another source reconciled with its version"); got == nil || got.SourceDeploymentID != betaDeployment {
+		t.Fatalf("source confirmation after another source's reconciliation: %+v", got)
+	}
+	exec(`UPDATE node_deployments SET created_at=$2::timestamptz-interval '30 days' WHERE id=$1`, later, now)
+	exec(`UPDATE node_config_state SET current_config_version_id=NULL WHERE node_id=$1 AND configuration_scope_id=$2`, nodeID, beta)
+	reconciliationFact(betaVersion, now.Add(2*time.Second))
+	if got := sourceConfirmation("supplemented"); got != nil {
+		t.Fatalf("source confirmation after the supplement: %+v", got)
+	}
+	exec(`UPDATE node_deployments SET state='healthy' WHERE id=$1`, betaDeployment)
+	exec(`UPDATE node_config_state SET current_config_version_id=$3 WHERE node_id=$1 AND configuration_scope_id=$2`, nodeID, beta, betaVersion)
 	// The isolated scope is reported with the reader's reason, in the same
 	// read transaction.
 	inventory.WithTelemetryExclusions(func(_ context.Context, tx pgx.Tx, readNode uuid.UUID, _ time.Time) (map[uuid.UUID]string, error) {

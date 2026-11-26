@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Space, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Space, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { checkoutURL } from '../../../api/market'
@@ -8,7 +8,7 @@ import { marketSupplierApi, supplierPageSize, type CommissionDeduction } from '.
 import { useErrorText, useTime, useToken, useWrite } from './hooks'
 import { commissionDaysLeft } from './model'
 import { CursorPager, LoadFailure, useCursorPages } from './shared'
-import { useFeedback, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedback, OutcomeUnknown, Table } from '@cdnca/ui'
 import { outcomeUnknown, useIdempotencyKey } from '../../market/idempotency'
 import { formatYuan, minorToYuan, yuanToMinor } from '@cdnca/ui/offer-terms'
 

@@ -51,7 +51,6 @@ const taskFactsZhCN = {
     siteStatusRecovery: '网站状态恢复', unknown: '未知任务类型',
   },
   taskFacts: {
-    name: '{{kind}} · {{resource}}',
     priority: { ready_fifo: '按就绪顺序', producer_managed: '由任务生产方调度', unknown: '调度方式未确认' },
     dependenciesUnknown: '依赖关系未记录', noDependency: '无依赖', completionDependency: '完成依赖',
     catalogHint: '已接入的任务类型；实际运行状态尚未确认。',
@@ -68,7 +67,6 @@ const taskFactsEnUS = {
     siteStatusRecovery: 'Site status recovery', unknown: 'Unknown task type',
   },
   taskFacts: {
-    name: '{{kind}} · {{resource}}',
     priority: { ready_fifo: 'Ready-time order', producer_managed: 'Scheduled by producer', unknown: 'Scheduling policy unconfirmed' },
     dependenciesUnknown: 'Dependencies not recorded', noDependency: 'No dependency', completionDependency: 'Completion dependency',
     catalogHint: 'Integrated task types; runtime status has not been confirmed.',

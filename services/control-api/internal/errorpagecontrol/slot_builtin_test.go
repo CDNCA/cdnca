@@ -216,3 +216,21 @@ func TestSnapshotWithoutSlotsKeepsCanonicalBytes(t *testing.T) {
 		t.Fatalf("%s %v", wire, err)
 	}
 }
+
+// a slot's built-in page is in the default
+// language only, its title and message said once.
+func TestBuiltinSlotPagesOneLanguage(t *testing.T) {
+	rendered := themepack.DefaultRendered()
+	for key, text := range slotBuiltinText {
+		body, _, err := slotPageFrom(rendered, key, true)
+		if err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		if !bytes.Contains(body, []byte(text.Title["zh-CN"])) || !bytes.Contains(body, []byte(text.Message["zh-CN"])) {
+			t.Fatalf("%s: Chinese text missing:\n%s", key, body)
+		}
+		if bytes.Contains(body, []byte(text.Title["en-US"])) || bytes.Contains(body, []byte(text.Message["en-US"])) {
+			t.Fatalf("%s: page carries a second language:\n%s", key, body)
+		}
+	}
+}

@@ -143,6 +143,9 @@ export interface ControlMigrationInput {
 
 export type ControlMigrationEnv = 'auto' | 'bt' | 'plain'
 
+/** A refused storage target names the target (details.target) beside the field. */
+export type ControlBackupApiError = ApiError & { target?: string }
+
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 const root = '/v1/admin/control-backup'
 
@@ -157,10 +160,11 @@ async function call<T>(token: string, method: string, path: string, body?: unkno
     })
   } catch { throw networkApiError() }
   if (!response.ok) {
-    // A refused target field comes as error.details.field (see controlbackuphttp targetError).
-    const details = await response.clone().json().then((body: { error?: { details?: { field?: unknown } } }) => body?.error?.details, () => undefined)
-    const error = await responseApiError(response)
+    // A refused target field comes as error.details.{target,field} (see controlbackuphttp targetError).
+    const details = await response.clone().json().then((body: { error?: { details?: { field?: unknown; target?: unknown } } }) => body?.error?.details, () => undefined)
+    const error: ControlBackupApiError = await responseApiError(response)
     if (typeof details?.field === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(details.field)) error.field = details.field
+    if (typeof details?.target === 'string' && details.target.length <= 64) error.target = details.target
     throw error
   }
   const value = await response.json().catch(() => null) as { data?: T } | T | null

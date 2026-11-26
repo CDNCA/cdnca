@@ -143,6 +143,14 @@ type KeyDocument struct {
 	// gets the field) is the node's cache directory, cache limit and log
 	// directory set on the console; omitted when none is set.
 	NodeStorage *NodeStorage `json:"node_storage,omitempty"`
+	// NodeFactsAt (NODE_STORAGE v2, per node: only a node that declares it
+	// gets the field) is when control read this node's NodeRegion and
+	// NodeStorage for this release, in Unix microseconds. Those fields are
+	// node facts every scope's key document carries; the node takes both
+	// from the release with the largest NodeFactsAt, an absent one (nil,
+	// "") included, so a scope whose newer publication was refused cannot
+	// bring back an older value.
+	NodeFactsAt int64 `json:"node_facts_at,omitempty"`
 }
 
 // NodeRegionAPIVersion is the CAPABILITY_NAME_NODE_REGION version an Agent
@@ -341,6 +349,9 @@ func ParseKeyDocument(raw []byte) (KeyDocument, error) {
 	}
 	if storage := document.NodeStorage; storage != nil && (storage.IsZero() || !storage.Validate()) {
 		return KeyDocument{}, fmt.Errorf("%w: key document node storage", ErrInvalid)
+	}
+	if document.NodeFactsAt < 0 || document.NodeFactsAt > maxSafeInteger {
+		return KeyDocument{}, fmt.Errorf("%w: key document node facts time", ErrInvalid)
 	}
 	if document.Schema != KeySchema || !uuidPattern.MatchString(document.ConfigurationScopeID) ||
 		!uuidPattern.MatchString(document.ConfigVersionID) || !digestPattern.MatchString(document.RootSHA256) ||

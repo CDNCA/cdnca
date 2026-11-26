@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import i18n from '../../i18n'
-import { cnameFailureText, siteAccessGap } from './cnameFailureText'
+import { cnameFailureText, cnameRegenerateBlockedForTenant, siteAccessGap } from './cnameFailureText'
 
 describe('cnameFailureText (cname-retry)', () => {
   const t = i18n.getFixedT('zh-CN', 'siteCnameRegeneration')
@@ -36,19 +36,47 @@ describe('cnameFailureText (cname-retry)', () => {
       .toBe('未配置默认 CNAME 域名（节点管理 → DNS配置 → CNAME域名）')
   })
 
-  it('FLOW001: tells a tenant to contact the administrator for platform-side gaps', () => {
+  it('FLOW001: gives a tenant one platform-side reason (the ticket button sits next to it)', () => {
     for (const code of ['cname_no_default_line_group', 'node_group_unavailable', 'node_targets_unavailable']) {
       expect(cnameFailureText(code, '', t, exists, false)).toBe('平台尚未配置可用线路，请联系管理员。网站配置已保存，管理员配置后可重新生成。')
     }
-    for (const code of ['dns_provider_not_configured', 'cname_zone_not_configured', 'cname_no_default_zone']) {
-      expect(cnameFailureText(code, '', t, exists, false)).toBe('平台尚未配置可用的 DNS 或 CNAME 域名，请联系管理员处理。网站配置已保存，处理后可重新生成。')
+    // 其余平台侧原因一句具体说明，不写管理员菜单路径。
+    expect(cnameFailureText('dns_provider_not_configured', '', t, exists, false))
+      .toBe('平台 DNS 服务商未配置，管理员处理后会自动重新生成。')
+    expect(cnameFailureText('cname_zone_not_configured', '', t, exists, false))
+      .toBe('平台没有可用的 CNAME 域名，管理员处理后会自动重新生成。')
+    expect(cnameFailureText('cname_no_default_zone', '', t, exists, false))
+      .toBe('平台没有可用的 CNAME 域名，管理员处理后可重新生成。')
+    expect(cnameFailureText('cname_zone_not_configured', 'cdn.cdnca.com', t, exists, false))
+      .toBe('套餐的 CNAME 域名 cdn.cdnca.com 找不到对应的 DNS 区域，管理员处理后会自动重新生成。')
+    for (const code of ['dns_provider_not_configured', 'cname_package_domain_missing', 'cname_zone_not_configured',
+      'cname_zone_provider_mismatch', 'cname_no_default_zone', 'platform_dns_sync_failed', 'domain_blocked']) {
+      expect(cnameFailureText(code, 'cdn.cdnca.com', t, exists, false)).not.toMatch(/节点管理|DNS配置|套餐管理|网站配置已保存|请联系管理员/)
     }
-    // a reason without a menu path keeps its detail for the tenant to pass on
-    expect(cnameFailureText('cname_zone_not_configured', 'cdn.cdnca.com', t, exists, false)).toBe('套餐 CNAME 域名 cdn.cdnca.com 未在 DNS 配置的 CNAME 域名里')
     // the administrator keeps the menu path
     expect(cnameFailureText('cname_no_default_line_group', '', t, exists, true)).toMatch(/节点管理 → 线路组/)
     // tenant-side reasons stay as they are
     expect(cnameFailureText('dns_permission_denied', null, t, exists, false)).toBe('操作人没有该租户的 DNS 权限')
+  })
+
+  it('a package without a CNAME domain and a missing DNS provider read differently', () => {
+    expect(cnameFailureText('cname_package_domain_missing', '', t, exists))
+      .toBe('所选套餐未绑定 CNAME 域名，请在套餐管理里为该套餐选择 CNAME 域名')
+    expect(cnameFailureText('cname_package_domain_missing', '', t, exists, false))
+      .toBe('所选套餐未绑定 CNAME 域名，管理员处理后会自动重新生成。')
+    const en = i18n.getFixedT('en-US', 'siteCnameRegeneration')
+    const enExists = (key: string) => i18n.exists(key, { lng: 'en-US' })
+    expect(cnameFailureText('cname_package_domain_missing', '', en, enExists, false)).toMatch(/^The selected package has no CNAME domain\. The CNAME is regenerated automatically/)
+    expect(cnameFailureText('dns_provider_not_configured', '', en, enExists, false)).toMatch(/^The platform has no DNS provider configured\. The CNAME is regenerated automatically/)
+  })
+
+  it('a tenant does not retry what only the platform can fix', () => {
+    for (const code of ['dns_provider_not_configured', 'cname_package_domain_missing', 'cname_zone_not_configured', 'cname_zone_provider_mismatch', 'platform_dns_sync_failed']) {
+      expect(cnameRegenerateBlockedForTenant(code)).toBe(true)
+    }
+    for (const code of ['cname_no_default_line_group', 'dns_reconcile_failed', 'cname_label_exhausted', null]) {
+      expect(cnameRegenerateBlockedForTenant(code)).toBe(false)
+    }
   })
 
   it('FLOW001: siteAccessGap names the missing line, CNAME or certificate', () => {

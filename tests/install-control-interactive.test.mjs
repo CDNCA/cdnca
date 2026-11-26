@@ -190,8 +190,11 @@ test('management nginx compresses, speaks HTTP/2 and caches only content-hashed 
   const immutable = rows.filter((row) => row.endsWith('"public, max-age=31536000, immutable";'))
   assert.deepEqual(immutable, ['"~^(?:200|304):/(?:dashboard/)?assets/[^/]+-[-_A-Za-z0-9]{8,}\\.[^/]+\\$" "public, max-age=31536000, immutable";',
     '"~^(?:200|304):/site/assets/[^/]+-[-_A-Za-z0-9]{8,}\\.[^/]+\\$" "public, max-age=31536000, immutable";'])
-  assert.deepEqual(rows.filter((row) => row.endsWith(' "";')), ['"~^(?:200|304):/v1/brand-assets/(?:favicon|logo|login_ad)\\$" "";'])
-  assert.equal(rows.length, 4)
+  // Empty values let the upstream Cache-Control pass: brand assets, and the public status page
+  // (200/304 "public, no-cache" + ETag, closed 404 "no-store"), whose path matches exactly.
+  assert.deepEqual(rows.filter((row) => row.endsWith(' "";')), ['"~^(?:200|304):/v1/brand-assets/(?:favicon|logo|login_ad)\\$" "";',
+    '"~^(?:200|304|404):/v1/status-page/public\\$" "";'])
+  assert.equal(rows.length, 5)
   // Only the page bundle location sets headers (it repeats the server's, checked below).
   const locations = config.slice(config.indexOf('        location = /healthz')).replace(/ {8}location \^~ \/site\/t\/ \{[\s\S]*?\n {8}\}\n/, '')
   assert.doesNotMatch(locations, /\badd_header\b/, 'a location add_header drops every inherited server security header')
@@ -498,7 +501,8 @@ test('new installation enables database-backed APIs with distinct private persis
   const directory = mkdtempSync(join(tmpdir(), 'cdnca-control-profile-test-'))
   try {
     const result = spawnSync('bash', ['-c', [
-      'set -Eeuo pipefail', block('fail'), block('generate_runtime_secrets'), block('signer_revocation_environment'), block('remote_gateway_access'), block('local_gateway_environment'), block('upgrade_download_origin'), 'GATEWAY_HOST=gateway.example.test GATEWAY_AGENT_PORT=9444 GATEWAY_ENROLLMENT_PORT=9443', block('write_environment'),
+      'set -Eeuo pipefail', block('fail'), block('generate_runtime_secrets'), block('signer_revocation_environment'), block('remote_gateway_access'), block('local_gateway_environment'),
+      block('public_https_trust_args'), block('upgrade_download_root_ca_file'), block('upgrade_download_root_env'), block('upgrade_download_origin'), 'GATEWAY_HOST=gateway.example.test GATEWAY_AGENT_PORT=9444 GATEWAY_ENROLLMENT_PORT=9443', block('write_environment'),
       'generate_runtime_secrets', 'write_environment',
       'source "$CONFIG_DIR/control.env"',
       'printf "%s" "$ANNOUNCEMENT_CURSOR_KEYS_JSON" | jq -e \'keys == ["announcement-v1"]\' >/dev/null',
@@ -508,6 +512,7 @@ test('new installation enables database-backed APIs with distinct private persis
       NATS_URL: 'nats://localhost:4222', LICENSING_SERVER: 'https://auth.example.test',
       INSTALLATION_ID: 'test-installation', INSTALLATION_NAME: 'test', CONTROL_VERSION: '1.0.1',
       DOWNLOAD_DIR: join(directory, 'downloads'), CONTROL_ORIGIN: 'https://control.example.test', DATA_DIR: directory,
+      CONTROL_DOMAIN: 'control.example.test', PUBLIC_CERT_FILE: '',
       UPGRADE_KEY_DIR: join(directory, 'upgrade'), UPGRADE_CONTROL_KEY_ID: 'control-execution-v1', UPGRADE_EDGE_KEY_ID: 'edge-execution-v1',
     } })
     assert.equal(result.status, 0, result.stderr)

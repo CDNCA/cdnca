@@ -52,6 +52,17 @@ body {
   border: 0;
 }
 
+/* 大图预览工具栏（components/PreviewImage.tsx）：antd 原本是 div，换成按钮后去掉浏览器按钮的边框、底色和字体，颜色跟随工具栏。 */
+.preview-image-operation {
+  border: 0;
+  background: transparent;
+  font: inherit;
+}
+
+.preview-image-operation:not(:disabled) {
+  color: inherit;
+}
+
 .announcement-page > h1 {
   margin: 0 0 16px;
   color: var(--cdnca-color-text);
@@ -112,12 +123,6 @@ body {
   border-radius: 10px;
 }
 
-.system-settings-baseline-page.sys-setting > .ant-tabs .ant-tabs-nav-wrap {
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  -webkit-overflow-scrolling: touch;
-}
 
 .system-settings-baseline-page.sys-setting > .ant-tabs .ant-tabs-tab {
   margin: 0 6px 0 0;
@@ -169,18 +174,6 @@ body {
   padding: 14px;
   border: 1px solid var(--setting-border-strong);
   border-radius: 8px;
-}
-
-.system-settings-baseline-page.sys-setting .system-settings-payment-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.system-settings-baseline-page.sys-setting .system-settings-payment-card {
-  padding: 14px;
-  border: 1px solid var(--setting-border);
-  border-radius: 6px;
 }
 
 /* Login */
@@ -393,14 +386,15 @@ body {
   padding-top: 70px;
 }
 
-.recovery-container h1 {
-  height: 64px;
+.recovery-brand {
+  min-height: 64px;
   margin: 0 0 57px;
   font-size: 46px;
   font-weight: 400;
   line-height: 64px;
   letter-spacing: 0;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .recovery-panel {
@@ -409,9 +403,11 @@ body {
 
 .recovery-tab {
   height: 44px;
+  margin-top: 0;
   margin-bottom: 16px;
   color: var(--cdnca-color-primary);
   font-size: 14px;
+  font-weight: 400;
   line-height: 43px;
   text-align: center;
   border-bottom: 1px solid var(--cdnca-color-border);
@@ -462,13 +458,38 @@ body {
 
 .recovery-result {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
+.recovery-status:focus {
+  outline: none;
+}
+
+.recovery-status:focus-visible {
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: 2px;
+}
+
 .recovery-primary-link {
-  display: block;
-  color: var(--cdnca-color-primary);
+  display: flex;
+  min-height: 40px;
+  padding: 4px 15px;
+  align-items: center;
+  justify-content: center;
+  color: var(--cdnca-color-text-inverse, #fff);
+  font-size: 16px;
   text-align: center;
+  text-decoration: none;
+  background: var(--cdnca-color-primary);
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.recovery-primary-link:hover,
+.recovery-primary-link:focus-visible {
+  color: var(--cdnca-color-text-inverse, #fff);
+  opacity: 0.88;
 }
 
 .recovery-login-link {
@@ -487,12 +508,6 @@ body {
   font-size: 14px;
   line-height: 30px;
   text-align: center;
-}
-
-.recovery-footer-links {
-  display: flex;
-  justify-content: center;
-  gap: 40px;
 }
 
 /* Application shell */
@@ -1054,6 +1069,32 @@ body {
 .app-main > * {
   min-width: 0;
   margin: 24px;
+}
+
+/* in-page scrolling (scroll-margin-top,
+   scrollIntoView, focus, hash links) keeps clear of the fixed 64px header. */
+html:has(.app-header) {
+  scroll-padding-top: calc(64px + var(--app-banners-height, 0px));
+}
+
+/* The shell-wide banners (impersonation, installation lock) stay pinned under
+   the fixed header, stacked in DOM order; in the page flow they scrolled under
+   it and their buttons took no clicks. PinnedBanners measures their total
+   height (they wrap on narrow screens) into --app-banners-height, which
+   .app-main reserves above the page and the scroll padding above adds. With
+   no banner shown the container is empty and nothing changes. */
+.app-main > .app-pinned-banners {
+  position: fixed;
+  z-index: 14;
+  top: 64px;
+  right: 0;
+  left: var(--sidebar-width);
+  margin: 0;
+  transition: left 160ms ease;
+}
+
+html[data-app-banners] .app-main {
+  padding-top: calc(64px + var(--app-banners-height, 0px));
 }
 
 .mobile-scrim {
@@ -1659,6 +1700,11 @@ body.i-theme-dark {
   margin-bottom: 0;
 }
 
+/* 高级筛选「网站分组」复用编辑页的分组下拉（外面多一层 div），与其他筛选项同宽。 */
+.site-advanced-filters .site-group-select > .ant-select {
+  width: 100%;
+}
+
 .site-toolbar .ant-select-selector {
   align-items: center;
 }
@@ -1688,6 +1734,17 @@ body.i-theme-dark {
 .site-quick-search .ant-select-selector {
   border-start-start-radius: 4px !important;
   border-end-start-radius: 4px !important;
+}
+
+/* 第二个下拉是查询内容（区域 / 线路分组按名称选、用户等联想框），占满剩余宽度、接在字段下拉右侧。 */
+.site-quick-search > .ant-select + .ant-select {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.site-quick-search > .ant-select + .ant-select .ant-select-selector {
+  border-radius: 0 4px 4px 0 !important;
 }
 
 .site-quick-search .ant-input {
@@ -3234,8 +3291,7 @@ body.i-theme-dark {
 }
 
 .site-edit-feedback,
-.site-edit-lock-banner,
-.site-edit-locked-notice {
+.site-edit-lock-banner {
   margin: 14px 20px 0;
 }
 
@@ -3315,7 +3371,6 @@ body.i-theme-dark {
 
 .site-inline-control,
 .site-inline-actions,
-.site-locked-actions,
 .site-cache-toolbar {
   display: flex;
   min-width: 0;
@@ -3326,7 +3381,6 @@ body.i-theme-dark {
 
 .site-inline-control .ant-btn,
 .site-inline-actions .ant-btn,
-.site-locked-actions .ant-btn,
 .site-cache-toolbar .ant-btn {
   height: 32px;
 }
@@ -3338,8 +3392,7 @@ body.i-theme-dark {
   line-height: 20px;
 }
 
-.site-origin-table,
-.site-locked-table {
+.site-origin-table {
   width: 100%;
   min-width: 0;
   margin-top: 10px;
@@ -3355,15 +3408,13 @@ body.i-theme-dark {
   outline-offset: -1px;
 }
 
-.site-origin-table .ant-table-thead > tr > th,
-.site-locked-table .ant-table-thead > tr > th {
+.site-origin-table .ant-table-thead > tr > th {
   height: 40px;
   padding: 8px 16px;
   background: var(--cdnca-color-table-header);
 }
 
-.site-origin-table .ant-table-tbody > tr > td,
-.site-locked-table .ant-table-tbody > tr > td {
+.site-origin-table .ant-table-tbody > tr > td {
   height: 48px;
   padding: 8px 16px;
 }
@@ -4273,6 +4324,25 @@ body.i-theme-dark {
   margin-bottom: 16px;
 }
 
+/* 筛选栏字段就地报错（components/FilterFieldError.tsx）：错误文字紧挨在字段下方，随字段同宽。 */
+.filter-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.cdnca-adv-filters-field > .filter-field {
+  display: flex;
+}
+
+.filter-field-error {
+  color: var(--cdnca-color-error, #ed4014);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .analytics-summary {
   display: grid;
   min-height: 78px;
@@ -4690,7 +4760,7 @@ body.i-theme-dark {
     padding-top: 70px;
   }
 
-  .recovery-container h1 {
+  .recovery-brand {
     margin-bottom: 57px;
     font-size: 46px;
   }
@@ -4805,8 +4875,7 @@ body.i-theme-dark {
     text-align: left;
   }
 
-  .analytics-tabs .ant-tabs-nav-wrap,
-  .analytics-rank-tabs .ant-tabs-nav-wrap {
+  .analytics-tabs .ant-tabs-nav-wrap {
     overflow-x: auto;
   }
 
@@ -5099,15 +5168,6 @@ body.i-theme-dark {
     overflow-x: auto;
   }
 
-  .jobs-table-scroll .ant-table-cell-fix-right {
-    position: static !important;
-  }
-
-  .jobs-table-scroll .ant-table-cell-fix-right-first::after,
-  .jobs-table-scroll .ant-table-cell-fix-right-last::after {
-    box-shadow: none !important;
-  }
-
   .jobs-drawer .ant-drawer-content-wrapper {
     max-width: 100vw;
   }
@@ -5132,15 +5192,6 @@ body.i-theme-dark {
 
   .node-table-scroll {
     max-width: 100%;
-  }
-
-  .node-table-scroll .ant-table-cell-fix-right {
-    position: static !important;
-  }
-
-  .node-table-scroll .ant-table-cell-fix-right-first::after,
-  .node-table-scroll .ant-table-cell-fix-right-last::after {
-    box-shadow: none !important;
   }
 
   .node-pagination {
@@ -5431,8 +5482,7 @@ body.i-theme-dark {
     width: 100%;
   }
 
-  .system-settings-baseline-page.sys-setting .system-settings-brand-grid,
-  .system-settings-baseline-page.sys-setting .system-settings-payment-grid {
+  .system-settings-baseline-page.sys-setting .system-settings-brand-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -5558,8 +5608,7 @@ body.i-theme-dark {
   }
 
   .site-edit-feedback,
-  .site-edit-lock-banner,
-  .site-edit-locked-notice {
+  .site-edit-lock-banner {
     margin-inline: 16px;
   }
 
@@ -6139,6 +6188,31 @@ body.i-theme-dark {
   font-size: 12px;
 }
 
+/* 未通过项前的图标；已通过项默认收起。 */
+.site-access-check-detail.is-failed .site-access-check-icon {
+  align-self: center;
+  color: var(--cdnca-color-error);
+}
+
+.site-access-passed {
+  margin-top: 6px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.site-access-passed > summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.site-access-passed .site-access-checks {
+  margin-top: 4px;
+}
+
+.site-access-passed .site-access-check {
+  white-space: normal;
+}
+
 @media (max-width: 720px) {
   .site-access-card {
     padding: 10px 12px;
@@ -6147,4 +6221,64 @@ body.i-theme-dark {
   .site-access-check-now {
     margin-left: 0;
   }
+}
+
+/* rc-tabs 15 在获得焦点的页签按钮里插入写死英文的「Tab N of M」aria-live 节点，
+   会把可访问名称变成「Tab 3 of 3 供货方日志」。role="tab" 本身由读屏报位置，
+   隐藏该节点（display:none 同时移出可访问树），名称只剩页签文字。 */
+.ant-tabs-tab-btn > div[aria-live='polite'] { display: none; }
+
+/* with scroll.x rc-table copies the column titles into an aria-hidden measure row to
+   measure widths, the select-all checkbox included, so Tab stopped twice on 选择当前页全部…. Hidden content keeps
+   its width but takes no focus; the real header keeps its single stop, Space, half-checked state and mouse use. */
+.ant-table-measure-row .ant-table-measure-cell-content {
+  visibility: hidden;
+}
+
+/* on a narrow screen the maintenance window uses two single
+   pickers whose popups stack the time columns under the calendar, so each popup is one calendar wide (about 290px)
+   and stays inside a 390px viewport instead of the 457px side-by-side panel. */
+.status-window-picker-popup .ant-picker-datetime-panel {
+  flex-direction: column;
+}
+
+.status-window-picker-popup .ant-picker-datetime-panel .ant-picker-time-panel {
+  border-inline-start: 0;
+  border-top: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+}
+
+.status-window-picker-popup .ant-picker-time-panel .ant-picker-content {
+  height: 168px;
+}
+
+/* the saved public state on one row (decorative icon, plain text); a long
+   address shortens with an ellipsis so the copy and open controls stay on the row. */
+.status-page-public-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.status-page-public-state > * {
+  flex: none;
+}
+
+.status-page-public-state > .status-page-public-url {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-page-public-state > .status-page-public-note {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 跨节点 CC 状态：租户、站点选择器（components/TenantScopeSelect、SearchSelect）。 */
+.cc-coordination-picker {
+  width: 260px;
+  max-width: 100%;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
@@ -9,7 +9,7 @@ import { useSessionStore } from '../auth/session'
 import { useRuntimeFeatureOff } from '../components/useRuntimeFeatures'
 import { localizedApiError } from '../i18n/apiError'
 import { tenantMembersMessages } from '../i18n/tenantMembers'
-import { FeedbackWhen, PageSection } from '@cdnca/ui'
+import { FeedbackWhen, PageSection, Table } from '@cdnca/ui'
 
 // Tenant members and sub-accounts; permissions beyond read-only are granted
 // through the custom roles page (/v1/custom-rbac).
@@ -222,7 +222,8 @@ export default function TenantMembersPage() {
       ) : null}
       <Modal open={creating} title={t('add')} okText={t('submit')} cancelText={t('cancel')} confirmLoading={busy}
         onCancel={() => setCreating(false)} onOk={() => form.submit()} destroyOnHidden>
-        <Form form={form} layout="vertical" onFinish={values => void create(values)}>
+        {/* 空提交聚焦首个出错字段；两张表单各有 name，字段 id 不撞（都有 email）。 */}
+        <Form form={form} name="member-create" layout="vertical" scrollToFirstError={{ focus: true }} onFinish={values => void create(values)}>
           <Form.Item name="username" label={t('username')} rules={[{ required: true, min: 3, max: 128 }]}><Input autoComplete="off" /></Form.Item>
           <Form.Item name="display_name" label={t('displayName')} rules={[{ required: true, max: 128 }]}><Input /></Form.Item>
           <Form.Item name="email" label={t('email')} rules={[{ type: 'email' }]}><Input autoComplete="off" /></Form.Item>
@@ -232,7 +233,7 @@ export default function TenantMembersPage() {
       <Modal open={inviting} title={t('inviteTitle')} okText={t('inviteSubmit')} cancelText={t('cancel')} confirmLoading={busy}
         onCancel={() => setInviting(false)} onOk={() => inviteForm.submit()} destroyOnHidden>
         <Typography.Paragraph type="secondary">{t('inviteHint')}</Typography.Paragraph>
-        <Form form={inviteForm} layout="vertical" onFinish={values => void invite(values)}>
+        <Form form={inviteForm} name="member-invite" layout="vertical" scrollToFirstError={{ focus: true }} onFinish={values => void invite(values)}>
           <Form.Item name="email" label={t('inviteEmail')} rules={[{ required: true, type: 'email', max: 254 }]}><Input type="email" autoComplete="off" /></Form.Item>
         </Form>
       </Modal>

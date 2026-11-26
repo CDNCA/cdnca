@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Modal, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { Alert, Button, Modal, Select, Tag, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -10,7 +10,7 @@ import { useSessionStore } from '../auth/session'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
 import { systemLogCodeMessage, systemLogMessage } from '../i18n/systemLog'
 import './SystemLogPage.css'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
 
 export default function SystemBackupLogPanel() {
   const { i18n } = useTranslation()

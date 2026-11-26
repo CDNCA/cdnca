@@ -61,8 +61,7 @@ export function AccountRecoveryRequestPage() {
   }
 
   return (
-    <AccountRecoveryLayout title={t('recovery.requestPageTitle')}>
-      <div className="recovery-tab">{t('recovery.requestTab')}</div>
+    <AccountRecoveryLayout title={t('recovery.requestPageTitle')} heading={t('recovery.requestTab')}>
 
       {mutation.error ? (
         <FeedbackWhen title={localizedApiError(mutation.error)} />

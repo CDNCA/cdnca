@@ -70,13 +70,13 @@ describe('主控备份任务状态', () => {
     expect(within(dialog).getByText('成功')).toBeInTheDocument()
   })
 
-  it('X08：Endpoint 不是 https://主机[:端口] 时就地标错，不发测试请求', async () => {
+  it('X08：服务地址不是 https://主机[:端口] 时就地标错，不发测试请求', async () => {
     const user = await openMaintenance()
     const panel = (await screen.findByRole('heading', { name: '异地存储' })).closest('form') as HTMLElement
     for (const value of ['https://', 'ftp://s3.example.com', 'http://s3.example.com', 'https://s3.example.com/x']) {
       fireEvent.change(within(panel).getByDisplayValue(/s3\.example\.com|^https?:\/\/$|^ftp/), { target: { value } })
       await user.click(within(panel).getByRole('button', { name: '测试连接' }))
-      await waitFor(() => expect(within(panel).getByText(/Endpoint 格式不对/)).toBeInTheDocument())
+      await waitFor(() => expect(within(panel).getByText(/服务地址格式不对/)).toBeInTheDocument())
     }
     expect(probes).toHaveLength(0)
   })

@@ -23,7 +23,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-
 type fakeCommandBus struct {
 	subscription *fakeCommandSubscription
 	publishErr   error
@@ -409,6 +408,19 @@ func TestDeploymentCommandValidation(t *testing.T) {
 		}},
 		{name: "missing health check", change: func(value *agentv1.DeploymentCommand) { value.HealthCheck = nil }},
 		{name: "invalid deadline", change: func(value *agentv1.DeploymentCommand) { value.DeadlineTime = nil }},
+		//
+		{name: "non-UUID released version", change: func(value *agentv1.DeploymentCommand) {
+			value.ReleasedConfigVersionIds = []string{"cfg-v0"}
+		}},
+		{name: "too many released versions", change: func(value *agentv1.DeploymentCommand) {
+			for range 65 {
+				value.ReleasedConfigVersionIds = append(value.ReleasedConfigVersionIds, uuid.NewString())
+			}
+		}},
+		{name: "released versions on a rollback", change: func(value *agentv1.DeploymentCommand) {
+			value.Action, value.Artifacts = agentv1.DeploymentAction_DEPLOYMENT_ACTION_ROLLBACK, nil
+			value.ReleasedConfigVersionIds = []string{uuid.NewString()}
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -421,6 +433,11 @@ func TestDeploymentCommandValidation(t *testing.T) {
 	}
 	if err := gateway.validateDeploymentCommand(validDeploymentCommand(), "artifact-key"); err != nil {
 		t.Fatalf("valid command rejected: %v", err)
+	}
+	released := validDeploymentCommand()
+	released.ReleasedConfigVersionIds = []string{uuid.NewString()}
+	if err := gateway.validateDeploymentCommand(released, "artifact-key"); err != nil {
+		t.Fatalf("apply command with a released version rejected: %v", err)
 	}
 }
 

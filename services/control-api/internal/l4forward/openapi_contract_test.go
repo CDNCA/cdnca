@@ -9,8 +9,46 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// G8: control.yaml's stream schemas are the served ones
+// (control-l4-forward.openapi.yaml), so its Stream reads eligibility_state and
+// ineligible_reason as the response does.
+func TestControlStreamSchemasAreTheServedOnes(t *testing.T) {
+	raw, err := os.ReadFile("../../../../api/openapi/v1/control.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	schemas := l4OpenAPIMap(t, l4OpenAPIMap(t, document, "components"), "schemas")
+	for _, name := range []string{"Stream", "StreamListResponse", "StreamPublishIntent", "StreamOwner", "StreamFields",
+		"CreateStreamRequest", "UpdateStreamRequest"} {
+		if got := l4OpenAPIMap(t, schemas, name)["$ref"]; got != "../../control-l4-forward.openapi.yaml#/components/schemas/"+name {
+			t.Errorf("control.yaml %s = %v, want the served schema", name, got)
+		}
+	}
+	raw, err = os.ReadFile("../../../../api/control-l4-forward.openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	stream := l4OpenAPIMap(t, l4OpenAPIMap(t, l4OpenAPIMap(t, document, "components"), "schemas"), "Stream")
+	properties := l4OpenAPIMap(t, stream["allOf"].([]any)[1].(map[string]any), "properties")
+	if got := l4OpenAPIMap(t, properties, "eligibility_state")["enum"]; !reflect.DeepEqual(got,
+		[]any{string(EligibilityEligible), string(EligibilityIneligible)}) {
+		t.Errorf("eligibility_state enum = %v", got)
+	}
+	if got := l4OpenAPIMap(t, properties, "ineligible_reason")["enum"]; !reflect.DeepEqual(got,
+		[]any{IneligiblePackageSuspended, IneligiblePackageCancelled}) {
+		t.Errorf("ineligible_reason enum = %v", got)
+	}
+}
+
 func TestPackageNameIsReadOnlyStreamMetadata(t *testing.T) {
-	for _, path := range []string{"../../../../api/control-l4-forward.openapi.yaml", "../../../../api/openapi/v1/control.yaml"} {
+	for _, path := range []string{"../../../../api/control-l4-forward.openapi.yaml"} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

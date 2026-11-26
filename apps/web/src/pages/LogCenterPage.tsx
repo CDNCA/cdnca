@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, App, Button, Descriptions, Drawer, Empty, Input, Result, Select, Space, Spin, Table, Tabs, Tag, Typography, type TableColumnsType } from 'antd'
+import { Alert, App, Button, Descriptions, Drawer, Empty, Input, Result, Select, Space, Spin, Tag, Typography, type TableColumnsType } from 'antd'
+import { Tabs } from '../components/Tabs'
+import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
@@ -14,8 +16,8 @@ import '../i18n/logCenter'
 import { factRegion } from './logGeo'
 import SystemBackupLogPanel from './SystemBackupLogPanel'
 import SystemSentLogPanel from './SystemSentLogPanel'
-import { useFilterUrl } from './filterUrl'
-import { AdvancedFilters, PageSection, TimeRangeFilter, resolveTimeRangePreset, useFeedback, useLiveApply, type TimeRangeValue } from '@cdnca/ui'
+import { filterParam, useFilterUrl } from './filterUrl'
+import { AdvancedFilters, PageSection, TimeRangeFilter, resolveTimeRangePreset, useFeedback, useLiveApply, type TimeRangeValue, Table } from '@cdnca/ui'
 import './LogCenterPage.css'
 
 // The attack and access logs are shown here, not linked out —
@@ -60,15 +62,34 @@ export default function LogCenterPage() {
   // 只在进入页面时读一次（之后由 useFilterUrl 回写）。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // 页签与已生效的时间范围也写进 URL（tab、range=快捷范围键，或自定义的 since/until），
+  // 刷新整页读回；非法值回退到「全部」与不限时间。filterParam：本标签页上一账号写的不读回。
+  const linkedView = useMemo<{ tab: Tab; range: TimeRangeValue }>(() => {
+    const tabValue = filterParam(searchParams, 'tab')
+    const preset = filterParam(searchParams, 'range')
+    const presetWindow = preset && preset !== 'custom' ? resolveTimeRangePreset(preset) : null
+    const since = Date.parse(filterParam(searchParams, 'since'))
+    const until = Date.parse(filterParam(searchParams, 'until'))
+    return {
+      tab: tabOrder.includes(tabValue as Tab) ? tabValue as Tab : 'all',
+      range: presetWindow ? { preset, range: presetWindow }
+        : Number.isFinite(since) && Number.isFinite(until) && since < until ? { preset: 'custom', range: [dayjs(since), dayjs(until)] }
+          : { preset: 'custom', range: null },
+    }
+  // 同 linked：只在进入页面时读一次。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const [tab, setTab] = useState<Tab>('all')
+  const [tab, setTab] = useState<Tab>(linkedView.tab)
   const [operationCategory, setOperationCategory] = useState<AuditLogCategory>()
   const [draft, setDraft] = useState<AuditLogFilters>(linked)
   // Open until a range is chosen ('custom' with no window).
-  const [range, setRange] = useState<TimeRangeValue>({ preset: 'custom', range: null })
-  const [applied, setApplied] = useState<AuditLogFilters>(linked)
+  const [range, setRange] = useState<TimeRangeValue>(linkedView.range)
+  const [applied, setApplied] = useState<AuditLogFilters>(() => ({
+    ...linked, since: linkedView.range.range?.[0].toISOString(), until: linkedView.range.range?.[1].toISOString(),
+  }))
   // 已生效时的草稿与时间范围（比较是否有未生效改动）。
-  const [appliedDraft, setAppliedDraft] = useState<{ draft: AuditLogFilters; range: TimeRangeValue }>({ draft: linked, range: { preset: 'custom', range: null } })
+  const [appliedDraft, setAppliedDraft] = useState<{ draft: AuditLogFilters; range: TimeRangeValue }>({ draft: linked, range: linkedView.range })
   const [cursors, setCursors] = useState<string[]>([])
   const [selected, setSelected] = useState<AuditLogItem>()
   const [exporting, setExporting] = useState(false)
@@ -97,7 +118,12 @@ export default function LogCenterPage() {
   useEffect(() => () => exportAbortRef.current?.abort(), [])
   // 文本条件 400ms 防抖、时间范围/下拉选完即生效（同一防抖，草稿变了就查）。
   useLiveApply({ draft: trimmed(draft), range }, { draft: trimmed(appliedDraft.draft), range: appliedDraft.range }, () => search(), { delay: 400 })
-  useFilterUrl({ node_id: undefined, resource_id: applied.resourceId, resource_type: applied.resourceType, actor: applied.actor, source_ip: applied.sourceIp, result: applied.result })
+  const appliedPreset = appliedDraft.range.preset !== 'custom' ? appliedDraft.range.preset : undefined
+  useFilterUrl({
+    node_id: undefined, resource_id: applied.resourceId, resource_type: applied.resourceType, actor: applied.actor, source_ip: applied.sourceIp, result: applied.result,
+    tab: tab === 'all' ? undefined : tab, range: appliedPreset,
+    since: appliedPreset ? undefined : applied.since, until: appliedPreset ? undefined : applied.until,
+  })
 
   if (!accessToken || !principal || !canRead) return <Result status="403" title="403" subTitle={t('states.forbidden')} />
 
@@ -139,13 +165,18 @@ export default function LogCenterPage() {
   // redesign-a: 一行读成一句话——时间 · 谁（下一行租户）· 内容（下一行对象）· 来源（IP / 地理位置 / UA）· 结果；7 列不横向滚动。
   const columns: TableColumnsType<AuditLogItem> = [
     { title: t('columns.time'), dataIndex: 'time', width: 160, render: (value: string) => <span className="log-center-time">{value}</span> },
-    { title: t('columns.actor'), key: 'actor', width: 150, render: (_, item) => <div className="log-center-cell">
-      <span className="log-center-main">{item.actor_username || item.actor}</span>
-      <span className="log-center-sub">{item.tenant_name || t('columns.platform')}</span>
-    </div> },
+    // 操作人与所属租户同名时只显示一行，不同才作次要信息。
+    { title: t('columns.actor'), key: 'actor', width: 150, render: (_, item) => {
+      const name = item.actor_username || item.actor
+      const tenant = item.tenant_name || t('columns.platform')
+      return <div className="log-center-cell">
+        <span className="log-center-main">{name}</span>
+        {sameName(tenant, name) ? null : <span className="log-center-sub">{tenant}</span>}
+      </div>
+    } },
     ...(tab === 'auth' ? [] : [{ title: t('columns.category'), dataIndex: 'category_label', width: 110 }]),
     { title: t('columns.summary'), key: 'summary', render: (_, item) => <div className="log-center-cell">
-      <span className="log-center-main log-center-summary">{item.summary}</span>
+      <span className="log-center-main log-center-summary" title={item.summary}>{summaryBody(item)}</span>
       <span className="log-center-sub"><span className="log-center-sub-label">{t('columns.object')}</span>
         <span title={item.resource_id}>{objectLabel(item, t)}</span></span>
     </div> },
@@ -164,15 +195,9 @@ export default function LogCenterPage() {
 
   // 读取失败就地报错：原因码翻成中文并附请求 ID，表格不再显示"没有符合条件的日志"（同 AccountLogPage）。
   const loadError = page.isError ? localizedUnknownApiError(page.error, t(errorKey(page.error))) : null
-  const tabs = tabOrder.map((key) => ({ key, label: key === 'auth' ? t('categories.auth') : t(`tabs.${key}`) }))
-
-  return <PageSection data-testid="log-center" className="log-center-v2">
-    <Typography.Title level={4}>{t('title')}</Typography.Title>
-    <Typography.Paragraph type="secondary">{t('subtitle')}</Typography.Paragraph>
-    <Tabs activeKey={tab} items={tabs}
-      tabBarExtraContent={external || panel ? undefined : <Button loading={exporting} onClick={() => void download()}>{t('filters.export')}</Button>}
-      onChange={(key) => { setTab(key as Tab); setCursors([]) }} />
-    {tab === 'backup' ? <SystemBackupLogPanel /> : tab === 'sent' ? <SystemSentLogPanel /> : external
+  // the active tab's panel carries its filters and table, so aria-controls
+  // points at real content; the other panels stay empty (each tab still reads its own data when chosen).
+  const activeContent = tab === 'backup' ? <SystemBackupLogPanel /> : tab === 'sent' ? <SystemSentLogPanel /> : external
       ? <div data-testid={`log-center-${tab}`}><Suspense fallback={<Spin aria-label={t('states.loading')} />}>{tab === 'attack' ? <WafLogsPage /> : <SiteAccessLogPage />}</Suspense></div> : <>
       {/* 1440 宽下与查询/重置/高级筛选同一行——常显只留 时间范围、操作人；来源 IP、结果、分类、对象类型、对象 ID、作用域收进共享高级筛选。 */}
       <section className="log-center-filters" aria-label={t('filters.title')}>
@@ -222,7 +247,15 @@ export default function LogCenterPage() {
           </Space>
         </div>
       </div>
-    </>}
+    </>
+  const tabs = tabOrder.map((key) => ({ key, label: key === 'auth' ? t('categories.auth') : t(`tabs.${key}`),
+    children: key === tab ? activeContent : null }))
+
+  return <PageSection data-testid="log-center" className="log-center-v2">
+    <Typography.Title level={4}>{t('title')}</Typography.Title>
+    <Tabs activeKey={tab} items={tabs}
+      tabBarExtraContent={external || panel ? undefined : <Button loading={exporting} onClick={() => void download()}>{t('filters.export')}</Button>}
+      onChange={(key) => { setTab(key as Tab); setCursors([]) }} />
     <Drawer open={Boolean(selected)} width={640} title={t('detail.title')} onClose={() => setSelected(undefined)}>
       {selected ? <LogDetail item={selected} /> : null}
     </Drawer>
@@ -232,6 +265,21 @@ export default function LogCenterPage() {
 // 比较用：去掉首尾空格与空值（空格不算改动）。
 function trimmed(filters: AuditLogFilters): Record<string, string> {
   return Object.fromEntries(Object.entries(filters).flatMap(([key, value]) => typeof value === 'string' && value.trim() ? [[key, value.trim()]] : []))
+}
+
+function sameName(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
+// 列表内容只留动作/对象/差异：服务端整句以「操作人 于 时间 从 IP」（英文「actor from IP at time」）开头，
+// 这三项已有独立列，按同一字段重建前缀后去掉；对不上就原样显示整句。完整原文在详情里。
+function summaryBody(item: Pick<AuditLogItem, 'summary' | 'actor' | 'time' | 'source_ip'>): string {
+  const prefixes = [
+    `${item.actor} 于 ${item.time}${item.source_ip ? ` 从 ${item.source_ip}` : ''} `,
+    `${item.actor}${item.source_ip ? ` from ${item.source_ip}` : ''} at ${item.time} `,
+  ]
+  const prefix = prefixes.find((candidate) => item.summary.startsWith(candidate))
+  return prefix && item.summary.length > prefix.length ? item.summary.slice(prefix.length) : item.summary
 }
 
 // errorKey: audit log refusal codes (auditloghttp/handler.go) to their message; others fall back to the generic one.

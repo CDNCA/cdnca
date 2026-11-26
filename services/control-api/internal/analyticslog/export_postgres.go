@@ -54,7 +54,8 @@ type AccessExport struct {
 	Downloadable bool         `json:"downloadable"`
 	// Filter 是申请时冻结的原查询条件（LOG-02）；文档版本不认识时为 null。
 	Filter *exportFilterBody `json:"filter"`
-	// 申请人与下载记录：下载 = 一次性令牌被消费（grants.consumed_at）。
+	// 申请人与下载记录（console-pagescan2）：每次成功下载一行 analytics_log_export_downloads_v1（707），
+	// 与下载审计同事务写入；授权行 5 分钟后被清理，不能作计数来源。
 	RequestedBy      ExportUser  `json:"requested_by"`
 	DownloadCount    int         `json:"download_count"`
 	LastDownloadedAt *time.Time  `json:"last_downloaded_at"`
@@ -585,17 +586,18 @@ func (manager *ExportManager) Consume(
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var content, artifactDigest []byte
+	var grantID uuid.UUID
 	err = tx.QueryRow(ctx, `WITH consumed AS (
 		UPDATE analytics_log_export_grants_v1 g SET consumed_at=$1
 		FROM analytics_log_exports_v1 request
 		WHERE g.export_id=request.id AND g.export_id=$2 AND g.scope_id=$3
 		  AND g.actor_user_id=$4 AND g.session_id=$5 AND g.token_sha256=$6
 		  AND request.actor_scope_id=$7 AND g.consumed_at IS NULL AND g.expires_at>$1
-		RETURNING g.export_id)
-		SELECT artifact.content,artifact.content_sha256 FROM consumed
+		RETURNING g.id,g.export_id)
+		SELECT consumed.id,artifact.content,artifact.content_sha256 FROM consumed
 		JOIN analytics_log_export_artifacts_v1 artifact ON artifact.export_id=consumed.export_id
 		WHERE artifact.artifact_expires_at>$1`, now, id, targetScopeID, identity.actorID, identity.credentialID,
-		digest[:], identity.scopeID).Scan(&content, &artifactDigest)
+		digest[:], identity.scopeID).Scan(&grantID, &content, &artifactDigest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if auditErr := manager.appendAudit(ctx, tx, identity.scopeID, identity.actorID, id,
 			"analytics_log.export.reject", "denied", "grant_rejected"); auditErr != nil {
@@ -612,6 +614,10 @@ func (manager *ExportManager) Consume(
 	calculatedDigest := sha256.Sum256(content)
 	if subtle.ConstantTimeCompare(artifactDigest, calculatedDigest[:]) != 1 {
 		return AccessExportDownload{}, ErrInvalidResponse
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO analytics_log_export_downloads_v1(id,export_id,actor_user_id,downloaded_at)
+		VALUES($1,$2,$3,$4)`, grantID, id, identity.actorID, now); err != nil {
+		return AccessExportDownload{}, ErrStorageUnavailable
 	}
 	if err := manager.appendAudit(ctx, tx, identity.scopeID, identity.actorID, id, "analytics_log.export.download", "success", "grant_consumed"); err != nil {
 		return AccessExportDownload{}, err
@@ -907,18 +913,18 @@ func (manager *ExportManager) exportAccess(ctx context.Context, actor Actor, aud
 }
 
 const exportSelectSQL = `SELECT request.id,latest.state,latest.reason,latest.snapshot_at,latest.row_count,
-	latest.byte_count,latest.artifact_sha256,request.created_at,artifact.artifact_expires_at,request.filter,
+	latest.byte_count,latest.artifact_sha256,latest.occurred_at,request.created_at,artifact.artifact_expires_at,request.filter,
 	requester.id,requester.username,requester.display_name,
 	downloads.count,downloads.last_at,downloader.id,downloader.username,downloader.display_name
 	FROM analytics_log_exports_v1 request
-	JOIN LATERAL (SELECT state,reason,snapshot_at,row_count,byte_count,artifact_sha256
+	JOIN LATERAL (SELECT state,reason,snapshot_at,row_count,byte_count,artifact_sha256,occurred_at
 		FROM analytics_log_export_events_v1 event WHERE event.export_id=request.id
 		ORDER BY sequence DESC LIMIT 1) latest ON true
 	JOIN users requester ON requester.id=request.actor_user_id
 	LEFT JOIN analytics_log_export_artifacts_v1 artifact ON artifact.export_id=request.id
-	JOIN LATERAL (SELECT count(*)::int AS count,max(consumed_at) AS last_at,
-		(array_agg(actor_user_id ORDER BY consumed_at DESC))[1] AS last_user
-		FROM analytics_log_export_grants_v1 g WHERE g.export_id=request.id AND g.consumed_at IS NOT NULL) downloads ON true
+	JOIN LATERAL (SELECT count(*)::int AS count,max(downloaded_at) AS last_at,
+		(array_agg(actor_user_id ORDER BY downloaded_at DESC,id DESC))[1] AS last_user
+		FROM analytics_log_export_downloads_v1 d WHERE d.export_id=request.id) downloads ON true
 	LEFT JOIN users downloader ON downloader.id=downloads.last_user `
 
 type rowScanner interface{ Scan(...any) error }
@@ -938,8 +944,10 @@ func scanExport(row rowScanner, now time.Time) (AccessExport, error) {
 	var requesterID uuid.UUID
 	var downloaderID *uuid.UUID
 	var downloaderUsername, downloaderName *string
+	var occurredAt time.Time
+	var artifactExpiresAt *time.Time
 	if err := row.Scan(&id, &job.Status, &job.Reason, &job.SnapshotAt, &job.RowCount, &job.ByteCount,
-		&digest, &job.CreatedAt, &job.ExpiresAt, &filter,
+		&digest, &occurredAt, &job.CreatedAt, &artifactExpiresAt, &filter,
 		&requesterID, &job.RequestedBy.Username, &job.RequestedBy.DisplayName,
 		&job.DownloadCount, &job.LastDownloadedAt, &downloaderID, &downloaderUsername, &downloaderName); errors.Is(err, pgx.ErrNoRows) {
 		return AccessExport{}, ErrNotFound
@@ -957,7 +965,14 @@ func scanExport(row rowScanner, now time.Time) (AccessExport, error) {
 		}
 		job.SHA256 = hex.EncodeToString(digest)
 	}
-	job.Downloadable = job.Status == ExportCompleted && job.ExpiresAt != nil && job.ExpiresAt.After(now)
+	// 制品到期被 Cleanup 删除后仍给出到期时间：completeClaim 用同一时刻写完成事件与制品
+	// （artifact_expires_at = 完成时间 + exportArtifactTTL）。能否下载仍以制品存在且未到期为准。
+	job.ExpiresAt = artifactExpiresAt
+	if job.ExpiresAt == nil && job.Status == ExportCompleted {
+		expiresAt := occurredAt.Add(exportArtifactTTL)
+		job.ExpiresAt = &expiresAt
+	}
+	job.Downloadable = job.Status == ExportCompleted && artifactExpiresAt != nil && artifactExpiresAt.After(now)
 	if summary, ok := exportFilterSummary(filter); ok {
 		job.Filter = &summary
 	}

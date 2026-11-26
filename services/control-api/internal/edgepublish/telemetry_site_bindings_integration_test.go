@@ -15,8 +15,8 @@ import (
 // TestSiteRuntimeV2TelemetrySubscriptions: the package subscription a v2
 // publication records per site (migration 295) is the site's, for a
 // subscribed site, a site recovering from package_expired in this
-// publication; a site without a subscription is not published at all
-//, so it has no binding.
+// publication; a site without a subscription is published too, with no
+// subscription (uuid.Nil).
 func TestSiteRuntimeV2TelemetrySubscriptions(t *testing.T) {
 	fixture := newL4V2ContractFixture(t)
 	subscribed := fixture.createSite(t, "telemetry-subscribed.example.com", 18081, false).Site
@@ -79,7 +79,7 @@ func TestSiteRuntimeV2TelemetrySubscriptions(t *testing.T) {
 		t.Fatalf("site runtime v2: %v", err)
 	}
 
-	want := map[uuid.UUID]uuid.UUID{subscribed.ID: fixture.subscriptionID, recovering.ID: fixture.subscriptionID}
+	want := map[uuid.UUID]uuid.UUID{subscribed.ID: fixture.subscriptionID, recovering.ID: fixture.subscriptionID, plain.ID: uuid.Nil}
 	for name, got := range map[string]map[uuid.UUID]uuid.UUID{"v2": v2} {
 		if len(got) != len(want) {
 			t.Fatalf("%s sites = %v, want %v", name, got, want)

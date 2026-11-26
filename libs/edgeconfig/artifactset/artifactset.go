@@ -111,7 +111,7 @@ var (
 	mediaTypes = map[string]struct{}{MediaTypeIPIntel: {}, MediaTypeEngineModule: {}, MediaTypeRulePack: {}}
 	// wrappedKeyPattern: base64url (unpadded) HPKE wrapped content key.
 	wrappedKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,512}$`)
-	reasons    = map[string]struct{}{
+	reasons           = map[string]struct{}{
 		ReasonObjectMissing: {}, ReasonSegmentMismatch: {}, ReasonContentMismatch: {}, ReasonDecompressFailed: {},
 		ReasonUnsupportedMediaType: {}, ReasonInstallRejected: {}, ReasonSignatureInvalid: {}, ReasonPlatformMismatch: {},
 		ReasonActivationFailed: {}, ReasonSetRejected: {},

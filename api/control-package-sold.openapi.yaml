@@ -141,7 +141,15 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SoldCommandResult'}
-        '400': {description: Invalid or duplicate fields/items; edit requires one item and a full config., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '400':
+          description: >-
+            Invalid or duplicate fields/items; edit requires one item and a full config.
+            An edit whose config.cname.domain is new or changed and is not a CNAME domain of
+            the DNS configuration (the base package CNAME domains) is refused with
+            error.details {field: config.cname.domain, reason: not_configured}; an unchanged
+            domain is not checked again.
+          x-description-zh: '编辑时新填或改动的 config.cname.domain 不在「节点管理 → DNS 配置」的 CNAME 域名（与基础套餐同源）里，返回 error.details {field: config.cname.domain, reason: not_configured}；未改动的域名不再校验。'
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '401': {description: A live platform session is required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
         '403': {description: Required package/resource/DNS/publication permission denied., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
         '409':
@@ -213,7 +221,7 @@ components:
     SoldPackage:
       type: object
       additionalProperties: false
-      required: [id, display_id, tenant_scope_id, owner_user_id, owner_user_display_id, owner_name, name, product_id, product_name, created_at, ends_at, lifecycle_status, traffic_limit_bytes, used_traffic_bytes, revision, enabled]
+      required: [id, display_id, tenant_scope_id, owner_user_id, owner_user_display_id, owner_name, name, product_id, product_name, created_at, ends_at, lifecycle_status, suspended_at, traffic_limit_bytes, used_traffic_bytes, revision, enabled]
       properties:
         id: {type: string, format: uuid}
         display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
@@ -227,6 +235,7 @@ components:
         created_at: {type: string, format: date-time}
         ends_at: {type: string, format: date-time}
         lifecycle_status: {type: string, enum: [active, cancelled]}
+        suspended_at: {type: [string, 'null'], format: date-time, description: When the subscription was suspended (for example by its billing host); null while it is not.}
         enabled: {type: boolean}
         traffic_limit_bytes: {type: integer, format: int64, minimum: -1}
         used_traffic_bytes: {type: [integer, 'null'], format: int64, minimum: 0}
@@ -310,7 +319,7 @@ components:
                         required: [region_id]
                         properties:
                           region_id: {type: [string, 'null'], format: uuid}
-                cname_domains: {type: array, items: {type: string}}
+                cname_domains: {type: array, description: 'CNAME domains of the DNS configuration (节点管理 → DNS 配置), the same as the base package options.', items: {type: string}}
     SoldOption:
       type: object
       required: [id, name]
@@ -358,4 +367,26 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/SoldDetail'}}
         publications: {type: array, items: {$ref: '#/components/schemas/SoldPublication'}}
         replayed: {type: boolean}
-    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}
+    StableError:
+      type: object
+      description: 'Error body: error.code and error.request_id are always present.'
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              type: object
+              description: >-
+                Only on package_commerce_validation_error when the refused request field can be named
+                (same shape as control.yaml APIFieldErrorDetails): field is the JSON path as sent, reason a machine code.
+              x-description-zh: 能定位到字段的 package_commerce_validation_error 附带：field 为请求 JSON 路径，reason 为机器码。
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$'}
+                reason: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}

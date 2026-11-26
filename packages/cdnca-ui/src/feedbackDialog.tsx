@@ -6,15 +6,21 @@ import { Button, ConfigProvider, Modal, Typography } from 'antd'
 
 import { useAckText, type FeedbackAction, type FeedbackDialogProps, type FeedbackType } from './feedback'
 
-// Pages append the request ID to their error text: 「原因（请求 ID：xxx）」 /
-// "reason (Request ID: xxx)". The dialog shows it as a small copyable line in
-// the body instead.
-const requestIdSuffix = /\s*[（(]\s*(?:请求\s?ID|[Rr]equest\s?ID)\s*[：:]\s*([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\s*[）)]\s*[。.]?\s*$/
+// Pages append diagnostics to their error text: 「原因（请求 ID：xxx）」 /
+// "reason (Request ID: xxx)", and the refusal texts of i18n/apiError.ts
+// 「原因（错误码 code，请求 ID xxx）」 / "reason (error code code, request ID xxx)".
+// The dialog keeps them out of the title and the reason and shows them in a
+// collapsed 「诊断详情」 with copy buttons (a long ID made the
+// title three lines; the code too).
+const diagnosticsSuffix = /\s*[（(]\s*(?:(?:错误码|錯誤碼|error code)\s*[：:]?\s*([A-Za-z][A-Za-z0-9_]{0,63}))?\s*[，,；;]?\s*(?:(?:请求|請求|request)\s?ID\s*[：:]?\s*([A-Za-z0-9][A-Za-z0-9._:-]{0,127}))?\s*[）)]\s*[。.]?\s*$/i
 
-function splitRequestId(node: ReactNode): { text: ReactNode; requestId?: string } {
+interface Diagnostics { code?: string; requestId?: string }
+
+function splitDiagnostics(node: ReactNode): { text: ReactNode } & Diagnostics {
   if (typeof node !== 'string') return { text: node }
-  const match = requestIdSuffix.exec(node)
-  return match ? { text: node.slice(0, match.index), requestId: match[1] } : { text: node }
+  const match = diagnosticsSuffix.exec(node)
+  if (!match || (!match[1] && !match[2])) return { text: node }
+  return { text: node.slice(0, match.index), code: match[1], requestId: match[2] }
 }
 
 // A sentence used as the title keeps only its first clause there (「请求内容无效」);
@@ -48,15 +54,24 @@ function FeedbackIcon({ type }: { type: FeedbackType }) {
   )
 }
 
+const diagnosticsLabels = {
+  'zh-CN': { summary: '诊断详情', code: '错误码：', requestId: '请求 ID：' },
+  'zh-TW': { summary: '診斷詳情', code: '錯誤碼：', requestId: '請求 ID：' },
+  'en-US': { summary: 'Diagnostic details', code: 'Error code: ', requestId: 'Request ID: ' },
+}
+
 export default function FeedbackDialogBody({ open, type, title, detail, actions = [], extra, hint, onClose, afterClose }: FeedbackDialogProps) {
   const ok = useAckText()
-  const requestIdLabel = useContext(ConfigProvider.ConfigContext).locale?.locale === 'en' ? 'Request ID: ' : '请求 ID：'
-  // Short reason in the title; the rest of the sentence and the request ID go to the body.
-  const fromTitle = splitRequestId(title)
-  const fromDetail = splitRequestId(detail)
-  // Only a server error sentence (it carried a request ID) is cut down; page-written titles stay as written.
-  const split = fromTitle.requestId && empty(fromDetail.text) ? splitTitle(fromTitle.text) : { title: fromTitle.text }
+  const locale = useContext(ConfigProvider.ConfigContext).locale?.locale
+  const labels = diagnosticsLabels[locale === 'en' ? 'en-US' : locale === 'zh-tw' ? 'zh-TW' : 'zh-CN']
+  // Short reason in the title; the rest of the sentence goes to the body, the code and request ID to 诊断详情.
+  const fromTitle = splitDiagnostics(title)
+  const fromDetail = splitDiagnostics(detail)
+  const fromServer = Boolean(fromTitle.code || fromTitle.requestId)
+  // Only a server error sentence (it carried diagnostics) is cut down; page-written titles stay as written.
+  const split = fromServer && empty(fromDetail.text) ? splitTitle(fromTitle.text) : { title: fromTitle.text }
   const body = empty(fromDetail.text) ? split.rest : fromDetail.text
+  const code = fromTitle.code ?? fromDetail.code
   const requestId = fromTitle.requestId ?? fromDetail.requestId
   const primary = actions.filter((action) => action.primary)
   const secondary = actions.filter((action) => !action.primary)
@@ -83,10 +98,12 @@ export default function FeedbackDialogBody({ open, type, title, detail, actions 
     >
       {empty(body) ? null : <div className="cdnca-feedback-detail">{body}</div>}
       {empty(hint) ? null : <div className="cdnca-feedback-hint">{hint}</div>}
-      {requestId ? (
-        <div className="cdnca-feedback-request-id">
-          <Typography.Text type="secondary" copyable={{ text: requestId }}>{requestIdLabel}{requestId}</Typography.Text>
-        </div>
+      {code || requestId ? (
+        <details className="cdnca-feedback-request-id">
+          <summary>{labels.summary}</summary>
+          {code ? <div><Typography.Text type="secondary" copyable={{ text: code }}>{labels.code}{code}</Typography.Text></div> : null}
+          {requestId ? <div><Typography.Text type="secondary" copyable={{ text: requestId }}>{labels.requestId}{requestId}</Typography.Text></div> : null}
+        </details>
       ) : null}
     </Modal>
   )

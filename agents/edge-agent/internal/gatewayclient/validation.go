@@ -31,6 +31,15 @@ func validateCommand(command *agentv1.DeploymentCommand, config Config, now time
 			(!activeIdentityEnabled && !safeIdentifier(command.GetPreviousConfigVersionId())) || command.GetPreviousConfigVersionId() == command.ConfigVersionId) {
 		return fmt.Errorf("%w: previous config version is invalid", ErrInvalidMessage)
 	}
+	// versions whose held telemetry may go.
+	if len(command.ReleasedConfigVersionIds) > 64 {
+		return fmt.Errorf("%w: too many released config versions", ErrInvalidMessage)
+	}
+	for _, released := range command.ReleasedConfigVersionIds {
+		if !canonicalUUID(released) {
+			return fmt.Errorf("%w: released config version is invalid", ErrInvalidMessage)
+		}
+	}
 	switch command.Action {
 	case agentv1.DeploymentAction_DEPLOYMENT_ACTION_APPLY,
 		agentv1.DeploymentAction_DEPLOYMENT_ACTION_RECONCILE:

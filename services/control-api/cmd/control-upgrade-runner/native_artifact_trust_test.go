@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -97,7 +98,7 @@ func TestNativeVerifierAcceptsSignedStatus(t *testing.T) {
 	status := controlplaneupgrade.NativeStandaloneStatus{Ready: true, Reason: "ready", Phase: "idle", InstallationID: installationID,
 		ProtocolVersion: 2, ArtifactFormat: controlplaneupgrade.NativeManifestSignedSchema, CurrentVersion: "1.4.0"}
 	runner := nativeVerifierRunner{probe: func(context.Context) (controlplaneupgrade.NativeStandaloneStatus, error) { return status, nil }}
-	verify := newNativePlanVerifier(t.Context(), trust, installationID, 2, store, runner, func() time.Time { return now })
+	verify := newNativePlanVerifier(t.Context(), trust, installationID, 2, store, runner, func() time.Time { return now }, slog.Default())
 	plan := nativeSignedPlan(t, signer, installationID, "1.4.0", "1.5.0", 42, now)
 	if err := verify(plan); err != nil {
 		t.Fatalf("v2 ready status rejected: %v", err)

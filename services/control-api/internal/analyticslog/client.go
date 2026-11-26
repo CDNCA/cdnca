@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"strconv"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -904,7 +904,7 @@ func (client *Client) ListBlockEvents(
 
 // pageSegmentSpans are the lookbacks, from the page top (the cursor or
 // filter.To), of the segments a log page tries before the whole window
-//. A segment that yields more than limit rows holds the
+// . A segment that yields more than limit rows holds the
 // window's newest ones: every event outside it is strictly older.
 var pageSegmentSpans = []time.Duration{time.Hour, 6 * time.Hour, 36 * time.Hour, 216 * time.Hour}
 
@@ -994,9 +994,9 @@ func filterParameters(scope scope, filter Filter, limit uint16) url.Values {
 	values := url.Values{
 		"param_tenant_scoped": {tenantScoped},
 		"param_tenant_id":     {tenantID},
-		"param_from_ms":   {strconv.FormatInt(filter.From.UnixMilli(), 10)},
-		"param_to_ms":     {strconv.FormatInt(filter.To.UnixMilli(), 10)},
-		"param_row_limit": {strconv.FormatUint(uint64(limit+1), 10)},
+		"param_from_ms":       {strconv.FormatInt(filter.From.UnixMilli(), 10)},
+		"param_to_ms":         {strconv.FormatInt(filter.To.UnixMilli(), 10)},
+		"param_row_limit":     {strconv.FormatUint(uint64(limit+1), 10)},
 	}
 	setOptional(values, "site", "site_id", filter.SiteID)
 	setOptional(values, "host", "host", filter.Host)

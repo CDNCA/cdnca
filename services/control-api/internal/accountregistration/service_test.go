@@ -204,7 +204,7 @@ func TestIAM02RegisterNormalizesHashesLimitsAndReplays(t *testing.T) {
 	}
 	if len(proofs.calls) != 1 || proofs.calls[0].Reference != input.ProofReference ||
 		proofs.calls[0].Channel != VerificationEmail || proofs.calls[0].Destination != "alice@example.com" ||
-		proofs.calls[0].Source != "203.0.113.9" || proofs.calls[0].IdempotencyKey != input.IdempotencyKey {
+		proofs.calls[0].IdempotencyKey != input.IdempotencyKey {
 		t.Fatalf("proof request = %+v", proofs.calls)
 	}
 	if bytes.Contains(record.RequestDigest[:], []byte(input.Password)) || bytes.Contains(record.SubjectDigest[:], []byte(record.Email)) {
@@ -281,13 +281,9 @@ func TestIAM02RegisterRejectsInvalidInputs(t *testing.T) {
 		"phone":        func(input *RegisterInput) { input.Phone = "123" },
 		"destination":  func(input *RegisterInput) { input.Email, input.Phone = "", "" },
 		"channel":      func(input *RegisterInput) { input.VerificationChannel = VerificationSMS; input.Phone = "" },
-		"terms":        func(input *RegisterInput) { input.TermsAccepted = false },
-		"terms_version": func(input *RegisterInput) {
-			input.TermsVersion = ""
-		},
-		"idempotency": func(input *RegisterInput) { input.IdempotencyKey = "contains spaces" },
-		"request_id":  func(input *RegisterInput) { input.RequestID = "" },
-		"source":      func(input *RegisterInput) { input.Source = "" },
+		"idempotency":  func(input *RegisterInput) { input.IdempotencyKey = "contains spaces" },
+		"request_id":   func(input *RegisterInput) { input.RequestID = "" },
+		"source":       func(input *RegisterInput) { input.Source = "" },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -311,5 +307,75 @@ func validRegistrationInput() RegisterInput {
 		Email: "alice@example.com", TermsAccepted: true, TermsVersion: "terms-2026-08",
 		VerificationChannel: VerificationEmail, IdempotencyKey: "registration-valid",
 		RequestID: "request-valid", Source: "203.0.113.10", ProofReference: "proof-reference-valid-registration",
+	}
+}
+
+// the Turnstile flow: with no terms required a sign-up without
+// an acceptance goes through and records none; required, it is refused.
+func TestRegisterWithoutRequiredTerms(t *testing.T) {
+	store := &registrationStoreStub{byKey: make(map[string]RegistrationRecord)}
+	service := newRegistrationTestService(t, store, &registrationLimiterStub{allowed: true}, &registrationProofStub{}, 0x31)
+	required := false
+	service.RequireTermsWhen(func(context.Context) (bool, error) { return required, nil })
+	input := RegisterInput{
+		Username: "alice", Password: "Correct-horse-battery-staple", DisplayName: "Alice", Email: "alice@example.com",
+		VerificationChannel: VerificationEmail, IdempotencyKey: "registration-no-terms", RequestID: "request-no-terms",
+		Source: "203.0.113.9", ProofReference: "proof-reference-registration-1",
+	}
+	if result, err := service.Register(t.Context(), input); err != nil || !result.Accepted {
+		t.Fatalf("no terms required: %#v %v", result, err)
+	}
+	if len(store.calls) != 1 || store.calls[0].TermsVersion != "" {
+		t.Fatalf("an acceptance was recorded: %#v", store.calls)
+	}
+	required = true
+	input.IdempotencyKey = "registration-terms-required"
+	if _, err := service.Register(t.Context(), input); !errors.Is(err, ErrTermsOutdated) {
+		t.Fatalf("terms required, none accepted: %v", err)
+	}
+}
+
+// the Turnstile flow: required terms not accepted,
+// or not in the version in force, are the terms refusal; checked after the
+// replay read, so a completed registration retried unchanged replays.
+func TestRegisterTermsAcceptance(t *testing.T) {
+	for name, mutate := range map[string]func(*RegisterInput){
+		"not accepted": func(input *RegisterInput) { input.TermsAccepted = false },
+		"no version":   func(input *RegisterInput) { input.TermsVersion = "" },
+		"old version":  func(input *RegisterInput) { input.CurrentTermsVersion = "terms-0123456789ab" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := validRegistrationInput()
+			mutate(&input)
+			store := &registrationStoreStub{byKey: make(map[string]RegistrationRecord)}
+			service := newRegistrationTestService(t, store, &registrationLimiterStub{allowed: true}, &registrationProofStub{}, 0x61)
+			if _, err := service.Register(t.Context(), input); !errors.Is(err, ErrTermsOutdated) || len(store.calls) != 0 {
+				t.Fatalf("err=%v store=%d", err, len(store.calls))
+			}
+		})
+	}
+	store := &builtInStoreStub{registrationStoreStub: registrationStoreStub{byKey: make(map[string]RegistrationRecord)}}
+	proofs := &registrationProofStub{}
+	service := newRegistrationTestService(t, store, &registrationLimiterStub{allowed: true}, proofs, 0x61)
+	input := validRegistrationInput()
+	input.CurrentTermsVersion = input.TermsVersion
+	if _, err := service.Register(t.Context(), input); err != nil {
+		t.Fatal(err)
+	}
+	store.completed = map[string][32]byte{input.IdempotencyKey: store.calls[0].RequestDigest}
+	input.CurrentTermsVersion = "terms-0123456789ab"
+	if result, err := service.Register(t.Context(), input); err != nil || !result.Replayed || len(store.calls) != 1 {
+		t.Fatalf("replay after the terms changed: %#v %v store=%d", result, err, len(store.calls))
+	}
+	fresh := input
+	fresh.IdempotencyKey = "registration-fresh"
+	spent := len(proofs.calls)
+	if _, err := service.Register(t.Context(), fresh); !errors.Is(err, ErrTermsOutdated) || len(proofs.calls) != spent {
+		t.Fatalf("first submission of old terms: %v proofs=%d", err, len(proofs.calls)-spent)
+	}
+	other := input
+	other.DisplayName = "Mallory"
+	if _, err := service.Register(t.Context(), other); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatalf("same key, other request: %v", err)
 	}
 }

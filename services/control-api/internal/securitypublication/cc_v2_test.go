@@ -265,7 +265,7 @@ func TestWriteEdgeCatalogParityFixtures(t *testing.T) {
 	edgeSite.ID = site.String()
 	result, err := CompileSiteSecurityBindings(edgeSite, scope, site, []ActiveBinding{{
 		BindingID: uuid.MustParse("018f1000-0000-7000-8000-000000000030"), BindingRevision: 1,
-		PublicationID: uuid.MustParse("018f1000-0000-7000-8000-000000000031"),
+		PublicationID:         uuid.MustParse("018f1000-0000-7000-8000-000000000031"),
 		RuntimeSnapshotSHA256: compiled.SHA256, Snapshot: compiled.Snapshot}})
 	if err != nil {
 		t.Fatal(err)

@@ -136,7 +136,7 @@ func candidateSyncReceiveClock(t *testing.T, pending bool) {
 				requestDigest := sha256.Sum256(framed("cdnca-plugin-installation-candidate-sync-idempotency/v1",
 					append(canonical, proof...)))
 				issued := started.Add(tc.issued)
-				batch := candidateSyncBatchWire{Schema: candidateSyncBatchSchema, RequestID: wire.RequestID,
+				batch := candidateSyncBatchWire{Schema: candidateSyncBatchSchemaFor(wire.Schema), RequestID: wire.RequestID,
 					RequestDigest: hex.EncodeToString(requestDigest[:]), CustomerID: uuid.New(), InstallationID: installationID,
 					Candidates: []candidateSyncCandidateWire{{AuthorizationID: uuid.New(), VerificationID: uuid.New(),
 						PluginID: "acme.example", PluginVersion: "1.2.0", ResourceScope: "tenant", EntrypointType: "external_https",

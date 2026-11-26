@@ -217,8 +217,44 @@ export * from './PriceBadge'
 export * from './PromoPlanFields'
 export * from './liveFilter'
 export * from './IdOrNameInput'
+export * from './SearchInput'
+export * from './pagination'
 export { useApp } from './app'
 export * from './dark'
+
+// antd's default Collapse arrow is an icon named "expanded" / "collapsed" in English, which screen readers read
+// into every panel header. The same
+// arrow, hidden from assistive technology: the header's aria-expanded already says the state.
+function collapseExpandIcon({ isActive }: { isActive?: boolean }) {
+  return (
+    <span className="anticon ant-collapse-arrow" aria-hidden="true">
+      <svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" focusable="false"
+        style={isActive ? { transform: 'rotate(90deg)' } : undefined}>
+        <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 00302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 000-50.4z" />
+      </svg>
+    </span>
+  )
+}
+
+// rc-collapse's header (role=button, or role=tab in an accordion) toggles on Enter only; a button also
+// toggles on Space.
+// Space runs the header's own click once per press, without scrolling the page; Enter, aria-expanded and focus stay
+// rc-collapse's. One document listener however many providers are mounted (a nested one would toggle twice).
+const collapseToggle = '.ant-collapse-header[aria-expanded], .ant-collapse-header-text[aria-expanded], .ant-collapse-expand-icon[aria-expanded]'
+let collapseSpaceUsers = 0
+function collapseSpace(event: KeyboardEvent) {
+  if (event.key !== ' ' || event.defaultPrevented || !(event.target instanceof HTMLElement) || !event.target.matches(collapseToggle)) return
+  event.preventDefault()
+  if (!event.repeat && event.target.getAttribute('aria-disabled') !== 'true') event.target.click()
+}
+function useCollapseSpace() {
+  useEffect(() => {
+    if (collapseSpaceUsers++ === 0) document.addEventListener('keydown', collapseSpace)
+    return () => {
+      if (--collapseSpaceUsers === 0) document.removeEventListener('keydown', collapseSpace)
+    }
+  }, [])
+}
 
 export type CdncaProviderProps = Omit<ConfigProviderProps, 'theme'> & {
   children: ReactNode
@@ -239,6 +275,7 @@ export type CdncaProviderProps = Omit<ConfigProviderProps, 'theme'> & {
  */
 export function CdncaProvider({ children, tokens: overrides, look = 'classic', darkSeeds, ...config }: CdncaProviderProps) {
   const reducedMotion = useReducedMotion()
+  useCollapseSpace()
   // <html data-theme="dark"> switches antd to its dark algorithm with the shared dark palette.
   const colorMode = useColorMode()
   const theme = useMemo(() => {
@@ -255,7 +292,7 @@ export function CdncaProvider({ children, tokens: overrides, look = 'classic', d
       : config.modal
   ), [closeLabel, config.modal])
   return (
-    <ConfigProvider button={{ autoInsertSpace: false }} {...config} modal={modal} theme={theme}>
+    <ConfigProvider button={{ autoInsertSpace: false }} collapse={{ expandIcon: collapseExpandIcon }} {...config} modal={modal} theme={theme}>
       <CdncaApp className={look === 'console' ? 'cdnca-app cdnca-console' : 'cdnca-app'} message={feedbackConfig.message} notification={feedbackConfig.notification}>
         <FeedbackProvider>{children}</FeedbackProvider>
       </CdncaApp>

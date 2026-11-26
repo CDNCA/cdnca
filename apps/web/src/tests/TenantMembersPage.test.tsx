@@ -154,6 +154,31 @@ it('invites by email and withdraws a pending invitation', async () => {
   expect(await screen.findByText('已撤回')).toBeInTheDocument()
 })
 
+// 新建子账号与邮件邀请空提交都聚焦首个出错字段，两张表单字段 id 不重复。
+it('focuses the first invalid field of the create and invite forms without sending', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json(none))
+  renderPage()
+  expect(await screen.findByRole('button', { name: '新建子账号' })).toBeEnabled()
+  const reads = fetchSpy.mock.calls.length
+  fireEvent.click(screen.getByRole('button', { name: '新建子账号' }))
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(within(dialog).getByRole('button', { name: '创建' }))
+  await waitFor(() => expect(within(dialog).getByLabelText('用户名')).toHaveFocus())
+  fireEvent.change(within(dialog).getByLabelText('用户名'), { target: { value: 'alice' } })
+  fireEvent.change(within(dialog).getByLabelText('名称'), { target: { value: 'Alice' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: '创建' }))
+  await waitFor(() => expect(within(dialog).getByLabelText('初始密码（至少 12 位）')).toHaveFocus())
+  fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+
+  fireEvent.click(screen.getByRole('button', { name: '邮件邀请' }))
+  const invite = await screen.findByRole('dialog', { name: /邀请/ })
+  fireEvent.click(within(invite).getByRole('button', { name: '发送邀请' }))
+  const email = within(invite).getByLabelText('被邀请人邮箱')
+  await waitFor(() => expect(email).toHaveFocus())
+  expect(email.id).toBe('member-invite_email')
+  expect(fetchSpy.mock.calls.length).toBe(reads)
+})
+
 it('accepts an invitation anonymously with the token from the link fragment', async () => {
   const token = 'A'.repeat(43)
   const fetchSpy = vi.spyOn(globalThis, 'fetch')

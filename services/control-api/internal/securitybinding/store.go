@@ -223,9 +223,10 @@ func checkClaim(binding bindingState, policyID uuid.UUID, kind string, request P
 	if binding.policyID != policyID {
 		return nil
 	}
+	reclaim := request.Reclaim && request.PolicyVersion == binding.lastClaimedVersion
 	if request.PolicyVersion <= binding.activeVersion ||
 		(binding.lastClaimedVersion > 0 && binding.lastPolicyID == policyID && !binding.lastDetach &&
-			request.PolicyVersion <= binding.lastClaimedVersion) {
+			request.PolicyVersion <= binding.lastClaimedVersion && !reclaim) {
 		return ErrPolicyVersionConflict
 	}
 	return nil

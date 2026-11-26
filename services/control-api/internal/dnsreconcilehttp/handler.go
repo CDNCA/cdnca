@@ -176,14 +176,25 @@ func (handler *Handler) handleTenant(writer http.ResponseWriter, request *http.R
 			handler.writeError(writer, request, err, false)
 			return
 		}
-		check, err := handler.decodeCheck(writer, request, principal.TenantID, route.siteID)
+		check, resolve, err := handler.decodeCheck(writer, request, principal.TenantID, route.siteID,
+			!isNil(handler.dependencies.Zones))
+		requestID := request.Context().Value(requestIDContextKey{}).(string)
+		if err == nil && resolve {
+			// No zone named: the site's own DNS account and the hosted
+			// domain covering the name, with its current records.
+			check.Provider, err = handler.dependencies.Zones.ResolveSiteZone(request.Context(), principal.TenantID,
+				route.siteID, principal.SubjectID, requestID, check.Name)
+			if err == nil && (check.Provider.TenantID != principal.TenantID || check.Provider.SiteID != route.siteID) {
+				err = ErrUnavailable
+			}
+		}
 		if err != nil {
 			handler.writeError(writer, request, err, false)
 			return
 		}
 		result, err := handler.dependencies.Domain.DryRun(request.Context(), dnsreconcile.DryRunRequest{
 			TenantID: principal.TenantID, SiteID: route.siteID, ActorUserID: principal.SubjectID,
-			RequestID: request.Context().Value(requestIDContextKey{}).(string), Check: check,
+			RequestID: requestID, Check: check,
 		})
 		if err == nil && !reconcileResultMatchesScope(result, principal.TenantID, route.siteID) {
 			err = ErrUnavailable
@@ -192,17 +203,31 @@ func (handler *Handler) handleTenant(writer http.ResponseWriter, request *http.R
 			handler.writeError(writer, request, err, false)
 			return
 		}
-		handler.writeJSON(writer, http.StatusOK, reconcileResultViewOf(result))
+		handler.writeJSON(writer, http.StatusOK, dryRunView{reconcileResultView: reconcileResultViewOf(result),
+			Provider: checkViewOf(check).Provider})
 	case routeApply:
 		metadata, err := parseMutationMetadata(request)
 		if err != nil {
 			handler.writeError(writer, request, err, true)
 			return
 		}
-		check, err := handler.decodeCheck(writer, request, principal.TenantID, route.siteID)
+		check, _, err := handler.decodeCheck(writer, request, principal.TenantID, route.siteID, false)
 		if err != nil {
 			handler.writeError(writer, request, err, true)
 			return
+		}
+		// A plan built on an older zone revision is refused before anything is
+		// stored (nothing was written: not an unknown outcome).
+		if !isNil(handler.dependencies.Zones) {
+			current, revisionErr := handler.dependencies.Zones.ZoneRevision(request.Context(), principal.TenantID,
+				route.siteID, check.Provider.ZoneID)
+			if revisionErr == nil && current != check.Provider.Revision {
+				revisionErr = dnsreconcile.ErrRevisionConflict
+			}
+			if revisionErr != nil {
+				handler.writeError(writer, request, revisionErr, false)
+				return
+			}
 		}
 		task, err := handler.dependencies.Domain.Apply(request.Context(), dnsreconcile.ApplyRequest{
 			TenantID: principal.TenantID, SiteID: route.siteID, ActorUserID: principal.SubjectID,
@@ -448,34 +473,41 @@ func resolveRoute(path string) (route, bool) {
 	return route{}, false
 }
 
-func (handler *Handler) decodeCheck(writer http.ResponseWriter, request *http.Request, tenantID, siteID uuid.UUID) (dnscheck.CheckRequest, error) {
+// decodeCheck: with resolvable, a body without provider (or an empty one)
+// asks the server to resolve the zone (resolve=true, Provider left zero).
+func (handler *Handler) decodeCheck(writer http.ResponseWriter, request *http.Request, tenantID, siteID uuid.UUID,
+	resolvable bool) (dnscheck.CheckRequest, bool, error) {
 	var body checkBody
 	if err := handler.decodeJSON(writer, request, &body); err != nil {
-		return dnscheck.CheckRequest{}, err
+		return dnscheck.CheckRequest{}, false, err
 	}
+	resolve := resolvable && body.Provider.ZoneID == "" && body.Provider.Revision == 0 && len(body.Provider.Records) == 0
 	zoneID, err := strictUUID(body.Provider.ZoneID)
+	if resolve {
+		err = nil
+	}
 	if err != nil || body.PropagationWindowSeconds <= 0 || body.PropagationWindowSeconds > int64((7*24*time.Hour)/time.Second) {
-		return dnscheck.CheckRequest{}, ErrInvalidRequest
+		return dnscheck.CheckRequest{}, false, ErrInvalidRequest
 	}
 	if !validLineWeight(body.Line, body.Weight) {
-		return dnscheck.CheckRequest{}, ErrInvalidRequest
+		return dnscheck.CheckRequest{}, false, ErrInvalidRequest
 	}
 	expected := make([]dnscheck.ExpectedRecord, len(body.Expected))
 	for index, item := range body.Expected {
 		recordType, typeErr := parseRecordType(item.Type)
 		if typeErr != nil {
-			return dnscheck.CheckRequest{}, typeErr
+			return dnscheck.CheckRequest{}, false, typeErr
 		}
 		expected[index] = dnscheck.ExpectedRecord{Type: recordType, Values: append([]string(nil), item.Values...)}
 	}
 	records := make([]dnscheck.ProviderRecord, len(body.Provider.Records))
 	for index, item := range body.Provider.Records {
 		if !validProviderID(item.RecordID) || !validLineWeight(item.Line, item.Weight) {
-			return dnscheck.CheckRequest{}, ErrInvalidRequest
+			return dnscheck.CheckRequest{}, false, ErrInvalidRequest
 		}
 		recordType, typeErr := parseRecordType(item.Type)
 		if typeErr != nil {
-			return dnscheck.CheckRequest{}, typeErr
+			return dnscheck.CheckRequest{}, false, typeErr
 		}
 		records[index] = dnscheck.ProviderRecord{RecordID: item.RecordID, Name: item.Name,
 			Type: recordType, Value: item.Value, TTL: item.TTL, Line: item.Line, Weight: item.Weight}
@@ -488,7 +520,7 @@ func (handler *Handler) decodeCheck(writer http.ResponseWriter, request *http.Re
 		PropagationWindow:    time.Duration(body.PropagationWindowSeconds) * time.Second,
 		Provider: dnscheck.ProviderSnapshot{TenantID: tenantID, SiteID: siteID, ZoneID: zoneID,
 			Revision: body.Provider.Revision, Records: records},
-	}, nil
+	}, resolve, nil
 }
 
 func validLineWeight(line string, weight uint32) bool {

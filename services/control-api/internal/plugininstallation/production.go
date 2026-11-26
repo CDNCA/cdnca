@@ -3,8 +3,9 @@ package plugininstallation
 import (
 	"context"
 	"errors"
-	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/mod/semver"
@@ -53,16 +54,49 @@ type InstallationRepository interface {
 	HasReceipt(ctx context.Context, actor Actor, authorizationID uuid.UUID, idempotencyKey string) (bool, error)
 }
 
+// ReceiptReader is implemented by repositories that return a persisted receipt (with its installation snapshot) by
+// idempotency key; it requires the manage permission like Apply.
+type ReceiptReader interface {
+	Receipt(ctx context.Context, actor Actor, authorizationID uuid.UUID, idempotencyKey string) (Receipt, bool, error)
+}
+
+// LicenseReportLedger is implemented by repositories that remember which lifecycle receipts the license service
+// signed for (control migration 684). A receipt is committed locally first; until its report is acknowledged it is
+// replayed as is, in to_revision order per authorization (the license service applies a report only on top of the
+// control revision it already knows, and answers an exact replay from its stored receipt).
+type LicenseReportLedger interface {
+	// UnreportedReceipts returns receipts not acknowledged yet, ordered by authorization then to_revision.
+	// installationID and authorizationID narrow the result when not uuid.Nil.
+	UnreportedReceipts(ctx context.Context, installationID, authorizationID uuid.UUID, limit int) ([]Receipt, error)
+	// PendingAuthorizations names which of authorizationIDs still have an unacknowledged receipt.
+	PendingAuthorizations(ctx context.Context, installationID uuid.UUID, authorizationIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	// DueReports returns the oldest unacknowledged receipt of each authorization whose retry is due: never attempted
+	// first, then the least recently attempted.
+	DueReports(ctx context.Context, installationID uuid.UUID, limit int) ([]Receipt, error)
+	// MarkReported records the license acknowledgement of a receipt; recording it twice is a no-op.
+	MarkReported(ctx context.Context, receiptID uuid.UUID, lifecycleRevision uint64) error
+	// RecordReportFailure counts a failed report of the receipt and holds it back from DueReports for
+	// min(base<<failures, maxWait) (failures capped at 5). It returns the failure count and the wait.
+	RecordReportFailure(ctx context.Context, receiptID uuid.UUID, base, maxWait time.Duration) (int, time.Duration, error)
+}
+
 type ProductionDomain struct {
 	repository InstallationRepository
 	activation ActivationResolver
+	// installationID is the control installation the license service knows (the activation client's); receipts of
+	// heads kept from another installation are never replayed. uuid.Nil: no filter.
+	installationID uuid.UUID
 }
 
 func NewProductionDomain(repository InstallationRepository, activation ActivationResolver) (*ProductionDomain, error) {
 	if repository == nil || activation == nil {
 		return nil, ErrInvalidInput
 	}
-	return &ProductionDomain{repository: repository, activation: activation}, nil
+	domain := &ProductionDomain{repository: repository, activation: activation}
+	if identified, ok := activation.(interface{ InstallationID() uuid.UUID }); ok {
+		domain.installationID = identified.InstallationID()
+	}
+	return domain, nil
 }
 
 func (domain *ProductionDomain) List(ctx context.Context, actor Actor, request ListRequest) (Page, error) {
@@ -108,6 +142,7 @@ func (domain *ProductionDomain) tenantList(ctx context.Context, actor Actor, req
 	if err != nil || len(page.Items) == 0 {
 		return page, err
 	}
+	domain.annotateLicenseSync(ctx, page.Items)
 	remote, err := domain.remoteAuthorizations(ctx, actor)
 	if err != nil {
 		// The local store stays authoritative while the license service is unreachable.
@@ -200,6 +235,7 @@ func (domain *ProductionDomain) list(ctx context.Context, actor Actor, request L
 	if len(page.Items) == 0 && request.Cursor == "" {
 		return domain.discover(ctx, actor, request)
 	}
+	domain.annotateLicenseSync(ctx, page.Items)
 	remote, err := domain.remoteAuthorizations(ctx, actor)
 	if err != nil {
 		// The local store stays authoritative while the license service is unreachable.
@@ -241,6 +277,9 @@ func (domain *ProductionDomain) Get(ctx context.Context, actor Actor,
 	}
 	result, err := domain.repository.Get(ctx, actor, authorizationID)
 	if err == nil {
+		// Opening the details (and its 重试) delivers what is still pending first, so the license state read next
+		// already reflects it.
+		result.LicenseSync = domain.syncLicense(ctx, actor.RequestID, "get", authorizationID)
 		if remote, remoteErr := domain.remoteAuthorizations(ctx, actor); remoteErr == nil {
 			annotateInstallation(&result, remote)
 		}
@@ -316,6 +355,12 @@ func annotateInstallation(view *InstallationView, remote map[uuid.UUID]Installat
 	}
 	view.AuthorizationStatus = candidate.AuthorizationStatus
 	view.PausedBy, view.PausedReason = candidate.PausedBy, candidate.PausedReason
+	if view.Installation.Status == StatusDisabled && candidate.AuthorizationStatus == StatusEnabled &&
+		ownPauseResumable(view.Installation, candidate, true) == nil {
+		// the platform holds no pause (an operator lifted its own, or this pause is
+		// still being reported); only this controller's pause stops the plugin, so it reads and resumes as one.
+		view.AuthorizationStatus, view.PausedBy, view.PausedReason = StatusDisabled, PausedByInstallation, ""
+	}
 	remoteVersion, localVersion := "v"+candidate.Installation.Version, "v"+view.Installation.Version
 	if candidate.AuthorizationStatus != "authorized" &&
 		candidate.Installation.VerificationID != view.Installation.VerificationID &&
@@ -326,6 +371,18 @@ func annotateInstallation(view *InstallationView, remote map[uuid.UUID]Installat
 			ApprovedScopes:  append([]string{}, candidate.Installation.ApprovedScopes...),
 			SensitiveScopes: append([]string{}, candidate.Installation.SensitiveScopes...),
 			NewScopes:       append([]string{}, candidate.NewScopes...)}
+		return
+	}
+	// License 176: the authorization still holds the running version and the license proposes a newer market
+	// version; upgrading resolves an upgrade activation for it and the upgrade_applied report moves the authorization.
+	if upgrade := candidate.AvailableUpgrade; upgrade != nil && candidate.AuthorizationStatus != "authorized" &&
+		upgrade.VerificationID != view.Installation.VerificationID && semver.IsValid("v"+upgrade.Version) &&
+		semver.Compare("v"+upgrade.Version, localVersion) > 0 {
+		view.AvailableUpgrade = &AvailableUpgrade{VerificationID: upgrade.VerificationID, Version: upgrade.Version,
+			ManifestScopes:  append([]string{}, upgrade.ManifestScopes...),
+			ApprovedScopes:  append([]string{}, upgrade.ApprovedScopes...),
+			SensitiveScopes: append([]string{}, upgrade.SensitiveScopes...),
+			NewScopes:       append([]string{}, upgrade.NewScopes...)}
 	}
 }
 
@@ -373,6 +430,15 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 		knownRevision := request.ExpectedRevision
 		if request.Action == ActionUpgrade {
 			knownRevision = 0
+		}
+		if request.Action == ActionConfirm {
+			replayed, err := domain.localConfirmReplay(ctx, actor, request, &command)
+			if err != nil {
+				return InstallationView{}, err
+			}
+			if replayed {
+				break
+			}
 		}
 		if request.Action == ActionConfirm && domain.pendingElsewhere(ctx, actor, request.AuthorizationID) {
 			return InstallationView{}, ErrFactDenied
@@ -453,11 +519,10 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 	if err != nil {
 		return InstallationView{}, StageError(request.Action+".apply", err)
 	}
-	if _, err := domain.activation.ReportLifecycle(ctx, LifecycleReportRequest{Receipt: result.Receipt}); err != nil {
-		return InstallationView{}, StageError(request.Action+".report",
-			fmt.Errorf("%w: report license lifecycle: %v", ErrResultUnknown, err))
-	}
 	view := installationViewFor(actor, result.Installation)
+	// The local write is committed: the request succeeded whatever the license report does. A report that did
+	// not go through stays pending (license_sync) and is replayed later; the administrator never repeats the action.
+	view.LicenseSync = domain.reportReceipt(ctx, request, result.Receipt)
 	if command.Targets != nil {
 		view.Targets = &TargetsView{AllTenants: command.Targets.AllTenants, Revision: 1, Tenants: []TargetTenant{}}
 		for _, id := range command.Targets.TenantScopeIDs {
@@ -494,10 +559,8 @@ func StageOf(err error) string {
 	return ""
 }
 
-// requireOwnPause checks the signed license snapshot before a resume: the authorization is still the one this
-// controller installed (verification, version, digests and scopes unchanged, no new permission to approve) and it
-// is disabled by this controller's own pause. A platform pause (operator, market delisting or advisory) is
-// ErrPlatformPaused; an unreachable license service keeps the plugin paused (ErrFactUnavailable).
+// requireOwnPause checks the signed license snapshot before a resume (ownPauseResumable). An unreachable license
+// service keeps the plugin paused (ErrFactUnavailable).
 func (domain *ProductionDomain) requireOwnPause(ctx context.Context, actor Actor, local Installation) error {
 	if local.Status != StatusDisabled {
 		return ErrTransitionInvalid
@@ -507,13 +570,27 @@ func (domain *ProductionDomain) requireOwnPause(ctx context.Context, actor Actor
 		return err
 	}
 	candidate, found := remote[local.AuthorizationID]
-	if !found || candidate.AuthorizationStatus != StatusDisabled {
+	return ownPauseResumable(local, candidate, found)
+}
+
+// ownPauseResumable is the one resume eligibility of a paused local head, for the resume API and for the paused_by
+// the list and details show (and so the resume button): the authorization is still the one this controller
+// installed (verification, version, digests and scopes unchanged, no new permission to approve) and no platform
+// pause is in force. That is the license disabling it by this controller's own pause, or, since
+// the license holding it enabled (an operator lifted its pause while this
+// controller's own pause stayed; the resume report is then signed for as already_enabled). A platform pause
+// (operator, market delisting or advisory) is ErrPlatformPaused and wins.
+func ownPauseResumable(local Installation, candidate InstallationView, found bool) error {
+	if local.Status != StatusDisabled {
+		return ErrTransitionInvalid
+	}
+	if !found || candidate.AuthorizationStatus != StatusDisabled && candidate.AuthorizationStatus != StatusEnabled {
 		return ErrFactDenied
 	}
 	if !sameCurrentCandidate(local, candidateFromInstallation(candidate.Installation)) || len(candidate.NewScopes) > 0 {
 		return ErrFactDenied
 	}
-	if candidate.PausedBy != PausedByInstallation {
+	if candidate.AuthorizationStatus == StatusDisabled && candidate.PausedBy != PausedByInstallation {
 		return ErrPlatformPaused
 	}
 	return nil
@@ -549,6 +626,31 @@ func (domain *ProductionDomain) requireResumeReplayable(ctx context.Context, act
 	}
 }
 
+// localConfirmReplay prepares the replay of a confirmation this controller already committed under the idempotency
+// key, before any license call: the signed activation fact of the first attempt expires after a minute, the local
+// receipt does not. The candidate comes from the receipt's snapshot; the request's own verification and scope set
+// must match it, and Apply's request digest then checks the rest (request ID, revision, consents, targets). A key
+// without a local receipt (or a repository that cannot read one) goes through the license service as before.
+func (domain *ProductionDomain) localConfirmReplay(ctx context.Context, actor Actor, request MutationRequest,
+	command *Command) (bool, error) {
+	reader, ok := domain.repository.(ReceiptReader)
+	if !ok {
+		return false, nil
+	}
+	receipt, found, err := reader.Receipt(ctx, actor, request.AuthorizationID, request.IdempotencyKey)
+	if err != nil || !found {
+		return false, err
+	}
+	if receipt.Action != ActionConfirm || receipt.Snapshot.VerificationID != request.VerificationID ||
+		!slices.Equal(receipt.Snapshot.ApprovedScopes, request.ApprovedScopes) {
+		return false, ErrIdempotencyConflict
+	}
+	command.InstallationID = receipt.Snapshot.InstallationID
+	command.Candidate = candidateFromInstallation(receipt.Snapshot)
+	command.Applied = true
+	return true, nil
+}
+
 // confirmPending confirms the authorization with the license service when it is one of this installation's
 // pending market authorizations, and returns its new license revision (0 when it was not pending).
 func (domain *ProductionDomain) confirmPending(ctx context.Context, actor Actor, request MutationRequest) (uint64, error) {
@@ -564,14 +666,19 @@ func (domain *ProductionDomain) confirmPending(ctx context.Context, actor Actor,
 		}
 	}
 	if target != nil {
+		// The license service now waits for another version of this authorization than the one confirmed.
 		if target.Installation.VerificationID != request.VerificationID {
-			return 0, ErrFactDenied
+			return 0, ErrApprovalStale
 		}
 		if target.Installation.Revision != request.ExpectedRevision {
 			return 0, ErrRevisionConflict
 		}
 		// Before the license service records the confirmation: a tenant plugin needs its tenants named.
 		if err := requireTargets(actor, target.Installation.ResourceScope, request.Targets); err != nil {
+			return 0, err
+		}
+		// The approved scope set is confirmed whole (not a subset), with the confirmations it presents.
+		if err := requirePendingApproval(*target, request); err != nil {
 			return 0, err
 		}
 	}

@@ -35,7 +35,7 @@ type AliyunProviderVerifier struct {
 func NewAliyunProviderVerifier() *AliyunProviderVerifier {
 	return newAliyunProviderVerifier(
 		aliyunDNSAPIEndpoint,
-		http.DefaultClient,
+		providerAPIClient(),
 		aliyunVerifyTimeout,
 		time.Now,
 		uuid.NewString,

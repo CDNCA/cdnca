@@ -105,6 +105,10 @@ export const dnsPlatformApi = {
       method: 'PUT', headers: writeHeaders(idempotencyKey, version), body: JSON.stringify(input),
     })
   },
+  // 断开 DNS 服务商: removes the saved credentials; returns the configuration read back.
+  disconnect(accessToken: string, version: number, idempotencyKey: string): Promise<PlatformDNSConfig> {
+    return request(accessToken, '/v1/dns/platform-config', { method: 'DELETE', headers: writeHeaders(idempotencyKey, version) })
+  },
   // 连接测试: read-only; without credentials the saved ones are tested.
   testConnection(accessToken: string, input: { provider_type: string; credentials?: Record<string, string> }): Promise<PlatformDNSConnection> {
     return request(accessToken, '/v1/dns/platform-config/connection-test', { method: 'POST', body: JSON.stringify(input) })

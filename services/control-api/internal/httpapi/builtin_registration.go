@@ -10,6 +10,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
+	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/google/uuid"
 )
 
@@ -20,22 +21,25 @@ import (
 
 // BuiltInRegistration is accountregistration.BuiltInService.
 type BuiltInRegistration interface {
-	Available(context.Context) (bool, error)
 	Register(context.Context, accountregistration.BuiltInInput) (accountregistration.RegisterResult, error)
 }
 
 var builtInRegistrationMetadataPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 type builtInRegistrationBody struct {
-	Username            string               `json:"username"`
-	Password            string               `json:"password"`
-	DisplayName         string               `json:"display_name"`
-	Email               string               `json:"email"`
-	Phone               string               `json:"phone"`
-	TermsAccepted       bool                 `json:"terms_accepted"`
-	TermsVersion        string               `json:"terms_version"`
-	VerificationChannel string               `json:"verification_channel"`
-	Captcha             *loginCaptchaRequest `json:"captcha"`
+	Username            string `json:"username"`
+	Password            string `json:"password"`
+	DisplayName         string `json:"display_name"`
+	Email               string `json:"email"`
+	Phone               string `json:"phone"`
+	QQ                  string `json:"qq"`
+	TermsAccepted       bool   `json:"terms_accepted"`
+	TermsVersion        string `json:"terms_version"`
+	VerificationChannel string `json:"verification_channel"`
+	// VerificationChallengeIDs names the verified challenge of each channel
+	// its proof cookie is the one spent.
+	VerificationChallengeIDs map[string]uuid.UUID `json:"verification_challenge_ids"`
+	Captcha                  *loginCaptchaRequest `json:"captcha"`
 }
 
 func (s *Server) handleBuiltInRegister(w http.ResponseWriter, r *http.Request) {
@@ -45,14 +49,12 @@ func (s *Server) handleBuiltInRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body builtInRegistrationBody
-	if err := decodeJSON(w, r, &body); err != nil {
+	if err := decodeJSON(w, r, &body); err != nil || !accountregistrationproof.ValidChallengeIDs(body.VerificationChallengeIDs) {
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_invalid_input", "request body is invalid")
 		return
 	}
-	if !body.TermsAccepted {
-		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_terms_required", "terms must be accepted")
-		return
-	}
+	// whether terms must be accepted is the service's to decide
+	// (BuiltInService.RequireTermsWhen): no readable terms, none are asked for.
 	// with a verification required the human check was
 	// spent sending the code, so the CAPTCHA is optional here and the
 	// service decides; the verified proofs come from the proof cookies.
@@ -63,10 +65,10 @@ func (s *Server) handleBuiltInRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if captcha != nil {
-			proof = identity.LoginCaptchaProof{ID: captcha.ID, Answer: captcha.Answer}
+			proof = *captcha
 		}
 	}
-	legacy, references, _ := accountregistrationproof.CookieReferenceResolver{}.ResolveProofReferences(r)
+	legacy, references, _ := accountregistrationproof.CookieReferenceResolver{}.ResolveProofReferences(r, body.VerificationChallengeIDs)
 	info := s.requestInfo(r)
 	requestID := info.RequestID
 	if !builtInRegistrationMetadataPattern.MatchString(requestID) {
@@ -75,7 +77,7 @@ func (s *Server) handleBuiltInRegister(w http.ResponseWriter, r *http.Request) {
 	result, err := s.builtInRegistration.Register(r.Context(), accountregistration.BuiltInInput{
 		RegisterInput: accountregistration.RegisterInput{
 			Username: body.Username, Password: body.Password, DisplayName: body.DisplayName,
-			Email: body.Email, Phone: body.Phone, TermsAccepted: body.TermsAccepted,
+			Email: body.Email, Phone: body.Phone, QQ: body.QQ, TermsAccepted: body.TermsAccepted,
 			TermsVersion: body.TermsVersion, VerificationChannel: body.VerificationChannel,
 			IdempotencyKey: key, RequestID: requestID, Source: info.SourceIP,
 			ProofReference: legacy, ProofReferences: references,
@@ -90,6 +92,7 @@ func (s *Server) handleBuiltInRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeBuiltInRegistrationError(w http.ResponseWriter, r *http.Request, err error) {
+	refusalreason.Record(r.Context(), refusalreason.Of(err))
 	if details, ok := passwordpolicy.DetailsOf(err); ok {
 		writeJSONStatus(w, http.StatusUnprocessableEntity, map[string]any{"error": map[string]any{
 			"code": passwordpolicy.Code, "message": "password does not meet the policy",
@@ -102,6 +105,8 @@ func (s *Server) writeBuiltInRegistrationError(w http.ResponseWriter, r *http.Re
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_captcha_invalid", "captcha is invalid")
 	case errors.Is(err, accountregistration.ErrProofInvalid):
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_verification_required", "a required verification code is missing or expired")
+	case errors.Is(err, accountregistration.ErrTermsOutdated):
+		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_terms_required", "the current terms must be accepted")
 	case errors.Is(err, accountregistration.ErrInvalidInput):
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_invalid_input", "registration details are invalid")
 	case errors.Is(err, accountregistration.ErrRegistrationDisabled):
@@ -126,17 +131,13 @@ func (s *Server) LoginMethodsDisabledHandler() http.Handler {
 // handleLoginMethodsDisabled answers GET /v1/auth/login-methods when the
 // account login runtime is not mounted: same shape as
 // accountloginchallengehttp, code login off, so only password sign-in shows;
-// registration follows 开放注册 when built-in registration is mounted.
+// registration as GET /v1/auth/registration-config reports it.
 func (s *Server) handleLoginMethodsDisabled(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	registration, mode := false, ""
-	if s.accountRegistrationHandler == nil && s.builtInRegistration != nil {
-		available, err := s.builtInRegistration.Available(r.Context())
-		if err != nil {
-			s.writeAPIError(w, r, http.StatusServiceUnavailable, "account_login_unavailable", "login methods are unavailable")
-			return
-		}
-		registration, mode = available, "builtin"
+	registration, mode, err := LoginMethodsRegistration{Source: s.registrationConfig}.Registration(r.Context())
+	if err != nil {
+		s.writeAPIError(w, r, http.StatusServiceUnavailable, "account_login_unavailable", "login methods are unavailable")
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
 		"registration_enabled": registration, "registration_mode": mode,

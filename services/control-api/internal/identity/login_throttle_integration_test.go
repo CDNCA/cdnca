@@ -76,7 +76,7 @@ func (fixture throttleFixture) login(t *testing.T, password, source string, capt
 
 func (fixture throttleFixture) captcha(t *testing.T, source string) identity.LoginCaptcha {
 	t.Helper()
-	captcha, err := fixture.service.IssueLoginCaptcha(t.Context(), source)
+	captcha, err := fixture.service.IssueLoginCaptcha(t.Context(), source, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,13 +97,13 @@ func TestLoginThrottleRequiresCaptchaThenLocksAccountSource(t *testing.T) {
 	}
 	// A wrong answer is refused without checking the password and burns the challenge.
 	wrong := fixture.captcha(t, source)
-	if err := fixture.login(t, fixture.password, source, &identity.LoginCaptchaProof{ID: wrong.ID, Answer: "00000"}); !errors.Is(err, identity.ErrLoginCaptchaInvalid) {
+	if err := fixture.login(t, fixture.password, source, &identity.LoginCaptchaProof{ID: wrong.ID, Answer: "00000", Binding: wrong.Binding}); !errors.Is(err, identity.ErrLoginCaptchaInvalid) {
 		t.Fatalf("wrong captcha: %v", err)
 	}
-	if err := fixture.login(t, fixture.password, source, &identity.LoginCaptchaProof{ID: wrong.ID, Answer: wrong.Answer}); !errors.Is(err, identity.ErrLoginCaptchaInvalid) {
+	if err := fixture.login(t, fixture.password, source, &identity.LoginCaptchaProof{ID: wrong.ID, Answer: wrong.Answer, Binding: wrong.Binding}); !errors.Is(err, identity.ErrLoginCaptchaInvalid) {
 		t.Fatalf("reused captcha: %v", err)
 	}
-	// A challenge issued to another source does not work here.
+	// A challenge sent without the browser binding it was issued with does not work.
 	foreign := fixture.captcha(t, "198.51.100.1")
 	if err := fixture.login(t, fixture.password, source, &identity.LoginCaptchaProof{ID: foreign.ID, Answer: foreign.Answer}); !errors.Is(err, identity.ErrLoginCaptchaInvalid) {
 		t.Fatalf("foreign captcha: %v", err)
@@ -111,13 +111,13 @@ func TestLoginThrottleRequiresCaptchaThenLocksAccountSource(t *testing.T) {
 	// Two more credential failures with solved CAPTCHAs reach the limit (4).
 	for attempt := range 2 {
 		solved := fixture.captcha(t, source)
-		if err := fixture.login(t, "wrong", source, &identity.LoginCaptchaProof{ID: solved.ID, Answer: strings.ToLower(solved.Answer)}); !errors.Is(err, identity.ErrInvalidCredentials) {
+		if err := fixture.login(t, "wrong", source, &identity.LoginCaptchaProof{ID: solved.ID, Answer: strings.ToLower(solved.Answer), Binding: solved.Binding}); !errors.Is(err, identity.ErrInvalidCredentials) {
 			t.Fatalf("captcha attempt %d: %v", attempt, err)
 		}
 	}
 	var throttled *identity.LoginThrottled
 	solved := fixture.captcha(t, source)
-	if err := fixture.login(t, fixture.password, source, &identity.LoginCaptchaProof{ID: solved.ID, Answer: solved.Answer}); !errors.As(err, &throttled) ||
+	if err := fixture.login(t, fixture.password, source, &identity.LoginCaptchaProof{ID: solved.ID, Answer: solved.Answer, Binding: solved.Binding}); !errors.As(err, &throttled) ||
 		throttled.RetryAfter <= 0 || throttled.RetryAfter > time.Hour+time.Second {
 		t.Fatalf("not throttled: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestLoginCaptchaIssueIsRateLimitedPerSource(t *testing.T) {
 	for range 30 {
 		fixture.captcha(t, "203.0.113.40")
 	}
-	if _, err := fixture.service.IssueLoginCaptcha(t.Context(), "203.0.113.40"); !errors.Is(err, identity.ErrLoginCaptchaRateLimited) {
+	if _, err := fixture.service.IssueLoginCaptcha(t.Context(), "203.0.113.40", ""); !errors.Is(err, identity.ErrLoginCaptchaRateLimited) {
 		t.Fatalf("captcha flood: %v", err)
 	}
 }

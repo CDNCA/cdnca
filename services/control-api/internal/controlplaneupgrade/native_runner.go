@@ -183,9 +183,10 @@ func newNativeStandaloneRunner(config NativeStandaloneConfig, trust *entitlement
 		now: now, client: client, webClient: webClient, platform: NativePlatform{OS: "linux", Arch: runtime.GOARCH},
 		database: nativePGTools{directory: config.DatabaseToolsDirectory}, freeSpace: nativeFreeSpace,
 		backupDir: filepath.Join(store.root, nativeBackupDirectory)}
-	if _, _, err := executor.current(); err != nil {
-		return nil, err
-	}
+	// The current release is runtime state, not configuration: a release that
+	// no longer matches its signed manifest keeps the runner up and not ready
+	// (Probe reports NativeReasonCurrentReleaseUnverified), and Facts, Expand
+	// and Rollback re-verify it before any change, so nothing executes on it.
 	lock, err := openNativeLock(filepath.Join(store.root, "runner.lock"), owner, true)
 	if err != nil {
 		return nil, err
@@ -314,7 +315,7 @@ func (runner *NativeStandaloneRunner) Probe(ctx context.Context) (NativeStandalo
 	status.StartID, status.RunnerExeSHA256 = process.startID, process.digest
 	artifact, manifest, err := executor.current()
 	if err != nil {
-		status.Reason = "control_upgrade_execution_unavailable"
+		status.Reason = NativeReasonCurrentReleaseUnverified
 		return status, err
 	}
 	status.CurrentVersion, status.CurrentArtifactSHA256 = manifest.Version, artifact.Digest

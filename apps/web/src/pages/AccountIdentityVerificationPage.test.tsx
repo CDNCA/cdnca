@@ -64,6 +64,21 @@ function renderWithQueryClient(queryClient: QueryClient) {
   )
 }
 
+async function openAdvanced(user: ReturnType<typeof userEvent.setup>) {
+  const header = screen.getByRole('button', { name: /高级$/ })
+  if (header.getAttribute('aria-expanded') !== 'true') await user.click(header)
+}
+
+const configuredMethods = {
+  configured: true, provider_display_name: 'trusted_kyc',
+  kinds: ['personal_initial', 'personal_reverification', 'enterprise'],
+} as const
+
+beforeEach(() => {
+  vi.spyOn(identityVerificationApi, 'getStatus').mockResolvedValue({ status: 'unverified' })
+  vi.spyOn(identityVerificationApi, 'getMethods').mockResolvedValue({ ...configuredMethods, kinds: [...configuredMethods.kinds] })
+})
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => { resolve = done })
@@ -79,9 +94,10 @@ describe('AccountIdentityVerificationPage', () => {
     const page = title.closest('.account-identity-verification-page')
     expect(page).not.toBeNull()
     expect(page).toHaveClass('identity-page')
-    expect(page?.querySelectorAll('h2')).toHaveLength(3)
-    expect(page?.querySelectorAll('.identity-section-title')).toHaveLength(3)
-    expect(page?.querySelector('.identity-introduction')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '开始认证' })).toBeInTheDocument()
+    expect([...page!.querySelectorAll('h2')].map((node) => node.textContent)).toEqual(['认证状态', '发起认证'])
+    expect(page?.querySelectorAll('.identity-section-title')).toHaveLength(4)
+    expect(page?.querySelector('.identity-introduction')).toBeNull()
     expect(page?.querySelector('.identity-lookup-toolbar')).toBeInTheDocument()
     expect(page?.querySelector('.identity-create-form')).toBeInTheDocument()
     expect(page?.querySelector('.identity-provider-form')).toBeInTheDocument()
@@ -118,7 +134,8 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithQueryClient(queryClient)
 
-    expect(screen.getByText('尚未选择实名认证案件')).toBeInTheDocument()
+    expect(screen.getByLabelText('实名认证案件状态')).toBeEmptyDOMElement()
+    await openAdvanced(user)
     await user.type(screen.getByLabelText('可信证据令牌'), evidenceToken)
     await user.click(screen.getByRole('button', { name: '创建认证草稿' }))
 
@@ -159,6 +176,8 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
 
+    await openAdvanced(user)
+
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
 
@@ -183,6 +202,8 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
 
+    await openAdvanced(user)
+
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
 
@@ -201,6 +222,7 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
 
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
+    await openAdvanced(user)
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
 
@@ -218,6 +240,7 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
 
+    await openAdvanced(user)
     const secretInput = screen.getByLabelText('可信证据令牌')
     await user.type(secretInput, evidenceToken)
     await user.click(screen.getByRole('button', { name: '创建认证草稿' }))
@@ -246,6 +269,8 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
 
+    await openAdvanced(user)
+
     await user.type(screen.getByLabelText('可信证据令牌'), evidenceToken)
     await user.click(screen.getByRole('button', { name: '创建认证草稿' }))
     expect(await screen.findByText('操作过于频繁，请稍后重试。')).toBeInTheDocument()
@@ -264,6 +289,7 @@ describe('AccountIdentityVerificationPage', () => {
       .mockResolvedValueOnce({ ...draft, status: 'submitted', revision: 2 })
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
+    await openAdvanced(user)
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
     expect(await screen.findByText('草稿')).toBeInTheDocument()
@@ -292,6 +318,7 @@ describe('AccountIdentityVerificationPage', () => {
       .mockRejectedValue(new ApiError('raw unavailable', 503, 'identity_verification_unavailable'))
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
+    await openAdvanced(user)
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
     expect(await screen.findByText('草稿')).toBeInTheDocument()
@@ -311,6 +338,7 @@ describe('AccountIdentityVerificationPage', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
     const user = userEvent.setup()
     renderWithQueryClient(queryClient)
+    await openAdvanced(user)
     await user.type(screen.getByLabelText('可信证据令牌'), evidenceToken)
     await user.click(screen.getByRole('button', { name: '创建认证草稿' }))
     await waitFor(() => expect(createSpy).toHaveBeenCalledOnce())
@@ -327,7 +355,7 @@ describe('AccountIdentityVerificationPage', () => {
       )
       await Promise.resolve()
     })
-    expect(await screen.findByText('尚未选择实名认证案件')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('实名认证案件状态')).toBeEmptyDOMElement())
     expect(createSpy.mock.calls[0]![1].evidence_token).toBe('')
 
     pending.resolve({ ...draft, status: 'approved' })
@@ -347,7 +375,8 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
 
-    expect(screen.getByText('尚未选择实名认证案件')).toBeInTheDocument()
+    expect(screen.getByLabelText('实名认证案件状态')).toBeEmptyDOMElement()
+    await openAdvanced(user)
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
     expect(screen.getByLabelText('实名认证案件状态')).toHaveAttribute('aria-busy', 'true')
@@ -377,6 +406,8 @@ describe('AccountIdentityVerificationPage', () => {
     })
     const user = userEvent.setup()
     renderWithQueryClient(queryClient)
+
+    await openAdvanced(user)
 
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
@@ -412,7 +443,7 @@ describe('AccountIdentityVerificationPage', () => {
       )
       await Promise.resolve()
     })
-    expect(await screen.findByText('尚未选择实名认证案件')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('实名认证案件状态')).toBeEmptyDOMElement())
     expect(screen.getByLabelText('案件 ID')).toHaveValue('')
     const remainingKeys = queryClient.getQueryCache().getAll().map((query) => JSON.stringify(query.queryKey))
     expect(remainingKeys.some((key) => key.includes(actorA.scope_id))).toBe(false)
@@ -432,6 +463,8 @@ describe('AccountIdentityVerificationPage', () => {
       .mockResolvedValueOnce({ ...draft, status: 'withdrawn', revision: 3 })
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
+
+    await openAdvanced(user)
 
     await user.type(screen.getByLabelText('案件 ID'), caseID)
     await user.click(screen.getByRole('button', { name: '查询案件' }))
@@ -477,10 +510,9 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
 
-    await user.click(screen.getByLabelText('服务认证类型'))
-    await user.click(screen.getByText('企业认证'))
-    await user.type(screen.getByLabelText('认证服务'), 'trusted_kyc')
-    await user.click(screen.getByRole('button', { name: '启动认证服务' }))
+    await user.click(await screen.findByRole('combobox', { name: '认证类型' }))
+    await user.click(screen.getByText('企业认证', { selector: '.ant-select-item-option-content' }))
+    await user.click(screen.getByRole('button', { name: '开始认证' }))
     expect(await screen.findByText('认证服务结果待确认', { selector: OUTCOME_BAR })).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('raw provider topology')
 
@@ -552,10 +584,8 @@ describe('AccountIdentityVerificationPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
 
-    await user.click(screen.getByLabelText('服务认证类型'))
-    await user.click(screen.getByText('个人重新认证'))
-    await user.type(screen.getByLabelText('认证服务'), 'trusted_kyc')
-    await user.click(screen.getByRole('button', { name: '启动认证服务' }))
+    vi.mocked(identityVerificationApi.getStatus).mockResolvedValue({ status: 'verified', verified_at: '2026-08-01T00:00:00Z' })
+    await user.click(await screen.findByRole('button', { name: '开始认证' }))
     expect(await screen.findByText('等待认证服务处理')).toBeInTheDocument()
 
     await user.click(screen.getByRole('combobox', { name: '私有材料类型' }))
@@ -582,5 +612,82 @@ describe('AccountIdentityVerificationPage', () => {
       expect.objectContaining({ requestId: expect.any(String), idempotencyKey: expect.any(String) }),
     )
     expect(document.body.textContent).not.toMatch(/secret-object-key|private-kms-key|private-person-name|[a-f0-9]{64}/i)
+  })
+
+  // 默认看当前状态与最近一次案件；按可读名称发起认证，服务标识取自 /methods。
+  it('shows the current status with the latest case and starts the configured service without internal ids', async () => {
+    authenticate()
+    vi.mocked(identityVerificationApi.getStatus).mockResolvedValue({ status: 'unverified', latest_case: {
+      id: caseID, kind: 'personal_initial', status: 'draft', revision: 1,
+      created_at: draft.created_at, state_changed_at: draft.state_changed_at,
+    } })
+    const getSpy = vi.spyOn(identityVerificationApi, 'getCase').mockResolvedValue(draft)
+    const startSpy = vi.spyOn(identityVerificationApi, 'startProviderSession').mockResolvedValue({
+      id: providerSessionID, kind: 'personal_initial', provider: 'trusted_kyc', state: 'pending', revision: 1,
+      expires_at: '2026-08-09T08:09:10Z', updated_at: '2026-08-08T08:09:10Z', replayed: false,
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
+
+    expect(await screen.findByText('未认证')).toBeInTheDocument()
+    expect(screen.getByText(/最近一次申请：个人首次认证 · 草稿/)).toBeInTheDocument()
+    await waitFor(() => expect(getSpy).toHaveBeenCalledWith('identity-token', caseID, expect.anything()))
+    expect(await screen.findByText('草稿', { selector: '.ant-tag' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '认证服务' })).toBeNull()
+    expect(screen.getByRole('button', { name: /高级$/ })).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(screen.getByRole('combobox', { name: '认证类型' }))
+    const options = [...document.querySelectorAll('.ant-select-item-option-content')].map((node) => node.textContent)
+    expect(options).toEqual(['个人认证', '企业认证'])
+    await user.click(screen.getByText('个人认证', { selector: '.ant-select-item-option-content' }))
+    await user.click(screen.getByRole('button', { name: '开始认证' }))
+    await waitFor(() => expect(startSpy).toHaveBeenCalledWith('identity-token',
+      { kind: 'personal_initial', provider: 'trusted_kyc' }, expect.anything()))
+  })
+
+  it.each([
+    ['configured false', () => vi.mocked(identityVerificationApi.getMethods).mockResolvedValue({ configured: false, provider_display_name: '', kinds: [] })],
+    ['no provider workflow (404)', () => vi.mocked(identityVerificationApi.getMethods)
+      .mockRejectedValue(new ApiError('not found', 404, 'identity_verification_route_not_found'))],
+  ])('tells the user to contact the platform when the service is not opened (%s)', async (_name, arrange) => {
+    authenticate()
+    arrange()
+    renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
+    expect(await screen.findByText('平台尚未开通实名认证服务，请联系平台管理员')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '开始认证' })).toBeNull()
+  })
+
+  // 
+  it('names each type select once, focuses the first empty field and explains an invalid case id', async () => {
+    authenticate()
+    const createSpy = vi.spyOn(identityVerificationApi, 'createDraft')
+    const user = userEvent.setup()
+    renderWithProviders(<AccountIdentityVerificationPage />, ['/account/verification'])
+    const start = await screen.findByRole('combobox', { name: '认证类型' })
+    await openAdvanced(user)
+    const draftKind = screen.getByRole('combobox', { name: '草稿认证类型' })
+    expect(start.id).not.toBe(draftKind.id)
+    const ids = [...document.querySelectorAll('[id]')].map((node) => node.id).filter(Boolean)
+    expect(ids.length).toBe(new Set(ids).size)
+
+    await user.click(screen.getByRole('button', { name: '创建认证草稿' }))
+    const token = screen.getByLabelText('可信证据令牌')
+    await waitFor(() => expect(token).toHaveFocus())
+    expect(token).toHaveAttribute('aria-invalid', 'true')
+    expect(createSpy).not.toHaveBeenCalled()
+
+    const caseInput = screen.getByRole('textbox', { name: '案件 ID' })
+    await user.click(caseInput)
+    await user.tab()
+    expect(caseInput).not.toHaveAttribute('aria-invalid')
+    await user.type(caseInput, 'not-a-uuid')
+    await user.tab()
+    expect(caseInput).toHaveAttribute('aria-invalid', 'true')
+    expect(caseInput).toHaveAccessibleDescription('请输入有效的案件编号')
+    await user.clear(caseInput)
+    await user.type(caseInput, caseID)
+    await user.tab()
+    expect(caseInput).not.toHaveAttribute('aria-invalid')
+    expect(screen.queryByText('请输入有效的案件编号')).toBeNull()
   })
 })

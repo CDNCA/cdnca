@@ -104,6 +104,7 @@ func (store *Store) ListFacts(ctx context.Context, query StoreQuery) ([]Fact, er
 			  AND ($17::uuid IS NULL OR actor_user_id=$17)
 			  AND ($18='' OR actor_user_display_id=$18)
 			  AND ($22='' OR category=$22)
+			  AND (NOT $23::boolean OR action<>'auth.refresh' OR result_code<>'success')
 			)
 			SELECT event_id,scope_id,kind,actor_user_id,actor_user_display_id,subject_user_id,action,reason_code,result_code,
 				resource_type,resource_id,user_agent,change_summary,request_id,source_ip,geo_code,geo_region,geo_city,geo_resolution,occurred_at,category,total_count
@@ -112,7 +113,7 @@ func (store *Store) ListFacts(ctx context.Context, query StoreQuery) ([]Fact, er
 			ORDER BY occurred_at DESC,event_id DESC LIMIT $21`, query.ScopeID, query.From, query.To, query.SnapshotAt,
 		kinds, results, query.Action, query.SourceIP, query.ActionVerb, query.ResourceType, query.ResourceID,
 		query.Change, query.ActorUserID, query.AuditBound, query.AuditAfterPosition, query.AuditThroughPosition,
-		query.ExactActorUserID, query.ActorUserDisplayID, beforeTime, query.BeforeID, query.Limit, query.Category)
+		query.ExactActorUserID, query.ActorUserDisplayID, beforeTime, query.BeforeID, query.Limit, query.Category, query.HideSessionRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("query observability facts: %w", err)
 	}

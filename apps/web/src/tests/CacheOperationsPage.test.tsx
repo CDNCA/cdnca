@@ -17,6 +17,12 @@ import i18n, { changeLocale } from '../i18n'
 import CacheOperationsPage from '../pages/CacheOperationsPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import { useLocation } from 'react-router-dom'
+import { clearFilterUrlMemory } from '../pages/filterUrl'
+
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().search}</output>
+}
 
 // 结果未知改为 OutcomeUnknown 后，弹窗标题与原位恢复条（或表单内 Alert）同文案；断言原位提示
 const OUTCOME_BAR = '.ant-alert-message'
@@ -292,17 +298,17 @@ describe('CacheOperationsPage', () => {
     await screen.findByText('暂无缓存任务')
     expect(screen.getByRole('heading', { name: '操作类型' })).toBeInTheDocument()
     expect(screen.getByText(/刷新 URL、刷新目录（含整站）、预热次数按账号每天分别计算/)).toBeInTheDocument()
-    expect(screen.getByText('当前：刷新 URL')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '刷新 URL', pressed: true })).toBeInTheDocument()
     const modes = screen.getByRole('group', { name: '操作类型' })
     expect(within(modes).getAllByRole('button').map((button) => button.textContent)).toEqual(['刷新 URL', '刷新目录', '预热', '刷新整站'])
     expect(within(modes).getByRole('button', { name: '刷新 URL' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('heading', { name: 'URL 列表' })).toBeInTheDocument()
-    expect(screen.getByText('每行一个完整 URL，适合清理已缓存资源。')).toBeInTheDocument()
-    expect(screen.getByText('支持批量粘贴，空行会自动忽略')).toBeInTheDocument()
+    expect(screen.queryByText('每行一个完整 URL，适合清理已缓存资源。')).toBeNull()
+    expect(screen.getByText('空行自动忽略')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '今日额度' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '提交状态' })).toBeInTheDocument()
     expect(screen.getByText('待输入')).toBeInTheDocument()
-    expect(screen.getByText('提交成功后可在操作记录里查看进度。')).toBeInTheDocument()
+    expect(screen.queryByText('提交成功后可在操作记录里查看进度。')).toBeNull()
     expect(screen.queryByRole('button', { name: '创建任务' })).toBeNull()
     expect(screen.queryByRole('combobox', { name: '网站' })).toBeNull()
     expect(screen.queryByRole('combobox', { name: '节点（可选）' })).toBeNull()
@@ -328,7 +334,7 @@ describe('CacheOperationsPage', () => {
     expect(bar).toHaveTextContent('第 1 行 www.example.com/a.js：URL 需要以 http:// 或 https:// 开头')
     expect(bar).toHaveTextContent('第 3 行 https://www.example.com/b.js：与前面的 URL 重复')
     expect(mainTargets()).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.queryByText('支持批量粘贴，空行会自动忽略')).toBeNull()
+    expect(screen.queryByText('空行自动忽略')).toBeNull()
     expect(screen.getByText('需修正')).toBeInTheDocument()
     expect(submitMain()).toBeDisabled()
     await new Promise((resolveTimer) => setTimeout(resolveTimer, 500))
@@ -446,7 +452,7 @@ describe('CacheOperationsPage', () => {
     renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean'])
 
     await user.click(await screen.findByRole('button', { name: '刷新目录' }))
-    expect(screen.getByText('当前：刷新目录')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '刷新目录', pressed: true })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '目录 URL' })).toBeInTheDocument()
     await typeMainTargets('https://www.example.com/assets')
     expect(errorBar()).toHaveTextContent('目录 URL 需以 / 结尾且不带查询参数')
@@ -459,7 +465,7 @@ describe('CacheOperationsPage', () => {
     await user.click(screen.getByRole('button', { name: '关闭' }))
     await user.click(screen.getByRole('button', { name: '预热' }))
     expect(screen.getByRole('heading', { name: '预热 URL' })).toBeInTheDocument()
-    expect(screen.getByText('每行一个完整 URL，提交后提前拉取资源。')).toBeInTheDocument()
+    expect(screen.queryByText('每行一个完整 URL，提交后提前拉取资源。')).toBeNull()
     await typeMainTargets('https://www.example.com/home.html')
     await waitForTaskCount(1)
     await user.click(submitMain())
@@ -575,7 +581,7 @@ describe('CacheOperationsPage', () => {
     renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean'])
 
     await user.click(await screen.findByRole('button', { name: '刷新整站' }))
-    expect(screen.getByText('当前：刷新整站')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '刷新整站', pressed: true })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'URL 列表' })).toBeNull()
     expect(submitMain()).toBeDisabled()
     await pickSite(user, 'www.example.com')
@@ -687,12 +693,12 @@ describe('CacheOperationsPage', () => {
     vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [] })
     authenticate('platform', ['sites.read', 'sites.manage'])
     const view = renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean'])
-    expect(screen.getByRole('tab', { name: '刷新预热' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: '操作记录' })).toHaveAttribute('href', '/site/cache-clean?tab=history')
+    expect(screen.getByRole('link', { name: '刷新预热' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '操作记录' })).toHaveAttribute('href', '/site/cache-clean?tab=history')
     view.unmount()
     authenticate('tenant', ['sites.read', 'sites.manage'])
     renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean'])
-    expect(screen.getByRole('tab', { name: '操作记录' })).toHaveAttribute('href', '/site/cache-clean/history')
+    expect(screen.getByRole('link', { name: '操作记录' })).toHaveAttribute('href', '/site/cache-clean/history')
   })
 
   // CACHE-02：管理员在「操作记录」页签选租户看记录；「刷新预热」页签只有提交区。
@@ -705,10 +711,30 @@ describe('CacheOperationsPage', () => {
     view.unmount()
 
     const { container } = renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean?tab=history'])
-    expect(screen.getByRole('tab', { name: '操作记录' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('link', { name: '操作记录' })).toHaveAttribute('aria-current', 'page')
     expect(container.querySelector('.cache-operations-management')).toHaveClass('cache-operations-management-admin')
     expect(screen.queryByRole('heading', { name: '操作类型' })).toBeNull()
     expect(within(container.querySelector<HTMLElement>('.cache-operations-toolbar')!).getByRole('combobox', { name: '目标租户' })).toBeInTheDocument()
+  })
+
+  // 管理员的代提交豁免只在「今日额度」讲一次（说明额度为何显示破折号），租户的操作类型说明不变。
+  it('says the administrator exemption once, under 今日额度, and keeps the tenant description', async () => {
+    vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [] })
+    vi.spyOn(cacheOperationsApi, 'dailyUsage').mockRejectedValue(new ApiError('down', 503, 'service_unavailable'))
+    authenticate('platform', ['sites.read', 'sites.manage'])
+    const view = renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean'])
+    const panel = await screen.findByRole('complementary', { name: '任务额度与提交状态' })
+    expect(within(panel).getByText('—')).toBeInTheDocument()
+    expect(within(panel).getByText(/^平台管理员代提交不计入额度，这里不显示剩余次数/)).toBeInTheDocument()
+    expect(view.container.textContent!.split('代提交不计入').length - 1).toBe(1)
+    // 管理员不看账户日限额长段，也没有提交后的流程说明
+    expect(view.container.textContent).not.toContain('预热次数按账号每天分别计算')
+    expect(view.container.textContent).not.toContain('操作记录里查看进度')
+    view.unmount()
+
+    authenticate('tenant', ['sites.read', 'sites.manage'])
+    renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean'])
+    expect(await screen.findByText('刷新 URL、刷新目录（含整站）、预热次数按账号每天分别计算，主账号和成员共用、账号下所有网站共用，超出时提交会被拒绝；平台管理员代提交不计入。')).toBeInTheDocument()
   })
 
   it('requires an explicit tenant scope before an administrator query', async () => {
@@ -728,6 +754,45 @@ describe('CacheOperationsPage', () => {
       { kind: 'admin', scopeId: '22222222-2222-4222-8222-222222222222' },
       expect.objectContaining({ limit: 20 }),
     )
+  })
+
+  // 已生效的目标租户与筛选写进 URL，刷新后读回并直接查询同一范围；
+  // 非法的租户值不读、不发无目标请求，非法筛选项丢弃。
+  it('keeps the applied administrator target and filters across a reload', async () => {
+    authenticate('platform', ['sites.read', 'sites.manage'])
+    const list = vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [] })
+    const user = userEvent.setup({ delay: null })
+    const view = renderWithProviders(<><CacheOperationsPage /><LocationProbe /></>, ['/site/cache-clean?tab=history'])
+
+    await pickScope(user, tenantAID)
+    await user.click(screen.getByRole('button', { name: '查询' }))
+    await selectOption(user, '任务状态', '失败')
+    await user.click(screen.getByRole('button', { name: '查询' }))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(
+      'memory-only-access-token', { kind: 'admin', scopeId: tenantAID }, expect.objectContaining({ states: ['failed'] }),
+    ))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('state=failed'))
+    const reloaded = screen.getByTestId('location').textContent!
+    expect(new URLSearchParams(reloaded).get('scope')).toBe(tenantAID)
+    expect(new URLSearchParams(reloaded).get('tab')).toBe('history')
+    view.unmount()
+
+    clearFilterUrlMemory()
+    list.mockClear()
+    const again = renderWithProviders(<CacheOperationsPage />, [`/site/cache-clean${reloaded}`])
+    await waitFor(() => expect(list).toHaveBeenCalledWith(
+      'memory-only-access-token', { kind: 'admin', scopeId: tenantAID },
+      { states: ['failed'], limit: 20, cursor: undefined },
+    ))
+    expect(screen.queryByText('请先选择目标租户')).toBeNull()
+    expect(screen.getByRole('button', { name: '刷新' })).toBeEnabled()
+    expect(again.container.querySelector('.cache-operations-toolbar')!.textContent).toContain('失败')
+    again.unmount()
+
+    list.mockClear()
+    renderWithProviders(<CacheOperationsPage />, ['/site/cache-clean?tab=history&scope=not-a-tenant&state=failed&action=bogus'])
+    expect(screen.getByText('请先选择目标租户')).toBeInTheDocument()
+    expect(list).not.toHaveBeenCalled()
   })
 
   it('preserves scoped page, filters, drawer, draft, and unknown retry across token refreshes', async () => {
@@ -936,7 +1001,7 @@ describe('CacheOperationsPage', () => {
       await act(async () => pendingListB.resolve({ items: [operationB] }))
       expect(await screen.findByTitle(siteBID)).toBeInTheDocument()
       expect(screen.queryByRole('group', { name: '高级' })).toBeNull()
-      expect(screen.getByText('当前：刷新 URL')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '刷新 URL', pressed: true })).toBeInTheDocument()
 
       await act(async () => {
         const late = lateKind === 'list' ? lateListA : lateDetailA
@@ -1527,7 +1592,7 @@ describe('CacheOperationsPage', () => {
     // 管理员查看受理的任务：切到「操作记录」页签，目标租户为该网站所在租户。
     await user.click(accepted[1]!)
     expect(await screen.findByText('缓存任务详情')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '操作记录' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('link', { name: '操作记录' })).toHaveAttribute('aria-current', 'page')
     expect(selectedScope()).toBe(tenantBID)
   })
 

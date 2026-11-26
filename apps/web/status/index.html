@@ -15,11 +15,12 @@
         <h1 id="status-title" class="st-title"></h1>
         <a id="status-lang" class="st-lang" href="?lang=en"></a>
       </header>
-      <main id="status-main" aria-busy="false">
+      <main id="status-main" aria-label="服务状态">
+        <p id="status-loading" class="st-sr" role="status"></p>
         <section class="st-banner st-skeleton" aria-hidden="true"></section>
         <section class="st-card st-skeleton st-skeleton-tall" aria-hidden="true"></section>
       </main>
-      <footer id="status-footer" class="st-footer st-muted"></footer>
+      <footer id="status-footer" class="st-footer st-muted" hidden></footer>
     </div>
     <script type="module" src="/src/status/main.ts"></script>
   </body>

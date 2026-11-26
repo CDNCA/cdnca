@@ -14,6 +14,7 @@ import '../i18n/firewallAction'
 import { DataTable, FormGrid, PageSection, StatusTag, TableToolbar, useFeedback } from '@cdnca/ui'
 import './FirewallActionPoliciesPage.css'
 import { validCIDR } from './streamForm'
+import { SearchInput } from '../components/SearchInput'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const pageSize = 20
@@ -156,7 +157,7 @@ function SitePicker({ isPlatform, scopeId, ownerId, onPick, onPickScope }: { isP
             emptyText={t('defaults.tenantEmpty')} value={scopeId}
             onChange={(scope) => { pendingScope.current = scope; setPage(1) }}
             onPickUser={(user) => { onPickScope(pendingScope.current, user?.id ?? ''); pendingScope.current = '' }} /> : undefined}
-          filters={<Input.Search allowClear aria-label={t('picker.search')} placeholder={t('picker.search')} value={search}
+          filters={<SearchInput allowClear aria-label={t('picker.search')} placeholder={t('picker.search')} value={search}
             onChange={(event) => { setSearch(event.target.value); if (!event.target.value) { setDomain(''); setPage(1) } }}
             onSearch={(value) => { setDomain(value.trim()); setPage(1) }} />} />
         {sites.isError ? <Alert type="error" showIcon message={t('picker.loadFailed')} action={<Button size="small" onClick={() => void sites.refetch()}>{t('picker.retry')}</Button>} /> : null}

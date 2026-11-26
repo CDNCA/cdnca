@@ -108,8 +108,7 @@ func TestPostgresSubscriptionOwnerProjectionRollsBackOnAuditFailure(t *testing.T
 	store := NewStore(pool)
 	auditor := &ownerProjectionFailingAudit{}
 	store.auditor = auditor
-	if _, err := NewService(store).Open(t.Context(), actor, ownerProjectionOpenRequest(tenant, productID));
-		!errors.Is(err, errOwnerProjectionAudit) {
+	if _, err := NewService(store).Open(t.Context(), actor, ownerProjectionOpenRequest(tenant, productID)); !errors.Is(err, errOwnerProjectionAudit) {
 		t.Fatalf("Open audit failure = %v", err)
 	}
 	if auditor.ownersBeforeFailure != 1 {

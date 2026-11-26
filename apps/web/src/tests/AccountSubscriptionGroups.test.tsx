@@ -59,8 +59,7 @@ describe('AccountSubscriptionsPage reference groups', () => {
     }
     // 这里是勾选框，不是开关。
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
-    expect(screen.getByText('提醒项').parentElement).toHaveTextContent('提醒项 6')
-    expect(screen.getByText('手机开启').parentElement).toHaveTextContent('手机开启 6')
+    expect(screen.queryByText('手机开启')).not.toBeInTheDocument()
     // 更多消息类型默认收起：公告、自动续费、攻击、WAF、工单行都不在页面上。
     const toggle = screen.getByRole('button', { name: /更多消息类型/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -78,6 +77,26 @@ describe('AccountSubscriptionsPage reference groups', () => {
     expect(screen.getByRole('checkbox', { name: '自动续费失败 邮件提醒' })).toBeChecked()
   })
 
+  // 表格不固定横向滚动宽度、渠道列不写死 136px，窄屏表头短名由 CSS 换；
+  // 只留与标题语义不同的说明（证书含自动续期失败），其余行不复述标题。
+  it('fits the table in its container with short narrow headers and keeps only meaningful row notes', async () => {
+    signIn()
+    server()
+    const { container } = renderWithProviders(<AccountSubscriptionsPage />, ['/account/subscribe'])
+    await screen.findByRole('checkbox', { name: '证书到期 邮件提醒' })
+    const main = screen.getAllByRole('table')[0]
+    expect(container.querySelector('.account-subscriptions-table .ant-table-content')?.getAttribute('style') ?? '').not.toMatch(/overflow-x/)
+    expect((main as HTMLElement).style.width).toBe('')
+    expect([...main.querySelectorAll('col')].map((col) => col.style.width).filter(Boolean)).toEqual([])
+    const sms = screen.getByRole('columnheader', { name: '手机提醒' })
+    expect(sms.querySelector('[data-short]')).toHaveAttribute('data-short', '短信')
+    expect(screen.getByRole('columnheader', { name: '邮件提醒' }).querySelector('[data-short]')).toHaveAttribute('data-short', '邮件')
+    const notes = within(main).getAllByRole('row').slice(1).map((row) => row.querySelector('.account-subscription-item-hint')?.textContent ?? null)
+    expect(notes).toEqual([null, null, null, null, null, '证书即将到期、已过期或自动续期失败时通知。'])
+    // 每格勾选框可用键盘到达（原生 checkbox，未被 tabindex 移出）。
+    for (const box of within(main).getAllByRole('checkbox')) expect(box).not.toHaveAttribute('tabindex', '-1')
+  })
+
   it('writes one checkbox of a group to every event of that group and keeps the other channel', async () => {
     signIn()
     const { fetchMock } = server()
@@ -92,7 +111,6 @@ describe('AccountSubscriptionsPage reference groups', () => {
       { event: 'certificate.renew_failed', body: { sms_enabled: false, email_enabled: true } },
     ])
     expect(screen.getByRole('checkbox', { name: '证书到期 邮件提醒' })).toBeChecked()
-    expect(screen.getByText('手机开启').parentElement).toHaveTextContent('手机开启 5')
   })
 
   it('marks a partly failed group write on its row and retries only what is still off target', async () => {

@@ -37,9 +37,7 @@ type JDCloudProviderVerifier struct {
 }
 
 func NewJDCloudProviderVerifier() *JDCloudProviderVerifier {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	return newJDCloudProviderVerifier("", &http.Client{Transport: transport}, jdCloudVerifyTimeout)
+	return newJDCloudProviderVerifier("", providerAPIClient(), jdCloudVerifyTimeout)
 }
 
 func newJDCloudProviderVerifier(testEndpoint string, client *http.Client, timeout time.Duration) *JDCloudProviderVerifier {

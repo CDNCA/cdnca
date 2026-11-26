@@ -37,18 +37,18 @@ const preview: HttpPolicyPublicationPreview = {
     redirect_allowed_hosts: [], redirects: [], cors: null, referer_check: null }] },
 }
 
-function renderPanel(permissions: string[], canManage = true) {
+function renderPanel(permissions: string[], canManage = true, siteName?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(<QueryClientProvider client={client}><HTTPPolicyPanel
     siteId={siteID} scopeKind="tenant" scopeId={scopeID} tenantId={scopeID} userId={userID}
-    sessionEpoch={1} permissions={permissions} canManage={canManage} lockedForTenant={false}
+    sessionEpoch={1} permissions={permissions} canManage={canManage} lockedForTenant={false} siteName={siteName}
   /></QueryClientProvider>)
   return client
 }
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  vi.spyOn(httpPoliciesApi, 'list').mockResolvedValue({ items: [] })
+  vi.spyOn(httpPoliciesApi, 'list').mockResolvedValue({ items: [], system_max_upload_bytes: 104857600 })
   vi.spyOn(httpPoliciesApi, 'preview').mockResolvedValue(preview)
   // fix-siteinstant：保存返回保存后的内容（与服务端一致），改动即保存时草稿不被旧值覆盖。
   vi.spyOn(httpPoliciesApi, 'create').mockImplementation(async (_token, _scope, _site, config) => ({ ...policy, ...config }))
@@ -68,7 +68,7 @@ describe('HTTPPolicyPanel', () => {
   })
 
   it('keeps a readable policy strictly non-writable without manage permission', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     renderPanel(['http_policies.read'], false)
     await screen.findByRole('heading', { name: 'HTTP 策略' })
     expect(screen.queryByRole('button', { name: '保存 HTTP 策略' })).not.toBeInTheDocument()
@@ -98,7 +98,7 @@ describe('HTTPPolicyPanel', () => {
         await user.click(dialog.getByRole('textbox', { name: /值/ }))
         await user.paste(value)
       }
-      if (duplicate) await user.click(dialog.getByRole('switch', { name: '允许重复' }))
+      if (duplicate) await user.click(dialog.getByRole('switch', { name: button === '新增响应头' ? '允许重复响应头' : '允许重复请求头' }))
       await user.click(dialog.getByRole('button', { name: /^确\s?定$/ }))
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     }
@@ -186,7 +186,39 @@ describe('HTTPPolicyPanel', () => {
     expect(await dialog.findByText('请输入有效的请求头名称，且不能与已有名称重复')).toBeInTheDocument()
   })
 
+  it.each([['新增请求头', '允许重复请求头', '允许重复响应头'], ['新增响应头', '允许重复响应头', '允许重复请求头']])(
+    '%s names the duplicate switch by direction and offers the other variables on demand', async (button, own, other) => {
+      const user = userEvent.setup()
+      renderPanel(['http_policies.read', 'http_policies.manage'])
+      await screen.findByRole('heading', { name: 'HTTP 策略' })
+      await user.click(screen.getByRole('button', { name: button }))
+      const dialog = within(await screen.findByRole('dialog'))
+      await user.click(dialog.getByRole('radio', { name: /^添加/ }))
+      expect(dialog.getByRole('switch', { name: own })).toBeInTheDocument()
+      expect(dialog.queryByRole('switch', { name: other })).not.toBeInTheDocument()
+      expect(dialog.queryByText(/同名请求头/)).not.toBeInTheDocument()
+      expect(dialog.queryByText('$scheme')).not.toBeInTheDocument()
+      expect(dialog.getByRole('combobox', { name: '更多变量' })).toBeInTheDocument()
+      await user.click(dialog.getByRole('radio', { name: /^覆盖/ }))
+      expect(dialog.queryByRole('switch', { name: own })).not.toBeInTheDocument()
+    })
+
   // CU-ADV-01 B：节点托管的响应头在弹窗里就地拒绝，弹窗与草稿保留，可原位改名，不发必败请求。
+  it('keeps the system upload limit when a site without a policy only adds a response header', async () => {
+    const user = userEvent.setup()
+    renderPanel(['http_policies.read', 'http_policies.manage'])
+    await screen.findByRole('heading', { name: 'HTTP 策略' })
+    expect(screen.getByRole('radio', { name: '系统默认（100 MB）' })).toBeChecked()
+    expect(screen.queryByRole('spinbutton', { name: '上传大小上限（字节）' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '新增响应头' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    await user.type(dialog.getByRole('textbox', { name: /名称/ }), 'X-Test')
+    await user.type(dialog.getByRole('textbox', { name: /值/ }), 'v')
+    await user.click(dialog.getByRole('button', { name: /^确\s?定$/ }))
+    await waitFor(() => expect(httpPoliciesApi.create).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(httpPoliciesApi.create).mock.calls[0]![3].max_upload_bytes).toBe(104857600)
+  })
+
   it('refuses a node-managed response header in place and keeps the dialog draft for correction', async () => {
     const user = userEvent.setup()
     renderPanel(['http_policies.read', 'http_policies.manage'])
@@ -225,7 +257,7 @@ describe('HTTPPolicyPanel', () => {
     })
 
   it('retries an unknown update with the exact frozen config, revision, identity, and metadata', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     vi.mocked(httpPoliciesApi.update)
       .mockRejectedValueOnce(new ApiError('raw upstream body', 503, 'service_unavailable'))
       .mockResolvedValueOnce({ ...policy, revision: 8 })
@@ -245,7 +277,7 @@ describe('HTTPPolicyPanel', () => {
 
   // 结果未知时可「放弃并刷新」退出（重试进行中禁用），放弃后重新读取并解锁编辑。
   it('abandons an unknown update only when no retry is in flight, then refetches and unlocks editing', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     let rejectRetry!: (reason: unknown) => void
     vi.mocked(httpPoliciesApi.update)
       .mockRejectedValueOnce(new ApiError('lost', 503, 'service_unavailable'))
@@ -271,28 +303,39 @@ describe('HTTPPolicyPanel', () => {
   })
 
   it('uses the current revision for disable and delete, and exposes only the current-site preview summary', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     const user = userEvent.setup()
-    renderPanel(['http_policies.read', 'http_policies.manage'])
+    renderPanel(['http_policies.read', 'http_policies.manage'], true, 'www.example.test')
     expect(await screen.findByText('策略版本 12，当前站点已包含')).toBeInTheDocument()
     expect(screen.getByText(preview.sha256)).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: '停用 HTTP 策略' }))
     await waitFor(() => expect(httpPoliciesApi.setEnabled).toHaveBeenCalledTimes(1))
     expect(vi.mocked(httpPoliciesApi.setEnabled).mock.calls[0]?.slice(0, 5)).toEqual(['token', scopeID, policy.id, 7, false])
     await screen.findByRole('switch', { name: '启用 HTTP 策略' })
+    // the confirmation names the site, lists the saved scope, focuses 取消; cancel writes nothing
     await user.click(screen.getByRole('button', { name: '删除 HTTP 策略' }))
+    let dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getAllByText('删除网站 www.example.test 的 HTTP 策略？').length).toBeGreaterThan(0)
+    expect(dialog.getByText('上传大小恢复为系统默认（100 MB）。')).toBeInTheDocument()
+    await waitFor(() => expect(dialog.getByRole('button', { name: /^取\s?消$/ })).toHaveFocus())
+    await user.click(dialog.getByRole('button', { name: /^取\s?消$/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(httpPoliciesApi.delete).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '删除 HTTP 策略' }))
+    dialog = within(await screen.findByRole('dialog'))
+    await user.click(dialog.getByRole('button', { name: '删除策略' }))
     await waitFor(() => expect(httpPoliciesApi.delete).toHaveBeenCalledTimes(1))
     expect(vi.mocked(httpPoliciesApi.delete).mock.calls[0]?.slice(0, 4)).toEqual(['token', scopeID, policy.id, 8])
-    confirm.mockRestore()
   })
 
   // moved from the retired ?tab=access sub-page (tp-b3c): 防盗链 now saves with the policy
   it('saves hotlink protection in the policy and keeps it canonical', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     const user = userEvent.setup()
     renderPanel(['http_policies.read', 'http_policies.manage'])
-    expect(await screen.findByText('当前关闭，不限制资源引用来源。')).toBeInTheDocument()
+    // off: the switch and its 关闭 state say it; the details stay hidden
+    expect(await screen.findByRole('switch', { name: '启用防盗链' })).not.toBeChecked()
+    expect(screen.queryByLabelText('白名单域名')).not.toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: '启用防盗链' }))
     await user.click(screen.getByRole('checkbox', { name: '无 Referer 时检查 Origin' }))
     await user.type(screen.getByLabelText('白名单域名'), '*.Partner.example.com{Enter}cdn.friend.test')
@@ -310,7 +353,7 @@ describe('HTTPPolicyPanel', () => {
   })
 
   it('refuses a hotlink check that restricts nothing without calling the API', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     const user = userEvent.setup()
     renderPanel(['http_policies.read', 'http_policies.manage'])
     await user.click(await screen.findByRole('switch', { name: '启用防盗链' }))
@@ -322,7 +365,7 @@ describe('HTTPPolicyPanel', () => {
   })
 
   it('rejects wildcard origins with credentials before writing', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy], system_max_upload_bytes: 104857600 })
     const user = userEvent.setup()
     renderPanel(['http_policies.read', 'http_policies.manage'])
     await user.click(await screen.findByRole('switch', { name: '启用跨域策略' }))
@@ -363,7 +406,7 @@ describe('HTTPPolicyPanel administrator target (C28)', () => {
   afterEach(() => { session.principal = tenantPrincipal })
 
   it('lists the site tenant scope, not the platform scope, and can save', async () => {
-    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [{ ...policy }] })
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [{ ...policy }], system_max_upload_bytes: 104857600 })
     renderAdmin(scopeID)
     await screen.findByRole('heading', { name: 'HTTP 策略' })
     expect(httpPoliciesApi.list).toHaveBeenCalledWith('token', scopeID, siteID, undefined)

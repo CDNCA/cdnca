@@ -17,9 +17,14 @@ type NodeStorage struct {
 	LogDirectory   string `json:"log_directory,omitempty"`
 }
 
-// NodeStorageAPIVersion is the CAPABILITY_NAME_NODE_STORAGE version an Agent
-// declares and control needs to write KeyDocument.NodeStorage.
+// NodeStorageAPIVersion is the CAPABILITY_NAME_NODE_STORAGE version control
+// needs to write KeyDocument.NodeStorage.
 const NodeStorageAPIVersion uint32 = 1
+
+// NodeStorageNodeFactsAPIVersion is the CAPABILITY_NAME_NODE_STORAGE version
+// an Agent declares: v2 also takes KeyDocument.NodeFactsAt, which control
+// writes only to such an Agent.
+const NodeStorageNodeFactsAPIVersion uint32 = 2
 
 // NodeStoragePrefixes are the roots a node storage directory must lie
 // strictly below: never the system, home or temp trees.

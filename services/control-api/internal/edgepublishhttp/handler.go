@@ -923,6 +923,10 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusForbidden, "package_feature_denied", "package feature is unavailable"
 	case errors.Is(err, packageaddon.ErrSubscriptionInactive):
 		return http.StatusConflict, "package_subscription_inactive", "package subscription is not active"
+	case errors.Is(err, edgepublish.ErrPackageSubscriptionSuspended):
+		// The site's subscription is suspended: nothing of it is published
+		// until it is unsuspended; the saved policy is kept (409, retry then).
+		return http.StatusConflict, "package_subscription_suspended", "the site's package subscription is suspended; it takes effect once the subscription is resumed"
 	case errors.Is(err, packageaddon.ErrInUse), errors.Is(err, packageaddon.ErrWAFInUse):
 		return http.StatusConflict, "package_addon_in_use", "package resources are still in use"
 	case errors.Is(err, ErrUnauthenticated), errors.Is(err, edgepublish.ErrUnauthenticated),
@@ -962,6 +966,12 @@ func classifyError(err error) (int, string, string) {
 		return http.StatusConflict, "target_snapshot_conflict", "the target snapshot no longer matches"
 	case errors.Is(err, edgedeployment.ErrDeadlineExpired):
 		return http.StatusConflict, "publication_deadline_expired", "the rollout deadline has expired"
+	case errors.Is(err, edgedeployment.ErrReconciliationObservedNotSource):
+		return http.StatusConflict, "reconciliation_version_not_source", "an operator-confirmed reconciliation may name only the source deployment's own config version"
+	case errors.Is(err, edgedeployment.ErrReconciliationSourceUnverifiable):
+		return http.StatusConflict, "reconciliation_source_unverifiable", "the source deployment's configuration artifact cannot be verified; reconcile without a version and publish again"
+	case errors.Is(err, edgedeployment.ErrReconciliationSupplementNotEligible):
+		return http.StatusConflict, "reconciliation_supplement_not_eligible", "the scope's latest reconciliation is not one without a version of this source deployment"
 	case errors.Is(err, edgedeployment.ErrNodeDeploymentActive), errors.Is(err, edgedeployment.ErrInvalidTransition),
 		errors.Is(err, edgedeployment.ErrRetriesExhausted), errors.Is(err, edgedeployment.ErrNodeReconciliationRequired),
 		errors.Is(err, edgedeployment.ErrReconciliationNotRequired), errors.Is(err, edgedeployment.ErrReconciliationSource),

@@ -46,9 +46,13 @@ func (s *Service) create(ctx context.Context, actor Actor, request CreateRequest
 	if err := normalizeActorAndTarget(actor, &request.TargetScopeID, &request.OwnerUserID); err != nil {
 		return WriteResult{}, err
 	}
+	if err := s.resolveCCReferences(ctx, request.TargetScopeID, &request.Fields); err != nil {
+		return WriteResult{}, err
+	}
+	referenced := ccReferenceIndexes(request.Fields.Rules)
 	if err := normalizeSentFields(&request.Fields, true, true); err != nil || !validWriteMetadata(request.IdempotencyKey, request.RequestID) {
 		if err != nil {
-			return WriteResult{}, err
+			return WriteResult{}, locateCCReferenceError(err, referenced)
 		}
 		return WriteResult{}, ErrInvalidInput
 	}
@@ -141,6 +145,18 @@ func (s *Service) update(ctx context.Context, actor Actor, request UpdateRequest
 	if err != nil {
 		return WriteResult{}, err
 	}
+	// reference rules are expanded from the
+	// policy scope's matchers and filters, then checked as inline rules.
+	if hasCCReferences(request.Fields.Rules) {
+		current, err := s.store.Get(ctx, actor, request.ID)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		if err := s.resolveCCReferences(ctx, current.ScopeID, &request.Fields); err != nil {
+			return WriteResult{}, err
+		}
+	}
+	referenced := ccReferenceIndexes(request.Fields.Rules)
 	// Invalid input fails before any read; the quick block rules (reserved
 	// IDs) are not the client's to validate.
 	precheck := request.Fields
@@ -152,7 +168,7 @@ func (s *Service) update(ctx context.Context, actor Actor, request UpdateRequest
 			if dropped {
 				err = unlocatedRules(err)
 			}
-			return WriteResult{}, err
+			return WriteResult{}, locateCCReferenceError(err, referenced)
 		}
 	}
 	if err := s.applyStoredQuickBlock(ctx, actor, &request); err != nil {

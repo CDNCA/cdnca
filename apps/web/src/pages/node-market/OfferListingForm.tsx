@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Checkbox, Descriptions, Form, Input, InputNumber, Modal, Radio, Select, Space, Steps, Switch, Table, Tag, Typography } from 'antd'
-import type { CheckboxProps } from 'antd'
+import { Alert, App, Button, Checkbox, Descriptions, Form, Input, InputNumber, Modal, Radio, Select, Space, Steps, Switch, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -29,8 +28,10 @@ import { useErrorText } from './supplier/hooks'
 import { useIdempotencyKey } from '../market/idempotency'
 import { UnmappedNodesAlert } from './OfferPoolReport'
 import { CapabilityFields } from './OfferCapabilities'
-import { useFeedback } from '@cdnca/ui'
+import { useFeedback, Table } from '@cdnca/ui'
 import { formatYuan } from '@cdnca/ui/offer-terms'
+import { useNamedRowSelection } from '../../components/namedRowSelection'
+import { SearchInput } from '../../components/SearchInput'
 
 type Values = ListingValues & Partial<ResaleAllocation> & { subscription?: string; subscriptions?: string[] }
 // C16: one listing flow, source → terms → publish. own: my nodes (listing
@@ -95,6 +96,7 @@ function InheritedTerms({ up, plugin }: { up: MarketFrozenTerms; plugin: (code: 
 
 export function OfferListingForm({ initialSource = 'own' }: { initialSource?: ListingSource }) {
   const { t, i18n } = useTranslation('nodeMarket')
+  const namedRows = useNamedRowSelection()
   const { message } = App.useApp()
   const feedback = useFeedback()
   const errorText = useErrorText()
@@ -475,7 +477,7 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
           options={options(allNodes.map(carrierOf))} onChange={(carrier) => setFilter((f) => ({ ...f, carrier }))} />
         <Select aria-label={t('listing.grade')} allowClear placeholder={t('listing.grade')} style={{ width: 120 }} value={filter.grade}
           options={['s', 'a', 'b', 'c'].map((g) => ({ value: g, label: g.toUpperCase() }))} onChange={(grade) => setFilter((f) => ({ ...f, grade }))} />
-        <Input.Search aria-label={t('batch.keyword')} placeholder={t('batch.keyword')} allowClear style={{ width: 220 }}
+        <SearchInput aria-label={t('batch.keyword')} placeholder={t('batch.keyword')} allowClear style={{ width: 220 }}
           onSearch={(keyword) => setFilter((f) => ({ ...f, keyword }))} />
         <Checkbox checked={!!filter.onlineOnly} onChange={(e) => setFilter((f) => ({ ...f, onlineOnly: e.target.checked }))}>{t('batch.onlineOnly')}</Checkbox>
         <Button onClick={() => setSelected((current) => allShownSelected
@@ -485,9 +487,8 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
       </Space>
       <Table<NodeInventoryItem> rowKey="id" size="small" loading={nodes.isLoading} dataSource={shown}
         pagination={{ pageSize: PAGE_SIZE, current: page, onChange: setPage, hideOnSinglePage: true, showSizeChanger: false }}
-        rowSelection={{ selectedRowKeys: selected, preserveSelectedRowKeys: true, onChange: (keys) => setSelected(keys.map(String)),
-          // antd forwards aria-* to the checkbox input; its CheckboxProps type omits them.
-          getCheckboxProps: (n) => ({ 'aria-label': n.name }) as CheckboxProps }}
+        rowSelection={namedRows<NodeInventoryItem>({ selectedRowKeys: selected, preserveSelectedRowKeys: true, onChange: (keys) => setSelected(keys.map(String)) },
+          (n) => n.name, t('listing.selectionScope'))}
         columns={[
           { title: t('listing.node'), dataIndex: 'name' },
           { title: t('listing.region'), key: 'region', render: (_: unknown, n) => regionOf(n) || '—' },

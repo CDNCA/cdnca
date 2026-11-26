@@ -154,7 +154,7 @@ func (s *Store) auditEngineModule(ctx context.Context, tx pgx.Tx, deployment loc
 	payload := map[string]any{"actor_kind": "node", "actor_node_id": envelope.NodeID.String(), "ip": address,
 		"node_id": envelope.NodeID.String(), "set_revision": receipt.Revision, "reason_code": reason,
 		"deployment_id": envelope.DeploymentID.String(),
-		"changes": map[string]any{"engine_module": map[string]any{"before": was, "after": now}}}
+		"changes":       map[string]any{"engine_module": map[string]any{"before": was, "after": now}}}
 	resourceID := envelope.NodeID.String()
 	if setItem != nil {
 		payload["artifact_id"], payload["version"], payload["revision"], payload["sha256"] =

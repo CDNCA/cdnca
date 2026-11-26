@@ -36,7 +36,7 @@ func TestReadAnalyticsKeepsDependencyFailureForKnownEmptyDataset(t *testing.T) {
 	reader := emptyDashboardAnalyticsStub(to)
 	reader.err = errors.New("clickhouse unavailable")
 	store := &Store{
-		analytics: reader,
+		analytics:    reader,
 		finalization: &analyticsFinalizationStub{snapshot: analyticsFinalizationSnapshot{ExpectedTenants: 1}},
 	}
 

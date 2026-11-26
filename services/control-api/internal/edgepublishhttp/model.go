@@ -167,6 +167,12 @@ type PublicationView struct {
 	NodeCount             int        `json:"node_count"`
 	CreatedAt             string     `json:"created_at"`
 	Replayed              bool       `json:"replayed,omitempty"`
+	// Kind is node_settings for a node settings redelivery (节点设置更新,
+	// migration 701): the release in effect on its nodes again with new node
+	// settings; ContentRefusal is why the scope's content was not published.
+	// Both omitted for a content publication.
+	Kind           string `json:"kind,omitempty"`
+	ContentRefusal string `json:"content_refusal,omitempty"`
 	// Platform view only: the nodes this release did not
 	// reach as intended -- left out for their key envelope (old configuration
 	// still in effect) or sent every website for lack of SITE_SELECTION.

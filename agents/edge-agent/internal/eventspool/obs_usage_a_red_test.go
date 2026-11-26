@@ -81,3 +81,22 @@ func TestOBSUsageASecretSegmentRedactionMatrix(t *testing.T) {
 		t.Fatalf("secret marker matrix was not preserved: %#v", captured)
 	}
 }
+
+// url.Values 丢弃 ";" 分隔的参数，"?a=1;token=x" 的密钥原样留下、网关整批拒收。
+// 现按 "&" 与 ";" 逐对打码；非敏感部分保留原字节与分隔符，结果能过网关同一校验。
+func TestRedactURLSemicolonQueries(t *testing.T) {
+	for in, want := range map[string]string{
+		"/a?q=1;token=raw-secret":       "/a?q=1;token=%5BREDACTED%5D",
+		"/a?q=1&tok%65n=raw-secret;b=2": "/a?q=1&tok%65n=%5BREDACTED%5D;b=2",
+		"/index.php?p=1;s=2&x=%3E%3E":   "/index.php?p=1;s=2&x=%3E%3E",
+		"/a?%zz=1;client_secret=raw":    "/a?%zz=1;client_secret=%5BREDACTED%5D",
+		"/login?token=secret&safe=yes":  "/login?token=%5BREDACTED%5D&safe=yes",
+		"/plain":                        "/plain",
+		"/a?":                           "/a?",
+	} {
+		got, err := redactURL(in)
+		if err != nil || got != want {
+			t.Errorf("redactURL(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}

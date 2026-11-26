@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Input, Modal, Result, Table, type TableColumnsType } from 'antd'
+import { Alert, Button, Modal, Result, type TableColumnsType } from 'antd'
 import { RotateCcw, Search, Unlock } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -9,7 +9,16 @@ import { analyticsLogsApi, type BlockStateFilters, type CCCoordinationState } fr
 import { ApiError, type Principal } from '../api/auth'
 import { useSessionStore } from '../auth/session'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
+import { useSearchParams } from 'react-router-dom'
+import { sitesApi } from '../api/sites'
+import { usersApi } from '../api/users'
+import { FieldErrorText, filterFieldProps, useFieldFocus } from '../components/FilterFieldError'
+import SearchSelect from '../components/SearchSelect'
+import TenantScopeSelect from '../components/TenantScopeSelect'
+import { filterParam, useFilterUrl } from './filterUrl'
+
+type CoordinationFieldErrors = Partial<Record<'tenant' | 'site', string>>
 
 type BlockOwner = readonly [Principal['scope_kind'], string, string | null, string, number]
 
@@ -49,10 +58,30 @@ export default function CCCoordinationPage() {
   const principal = useSessionStore((state) => state.principal)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
   const owner = useMemo(() => principal ? blockOwner(principal, sessionEpoch) : null, [principal, sessionEpoch])
-  const [draftTenant, setDraftTenant] = useState('')
-  const [draftSite, setDraftSite] = useState('')
-  const [applied, setApplied] = useState<BlockStateFilters>({})
-  const [validationError, setValidationError] = useState<string | null>(null)
+  // 租户按用户名、邮箱或用户编号选，站点按域名选
+  // 并受所选租户约束；已生效的 tenant_id、site_id 写进 URL，刷新后首条请求原样带上。链接里的值无效或站点不属于该租户时
+  // 不生效、不查询（不悄悄扩成平台范围），错误挂在字段上并给焦点。请求仍提交实体 UUID，由服务端校验权限。
+  const [searchParams] = useSearchParams()
+  const [linked] = useState(() => ({ tenant: filterParam(searchParams, 'tenant_id'), site: filterParam(searchParams, 'site_id') }))
+  const platformSession = principal?.scope_kind === 'platform'
+  const linkErrors = (): CoordinationFieldErrors => ({
+    ...(platformSession && linked.tenant && !uuidPattern.test(linked.tenant) ? { tenant: t('blockState.coordination.states.tenantInvalid') } : {}),
+    ...(linked.site && !uuidPattern.test(linked.site) ? { site: t('blockState.coordination.states.siteInvalid') } : {}),
+  })
+  const [fieldErrors, setFieldErrors] = useState<CoordinationFieldErrors>(linkErrors)
+  const linkValid = Object.keys(fieldErrors).length === 0
+  const [draftTenant, setDraftTenant] = useState(platformSession ? linked.tenant : '')
+  const [tenantOwner, setTenantOwner] = useState('')
+  const [draftSite, setDraftSite] = useState(linked.site)
+  const [applied, setApplied] = useState<BlockStateFilters>(() => linkValid ? {
+    ...(linked.site ? { siteId: linked.site } : {}), ...(platformSession && linked.tenant ? { tenantId: linked.tenant } : {}),
+  } : {})
+  // A linked tenant + site is confirmed before the first read: the site's owner must belong to that tenant.
+  const [linkChecked, setLinkChecked] = useState(() => !(linkValid && applied.tenantId && applied.siteId))
+  const [blocked, setBlocked] = useState(!linkValid)
+  const focusField = useFieldFocus()
+  const tenantFieldID = 'cc-coordination-tenant'
+  const siteFieldID = 'cc-coordination-site'
   const [generation, setGeneration] = useState(0)
   const [selected, setSelected] = useState<CCCoordinationState | null>(null)
   const [idempotencyKey, setIdempotencyKey] = useState('')
@@ -67,6 +96,12 @@ export default function CCCoordinationPage() {
   const canManage = Boolean(principal?.permissions.includes('security_policies.manage'))
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
   const queryKey = ['analytics-cc-coordination', ownerKey, applied, generation] as const
+  const siteOptions = useMemo(() => async (text: string) => {
+    const page = await sitesApi.list(currentBlockAccess(ownerKey) ?? '', {
+      page: 1, limit: 10, ...(text ? { domain: text } : {}), ...(audience === 'admin' && tenantOwner ? { owner: tenantOwner } : {}),
+    })
+    return page.items.map((site) => ({ id: site.id, name: site.domain, code: site.display_id, detail: site.owner?.display_name }))
+  }, [audience, ownerKey, tenantOwner])
 
   const coordinationErrorKey = (error: unknown): string => {
     if (!(error instanceof ApiError)) return 'blockState.coordination.states.requestFailed'
@@ -96,24 +131,56 @@ export default function CCCoordinationPage() {
       if (!currentBlockAccess(ownerKey)) throw staleBlockRead
       return result
     },
-    enabled: allowed && Boolean(currentBlockAccess(ownerKey)),
+    enabled: allowed && !blocked && linkChecked && Boolean(currentBlockAccess(ownerKey)),
     retry: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   })
 
+  useEffect(() => {
+    if (linkChecked || !applied.tenantId || !applied.siteId) return undefined
+    let current = true
+    const token = currentBlockAccess(ownerKey)
+    void (async () => {
+      try {
+        const site = (await sitesApi.list(token ?? '', { page: 1, limit: 1, site_ids: applied.siteId })).items.find((item) => item.id === applied.siteId)
+        const owner = site?.owner ? await usersApi.get(token ?? '', site.owner.id) : null
+        if (!current) return
+        if (!site || owner?.tenant_id !== applied.tenantId) {
+          setFieldErrors({ site: t('blockState.coordination.states.siteNotInTenant') })
+          setBlocked(true)
+          setApplied({})
+          focusField(siteFieldID)
+        } else if (owner) setTenantOwner(owner.id)
+      } catch {
+        // The lookup is a courtesy: when it cannot run, the server still checks the request.
+      }
+      if (current) setLinkChecked(true)
+    })()
+    return () => { current = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the link the page opened with
+  }, [])
+  useEffect(() => {
+    if (fieldErrors.tenant) focusField(tenantFieldID)
+    else if (fieldErrors.site) focusField(siteFieldID)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the errors of the link the page opened with
+  }, [])
+  useFilterUrl({ tenant_id: applied.tenantId, site_id: applied.siteId })
+
   const apply = () => {
     const tenant = draftTenant.trim()
     const site = draftSite.trim()
-    if (audience === 'admin' && tenant !== '' && !uuidPattern.test(tenant)) {
-      setValidationError(t('blockState.states.tenantRequired'))
+    const errors: CoordinationFieldErrors = {
+      ...(audience === 'admin' && tenant !== '' && !uuidPattern.test(tenant) ? { tenant: t('blockState.coordination.states.tenantInvalid') } : {}),
+      ...(site !== '' && !uuidPattern.test(site) ? { site: t('blockState.coordination.states.siteInvalid') } : {}),
+    }
+    setFieldErrors(errors)
+    if (errors.tenant || errors.site) {
+      focusField(errors.tenant ? tenantFieldID : siteFieldID)
       return
     }
-    if (site !== '' && !uuidPattern.test(site)) {
-      setValidationError(t('blockState.coordination.states.siteRequired'))
-      return
-    }
-    setValidationError(null)
+    setBlocked(false)
+    setLinkChecked(true)
     setSuccess(null)
     setApplied({ ...(site ? { siteId: site } : {}), ...(audience === 'admin' && tenant ? { tenantId: tenant } : {}) })
     setGeneration((value) => value + 1)
@@ -121,9 +188,12 @@ export default function CCCoordinationPage() {
 
   const reset = () => {
     setDraftTenant('')
+    setTenantOwner('')
     setDraftSite('')
     setApplied({})
-    setValidationError(null)
+    setFieldErrors({})
+    setBlocked(false)
+    setLinkChecked(true)
     setSuccess(null)
     setGeneration((value) => value + 1)
   }
@@ -236,17 +306,27 @@ export default function CCCoordinationPage() {
           {audience === 'admin' ? (
             <label className="analytics-filter-field">
               <span>{t('filters.tenant')}</span>
-              <Input value={draftTenant} onChange={(event) => setDraftTenant(event.target.value)} />
+              <TenantScopeSelect {...filterFieldProps(tenantFieldID, fieldErrors.tenant)} accessToken={accessToken} ownerKey={ownerKey}
+                canList={Boolean(principal?.permissions.some((code) => code === 'identity.users.manage' || code === 'platform.admin'))}
+                queryKeyPrefix="cc-coordination-tenants" valueKey="tenant_id" lazy allowClear className="cc-coordination-picker"
+                ariaLabel={t('filters.tenant')} placeholder={t('filters.tenantSearchPlaceholder')} emptyText={t('filters.tenantSearchEmpty')}
+                value={draftTenant}
+                onChange={(tenant) => { setDraftTenant(tenant); setDraftSite(''); setFieldErrors({}) }}
+                onPickUser={(user) => setTenantOwner(user?.id ?? '')} />
+              <FieldErrorText id={tenantFieldID} error={fieldErrors.tenant} />
             </label>
           ) : null}
           <label className="analytics-filter-field">
-            <span>{t('filters.site')}</span>
-            <Input value={draftSite} onChange={(event) => setDraftSite(event.target.value)} />
+            <span>{t('filters.siteName')}</span>
+            <SearchSelect {...filterFieldProps(siteFieldID, fieldErrors.site)} className="cc-coordination-picker" allowClear
+              queryKey={['cc-coordination-sites', ownerKey, audience === 'admin' ? draftTenant : '', tenantOwner]} search={siteOptions}
+              ariaLabel={t('filters.siteName')} placeholder={t('filters.siteSearchPlaceholder')} emptyText={t('filters.siteSearchEmpty')}
+              value={draftSite} onChange={(site) => { setDraftSite(site as string); setFieldErrors((current) => ({ ...current, site: undefined })) }} />
+            <FieldErrorText id={siteFieldID} error={fieldErrors.site} />
           </label>
           <Button type="primary" icon={<Search size={15} />} onClick={apply}>{t('actions.query')}</Button>
           <Button icon={<RotateCcw size={15} />} onClick={reset}>{t('actions.reset')}</Button>
         </div>
-        {validationError ? <Alert type="error" showIcon message={validationError} /> : null}
         {success ? <Alert type="success" showIcon message={success} /> : null}
         {query.error && !query.isFetching ? (
           <FeedbackWhen title={t(coordinationErrorKey(query.error))} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} />

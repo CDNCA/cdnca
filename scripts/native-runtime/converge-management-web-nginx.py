@@ -15,9 +15,12 @@ Only the exact installer edits are made (including the website root fallback,
 asset cache rule, /favicon.ico and /robots.txt, the sandboxed /site/t/ of
 theme plugin page bundles, the node installer served from the active
 release, the /dashboard console entry without a trailing slash, the log and
-website content JSON gzip, the favicon fallback, the billing bridge downloads,
-WebSocket upgrades under /v1/ (the console SSH terminal), the node
-WebSocket tunnel /agent/v1/ to the local Gateway, and brotli_static
+website content JSON gzip, the favicon fallback, dropping the billing bridge
+downloads location older installers wrote,
+WebSocket upgrades under /v1/ (the console SSH terminal), the public
+status page's upstream Cache-Control (/v1/status-page/public), the node
+WebSocket tunnel /agent/v1/ to the local Gateway, the client's own
+X-Real-IP / X-Forwarded-For passed as X-Cdnca-Client-* for 源IP请求头, and brotli_static
 where libnginx-mod-http-brotli-static is installed); CDN origin authentication
 enabled by install-control.sh origin-auth is kept and extends to the added
 locations; any other local drift is refused.
@@ -78,6 +81,27 @@ AUTH_LOCATION = '''        location ^~ /v1/auth/ {
 # client-supplied forwarding chain with the TCP peer instead of appending to it.
 XFF_APPEND = '            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n'
 XFF_PEER = '            proxy_set_header X-Forwarded-For $remote_addr;\n'
+# The API refuses a request carrying both RFC 7239 Forwarded and X-Forwarded-For
+# (source unknown), so every location clears the inbound Forwarded right before
+# the canonical X-Forwarded-For. Convergence compares the form without it and
+# adds it last, so hosts converged before this rule get it too.
+FORWARDED_CLEAR = '            proxy_set_header Forwarded "";\n'
+# 源IP请求头 (control-api internal/clientip) reads
+# the client's own X-Real-IP / X-Forwarded-For, which nginx rewrites with its
+# TCP peer: right after the canonical X-Forwarded-For every location passes
+# the originals as X-Cdnca-Client-X-Real-IP / X-Cdnca-Client-X-Forwarded-For.
+# Setting them replaces any of those names the client sent (an empty original
+# sends none). Compared without them and added last, like FORWARDED_CLEAR.
+CLIENT_HEADERS = ('            proxy_set_header X-Cdnca-Client-X-Real-IP $http_x_real_ip;\n'
+                  '            proxy_set_header X-Cdnca-Client-X-Forwarded-For $http_x_forwarded_for;\n')
+
+
+def strip_forwarded(text):
+    return text.replace(XFF_PEER + CLIENT_HEADERS, XFF_PEER).replace(FORWARDED_CLEAR + XFF_PEER, XFF_PEER)
+
+
+def render_forwarded(text):
+    return strip_forwarded(text).replace(XFF_PEER, FORWARDED_CLEAR + XFF_PEER + CLIENT_HEADERS)
 LISTEN = re.compile(r'(?m)^        listen ((?:\[[0-9A-Fa-f:]+\]:|[0-9.]+:)?([0-9]{1,5})) ssl( http2)?;$')
 SITE_ROOT_OLD = '''        location / {
             try_files $uri $uri/ /index.html;
@@ -225,7 +249,8 @@ FAVICON_FALLBACK = '''        location @brand_favicon_fallback {
         }
 '''
 FAVICON_FALLBACK_ANCHOR = '        location @brand_logo_fallback {\n'
-# Billing integration PHP modules ship with the active release (5b9b5bd10).
+# Billing integration PHP modules location older installers wrote; the community
+# edition ships no billing modules, so converging removes it.
 BILLING_BRIDGE = '''        # Billing integration PHP modules (ADR 0019) ship with the active release.
         location ^~ /downloads/billing-bridge/ {
             root /data/cdnca-native-root/cdnca/current/static/web;
@@ -266,7 +291,12 @@ AGENT_HOST = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$')
 # WebSocket upgrades under /v1/ (the console SSH terminal):
 # "Connection: upgrade" only when the client asked for it, so plain API
 # requests keep the connection header they had before.
-WS_MAP_ANCHOR = '        "~^(?:200|304):/v1/brand-assets/(?:favicon|logo|login_ad)$" "";\n    }\n'
+BRAND_CACHE = '        "~^(?:200|304):/v1/brand-assets/(?:favicon|logo|login_ad)$" "";\n'
+# The public status page sets its own Cache-Control (200/304 "public,
+# no-cache" with an ETag, the closed page's 404 "no-store"); an empty value
+# keeps nginx from adding a second, conflicting "no-store" line.
+STATUS_PAGE_CACHE = '        "~^(?:200|304|404):/v1/status-page/public$" "";\n'
+WS_MAP_ANCHOR = BRAND_CACHE + STATUS_PAGE_CACHE + '    }\n'
 WS_MAP = '''    # WebSocket upgrades under /v1/ (the console SSH terminal); other requests
     # keep "Connection: close" to the API exactly as before.
     map $http_upgrade $connection_upgrade {
@@ -339,14 +369,21 @@ CERT_LINE = re.compile(r'(?m)^        ssl_certificate(_key)? [^\n]*;\n')
 # origin_auth_apply_nginx): the http block includes origin-auth.conf right
 # after the plan source include, and every proxy location's X-Real-IP /
 # X-Forwarded-For take $cdnca_client_ip, the forwarded one followed by an empty
-# X-Cdnca-Origin-Key. Convergence works on the plain form and applies the same
-# rewrite to the result, so locations it adds get the client IP too.
+# X-Cdnca-Origin-Key and X-Cdnca-Origin-Verified $cdnca_origin_verified, the
+# map right after the include (1: key and visitor IP, key_only, 0; for
+# control-api). Hosts rewritten before the map and that line have neither and
+# get them here (their origin-auth.conf needs no change). Convergence works on
+# the plain form and applies the same rewrite to the result, so locations it
+# adds get the client IP too.
 PLAN_SOURCE = '    include /etc/cdnca-upgrade/plan-source-nginx.conf;\n'
 ORIGIN_AUTH_INCLUDE = '    include /etc/cdnca-control/origin-auth.conf;\n'
+ORIGIN_AUTH_VERIFIED_MAP = ('    map "$cdnca_origin_ok:$cdnca_origin_peer" $cdnca_origin_verified '
+                            '{ default 0; "1:" key_only; "~^1:." 1; }\n')
 REAL_IP_PEER = '            proxy_set_header X-Real-IP $remote_addr;\n'
 REAL_IP_CLIENT = '            proxy_set_header X-Real-IP $cdnca_client_ip;\n'
-XFF_CLIENT = '            proxy_set_header X-Forwarded-For $cdnca_client_ip;\n            proxy_set_header X-Cdnca-Origin-Key "";\n'
-ORIGIN_AUTH_TEXT = re.compile(r'cdnca_client_ip|X-Cdnca-Origin-Key|origin-auth', re.I)
+XFF_CLIENT_UNVERIFIED = '            proxy_set_header X-Forwarded-For $cdnca_client_ip;\n            proxy_set_header X-Cdnca-Origin-Key "";\n'
+XFF_CLIENT = XFF_CLIENT_UNVERIFIED + '            proxy_set_header X-Cdnca-Origin-Verified $cdnca_origin_verified;\n'
+ORIGIN_AUTH_TEXT = re.compile(r'cdnca_client_ip|cdnca_origin_(?:ok|peer|verified)|X-Cdnca-Origin-(?:Key|Verified)|origin-auth', re.I)
 
 
 def replace_lines(text, old, new):
@@ -363,8 +400,12 @@ def split_origin_auth(text):
     if (text.count(ORIGIN_AUTH_INCLUDE) != 1 or text.count(PLAN_SOURCE) != 1 or
             text.count(PLAN_SOURCE + ORIGIN_AUTH_INCLUDE) != 1):
         raise ValueError('unexpected origin-auth include; converge manually')
-    plain = text.replace(PLAN_SOURCE + ORIGIN_AUTH_INCLUDE, PLAN_SOURCE)
+    if text.count(ORIGIN_AUTH_VERIFIED_MAP) > 1:
+        raise ValueError('unexpected origin-auth map; converge manually')
+    plain = text.replace(PLAN_SOURCE + ORIGIN_AUTH_INCLUDE + ORIGIN_AUTH_VERIFIED_MAP, PLAN_SOURCE)
+    plain = plain.replace(PLAN_SOURCE + ORIGIN_AUTH_INCLUDE, PLAN_SOURCE)
     plain = replace_lines(replace_lines(plain, REAL_IP_CLIENT, REAL_IP_PEER), XFF_CLIENT, XFF_PEER)
+    plain = replace_lines(plain, XFF_CLIENT_UNVERIFIED, XFF_PEER)
     if ORIGIN_AUTH_TEXT.search(plain):
         raise ValueError('unexpected origin-auth lines; converge manually')
     return plain, True
@@ -372,7 +413,7 @@ def split_origin_auth(text):
 
 def render_origin_auth(text):
     """origin_auth_apply_nginx on the converged plain text."""
-    text = text.replace(PLAN_SOURCE, PLAN_SOURCE + ORIGIN_AUTH_INCLUDE, 1)
+    text = text.replace(PLAN_SOURCE, PLAN_SOURCE + ORIGIN_AUTH_INCLUDE + ORIGIN_AUTH_VERIFIED_MAP, 1)
     return replace_lines(replace_lines(text, REAL_IP_PEER, REAL_IP_CLIENT), XFF_PEER, XFF_CLIENT)
 
 
@@ -421,7 +462,11 @@ def converge(raw, brotli=False, agent=DEFAULT_AGENT):
 
 
 def converge_main(raw, brotli=False, agent=DEFAULT_AGENT):
-    text = raw.decode('utf-8')
+    text = strip_forwarded(raw.decode('utf-8'))
+    if 'proxy_set_header Forwarded' in text:
+        raise ValueError('unexpected Forwarded configuration; converge manually')
+    if re.search(r'X-Cdnca-Client-|\$http_x_real_ip', text, re.I):
+        raise ValueError('unexpected client header forwarding; converge manually')
     if text.count('\nhttp {\n') != 1 or 'root /data/cdnca-native-root/cdnca/current/static/web;' not in text:
         raise ValueError('not an installer-generated management nginx configuration')
     listens = LISTEN.findall(text)
@@ -429,7 +474,7 @@ def converge_main(raw, brotli=False, agent=DEFAULT_AGENT):
         raise ValueError('expected exactly one public TLS listener')
     port = int(listens[0][1])
     if MARKER in text:
-        before = text.replace(SITE_CACHE, '', 1) if SITE_CACHE in text else text
+        before = (text.replace(SITE_CACHE, '', 1) if SITE_CACHE in text else text).replace(STATUS_PAGE_CACHE, '', 1)
         expected = (listens[0][2] == ' http2', HTTP_ADDITIONS in before, AUTH_LOCATION in text,
                     '        add_header Cache-Control $cdnca_cache_control always;\n' in text,
                     all(line == XFF_PEER for line in re.findall(r'(?m)^.*X-Forwarded-For.*\n', text)))
@@ -453,9 +498,23 @@ def converge_main(raw, brotli=False, agent=DEFAULT_AGENT):
 
 def converge_rest(text, brotli, agent=DEFAULT_AGENT):
     text, tunnel = split_agent_tunnel(text, agent)
+    # The status page rule goes first: WS_MAP_ANCHOR ends with it.
+    text = converge_status_page_cache(text)
     text = converge_websocket(converge_api_gzip(converge_status(converge_dashboard(converge_node_installer(converge_site(text))))))
-    text = converge_billing_bridge(converge_favicon(text))
-    return converge_http_end(converge_brotli(converge_agent_tunnel(text, tunnel), brotli))
+    text = drop_billing_bridge(converge_favicon(text))
+    return render_forwarded(converge_http_end(converge_brotli(converge_agent_tunnel(text, tunnel), brotli)))
+
+
+def converge_status_page_cache(text):
+    """Leaves /v1/status-page/public's Cache-Control to control-api: one
+    empty-valued map row right after the brand-asset row."""
+    if STATUS_PAGE_CACHE in text:
+        if text.count('/v1/status-page/public') != 1 or text.count(BRAND_CACHE + STATUS_PAGE_CACHE) != 1:
+            raise ValueError('partially converged status page Cache-Control rule; converge manually')
+        return text
+    if '/v1/status-page/public' in text or text.count(BRAND_CACHE) != 1:
+        raise ValueError('unexpected status page Cache-Control rule; converge manually')
+    return text.replace(BRAND_CACHE, BRAND_CACHE + STATUS_PAGE_CACHE)
 
 
 def converge_websocket(text):
@@ -483,11 +542,11 @@ def split_agent_tunnel(text, agent):
 
 
 def converge_agent_tunnel(text, tunnel):
-    """The node WebSocket tunnel sits between the billing bridge downloads and
+    """The node WebSocket tunnel sits between the node installer locations and
     location ^~ /downloads/, as install-control.sh write_nginx_config has it."""
-    if text.count(BILLING_BRIDGE + NODE_INSTALLER_ANCHOR) != 1:
+    if text.count(NODE_INSTALLER + NODE_INSTALLER_ANCHOR) != 1:
         raise ValueError('unexpected downloads locations for /agent/v1/; converge manually')
-    return text.replace(BILLING_BRIDGE + NODE_INSTALLER_ANCHOR, BILLING_BRIDGE + tunnel + NODE_INSTALLER_ANCHOR)
+    return text.replace(NODE_INSTALLER + NODE_INSTALLER_ANCHOR, NODE_INSTALLER + tunnel + NODE_INSTALLER_ANCHOR)
 
 
 def converge_favicon(text):
@@ -502,16 +561,16 @@ def converge_favicon(text):
     return text.replace(FAVICON_ERROR_OLD, FAVICON_ERROR).replace(FAVICON_FALLBACK_ANCHOR, FAVICON_FALLBACK + FAVICON_FALLBACK_ANCHOR)
 
 
-def converge_billing_bridge(text):
-    """Serves the billing integration modules from the active release, right
-    after the node installer locations."""
+def drop_billing_bridge(text):
+    """Removes the billing integration downloads location older installers
+    wrote right after the node installer locations."""
     if BILLING_BRIDGE in text:
         if text.count(BILLING_BRIDGE) != 1 or text.count(NODE_INSTALLER + BILLING_BRIDGE + NODE_INSTALLER_ANCHOR) != 1:
-            raise ValueError('partially converged billing bridge downloads; converge manually')
-        return text
-    if 'billing-bridge/ ' in text or text.count(NODE_INSTALLER + NODE_INSTALLER_ANCHOR) != 1:
+            raise ValueError('unexpected billing bridge downloads; converge manually')
+        return text.replace(BILLING_BRIDGE, '')
+    if 'billing-bridge/ ' in text:
         raise ValueError('unexpected billing bridge downloads; converge manually')
-    return text.replace(NODE_INSTALLER + NODE_INSTALLER_ANCHOR, NODE_INSTALLER + BILLING_BRIDGE + NODE_INSTALLER_ANCHOR)
+    return text
 
 
 def converge_brotli(text, brotli):

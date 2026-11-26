@@ -139,8 +139,77 @@ export function leftoverColors(files, read) {
 export const intentionalRemovals = [
   // cdncaCE：社区版去掉计费/套餐面板，管理首页操作区由三列改为一列。
   { file: 'apps/web/src/styles/adminHomeReference.css', selector: '.admin-overview .dashboard-operation-panels { grid-template-columns:' },
+  // 四层实时监控空序列不再画图，去掉图中央的 0。
+  { file: 'apps/web/src/pages/L4RealtimeMonitorPage.css', selector: '.l4-realtime-baseline-chart-zero {' },
+  // 维护页节点设置去掉历史实现与重复指路的列表。
+  { file: 'apps/web/src/pages/ControlUpgradesPage.css', selector: '.maintenance-node-settings-paths {' },
+  // 刷新预热去掉重复的「当前：xx」提示。
+  { file: 'apps/web/src/pages/CacheOperationsPage.css', selector: '.cache-baseline-current {' },
+  { file: 'apps/web/src/pages/CacheOperationsPage.css', selector: '@media (max-width: 560px) >> .cache-replica-page .cache-baseline-current {' },
+  // 窄屏不再取消刷新预热任务表、缓存操作记录表操作列的右固定与固定阴影（同 .jobs-table-scroll 的处理）。
+  { file: 'apps/web/src/pages/CacheOperationsPage.css', selector: '@media (max-width: 900px) >> .cache-operations-table .ant-table-cell-fix-right {' },
+  { file: 'apps/web/src/pages/CacheOperationsPage.css', selector: '@media (max-width: 900px) >> .cache-operations-table .ant-table-cell-fix-right-first::after, .cache-operations-table .ant-table-cell-fix-right-last::after {' },
+  { file: 'apps/web/src/pages/CacheOperationHistoryPage.css', selector: '@media (max-width: 900px) >> .cache-operation-history-table .ant-table-cell-fix-right {' },
+  { file: 'apps/web/src/pages/CacheOperationHistoryPage.css', selector: '@media (max-width: 900px) >> .cache-operation-history-table .ant-table-cell-fix-right-first::after, .cache-operation-history-table .ant-table-cell-fix-right-last::after {' },
+  // 事件提醒页去掉常驻两行说明。
+  { file: 'apps/web/src/pages/AccountMessagesPage.css', selector: '.account-messages-hint {' },
+  // 实名页去掉令牌说明横幅。
+  { file: 'apps/web/src/pages/AccountIdentityVerificationPage.css', selector: '.account-identity-verification-page .identity-introduction {' },
+  // 窄屏不再隐藏账户安全操作按钮。
+  { file: 'apps/web/src/pages/AccountUserPage.css', selector: '@media (max-width: 767px) >> .account-user-check > .ant-btn { display: none' },
+  // 已发送日志去掉内容列后，「不可用」占位文字不再出现。
+  { file: 'apps/web/src/pages/SystemSentLogPanel.css', selector: '.system-sent-time small, .system-sent-recipient small, .system-sent-unavailable {' },
+  // 错误页地区覆盖表去掉批量勾选：选择列、勾选框与按列序号定宽的规则随之删除；工具栏不再有说明文字。
+  { file: 'apps/web/src/pages/ErrorPagesPage.css', selector: '.error-page-regional-toolbar > span {' },
+  { file: 'apps/web/src/pages/ErrorPagesPage.css', selector: '.error-page-regional-table .ant-checkbox-inner {' },
+  { file: 'apps/web/src/pages/ErrorPagesPage.css', selector: '@media (max-width: 767px) >> .error-page-regional-table col' },
+  // DNS CNAME 表行操作由链接改为按钮。
+  { file: 'apps/web/src/pages/NodeDnsPage.css', selector: '.dns-page .dns-cname-table .dns-zone-actions a.ant-typography {' },
+  // 通知策略模板说明段落与四层转发面板的说明段落已删除（界面不再写说明横幅）。
+  { file: 'apps/web/src/pages/NotificationDeliveryPolicyPanel.css', selector: '.notification-policy-template-note {' },
+  { file: 'apps/web/src/pages/StreamListPage.css', selector: '.stream-panel-description {' },
+  // 窄屏不再取消节点列表操作列的右固定与固定阴影。
+  { file: 'apps/web/src/styles.css', selector: '@media (max-width: 767px) >> .node-table-scroll .ant-table-cell-fix-right {' },
+  { file: 'apps/web/src/styles.css', selector: '@media (max-width: 767px) >> .node-table-scroll .ant-table-cell-fix-right-first::after, .node-table-scroll .ant-table-cell-fix-right-last::after {' },
+  // 窄屏不再取消后台任务操作列的右固定与固定阴影。
+  { file: 'apps/web/src/styles.css', selector: '@media (max-width: 767px) >> .jobs-table-scroll .ant-table-cell-fix-right {' },
+  { file: 'apps/web/src/styles.css', selector: '@media (max-width: 767px) >> .jobs-table-scroll .ant-table-cell-fix-right-first::after, .jobs-table-scroll .ant-table-cell-fix-right-last::after {' },
+  // 筛选栏多出可见的「查询」列；首列单元格改为任务 ID。
+  { file: 'apps/web/src/pages/AdminTasksPage.css', selector: '.jobs-page .jobs-filter-group { grid-template-columns: repeat(4, minmax(0, 190px))' },
+  { file: 'apps/web/src/pages/AdminTasksPage.css', selector: '.jobs-page .jobs-task-name-cell, .jobs-page .jobs-dependency-cell .ant-btn {' },
+  { file: 'apps/web/src/pages/AdminTasksPage.css', selector: '.jobs-page .jobs-task-name-cell {' },
+  // API 密钥首屏改为「创建密钥」后，兼容区标题与高级区标题下的说明段落已删除。
+  { file: 'apps/web/src/pages/AccountApiKeysPage.css', selector: '.account-api-key-compatibility-header p, .account-api-key-advanced-heading p, .account-api-key-compatibility-copy p, .account-api-key-compatibility-note {' },
+  // 节点编辑弹窗页签交回 rc-tabs，窄屏能到达「添加子IP」。
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '.node-list-modal .ant-tabs-nav-wrap {' },
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '.node-list-modal .ant-tabs-nav-wrap::-webkit-scrollbar {' },
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '.node-list-modal .ant-tabs-nav-operations {' },
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '.node-list-modal .ant-tabs-nav-list {' },
+  // 数据分析排行页签窄屏交回 rc-tabs（「更多」与自动平移），不再隐藏入口做原生横滚。
+  { file: 'apps/web/src/pages/SiteAnalysisPage.css', selector: '@media (max-width: 767px) >> .analytics-analysis-page .analytics-rank-tabs .ant-tabs-nav-wrap {' },
+  { file: 'apps/web/src/pages/SiteAnalysisPage.css', selector: '@media (max-width: 767px) >> .analytics-analysis-page .analytics-rank-tabs .ant-tabs-nav-wrap::-webkit-scrollbar' },
+  { file: 'apps/web/src/pages/SiteAnalysisPage.css', selector: '@media (max-width: 767px) >> .analytics-analysis-page .analytics-rank-tabs .ant-tabs-nav-operations {' },
+  { file: 'apps/web/src/styles.css', selector: '@media (max-width: 767px) >> .analytics-tabs .ant-tabs-nav-wrap, .analytics-rank-tabs .ant-tabs-nav-wrap {' },
+  // 节点列表页窄屏不再用原生横滚替代 rc-tabs，键盘焦点与选中项回到可见区。
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '@media (max-width: 767px) >> .node-tabs .ant-tabs-nav-wrap {' },
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '@media (max-width: 767px) >> .node-tabs .ant-tabs-nav-wrap::-webkit-scrollbar {' },
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '@media (max-width: 767px) >> .node-tabs .ant-tabs-nav-operations {' },
+  { file: 'apps/web/src/pages/NodeListPage.css', selector: '@media (max-width: 767px) >> .node-tabs .ant-tabs-nav-list {' },
+  // 节点实时页窄屏不再强关 rc-tabs 的平移与「更多」，320px 末项能移入可见区。
+  { file: 'apps/web/src/pages/NodeRealtimePage.css', selector: '@media (max-width: 767px) >> .node-realtime-tabs .ant-tabs-nav-wrap {' },
+  { file: 'apps/web/src/pages/NodeRealtimePage.css', selector: '@media (max-width: 767px) >> .node-realtime-tabs .ant-tabs-nav-operations {' },
+  { file: 'apps/web/src/pages/NodeRealtimePage.css', selector: '@media (max-width: 767px) >> .node-realtime-tabs .ant-tabs-nav-list {' },
+  // 系统设置顶部页签不再自加原生横向滚动，由 rc-tabs 按扣除「更多」后的宽度平移并把选中项移入可见区。
+  { file: 'apps/web/src/pages/SystemGlobalSettingsPage.css', selector: '.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav-wrap {' },
+  { file: 'apps/web/src/styles.css', selector: '.system-settings-baseline-page.sys-setting > .ant-tabs .ant-tabs-nav-wrap {' },
   // 系统设置充值方式卡片加 USDT，网格由 3 列改为 4 列（窄屏 2 列）。
   { file: 'apps/web/src/styles.css', selector: '.system-settings-baseline-page.sys-setting .system-settings-payment-grid { grid-template-columns: repeat(3,' },
+  // 系统配置表单卡片的控件列原固定 760px，768px（侧栏常驻、内容区不足 930px）时掉到标签下方并撑出整页横向滚动；
+  // 改为占满标签后的剩余宽度（上限仍 760px），窄卡片由 @container 改纵排。
+  { file: 'apps/web/src/pages/SystemGlobalSettingsPage.css', selector: '.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control { flex:' },
+  { file: 'apps/web/src/pages/SystemGlobalSettingsPage.css', selector: '.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control { width:' },
+  { file: 'apps/web/src/pages/SystemGlobalSettingsPage.css', selector: '.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input, .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input-content { width:' },
+  { file: 'apps/web/src/pages/SystemGlobalSettingsPage.css', selector: '.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-extra { width:' },
   // 操作记录页工具栏移到标签行右侧（SiteCacheTabs extra），不再单独占一行，故去掉行距与两端对齐。
   { file: 'apps/web/src/pages/CacheOperationHistoryPage.css', selector: '.cache-operation-history-toolbar { justify-content:' },
   { file: 'apps/web/src/pages/CacheOperationHistoryPage.css', selector: '.cache-operation-history-toolbar { margin-bottom:' },

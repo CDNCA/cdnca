@@ -1884,6 +1884,12 @@ components:
               description: Why the stream's own CNAME failed (cname_state failed), e.g. cname_zone_not_configured, dns_propagation_unconfirmed.
             geo_policy: {$ref: '#/components/schemas/StreamGeoPolicyState'}
             eligibility_state: {type: string, enum: [eligible, ineligible]}
+            ineligible_reason:
+              type: string
+              enum: [package_suspended, package_cancelled]
+              readOnly: true
+              description: With eligibility_state ineligible, package_cancelled when the package subscription is cancelled (terminated; it ranks before an earlier suspension) and package_suspended when it is suspended (the stream is not published until it is resumed), as a site's package_unavailable_reason of the same names. Omitted otherwise.
+              x-description-zh: 套餐订阅已终止时为 package_cancelled（先于之前的暂停），已暂停时为 package_suspended（恢复前不下发），与网站一致；其他情况省略。
             admin_status: {$ref: '#/components/schemas/StreamAdminStatus'}
             overrides: {$ref: '#/components/schemas/StreamOverrides'}
             line: {$ref: '#/components/schemas/StreamLine'}
@@ -1924,20 +1930,33 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_session, permission_denied, validation_error, invalid_request, unsupported_media_type, stream_not_found, stream_port_conflict, stream_shared_port_proxy_protocol, stream_name_conflict, stream_group_not_found, stream_group_name_conflict, stream_group_in_use, stream_default_not_found, version_conflict, idempotency_conflict, internal_error]
+              enum: [invalid_session, permission_denied, validation_error, invalid_request, unsupported_media_type, stream_not_found, stream_port_conflict, stream_shared_port_proxy_protocol, stream_name_conflict, stream_group_not_found, stream_group_name_conflict, stream_group_in_use, stream_default_not_found, version_conflict, idempotency_conflict, package_resource_quota_exceeded, internal_error]
             message: {type: string}
             request_id: {type: string, minLength: 1, maxLength: 128}
             details:
-              type: object
-              additionalProperties: false
-              required: [protocol, port, with]
-              description: Only on stream_port_conflict when the collision is located. with is reserved (node ports 80/443/18080/18443), self (another listener of this stream), stream or site; name is the other stream or website when it is in the caller's scope.
-              properties:
-                protocol: {$ref: '#/components/schemas/StreamProtocol'}
-                port: {type: integer, minimum: 1, maximum: 65535}
-                port_end: {type: integer, minimum: 2, maximum: 65535}
-                with: {type: string, enum: [reserved, self, stream, site]}
-                name: {type: string}
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [protocol, port, with]
+                  description: Only on stream_port_conflict when the collision is located. with is reserved (node ports 80/443/18080/18443), self (another listener of this stream), stream or site; name is the other stream or website when it is in the caller's scope.
+                  properties:
+                    protocol: {$ref: '#/components/schemas/StreamProtocol'}
+                    port: {type: integer, minimum: 1, maximum: 65535}
+                    port_end: {type: integer, minimum: 2, maximum: 65535}
+                    with: {type: string, enum: [reserved, self, stream, site]}
+                    name: {type: string}
+                - $ref: '#/components/schemas/StreamPackageQuotaExceededDetails'
+    StreamPackageQuotaExceededDetails:
+      type: object
+      additionalProperties: false
+      required: [resource, limit, used, requested]
+      description: On 409 package_resource_quota_exceeded of a stream create or update - the package's stream_ports (every listener socket, a port range counting each port) would go above its effective limit. used is the subscription's sockets before the save (this stream's own included when it already counts there), requested what the save adds (0 when re-enabling a stream over the limit). The admission check is unchanged.
+      x-description-zh: 四层转发新建或修改因套餐四层端口额度被拒（409 package_resource_quota_exceeded）时附带：resource 为 stream_ports，生效上限、保存前已用端口数（本转发已计入时含其自身）与本次新增数（超额时重新启用为 0）；准入判断不变。
+      properties:
+        resource: {type: string, enum: [stream_ports]}
+        limit: {type: integer, format: int64, minimum: 0}
+        used: {type: integer, format: int64, minimum: 0}
+        requested: {type: integer, format: int64, minimum: 0}
   responses:
     BadRequest:
       description: Stable invalid request or validation error.
@@ -1968,7 +1987,7 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}
     Conflict:
-      description: Revision, idempotency, name, or listener-port conflict.
+      description: Revision, idempotency, name, listener-port or package quota conflict.
       headers:
         X-Request-ID: {$ref: '#/components/headers/RequestID'}
       content:

@@ -1,6 +1,6 @@
 // Package statuspagehttp serves the status page:
 //
-//	GET    /v1/status-page/public                          public view (no session; cached 30 s, 60/min per source)
+//	GET    /v1/status-page/public                          public view (no session; snapshot up to 30 s, dropped on every admin write; 60/min per source)
 //	GET    /v1/admin/status-page                           editor view
 //	PUT    /v1/admin/status-page                           save settings and components (If-Match revision)
 //	POST   /v1/admin/status-page/incidents                 open an incident or schedule maintenance
@@ -92,6 +92,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		request.ExpectedRevision = revision
 		view, err := h.service.Save(ctx, actor, request)
+		h.written()
 		h.respond(w, requestID, http.StatusOK, view, err)
 	case path == incidentsPath && r.Method == http.MethodPost:
 		var input statuspage.IncidentInput
@@ -99,6 +100,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		item, err := h.service.CreateIncident(ctx, actor, input)
+		h.written()
 		h.respond(w, requestID, http.StatusCreated, item, err)
 	case strings.HasPrefix(path, incidentsPath+"/"):
 		h.incident(ctx, w, r, requestID, actor, strings.TrimPrefix(path, incidentsPath+"/"))
@@ -123,9 +125,11 @@ func (h *Handler) incident(ctx context.Context, w http.ResponseWriter, r *http.R
 			return
 		}
 		item, err := h.service.AddUpdate(ctx, actor, id, input)
+		h.written()
 		h.respond(w, requestID, http.StatusOK, item, err)
 	case action == "" && r.Method == http.MethodDelete:
 		err := h.service.DeleteIncident(ctx, actor, id)
+		h.written()
 		if err == nil {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -135,6 +139,11 @@ func (h *Handler) incident(ctx context.Context, w http.ResponseWriter, r *http.R
 		writeError(w, requestID, http.StatusMethodNotAllowed, "status_page_method_not_allowed")
 	}
 }
+
+// written drops the public snapshot after an admin write, so the next public
+// read already shows it (enabled, branding, components, incidents). It runs
+// on errors too: Save can commit and then fail to read the editor view back.
+func (h *Handler) written() { h.cache.invalidate() }
 
 func (h *Handler) actor(w http.ResponseWriter, r *http.Request, requestID string) (statuspage.Actor, bool) {
 	values := r.Header.Values("Authorization")

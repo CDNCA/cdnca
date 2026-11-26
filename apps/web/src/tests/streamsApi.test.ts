@@ -187,6 +187,19 @@ describe('streamsApi', () => {
     expect((await streamsApi.get('token', modernStream.id)).publish_intent.failure_code).toBeNull()
   })
 
+  it('reads a suspended or cancelled package reason only on an ineligible stream', async () => {
+    const suspended = { ...modernStream, eligibility_state: 'ineligible', ineligible_reason: 'package_suspended' }
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(suspended)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...suspended, ineligible_reason: 'package_cancelled' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...suspended, eligibility_state: 'eligible' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...suspended, ineligible_reason: 'package_expired' })))
+    expect(await streamsApi.get('token', suspended.id)).toMatchObject({ eligibility_state: 'ineligible', ineligible_reason: 'package_suspended' })
+    expect(await streamsApi.get('token', suspended.id)).toMatchObject({ eligibility_state: 'ineligible', ineligible_reason: 'package_cancelled' })
+    await expect(streamsApi.get('token', suspended.id)).rejects.toMatchObject({ code: 'invalid_response' })
+    await expect(streamsApi.get('token', suspended.id)).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
   it.each([42, 'Node Artifacts', ''])('rejects a malformed publication failure code %j', async (code) => {
     const item = { ...modernStream, publish_intent: { ...modernStream.publish_intent, state: 'failed', failure_code: code } }
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(item)))

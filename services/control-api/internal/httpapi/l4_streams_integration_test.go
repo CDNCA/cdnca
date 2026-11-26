@@ -920,6 +920,12 @@ func seedL4PackageCNAME(t *testing.T, pool *pgxpool.Pool, tenant l4TenantFixture
 			WHERE tenant_scope_id=$1 AND id=$2`, tenant.scopeID, tenant.subscriptionID); err != nil {
 			return err
 		}
+		// Readers project the entitlement in force now (migration 691), so its versions carry the mode too.
+		if _, err := tx.Exec(t.Context(), `UPDATE package_subscription_entitlement_versions
+			SET product_snapshot=jsonb_set(product_snapshot,'{spec,cname,mode}','"shared"')
+			WHERE tenant_scope_id=$1 AND subscription_id=$2`, tenant.scopeID, tenant.subscriptionID); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(t.Context(), `INSERT INTO cname_allocations(id,tenant_id,tenant_scope_id,owner_user_id,mode,
 			package_subscription_id,current_claim_id,lkg_claim_id,current_revision,lkg_revision,generation,state,job_id,created_at,updated_at)
 			SELECT $1,scope.tenant_id,scope.id,$3,'package',$4,$5,$5,1,1,1,'done',gen_random_uuid(),now(),now()

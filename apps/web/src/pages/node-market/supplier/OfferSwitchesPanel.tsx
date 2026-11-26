@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { Space, Switch, Table, Tag, Tooltip, Typography } from 'antd'
+import { Space, Switch, Tag, Tooltip, Typography } from 'antd'
+import { Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { marketApi, newIdempotencyKey, type MarketOfferListing } from '../../../api/market'

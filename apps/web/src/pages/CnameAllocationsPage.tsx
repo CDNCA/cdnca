@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Descriptions, Drawer, Input, Result, Space, Table, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
+import { Button, Descriptions, Drawer, Input, Result, Space, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
+import { Table } from '@cdnca/ui'
 import { ChevronLeft, ChevronRight, Eye, RefreshCw, Search, Stethoscope } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'

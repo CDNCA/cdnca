@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/libs/mail"
+	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/notificationruntime"
 	"github.com/cdnca/cdnca/services/control-api/internal/theme"
@@ -43,9 +44,10 @@ type smtpTLSTransport struct {
 }
 
 // smtpHTMLLayout returns the HTML alternative for a message, or false to send
-// the plain-text body alone.
+// the plain-text body alone. action is the message's link (smtpEmailAction),
+// given apart from the body so the layout can make it clickable.
 type smtpHTMLLayout interface {
-	Render(ctx context.Context, scopeID uuid.UUID, subject, body string) ([]byte, bool)
+	Render(ctx context.Context, scopeID uuid.UUID, subject, body string, action theme.EmailAction) ([]byte, bool)
 }
 
 // newThemedSMTPTLSTransport adds the active theme's HTML email layout.
@@ -124,7 +126,7 @@ func (transport *smtpTLSTransport) Send(
 	}
 	var html []byte
 	if transport.html != nil {
-		if rendered, ok := transport.html.Render(ctx, message.ScopeID, message.Subject, message.Body); ok {
+		if rendered, ok := transport.html.Render(ctx, message.ScopeID, message.Subject, message.Body, smtpEmailAction(message)); ok {
 			html = rendered
 		}
 	}
@@ -299,6 +301,21 @@ func validSMTPProviderMessage(message notificationruntime.ProviderMessage) bool 
 	parsed, err := url.Parse(message.ActionURL)
 	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil &&
 		!strings.ContainsAny(message.ActionURL, "\r\n\x00")
+}
+
+// smtpEmailAction is the themed HTML link of a message: member
+// invitations read 接受邀请; account recovery, the only other sender of an
+// ActionURL (its template id is operator-configurable), reads 设置新密码.
+// The plain part carries the address itself (buildNamedSMTPMessage).
+func smtpEmailAction(message notificationruntime.ProviderMessage) theme.EmailAction {
+	if message.ActionURL == "" {
+		return theme.EmailAction{}
+	}
+	label := "设置新密码"
+	if message.TemplateID == identity.TenantMemberInvitationTemplate {
+		label = "接受邀请"
+	}
+	return theme.EmailAction{URL: message.ActionURL, Label: label}
 }
 
 func buildSMTPMessage(from, serverName string, message notificationruntime.ProviderMessage, html []byte) string {

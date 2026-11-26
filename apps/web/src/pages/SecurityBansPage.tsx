@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography, type TableColumnsType } from 'antd'
+import { Alert, Button, Form, Input, Modal, Select, Space, Tag, Typography, type TableColumnsType } from 'antd'
 import { Plus, RefreshCw, Unlock } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 
 import { ApiError } from '../api/auth'
 import {
@@ -20,8 +21,11 @@ import { formatDateTime } from '../i18n/formatters'
 import '../i18n/securityBans'
 import { cacheWriteIdentity, cacheWriteOwner, pendingCacheWriteKey, rememberCacheWrite, settleCacheWrite } from './cacheWriteJournal'
 import { writeOutcomeUnknown } from './site-edit/writeOutcome'
-import { FeedbackWhen, IdOrNameInput, PageSection, useLiveApply } from '@cdnca/ui'
+import { FeedbackWhen, IdOrNameInput, PageSection, liveFilterDelay, useLiveApply, Table } from '@cdnca/ui'
+import { isIPOrCIDR } from '../api/addressRules'
+import { FilterField, filterFieldProps, useFieldFocus } from '../components/FilterFieldError'
 import { siteSearch as siteNameSearch } from './idNameSources'
+import { filterParam, useFilterUrl } from './filterUrl'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const stateColors: Record<SecurityBanState, string> = { active: 'red', released: 'green', expired: 'default' }
@@ -68,6 +72,12 @@ interface Filters {
   state: '' | SecurityBanState
 }
 
+const ipFieldID = 'security-bans-filter-ip'
+const banStates = ['active', 'released', 'expired'] as const
+const pageSizes = [20, 50, 100]
+// 新建封禁的网站搜索停顿后才查（清空立即生效）。
+const siteSearchDelay = 250
+
 function errorKey(error: unknown): string {
   if (!(error instanceof ApiError)) return 'errors.failed'
   switch (error.code) {
@@ -89,10 +99,34 @@ export default function SecurityBansPage() {
   const audience: SecurityBanAudience = principal?.scope_kind === 'platform' ? 'admin' : 'tenant'
   const canManage = principal?.permissions.includes('security_policies.manage') ||
     principal?.permissions.includes('platform.admin') || false
-  const [draft, setDraft] = useState<Filters>({ site: '', ip: '', state: 'active' })
-  const [applied, setApplied] = useState<Filters>(draft)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  // 已生效的网站、IP、状态、页码与每页条数写进 URL（默认值不写），刷新或打开链接时读回；
+  // 链接里的网站不是 UUID、状态或页码不认识时用默认值；IP 不合法时放进输入框标错，不生效。
+  const [searchParams] = useSearchParams()
+  const [linked] = useState(() => {
+    const site = filterParam(searchParams, 'site_id').toLowerCase()
+    const ip = filterParam(searchParams, 'client_ip')
+    const state = filterParam(searchParams, 'state')
+    const pageNumber = Number(filterParam(searchParams, 'page'))
+    const limit = Number(filterParam(searchParams, 'limit'))
+    const filters: Filters = {
+      site: uuidPattern.test(site) ? site : '', ip,
+      state: state === 'all' ? '' : (banStates as readonly string[]).includes(state) ? state as SecurityBanState : 'active',
+    }
+    const valid = ip === '' || isIPOrCIDR(ip, minNetworkBits)
+    return {
+      draft: filters, applied: valid ? filters : { ...filters, ip: '' },
+      page: valid && Number.isSafeInteger(pageNumber) && pageNumber > 1 ? pageNumber : 1,
+      pageSize: pageSizes.includes(limit) ? limit : 20,
+    }
+  })
+  const [draft, setDraft] = useState<Filters>(linked.draft)
+  const [applied, setApplied] = useState<Filters>(linked.applied)
+  const [page, setPage] = useState(linked.page)
+  const [pageSize, setPageSize] = useState(linked.pageSize)
+  useFilterUrl({
+    site_id: applied.site, client_ip: applied.ip, state: applied.state === 'active' ? undefined : applied.state || 'all',
+    page: page > 1 ? page : undefined, limit: pageSize !== 20 ? pageSize : undefined,
+  })
   const [creating, setCreating] = useState(false)
   const [releasing, setReleasing] = useState<SecurityBan | null>(null)
   const [busy, setBusy] = useState(false)
@@ -100,7 +134,14 @@ export default function SecurityBansPage() {
   // The result of a submission that banned nothing, shown inside the dialog.
   const [createError, setCreateError] = useState<ResultMessage | null>(null)
   const [form] = Form.useForm<{ site_ids: string[]; client_ips: string; seconds: number; reason: string }>()
+  const [siteTyping, setSiteTyping] = useState('')
   const [siteSearch, setSiteSearch] = useState('')
+  useEffect(() => {
+    const term = siteTyping.trim()
+    if (!term) { setSiteSearch(''); return undefined }
+    const timer = window.setTimeout(() => setSiteSearch(term), siteSearchDelay)
+    return () => window.clearTimeout(timer)
+  }, [siteTyping])
   const sites = useQuery({
     queryKey: ['security-ban-sites', audience, principal?.scope_id, siteSearch],
     enabled: creating && Boolean(accessToken),
@@ -127,12 +168,37 @@ export default function SecurityBansPage() {
   // 筛选边输入边生效；网站也可输入域名从联想中选中（接口只认网站 UUID，
   // 未选中的域名只联想不过滤）。查询按钮：无未生效改动时刷新。
   const applyFilters = (next: Filters) => { setApplied(next); setPage(1) }
-  const draftValid = draft.site === '' || uuidPattern.test(draft.site)
-  useLiveApply(draft, applied, applyFilters, { valid: draftValid })
+  // 客户端 IP 按服务端同一规则（地址或网段，IPv4 最大 /8、IPv6 最大 /32）先校验，
+  // 错误挂在 IP 输入框上；服务端仍拒绝（validation_error，如保留地址段）时同样记在该字段，并回到上次成功的条件与结果。
+  const siteValid = draft.site === '' || uuidPattern.test(draft.site)
+  const [refusedIP, setRefusedIP] = useState<string | null>(null)
+  const ipValid = (draft.ip === '' || isIPOrCIDR(draft.ip, minNetworkBits)) && draft.ip !== refusedIP
+  const [ipErrorShown, setIPErrorShown] = useState(false)
+  const focusField = useFieldFocus()
+  // 边输入边校验：停下与自动生效同样的时长后才标错，输入中途不闪错误。
+  useEffect(() => {
+    if (ipValid) { setIPErrorShown(false); return undefined }
+    const timer = window.setTimeout(() => setIPErrorShown(true), liveFilterDelay)
+    return () => window.clearTimeout(timer)
+  }, [draft.ip, ipValid])
+  const ipError = !ipValid && (ipErrorShown || draft.ip === refusedIP) ? t('filters.invalidIp') : null
+  useLiveApply(draft, applied, applyFilters, { valid: siteValid && ipValid })
   const search = () => {
+    if (!ipValid) { setIPErrorShown(true); focusField(ipFieldID); return }
     if (JSON.stringify(draft) !== JSON.stringify(applied)) applyFilters(draft)
     else void query.refetch()
   }
+  const lastGood = useRef({ filters: applied, page })
+  useEffect(() => {
+    if (query.isSuccess) lastGood.current = { filters: applied, page }
+  }, [query.isSuccess, applied, page])
+  const ipRefused = query.error instanceof ApiError && query.error.code === 'validation_error' && applied.ip !== '' && applied.ip !== lastGood.current.filters.ip
+  useEffect(() => {
+    if (!ipRefused) return
+    setRefusedIP(applied.ip)
+    setApplied(lastGood.current.filters)
+    setPage(lastGood.current.page)
+  }, [ipRefused, applied.ip])
   const siteOptions = useMemo(() => siteNameSearch(accessToken ?? '', 'id'), [accessToken])
   const marketSites = (query.data?.items ?? []).some((item) => (item.delivery?.leaves ?? 0) > 0)
   const deliveryReason = (reason: string) => (i18n.exists(`delivery.reasons.${reason}`, { ns: 'securityBans' })
@@ -150,7 +216,12 @@ export default function SecurityBansPage() {
   // failure with its reason.
   const submitCreate = async () => {
     // Invalid input stays in the form with its field errors; the rejection is handled here.
-    const values = await form.validateFields().catch(() => null)
+    // 校验不过时滚到并聚焦第一个出错的字段。
+    const values = await form.validateFields().catch((error: { errorFields?: Array<{ name: (string | number)[] }> }) => {
+      const first = error.errorFields?.[0]?.name
+      if (first) form.scrollToField(first, { block: 'center', focus: true })
+      return null
+    })
     if (!values) return
     const { clients } = parseClients(values.client_ips)
     const domains = new Map(siteItems.map((item) => [item.id, item.domain]))
@@ -249,7 +320,7 @@ export default function SecurityBansPage() {
       render: (value: string | null) => (value ? formatDateTime(value, locale) : '-'),
     },
     {
-      title: t('columns.actions'), key: 'actions',
+      title: t('columns.actions'), key: 'actions', width: 110, fixed: 'right',
       render: (_: unknown, row: SecurityBan) => (canManage && row.state === 'active' ? (
         <Button size="small" icon={<Unlock size={14} aria-hidden />} onClick={() => setReleasing(row)}>{t('actions.release')}</Button>
       ) : null),
@@ -266,25 +337,30 @@ export default function SecurityBansPage() {
         <IdOrNameInput aria-label={t('filters.site')} placeholder={t('filters.sitePlaceholder')} value={draft.site} style={{ width: 300 }}
           isId={(text) => uuidPattern.test(text.toLowerCase())} search={siteOptions} onPressEnter={search}
           onChange={(site) => setDraft((current) => ({ ...current, site: site.trim().toLowerCase() }))} />
-        <Input aria-label={t('filters.ip')} placeholder={t('filters.ip')} value={draft.ip} style={{ width: 220 }} onPressEnter={search}
-          onChange={(event) => { const ip = event.target.value.trim(); setDraft((current) => ({ ...current, ip })) }} />
+        <FilterField id={ipFieldID} error={ipError}>
+          <Input aria-label={t('filters.ip')} placeholder={t('filters.ip')} value={draft.ip} style={{ width: 220 }} onPressEnter={search}
+            {...filterFieldProps(ipFieldID, ipError)}
+            onChange={(event) => { const ip = event.target.value.trim(); setDraft((current) => ({ ...current, ip })) }} />
+        </FilterField>
         <Select aria-label={t('filters.state')} value={draft.state} style={{ width: 140 }}
           onChange={(value) => setDraft((current) => ({ ...current, state: value }))}
-          options={[{ value: '', label: t('filters.all') }, ...(['active', 'released', 'expired'] as const).map((value) => ({ value, label: t(`state.${value}`) }))]} />
-        <Button type="primary" disabled={!draftValid} onClick={search}>{t('filters.search')}</Button>
+          options={[{ value: '', label: t('filters.all') }, ...banStates.map((value) => ({ value, label: t(`state.${value}`) }))]} />
+        <Button type="primary" disabled={!siteValid} onClick={search}>{t('filters.search')}</Button>
         <Button onClick={() => { const empty: Filters = { site: '', ip: '', state: 'active' }; setDraft(empty); setApplied(empty); setPage(1) }}>{t('filters.reset')}</Button>
         <Button icon={<RefreshCw size={14} aria-hidden />} onClick={() => void refresh()}>{t('actions.refresh')}</Button>
         {canManage ? <Button icon={<Plus size={14} aria-hidden />} onClick={() => setCreating(true)}>{t('actions.create')}</Button> : null}
       </Space>
-      {query.isError ? <FeedbackWhen title={t('errors.load')} /> : null}
+      {query.isError && !ipRefused ? <FeedbackWhen title={t('errors.load')} /> : null}
       <Table<SecurityBan>
         rowKey="id"
         loading={query.isFetching}
         columns={columns}
         dataSource={query.data?.items ?? []}
         locale={{ emptyText: t('empty') }}
+        // 表格在自己的容器里横向滚动，操作列固定在右侧，不撑宽页面。
+        scroll={{ x: 'max-content' }}
         pagination={{
-          current: page, pageSize, total: query.data?.total ?? 0, showSizeChanger: true, pageSizeOptions: [20, 50, 100],
+          current: page, pageSize, total: query.data?.total ?? 0, showSizeChanger: true, pageSizeOptions: pageSizes,
           showTotal: (count) => t('total', { count }),
           onChange: (next, size) => { setPage(size !== pageSize ? 1 : next); setPageSize(size) },
         }}
@@ -294,7 +370,7 @@ export default function SecurityBansPage() {
         {createError ? resultAlert(createError, () => setCreateError(null)) : null}
         <Form form={form} layout="vertical" initialValues={{ site_ids: [], seconds: 3600, reason: '' }}>
           <Form.Item name="site_ids" label={t('form.site')} rules={[{ required: true, type: 'array', min: 1, message: t('errors.siteRequired') }]}>
-            <Select mode="multiple" showSearch filterOption={false} onSearch={setSiteSearch} loading={sites.isFetching}
+            <Select mode="multiple" showSearch filterOption={false} onSearch={setSiteTyping} loading={sites.isFetching || siteTyping.trim() !== siteSearch}
               placeholder={t('form.sitePlaceholder')} aria-label={t('form.site')} notFoundContent={sites.isFetching ? null : t('form.noSites')}
               options={siteItems.map((item) => ({ value: item.id, label: item.domain, title: item.domain }))} />
           </Form.Item>

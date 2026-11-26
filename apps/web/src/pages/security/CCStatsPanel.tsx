@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Segmented, Space, Table, Typography } from 'antd'
+import { Alert, Segmented, Space, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
 
 import { ccStatsRanges, getCCSiteStats, type CCRuleTotal, type CCSiteStats, type CCStatsRange, type CCTopValue } from '../../api/ccStats'
 import '../../i18n/securityPoliciesCCStats'
 import { themeColor, useThemeRevision } from '../../theme/themeColor'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, Table } from '@cdnca/ui'
 
 // The CC page's statistics tab: one site's rule activity
 // as a trend chart, per-rule totals and the triggering top lists.

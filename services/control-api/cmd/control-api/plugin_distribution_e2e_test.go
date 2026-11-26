@@ -109,6 +109,9 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 	if err != nil || pluginRuntime == nil {
 		t.Fatalf("plugin installation runtime=%v err=%v", pluginRuntime != nil, err)
 	}
+	// The activation client shares this license client: the market confirmation below loses one committed answer.
+	lostAnswer := &lostActivationAnswer{next: pluginRuntime.licenseHTTP.Transport}
+	pluginRuntime.licenseHTTP.Transport = lostAnswer
 	handler, err := pluginRuntime.handler()
 	if err != nil {
 		t.Fatal(err)
@@ -335,7 +338,7 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		// Before runMarketPluginFlow: it signals the market process to stop serving the catalog origin.
 		runMarketRulePackFlow(t, fixture, client, platformClient, pool, trust)
 	}
-	runMarketPluginFlow(t, directory, fixture, platformClient, []controlClient{client, clientB},
+	runMarketPluginFlow(t, directory, fixture, platformClient, []controlClient{client, clientB}, pool, lostAnswer,
 		func(label string) bool {
 			return available(label, token, marketPluginID) && available(label, tokenB, marketPluginID)
 		})

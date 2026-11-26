@@ -1,6 +1,6 @@
 import { Alert, App, Space, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import type { SystemConfigurationCategory } from '../../api/systemConfiguration'
 import { systemConfigurationPendingNamespace as namespace } from '../../i18n/systemConfigurationPending'
@@ -44,10 +44,20 @@ function CategoryLinks({ categories, onNavigate }: {
   )
 }
 
-/** Scope and save granularity of the nginx/resources/defaults pages: saving only creates a draft (ADMIN-CURRENT-08). */
-export function CategoryScopeNotice() {
+/**
+ * nginx/resources/defaults 页保存只生成草稿。不再常驻整段说明，
+ * 只在本分类确有已保存未生效的修改时给一行状态与去检查并启用的入口。
+ */
+export function CurrentCategoryPending({ current, pending }: {
+  current: SystemConfigurationCategory
+  pending: readonly SystemConfigurationCategory[]
+}) {
   const { t } = useTranslation(namespace)
-  return <Alert type="info" showIcon data-testid="category-scope-notice" message={t('scope.title')} description={t('scope.description')} />
+  if (!pending.includes(current)) return null
+  return <p className="configuration-current-pending" data-testid="current-category-pending">
+    <span>{t('current.pending')}</span>
+    <Link to={categoryPaths.node_monitoring!}>{t('current.activate')}</Link>
+  </p>
 }
 
 /** Banner shown on a category page when the shared head carries other categories' unactivated changes. */

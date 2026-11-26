@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Drawer, Grid, Input, InputNumber, Radio, Select, Switch, Tabs, Tag } from 'antd'
+import { Alert, Button, Drawer, Grid, Input, InputNumber, Radio, Select, Switch, Tag } from 'antd'
+import { Tabs } from '../../components/Tabs'
 import { FeedbackWhen, useFeedbackMessage } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 

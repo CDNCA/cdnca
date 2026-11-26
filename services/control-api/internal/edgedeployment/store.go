@@ -556,9 +556,14 @@ func (s *Store) insertNodeDeployment(
 			commandArtifacts = []*agentv1.ArtifactDescriptor{root, commandArtifacts[0]}
 		}
 	}
+	var released []string
 	switch request.Action {
 	case agentv1.DeploymentAction_DEPLOYMENT_ACTION_APPLY:
 		commandPrevious = currentVersionID
+		var err error
+		if released, err = releasedConfigVersions(ctx, tx, nodeID, request.ConfigurationScopeID, now); err != nil {
+			return Deployment{}, err
+		}
 	case agentv1.DeploymentAction_DEPLOYMENT_ACTION_ROLLBACK:
 		if currentVersionID == nil || previousVersionID == nil || *previousVersionID != request.ConfigVersionID {
 			return Deployment{}, ErrRollbackStateConflict
@@ -585,6 +590,9 @@ func (s *Store) insertNodeDeployment(
 		// MULTI_TENANT_RUNTIME agents keep state per scope and require it on
 		// every configuration command, rollbacks included; others ignore it.
 		ConfigurationScopeId: proto.String(request.ConfigurationScopeID.String()),
+		// the agent stops holding the records
+		// of the versions the operator confirmed it served.
+		ReleasedConfigVersionIds: released,
 	}
 	encoded, err := marshalDeploymentCommand(command)
 	if err != nil {

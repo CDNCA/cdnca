@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import type { ControlUpgradeRolloutDetail, ControlUpgradeRolloutSummary, MaintenanceUpgradeStatus, MaintenanceUpgradeNode } from '../api/controlUpgrades'
+import type { ControlUpgradePreparation, ControlUpgradeRolloutDetail, ControlUpgradeRolloutSummary, MaintenanceUpgradeStatus, MaintenanceUpgradeNode } from '../api/controlUpgrades'
 import { nativeControlUpgradesApi } from '../api/controlUpgrades.native'
 import { nativePublicationFixture, nativeStatusFixture } from '../api/controlUpgrades.native.fixtures'
 import { useSessionStore } from '../auth/session'
@@ -10,6 +10,7 @@ import { enUS, zhCN } from '../i18n/resources'
 import { authResponse, nodeManagementSettingsFixture, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
 import ControlUpgradesPage from './ControlUpgradesPage'
+import { pendingBackupKey } from './controlBackupPending'
 
 // antd 在 jsdom 下所有弹窗共用 aria-labelledby="test-id"，常驻的反馈弹窗（useFeedback/OutcomeUnknown）
 // 挂在前面时会抢走其他弹窗的可访问名；按可见标题找当前可见的弹窗/抽屉。
@@ -100,9 +101,19 @@ function rollout(overrides: Partial<ControlUpgradeRolloutSummary> = {}): Control
 const emptyBackupStatus = { data: { keys_ready: false, agent_installed: false, migration_ready: false, freeze: null, bundles: [], runs: [], settings: null, revision: 0 } }
 
 function listResponse(...items: ControlUpgradeRolloutSummary[]) {
+  return listWithPreparations([], ...items)
+}
+
+function listWithPreparations(preparations: ControlUpgradePreparation[], ...items: ControlUpgradeRolloutSummary[]) {
   const data = items.map((item) => Object.fromEntries(Object.entries(item)
     .filter(([key]) => !['batches', 'nodes', 'events', 'status_receipts'].includes(key))) as unknown as ControlUpgradeRolloutSummary)
-  return { data, page: 1, page_size: 10, total: data.length }
+  return { data, page: 1, page_size: 10, total: data.length, preparations }
+}
+
+// a create is answered with its background preparation.
+function preparationOf(nodeIDs: string[], overrides: Partial<ControlUpgradePreparation> = {}): ControlUpgradePreparation {
+  return { id: '00000000-0000-4000-8000-0000000000a1', plan_id: ids.plan, state: 'preparing', phase: 'queued',
+    start_when_ready: true, node_ids: [...nodeIDs].sort(), created_at: '2026-11-25T01:00:00Z', updated_at: '2026-11-25T01:00:00Z', ...overrides }
 }
 
 function rolloutDetail(nodeIDs: string[], overrides: Partial<ControlUpgradeRolloutDetail> = {}): ControlUpgradeRolloutDetail {
@@ -157,6 +168,9 @@ function nodeUpgrade(nodeID: string, overrides: Partial<MaintenanceUpgradeNode> 
     ...overrides,
   }
 }
+
+// A queued backup's wait is kept in localStorage; no test inherits another's.
+afterEach(() => window.localStorage.removeItem(pendingBackupKey))
 
 describe('ControlUpgradesPage', () => {
   it('compacts only the healthy current-version state while keeping details and idle signed actions reachable', async () => {
@@ -229,6 +243,107 @@ describe('ControlUpgradesPage', () => {
       if (condition === 'runner') expect(within(details).getByText('签名计划服务已接入，独立升级执行器状态待确认')).toBeInTheDocument()
     },
   )
+
+  // Problem 47: unconfirmed runner, runner up but refusing upgrades, ready runner.
+  it.each([
+    ['unconfirmed', { ready: false, reason: 'control_upgrade_runner_unconfirmed' }, '状态未确认，暂不可升级'],
+    ['unavailable', { ready: false, reason: 'control_upgrade_current_release_unverified' }, '当前版本文件与签名清单不一致，升级执行器已暂停执行升级'],
+    ['ready', { ready: true, reason: 'ready' }, '当前已经是最新版本'],
+  ] as const)('tells the %s control upgrade runner state apart on the summary card', async (condition, runtime, label) => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage'])
+    const data = maintenanceStatus()
+    data.control.candidate = { ...data.control.candidate, state: 'up_to_date', reason: 'same_version', version: '3.4.0' }
+    data.control.runtime = { ...runtime }
+    vi.spyOn(nativeControlUpgradesApi, 'status').mockImplementation(async () => nativeStatusFixture())
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(json(
+      String(input).startsWith('/v1/admin/maintenance-upgrade-status') ? { data } : listResponse(),
+    )))
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const summary = screen.getByRole('heading', { name: '主控升级' }).closest('section')!
+    expect(await within(summary).findByText(label)).toBeInTheDocument()
+    if (condition === 'unavailable') expect(summary).toHaveTextContent('journalctl -u cdnca-native-control-upgrade-runner')
+    else expect(summary).not.toHaveTextContent('journalctl')
+    expect(within(summary).queryByRole('button', { name: '升级主控' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the master upgrade disabled and explains an unverified current release', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage'])
+    const data = maintenanceStatus()
+    data.control.runtime = { ready: false, reason: 'control_upgrade_current_release_unverified' }
+    vi.spyOn(nativeControlUpgradesApi, 'status').mockImplementation(async () => ({
+      ...nativeStatusFixture(), execution: { state: 'unavailable' as const, phase: null, receipt: null },
+      runtime: { ready: false, reason: 'control_upgrade_current_release_unverified' },
+    }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/admin/control-upgrade-plan/run-log') {
+        return Promise.resolve(json({ schema: 'cdnca.native-control-upgrade-runlog/v1', observed_at: new Date().toISOString(), state: 'unavailable', run_log: null }))
+      }
+      return Promise.resolve(json(url.pathname.endsWith('/maintenance-upgrade-status') ? { data } : listResponse()))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const summary = screen.getByRole('heading', { name: '主控升级' }).closest('section')!
+    expect(await within(summary).findByRole('button', { name: '升级主控' })).toBeDisabled()
+    expect(await within(summary).findByText('当前版本文件与签名清单不一致，升级执行器已暂停执行升级')).toBeInTheDocument()
+    expect(summary).toHaveTextContent('journalctl -u cdnca-native-control-upgrade-runner')
+    // The log dialog's shared status area carries the reason and next step; the
+    // script log keeps its own empty text.
+    await user.click(within(summary).getByRole('button', { name: '查看日志' }))
+    const dialog = await findDialog('主控升级日志')
+    const status = within(dialog).getByRole('region', { name: '状态' })
+    expect(status).toHaveTextContent('当前版本文件与签名清单不一致，升级执行器已暂停执行升级')
+    expect(status).toHaveTextContent('journalctl -u cdnca-native-control-upgrade-runner')
+    const scriptBox = within(dialog).getByLabelText('日志内容 脚本日志') as HTMLTextAreaElement
+    await waitFor(() => expect(scriptBox.value).toContain('暂无脚本日志'))
+    expect(scriptBox.value).not.toContain('当前版本文件与签名清单不一致')
+    expect(within(dialog).getByRole('button', { name: /复制/ })).toBeDisabled()
+    expect(within(dialog).queryByRole('button', { name: '升级主控' })).not.toBeInTheDocument()
+  })
+
+  // Problem 47 follow-up: the master log dialog shows the runner state above both
+  // tabs, the same on either tab, while the program log keeps its own empty text.
+  it.each([
+    ['unconfirmed', { ready: false, reason: 'control_upgrade_runner_unconfirmed' }, '签名计划服务已接入，独立升级执行器状态待确认', false],
+    ['unavailable', { ready: false, reason: 'control_upgrade_current_release_unverified' }, '当前版本文件与签名清单不一致，升级执行器已暂停执行升级', true],
+    ['ready', { ready: true, reason: 'ready' }, '运行条件已就绪', false],
+  ] as const)('shows the %s runner state above both master log tabs', async (condition, runtime, label, hinted) => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage'])
+    const data = maintenanceStatus()
+    data.control.candidate = { ...data.control.candidate, state: 'up_to_date', reason: 'same_version', version: '3.4.0' }
+    data.control.runtime = { ...runtime }
+    vi.spyOn(nativeControlUpgradesApi, 'status').mockImplementation(async () => ({ ...nativeStatusFixture(), runtime: { ...runtime } }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/admin/control-upgrade-plan/run-log') {
+        return Promise.resolve(json({ schema: 'cdnca.native-control-upgrade-runlog/v1', observed_at: new Date().toISOString(), state: 'unavailable', run_log: null }))
+      }
+      return Promise.resolve(json(url.pathname.endsWith('/maintenance-upgrade-status') ? { data } : listResponse()))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const summary = screen.getByRole('heading', { name: '主控升级' }).closest('section')!
+    await within(summary).findByText(condition === 'ready' ? '当前已经是最新版本' : condition === 'unavailable' ? label : '状态未确认，暂不可升级')
+    await user.click(within(summary).getByRole('button', { name: '查看日志' }))
+    const dialog = await findDialog('主控升级日志')
+    const expectStatus = () => {
+      const status = within(dialog).getByRole('region', { name: '状态' })
+      expect(status).toHaveTextContent(label)
+      if (hinted) expect(status).toHaveTextContent('journalctl -u cdnca-native-control-upgrade-runner')
+      else expect(status).not.toHaveTextContent('journalctl')
+      expect(status.querySelector(condition === 'ready' ? '.ant-alert-success' : '.ant-alert-warning')).not.toBeNull()
+      expect(status.querySelector(condition === 'ready' ? '.ant-alert-warning' : '.ant-alert-success')).toBeNull()
+    }
+    expectStatus()
+    await waitFor(() => expect((within(dialog).getByLabelText('日志内容 脚本日志') as HTMLTextAreaElement).value).toContain('暂无脚本日志'))
+    await user.click(within(dialog).getByRole('tab', { name: '程序日志' }))
+    expectStatus()
+    expect((within(dialog).getByLabelText('日志内容 程序日志') as HTMLTextAreaElement).value)
+      .toBe('暂无程序日志：升级结束（成功、回滚或失败）时会自动附上相关服务最近的运行日志。')
+    await user.click(within(dialog).getByRole('tab', { name: '脚本日志' }))
+    expectStatus()
+    expect(within(dialog).queryByRole('button', { name: '升级主控' })).not.toBeInTheDocument()
+  })
 
   it('keeps expired status compact without exposing signed actions on the main card', async () => {
     vi.useFakeTimers()
@@ -420,18 +535,21 @@ describe('ControlUpgradesPage', () => {
   it('upgrades a node through a plain confirmation using one canary, batch size one and automatic rollback', async () => {
     authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
     const nodes = [inventoryNode(1), inventoryNode(2)]
-    const queued = rolloutDetail([nodes[0].id], { revision: '1' })
     const started = rolloutDetail([nodes[0].id], { revision: '2', state: 'canary', active_batch: 0,
       nodes: [{ node_id: nodes[0].id, agent_version: '2.0.0', protocol_version: 1, state: 'dispatched', dispatch_revision: '2' }] })
     let plans: ControlUpgradeRolloutDetail[] = []
+    let preparations: ControlUpgradePreparation[] = []
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = new URL(String(input), 'https://test.invalid')
       if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
       if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
-      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') { plans = [queued]; return Promise.resolve(json({ data: queued, replayed: false }, 201)) }
+      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') {
+        preparations = [preparationOf([nodes[0].id], { phase: 'downloading' })]
+        return Promise.resolve(json({ data: preparationOf([nodes[0].id]), replayed: false }, 202))
+      }
       if (url.pathname.endsWith('/start') && init?.method === 'POST') { plans = [started]; return Promise.resolve(json({ data: started, replayed: false })) }
       if (url.pathname === `/v1/admin/control-upgrade-rollouts/${ids.plan}`) return Promise.resolve(json({ data: plans[0] }))
-      return Promise.resolve(json(listResponse(...plans)))
+      return Promise.resolve(json(listWithPreparations(preparations, ...plans)))
     })
     const user = userEvent.setup()
     renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
@@ -444,15 +562,81 @@ describe('ControlUpgradesPage', () => {
     expect(dialog).toHaveTextContent('2.1.0')
     expect(dialog).not.toHaveTextContent(/金丝雀|批次|自动回滚开关/)
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
-    expect(await screen.findByText('已开始升级节点')).toBeInTheDocument()
+    // The create returns at once; the node shows the preparation phase and cannot start yet.
+    expect(await screen.findByText('已提交升级，正在准备升级包，就绪后自动开始。')).toBeInTheDocument()
+    expect(await within(row).findByText('准备中：下载并校验升级包')).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: '升级' })).toBeDisabled()
+    expect(within(row).queryByRole('button', { name: '开始升级' })).not.toBeInTheDocument()
+    // The create asks the server to start the plan once ready; the console sends no start of its own.
     const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
-    expect(posts.map(([input]) => String(input))).toEqual(['/v1/admin/control-upgrade-rollouts', `/v1/admin/control-upgrade-rollouts/${ids.plan}/start`])
-    expect(JSON.parse(String(posts[0][1]!.body))).toEqual({
-      schema: 'cdnca.control-upgrade-rollout.create/v1', node_ids: [nodes[0].id], canary_node_ids: [nodes[0].id], batch_size: 1, automatic_rollback: true,
-    })
-    expect(JSON.parse(String(posts[1][1]!.body))).toEqual({ expected_revision: '1', reason: 'operator_upgrade' })
+    expect(posts.map(([input]) => String(input))).toEqual(['/v1/admin/control-upgrade-rollouts'])
+    expect(String(posts[0][1]!.body)).toBe(JSON.stringify({
+      schema: 'cdnca.control-upgrade-rollout.create/v1', node_ids: [nodes[0].id], canary_node_ids: [nodes[0].id], batch_size: 1,
+      automatic_rollback: true, start_when_ready: true,
+    }))
+    // Ready and started by the server: the running plan replaces the preparation.
+    preparations = []
+    plans = [started]
+    await user.click(screen.getByRole('button', { name: '刷新' }))
     expect(await within(row).findByText('升级中')).toBeInTheDocument()
     expect(within(row).getByRole('button', { name: '升级' })).toBeDisabled()
+    expect(fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('explains a ready plan the server did not start and starts it from the row', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    const queued = rolloutDetail([nodes[0].id], { revision: '1', created_at: '2026-11-25T01:05:00Z', updated_at: '2026-11-25T01:05:00Z' })
+    const started = rolloutDetail([nodes[0].id], { revision: '2', state: 'canary', active_batch: 0,
+      nodes: [{ node_id: nodes[0].id, agent_version: '2.0.0', protocol_version: 1, state: 'dispatched', dispatch_revision: '2' }] })
+    let plans = [queued]
+    const held = preparationOf([nodes[0].id], { state: 'ready', phase: 'done', start_failure_code: 'approval_required' })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      if (url.pathname.endsWith('/start') && init?.method === 'POST') { plans = [started]; return Promise.resolve(json({ data: started, replayed: false })) }
+      if (url.pathname === `/v1/admin/control-upgrade-rollouts/${ids.plan}`) return Promise.resolve(json({ data: plans[0] }))
+      return Promise.resolve(json(listWithPreparations(plans[0].state === 'queued' ? [held] : [], ...plans)))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    expect(await within(row).findByText('开始升级需要审批，请点「开始升级」提交审批。')).toBeInTheDocument()
+    await user.click(within(row).getByRole('button', { name: '开始升级' }))
+    expect(await screen.findByText('已开始升级节点')).toBeInTheDocument()
+    expect(fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST').map(([input]) => String(input)))
+      .toEqual([`/v1/admin/control-upgrade-rollouts/${ids.plan}/start`])
+    expect(await within(row).findByText('升级中')).toBeInTheDocument()
+  })
+
+  it('shows a failed preparation with its reason and retries it as a new create', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    // A License refusal without a reason code is named by its HTTP status.
+    let preparations = [preparationOf([nodes[0].id], { state: 'failed', phase: 'issuing', failure_code: 'license_rejected', failure_reason: 'http_403' })]
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') {
+        preparations = [preparationOf([nodes[0].id], { id: '00000000-0000-4000-8000-0000000000a2', created_at: '2026-11-25T02:00:00Z', updated_at: '2026-11-25T02:00:00Z' })]
+        return Promise.resolve(json({ data: preparations[0], replayed: false }, 202))
+      }
+      return Promise.resolve(json(listWithPreparations(preparations)))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    expect(await within(row).findByText('准备失败')).toBeInTheDocument()
+    expect(within(row).getByText('授权端拒绝签发（HTTP 403）')).toBeInTheDocument()
+    await waitFor(() => expect(within(row).getByRole('button', { name: '重试' })).toBeEnabled())
+    await user.click(within(row).getByRole('button', { name: '重试' }))
+    await user.click(within(await findDialog('升级节点')).getByRole('button', { name: '确定' }))
+    expect(await within(row).findByText('准备中：等待处理')).toBeInTheDocument()
+    const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
+    expect(posts).toHaveLength(1)
+    expect(JSON.parse(String(posts[0][1]!.body)).node_ids).toEqual([nodes[0].id])
   })
 
   // A plan whose start failed or whose create response was lost stays queued; after a refresh
@@ -582,12 +766,11 @@ describe('ControlUpgradesPage', () => {
   it('upgrades a selected batch with the first selected node as canary', async () => {
     authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
     const nodes = [inventoryNode(1), inventoryNode(2)]
-    const plan = rolloutDetail(nodes.map((node) => node.id), { state: 'canary', revision: '2' })
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = new URL(String(input), 'https://test.invalid')
       if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
       if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
-      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') return Promise.resolve(json({ data: plan, replayed: true }, 201))
+      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') return Promise.resolve(json({ data: preparationOf(nodes.map((node) => node.id), { state: 'ready', phase: 'done' }), replayed: true }, 202))
       return Promise.resolve(json(listResponse()))
     })
     const user = userEvent.setup()
@@ -597,9 +780,9 @@ describe('ControlUpgradesPage', () => {
     await waitFor(() => expect(batch).toBeEnabled())
     await user.click(batch)
     await user.click(within(await findDialog('升级节点')).getByRole('button', { name: '确定' }))
-    await screen.findByText('已开始升级节点')
+    await screen.findByText('已提交升级，正在准备升级包，就绪后自动开始。')
     const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
-    // A replayed create that already left the queue is not started again.
+    // A create is never followed by a start; the plan starts from the row once ready.
     expect(posts).toHaveLength(1)
     const body = JSON.parse(String(posts[0][1]!.body))
     expect(body.node_ids).toEqual(nodes.map((node) => node.id).sort())
@@ -630,7 +813,7 @@ describe('ControlUpgradesPage', () => {
       const url = new URL(String(input), 'https://test.invalid')
       if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
       if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
-      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') return Promise.resolve(json({ data: plan, replayed: false }, 201))
+      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') return Promise.resolve(json({ data: preparationOf([nodes[0].id]), replayed: false }, 202))
       if (url.pathname.endsWith('/start') && init?.method === 'POST') return Promise.resolve(json({ data: { ...plan, state: 'canary', revision: '2' }, replayed: false }))
       return Promise.resolve(json(listResponse()))
     })
@@ -642,9 +825,9 @@ describe('ControlUpgradesPage', () => {
     await waitFor(() => expect(batch).toBeEnabled())
     await user.click(batch)
     await user.click(within(await findDialog('升级节点')).getByRole('button', { name: '确定' }))
-    await screen.findByText('已开始升级节点')
+    await screen.findByText('已提交升级，正在准备升级包，就绪后自动开始。')
     const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
-    expect(posts).toHaveLength(2)
+    expect(posts).toHaveLength(1)
     const body = JSON.parse(String(posts[0][1]!.body))
     // only the selected node should be in the plan
     expect(body.node_ids).toEqual([nodes[0].id])
@@ -751,6 +934,42 @@ describe('ControlUpgradesPage', () => {
     expect((within(masterLog).getByLabelText('日志内容 脚本日志') as HTMLTextAreaElement).value).toMatch(/\[INFO\] \[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] \S/)
   })
 
+  // the node log dialog reads the plan it opened with, so the
+  // plan completing (the recent-plans read then names no plan for the node) keeps its final log.
+  it('keeps the open node log on its plan after the plan completes', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    const start = { id: '00000000-0000-4000-8000-0000000000e1', revision: '2', from: 'queued' as const, to: 'canary' as const,
+      action: 'start' as const, reason: 'operator_start', batch_id: ids.batch, node_id: '', occurred_at: '2026-10-14T08:01:00Z' }
+    const running = rolloutDetail([nodes[0].id], { state: 'canary', revision: '2', events: [start],
+      nodes: [{ node_id: nodes[0].id, agent_version: '2.0.0', protocol_version: 1, state: 'dispatched', dispatch_revision: '2' }] })
+    const completed = rolloutDetail([nodes[0].id], { state: 'completed', completion: 'upgraded', revision: '3', events: [start, {
+      id: '00000000-0000-4000-8000-0000000000e2', revision: '3', from: 'canary', to: 'completed', action: 'health_succeeded',
+      reason: 'node_healthy', batch_id: ids.batch, node_id: nodes[0].id, occurred_at: '2026-10-14T08:05:00Z' }],
+    nodes: [{ node_id: nodes[0].id, agent_version: '2.1.0', protocol_version: 1, state: 'healthy', dispatch_revision: '2' }] })
+    let plan = running
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      if (url.pathname.endsWith(ids.plan)) return Promise.resolve(json({ data: plan }))
+      return Promise.resolve(json(listResponse(plan)))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    expect(await within(row).findByText('升级中')).toBeInTheDocument()
+    await user.click(within(row).getByRole('button', { name: '日志' }))
+    const dialog = await findDialog('节点升级日志')
+    const box = () => (within(dialog).getByLabelText('日志内容 脚本日志') as HTMLTextAreaElement).value
+    await waitFor(() => expect(box()).toContain('开始执行升级任务 (operator_start)'))
+    plan = completed
+    await user.click(within(dialog).getByRole('button', { name: '刷新' }))
+    await waitFor(() => expect(box()).toContain('健康检查通过 (node_healthy)'))
+    expect(box()).toContain('开始执行升级任务 (operator_start)')
+    expect(within(row).queryByText('升级中')).not.toBeInTheDocument()
+  })
+
   it('shows the master script log and program log tabs from the runner run log', async () => {
     authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
     const publication = nativePublicationFixture()
@@ -774,7 +993,7 @@ describe('ControlUpgradesPage', () => {
       }
       if (url.pathname === '/v1/admin/control-upgrade-plan') return Promise.resolve(json(native))
       if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: [] }) }))
-      return Promise.resolve(json({ data: [], page: 1, page_size: 20, total: 0 }))
+      return Promise.resolve(json({ data: [], page: 1, page_size: 20, total: 0, preparations: [] }))
     })
     const user = userEvent.setup()
     renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
@@ -809,36 +1028,33 @@ describe('ControlUpgradesPage', () => {
     expect(urls.filter((path) => path.endsWith('/run-log')).length).toBeGreaterThanOrEqual(3)
   })
 
-  it('retries an unknown start outcome with the same request and never creates a second plan', async () => {
+  it('retries an unknown start outcome with the same request and never creates a plan', async () => {
     authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
     const node = inventoryNode(1)
     const queued = rolloutDetail([node.id], { revision: '1' })
     let starts = 0
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = new URL(String(input), 'https://test.invalid')
       if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: [node] }))
       if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
-      if (url.pathname === '/v1/admin/control-upgrade-rollouts' && init?.method === 'POST') return Promise.resolve(json({ data: queued, replayed: false }, 201))
       if (url.pathname.endsWith('/start')) {
         starts += 1
         return starts === 1 ? Promise.reject(new TypeError('connection lost after commit'))
           : Promise.resolve(json({ data: { ...queued, state: 'canary', revision: '2' }, replayed: true }))
       }
       if (url.pathname.endsWith(ids.plan)) return Promise.resolve(json({ data: queued }))
-      return Promise.resolve(json(listResponse()))
+      return Promise.resolve(json(listResponse(queued)))
     })
     const user = userEvent.setup()
     renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
     const row = (await screen.findByText('Node 1')).closest('tr')!
-    await waitFor(() => expect(within(row).getByRole('button', { name: '升级' })).toBeEnabled())
-    await user.click(within(row).getByRole('button', { name: '升级' }))
-    await user.click(within(await findDialog('升级节点')).getByRole('button', { name: '确定' }))
+    await user.click(await within(row).findByRole('button', { name: '开始升级' }))
     expect(await screen.findByText('升级请求结果待确认，请使用同一请求重试，不会重复创建升级任务。', { selector: '.cdnca-outcome-bar .ant-alert-message' })).toBeInTheDocument()
-    expect(within(row).getByRole('button', { name: '升级' })).toBeDisabled()
+    expect(within(row).getByRole('button', { name: '开始升级' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '使用同一请求重试' }))
     expect(await screen.findByText('已开始升级节点')).toBeInTheDocument()
     const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
-    expect(posts.filter(([input]) => String(input) === '/v1/admin/control-upgrade-rollouts')).toHaveLength(1)
+    expect(posts.filter(([input]) => String(input) === '/v1/admin/control-upgrade-rollouts')).toHaveLength(0)
     const startCalls = posts.filter(([input]) => String(input).endsWith('/start'))
     expect(startCalls).toHaveLength(2)
     expect(startCalls[1][1]?.headers).toEqual(startCalls[0][1]?.headers)
@@ -1244,6 +1460,133 @@ describe('ControlUpgradesPage', () => {
     expect(screen.getByRole('heading', { name: '节点设置' })).toBeInTheDocument()
   })
 
+  const nginx502 = () => new Response('<html><body><h1>502 Bad Gateway</h1></body></html>', { status: 502, headers: { 'Content-Type': 'text/html' } })
+  const backupRunID = '20261124T030000Z-feedfacecafe'
+  const queuedBackupRun = { id: backupRunID, kind: 'backup', reason: 'manual', state: 'queued', requested_at: '2026-11-24T03:00:00Z', log: [] }
+
+  it('waits through the planned backup outage: no failure dialog, backup/migration/address writes locked', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read', 'nodes.manage'])
+    let posted = false
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      calls.push(url)
+      if (url.endsWith('/v1/admin/control-backup/backups') && init?.method === 'POST') { posted = true; return Promise.resolve(json({ data: queuedBackupRun }, 202)) }
+      if (posted && (url.includes('/v1/admin/control-backup') || url.includes('/node-gateway-address-changes'))) return Promise.resolve(nginx502())
+      if (url.includes('/v1/admin/control-backup')) return Promise.resolve(json({ data: backupStatus }))
+      if (url.endsWith('/node-gateway-address-changes')) return Promise.resolve(json({ items: [] }))
+      if (url.includes('/v1/nodes')) return Promise.resolve(json({ items: [] }))
+      return Promise.resolve(json(listResponse()))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op?tab=maintenance'])
+    await screen.findAllByText('20261017T030000Z-abcdefgh', { selector: 'td' })
+    await user.click(screen.getByRole('button', { name: '立即备份' }))
+    await user.click(await screen.findByRole('button', { name: /确\s*定|OK/ }))
+    expect(await screen.findByText('备份进行中，管理后台恢复后自动显示结果')).toBeInTheDocument()
+    expect(screen.getByText(`运行 ${backupRunID} · 排队中`)).toBeInTheDocument()
+    await waitFor(() => expect(calls.some((url) => url.endsWith(`/runs/${backupRunID}`))).toBe(true))
+    expect(JSON.parse(window.localStorage.getItem(pendingBackupKey)!)).toMatchObject({ runID: backupRunID, state: 'queued' })
+    expect(screen.getByRole('button', { name: '立即备份' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '开始迁移' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下发新地址' })).toBeDisabled()
+    expect(screen.queryByText('操作失败')).not.toBeInTheDocument()
+    const address = screen.getByRole('heading', { name: '更换主控连接地址' }).closest('section')!
+    expect(address.querySelector('.ant-alert-error')).toBeNull()
+  })
+
+  it('resumes a stored backup wait after a reload and shows the final state read by run id', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage'])
+    window.localStorage.setItem(pendingBackupKey, JSON.stringify({ runID: backupRunID, startedAt: Date.now() - 60_000, state: 'running' }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith(`/runs/${backupRunID}`)) return Promise.resolve(json({ data: { ...queuedBackupRun, state: 'succeeded', backup_id: '20261124T030500Z-abcdefgh' } }))
+      if (url.includes('/v1/admin/control-backup')) return Promise.resolve(json({ data: backupStatus }))
+      return Promise.resolve(json(listResponse()))
+    })
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op?tab=maintenance'])
+    expect(await screen.findByText('备份完成')).toBeInTheDocument()
+    expect(window.localStorage.getItem(pendingBackupKey)).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: '立即备份' })).toBeEnabled())
+    expect(screen.queryByText('备份进行中，管理后台恢复后自动显示结果')).not.toBeInTheDocument()
+  })
+
+  it('shows a failed backup read by run id as a failure with its log', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage'])
+    window.localStorage.setItem(pendingBackupKey, JSON.stringify({ runID: backupRunID, startedAt: Date.now() - 60_000, state: 'running' }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith(`/runs/${backupRunID}`)) return Promise.resolve(json({ data: { ...queuedBackupRun, state: 'failed', error: 'disk full', log: ['freeze', 'dump failed'] } }))
+      if (url.includes('/v1/admin/control-backup')) return Promise.resolve(json({ data: backupStatus }))
+      return Promise.resolve(json(listResponse()))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op?tab=maintenance'])
+    const alert = (await screen.findByText('备份失败')).closest('.ant-alert')! as HTMLElement
+    expect(within(alert).getByText(/disk full/)).toBeInTheDocument()
+    await user.click(within(alert).getByRole('button', { name: '日志' }))
+    expect(await screen.findByText(/dump failed/)).toBeInTheDocument()
+  })
+
+  it('ends a backup wait after 15 minutes with an explicit error and a log entry', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage'])
+    window.localStorage.setItem(pendingBackupKey, JSON.stringify({ runID: backupRunID, startedAt: Date.now() - 16 * 60_000, state: 'running' }))
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(
+      String(input).includes('/v1/admin/control-backup') && !String(input).includes('/runs/') ? json({ data: backupStatus }) : json(listResponse())))
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op?tab=maintenance'])
+    const alert = (await screen.findByText(/超过 15 分钟仍未返回结果/)).closest('.ant-alert')! as HTMLElement
+    expect(within(alert).getByRole('button', { name: '日志' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: '立即备份' })).toBeEnabled())
+    expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/runs/'))).toBe(false)
+  })
+
+  it('maintenance tabs follow the WAI-ARIA tabs pattern: roving focus, arrow/Home/End keys and linked panels', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(json(String(input).includes('/v1/admin/control-backup') ? emptyBackupStatus : listResponse())))
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const system = await screen.findByRole('tab', { name: '系统升级' })
+    const maintenance = screen.getByRole('tab', { name: '维护操作' })
+    expect(screen.getAllByRole('tablist')).toHaveLength(1)
+    expect(system).toHaveAttribute('aria-selected', 'true')
+    expect(system).toHaveAttribute('tabindex', '0')
+    expect(maintenance).toHaveAttribute('tabindex', '-1')
+    const systemPanel = screen.getByRole('tabpanel')
+    expect(system).toHaveAttribute('aria-controls', systemPanel.id)
+    expect(systemPanel).toHaveAttribute('aria-labelledby', system.id)
+    // 未激活的维护操作页签也指向真实（隐藏、未挂正文的）面板。
+    const inactivePanel = document.getElementById(maintenance.getAttribute('aria-controls')!)
+    expect(inactivePanel).toHaveAttribute('role', 'tabpanel')
+    expect(inactivePanel).toHaveAttribute('hidden')
+    expect(inactivePanel).toBeEmptyDOMElement()
+    expect(within(systemPanel).getByRole('heading', { name: '主控升级' })).toBeInTheDocument()
+    expect(screen.queryByText('当前主控版本与升级任务状态')).not.toBeInTheDocument()
+    expect(screen.queryByText('节点版本、升级任务和单节点日志')).not.toBeInTheDocument()
+
+    system.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(maintenance).toHaveAttribute('aria-selected', 'true')
+    expect(maintenance).toHaveFocus()
+    expect(maintenance).toHaveAttribute('tabindex', '0')
+    expect(system).toHaveAttribute('tabindex', '-1')
+    const maintenancePanel = screen.getByRole('tabpanel')
+    expect(maintenance).toHaveAttribute('aria-controls', maintenancePanel.id)
+    expect(within(maintenancePanel).getByRole('heading', { name: '主控备份与迁移' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '主控升级' })).not.toBeInTheDocument()
+    expect(document.getElementById(system.getAttribute('aria-controls')!)).toHaveAttribute('hidden')
+
+    await user.keyboard('{ArrowRight}')
+    expect(system).toHaveAttribute('aria-selected', 'true')
+    expect(system).toHaveFocus()
+    await user.keyboard('{End}')
+    expect(maintenance).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Home}')
+    expect(system).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{ArrowLeft}')
+    expect(maintenance).toHaveAttribute('aria-selected', 'true')
+    expect(within(screen.getByRole('tabpanel')).getByRole('heading', { name: '主控备份与迁移' })).toBeInTheDocument()
+  })
+
   it('submits a migration only with a pinned host key and the typed host confirmation', async () => {
     authenticate(['control.upgrades.read', 'control.upgrades.manage'])
     const calls: Array<[string, RequestInit | undefined]> = []
@@ -1276,7 +1619,8 @@ describe('ControlUpgradesPage', () => {
     const section = screen.getByRole('heading', { name: '节点设置' }).closest('section')!
     expect(within(section).getByText('其他节点设置：')).toBeInTheDocument()
     expect(within(section).queryByText(/本版不提供/)).not.toBeInTheDocument()
-    expect(within(section).getByText(/节点 Agent 直接上报主控，不再使用 Elasticsearch \/ filebeat/)).toBeInTheDocument()
+    // 不再常驻历史实现与重复指路说明。
+    expect(within(section).queryByText(/Elasticsearch|filebeat|迁移主控|在节点列表中编辑/)).not.toBeInTheDocument()
     expect(within(section).queryByRole('heading', { name: '更换主控连接地址' })).not.toBeInTheDocument()
     expect(within(section).queryAllByRole('checkbox')).toHaveLength(0)
     expect(within(section).queryAllByRole('textbox')).toHaveLength(0)
@@ -1345,6 +1689,25 @@ describe('ControlUpgradesPage', () => {
       step_up_token: 's'.repeat(43) })
   })
 
+  it('an empty submit focuses the first invalid input instead of leaving focus on the submit button', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read', 'nodes.manage'])
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (init?.method === 'POST') calls.push(url)
+      if (url.includes('/v1/admin/control-backup')) return Promise.resolve(json(emptyBackupStatus))
+      if (url.endsWith('/node-gateway-address-changes')) return Promise.resolve(json({ items: [] }))
+      if (url.includes('/v1/nodes')) return Promise.resolve(json({ items: [] }))
+      return Promise.resolve(json(listResponse()))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op?tab=maintenance'])
+    const panel = (await screen.findByRole('heading', { name: '更换主控连接地址' })).closest('section')!
+    await user.click(within(panel).getByRole('button', { name: '下发新地址' }))
+    await waitFor(() => expect(within(panel).getByLabelText('新连接地址')).toHaveFocus())
+    expect(calls.some((url) => url.endsWith('/node-gateway-address-changes'))).toBe(false)
+  })
+
   it('fix-nodegw: a read-only node viewer sees the change history but no form', async () => {
     authenticate(['control.upgrades.read', 'nodes.read'])
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
@@ -1395,7 +1758,7 @@ describe('ControlUpgradesPage', () => {
       expect(i18n.getFixedT('qps-ploc', 'maintenanceUpgrade')(key)).toMatch(/^［.+］$/)
     }
     authenticate(['control.upgrades.read'])
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(json(String(input).includes('/v1/admin/control-backup') ? emptyBackupStatus : { data: [], page: 1, page_size: 20, total: 0 })))
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(json(String(input).includes('/v1/admin/control-backup') ? emptyBackupStatus : { data: [], page: 1, page_size: 20, total: 0, preparations: [] })))
     await changeLocale('qps-ploc')
     renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
 

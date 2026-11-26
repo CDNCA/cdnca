@@ -11,6 +11,7 @@ import (
 type (
 	CatalogEntry    = themepack.CatalogEntry
 	Rendered        = themepack.Rendered
+	EmailAction     = themepack.EmailAction
 	ValidationError = themepack.ValidationError
 	I18nText        = themepack.I18nText
 	Package         = themepack.Package

@@ -90,12 +90,47 @@ describe('节点管理 DNS配置 CNAME域名 tab', () => {
     expect(await screen.findByText('example.com')).toBeInTheDocument()
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
     expect(headers.slice(1)).toEqual(['ID', '域名', '备注', '参与随机分配', '操作'])
-    // fix-cnamerand: the rule is explained above the list.
-    expect(screen.getByText('新网站会在勾选的域名中随机分配一个；未勾选任何域名时使用默认 CNAME 域名。')).toBeInTheDocument()
+    // 列表上方不再常驻说明块。
+    expect(document.querySelector('.dns-cname-panel [role="alert"]')).toBeNull()
+    expect(screen.queryByText(/须与套餐里的 CNAME 域名一致/)).not.toBeInTheDocument()
     expect(screen.getByText('共 1 条')).toBeInTheDocument()
     expect(screen.getByText('10 条/页')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /新增域名/ })).toBeInTheDocument()
     expect(screen.getByPlaceholderText('输入域名搜索')).toBeInTheDocument()
+  })
+
+  // 行操作是可聚焦的按钮、名称带域名，操作列固定在右侧，表格自身横滚。
+  it('names the row actions after the domain as focusable buttons in a fixed actions column', async () => {
+    authenticate()
+    mockAPI({ zones: [zone(1, 'cname-demo.com')] })
+    const user = await openCnameTab()
+    const row = (await screen.findByText('cname-demo.com')).closest('tr')!
+    const edit = within(row).getByRole('button', { name: '编辑 cname-demo.com' })
+    const remove = within(row).getByRole('button', { name: '删除 cname-demo.com' })
+    edit.focus()
+    expect(edit).toHaveFocus()
+    expect(edit.closest('td')).toHaveClass('ant-table-cell-fix-right')
+    expect(row.closest('.ant-table')).toHaveClass('ant-table-scroll-horizontal')
+    await user.click(remove)
+    expect(await findDialog('删除')).toHaveTextContent('确定删除域名 cname-demo.com 吗？')
+  })
+
+  it('merges the row actions into one 更多 at 390px', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      matches: query === '(max-width: 575px)', media: query, onchange: null, addListener: () => undefined, removeListener: () => undefined,
+      addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+    }))
+    authenticate()
+    mockAPI({ zones: [zone(1, 'cname-demo.com')] })
+    const user = await openCnameTab()
+    const row = (await screen.findByText('cname-demo.com')).closest('tr')!
+    expect(within(row).queryByRole('button', { name: '编辑 cname-demo.com' })).not.toBeInTheDocument()
+    const more = within(row).getByRole('button', { name: 'cname-demo.com 的更多操作' })
+    expect(more.closest('td')).toHaveClass('ant-table-cell-fix-right')
+    await user.click(more)
+    expect(await screen.findByRole('menuitem', { name: '编辑' })).toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: '删除' }))
+    expect(await findDialog('删除')).toHaveTextContent('确定删除域名 cname-demo.com 吗？')
   })
 
   it('adds and edits a domain through the 新增域名 / 编辑域名 dialogs', async () => {
@@ -105,7 +140,13 @@ describe('节点管理 DNS配置 CNAME域名 tab', () => {
     const user = await openCnameTab()
     await user.click(await screen.findByRole('button', { name: /新增域名/ }))
     let dialog = await findDialog('新增域名')
-    expect(within(dialog).getByText('域名：')).toBeInTheDocument()
+    expect(within(dialog).getByText('CNAME 域名：')).toBeInTheDocument()
+    expect(within(dialog).getByRole('textbox', { name: 'CNAME 域名' })).toBeInTheDocument()
+    expect(within(dialog).queryByText(/须与套餐里的 CNAME 域名一致/)).not.toBeInTheDocument()
+    // 作用范围说明只在随机分配开关旁出现一次，并作为它的描述。
+    const randomSwitch = within(dialog).getByRole('switch', { name: '参与随机分配' })
+    expect(randomSwitch).toHaveAccessibleDescription(/之后新建的网站从参与随机分配的域名中随机取一个/)
+    expect(screen.getAllByText(/之后新建的网站从参与随机分配的域名中随机取一个/)).toHaveLength(1)
     expect(Array.from(dialog.querySelectorAll('.ant-modal-footer .ant-btn')).map((button) => button.textContent?.replace(/\s/g, '')))
       .toEqual(['取消', '确定'])
     await user.type(within(dialog).getByPlaceholderText('请输入域名'), 'bad domain')
@@ -115,6 +156,7 @@ describe('节点管理 DNS配置 CNAME域名 tab', () => {
     expect(screen.queryByRole('button', { name: /知\s*道\s*了/ })).not.toBeInTheDocument()
     expect(within(dialog).getByPlaceholderText('请输入域名')).toHaveFocus()
     expect(within(dialog).getByPlaceholderText('请输入域名')).toHaveAttribute('aria-invalid', 'true')
+    expect(within(dialog).getByPlaceholderText('请输入域名')).toHaveAccessibleDescription('请输入正确的域名')
     await user.clear(within(dialog).getByPlaceholderText('请输入域名'))
     await waitFor(() => expect(within(dialog).queryByText('请输入正确的域名')).not.toBeInTheDocument())
     await user.type(within(dialog).getByPlaceholderText('请输入域名'), 'CDN2.Example.com')
@@ -170,7 +212,7 @@ describe('节点管理 DNS配置 CNAME域名 tab', () => {
     const fetchMock = mockAPI(state)
     const user = await openCnameTab()
     expect(await screen.findByText('spare.example.com')).toBeInTheDocument()
-    const deleteButton = screen.getByRole('button', { name: /删\s*除/ })
+    const deleteButton = screen.getByRole('button', { name: /^删\s*除$/ })
     expect(deleteButton).toHaveClass('ant-btn-default', 'ant-btn-dangerous')
     expect(deleteButton).not.toHaveClass('ant-btn-primary')
     await user.click(deleteButton)
@@ -180,7 +222,7 @@ describe('节点管理 DNS配置 CNAME域名 tab', () => {
     for (const name of ['used.example.com', 'spare.example.com']) {
       await user.click(within(screen.getByText(name).closest('tr')!).getByRole('checkbox'))
     }
-    await user.click(screen.getByRole('button', { name: /删\s*除/ }))
+    await user.click(screen.getByRole('button', { name: /^删\s*除$/ }))
     // 未选择时的警告弹窗仍挂着（标题也含「删除」），按确认框精确标题找。
     const dialog = await findDialog('删除')
     expect(dialog).toHaveTextContent('确定删除选中的 2 个域名吗？')

@@ -7,7 +7,7 @@ import (
 )
 
 func TestRenderPNGCoversAlphabetAndRejectsOthers(t *testing.T) {
-	alphabet := "23456789ABCDEFGHJKMNPQRSTUVWXZ"
+	alphabet := Alphabet
 	for start := 0; start < len(alphabet); start += 5 {
 		answer := alphabet[start:min(start+5, len(alphabet))]
 		raw, err := RenderPNG(answer)
@@ -19,7 +19,7 @@ func TestRenderPNGCoversAlphabetAndRejectsOthers(t *testing.T) {
 			t.Fatalf("%s: decoded=%v err=%v", answer, decoded, err)
 		}
 	}
-	for _, answer := range []string{"", "ABC0", "abcde", "ABCDEFGHJ"} {
+	for _, answer := range []string{"", "ACE0", "acdef", "ACDEFHJKM", "ABCDE", "2345S", "Z2345"} {
 		if _, err := RenderPNG(answer); err == nil {
 			t.Fatalf("%q accepted", answer)
 		}

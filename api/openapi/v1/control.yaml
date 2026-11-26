@@ -64,6 +64,8 @@ paths:
     $ref: '../../control-system-user-settings.openapi.yaml#/paths/~1v1~1admin~1system-user-settings'
   /v1/admin/system-mail-settings:
     $ref: '../../control-system-mail-settings.openapi.yaml#/paths/~1v1~1admin~1system-mail-settings'
+  /v1/admin/system-mail-settings/tests:
+    $ref: '../../control-system-mail-settings.openapi.yaml#/paths/~1v1~1admin~1system-mail-settings~1tests'
   /v1/admin/system-other-settings:
     $ref: '../../control-system-other-settings.openapi.yaml#/paths/~1v1~1admin~1system-other-settings'
   /v1/status-page/public:
@@ -86,6 +88,8 @@ paths:
     $ref: './account-registration-challenge.yaml#/paths/~1v1~1auth~1registration-challenge-verifications'
   /v1/auth/registration-config:
     $ref: './account-registration-challenge.yaml#/paths/~1v1~1auth~1registration-config'
+  /v1/auth/registration-terms:
+    $ref: './account-registration-challenge.yaml#/paths/~1v1~1auth~1registration-terms'
   /v1/auth/login-methods:
     $ref: './account-login-challenge.yaml#/paths/~1v1~1auth~1login-methods'
   /v1/auth/login-challenges:
@@ -432,9 +436,9 @@ paths:
   /v1/auth/login-captchas:
     post:
       operationId: issueLoginCaptcha
-      x-summary-zh: "签发绑定来源地址的一次性内置登录验证码"
-      summary: Issue a one-time built-in sign-in CAPTCHA bound to the source address
-      description: Requested after login_captcha_required. The answer is never returned as text; send {id, answer} as captcha with the next password attempt. Each challenge is consumed by one attempt and expires after five minutes. Thirty challenges per source per hour.
+      x-summary-zh: "签发绑定当前浏览器的一次性内置验证码"
+      summary: Issue a one-time built-in CAPTCHA bound to this browser
+      description: Requested after login_captcha_required, and by built-in registration. The answer is never returned as text; send {id, answer} as captcha with the next password attempt (or the registration request) from the same browser, which sends back the binding cookie set here. Each challenge is consumed by one attempt and expires after five minutes. Thirty challenges per source address per hour.
       security: []
       responses:
         '201':
@@ -442,6 +446,15 @@ paths:
           headers:
             Cache-Control:
               schema: {type: string, enum: [no-store]}
+            Set-Cookie:
+              description: >-
+                cdnca_captcha_bind, the browser binding: HttpOnly, SameSite=Lax, Path=/v1/auth, expiring with the
+                newest CAPTCHA; Secure outside explicit local development. A request that sends a binding this
+                controller issued keeps it, so every open CAPTCHA of a browser (several tabs) can be spent. When
+                this request created the binding, also cdnca_captcha_bind_<id> with the same attributes, expiring
+                with this CAPTCHA, so tabs fetching their first CAPTCHA at once each keep theirs.
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -732,6 +745,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: tenant_member_not_found.
           content:
@@ -739,7 +758,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: tenant_member_protected (the owner or yourself) or tenant_member_status_conflict.
+          description: >-
+            tenant_member_protected (the owner or yourself), tenant_member_status_conflict, or with transfer_to
+            tenant_member_owns_resources (with the counts of what cannot change owner).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorEnvelope'
+                  - $ref: '#/components/schemas/TenantMemberOwnsResourcesError'
+        '422':
+          description: tenant_member_transfer_target_invalid (transfer_to is not another active member of the scope).
           content:
             application/json:
               schema:
@@ -758,8 +787,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: tenant_member_not_found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: tenant_member_protected (the owner or yourself) or tenant_member_status_conflict.
           content:
             application/json:
               schema:
@@ -786,6 +827,12 @@ paths:
       responses:
         '204':
           description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: tenant_member_not_found.
           content:
@@ -835,6 +882,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: tenant_member_not_found.
           content:
@@ -858,7 +911,7 @@ paths:
         without resetting again; afterwards the key answers 410.
       parameters:
         - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}}
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: >-
@@ -882,6 +935,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '410':
           description: tenant_member_password_reset_result_gone — the key's result was already retrieved, expired or replaced; nothing was reset.
           content:
@@ -976,6 +1033,12 @@ paths:
       responses:
         '204':
           description: Revoked (audited identity.tenant_member.invitation.revoke).
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: tenant_member_invitation_not_found.
           content:
@@ -1081,6 +1144,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/admin/control-origin-auth:
+    get:
+      operationId: getControlOriginAuthStatus
+      x-summary-zh: "读取主控在 CDN 后是否已取得访客 IP（源IP请求头 / 回源鉴权状态）"
+      summary: Read whether the console behind a CDN gets the visitor address (source IP header, origin authentication)
+      description: >-
+        Requires system_configuration.read on the platform scope. Two separate observations of the answering
+        control-api process, kept in its memory for an hour; no header value is stored. A CDN clue is a header CDNs
+        write the visitor address into (CF-Connecting-IP, True-Client-IP, Ali-Cdn-Real-Ip, EO-Connecting-IP,
+        Fastly-Client-IP, Cdn-Src-Ip), which the console nginx passes through. The visitor address is confirmed when
+        the source IP header of the system other settings (source_ip_header) gave a valid address for the request,
+        or when the console nginx with origin authentication (install-control.sh origin-auth --real-ip-header H, the
+        CDN sending X-Cdnca-Origin-Key) sets X-Cdnca-Origin-Verified to 1, meaning the key matched and H gave the
+        visitor address (key_only: the key matched, H did not; 0: no key); that header is believed only while the
+        installer's /etc/cdnca-control/origin-auth.conf exists, since without origin authentication nginx passes a
+        client's own through. cdn_without_origin_auth is true while the last CDN request without a confirmed
+        visitor address came within the hour and no confirmed request came since.
+      responses:
+        '200':
+          description: The observation of the answering process.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlOriginAuthStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/auth/refresh:
     post:
       operationId: refresh
@@ -1183,7 +1277,7 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [status, lease_serial, modules]
+                required: [status, lease_serial, modules, lease_modules, features]
                 properties:
                   status:
                     type: string
@@ -1191,9 +1285,28 @@ paths:
                   lease_serial: {type: integer, minimum: 0}
                   modules:
                     type: array
+                    description: >-
+                      The codes the control plane acts on: the lease's module codes, plus module.doh, module.rum
+                      and module.content_rewrite when a valid lease issued before those codes names none of them
+                      (the publication gate delivers them under the same rule).
                     items:
                       type: string
                       pattern: '^(module|pack|theme)\.[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$'
+                  lease_modules:
+                    type: array
+                    description: The lease's literal module codes, empty under the same rule as modules.
+                    items:
+                      type: string
+                      pattern: '^(module|pack|theme)\.[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$'
+                  features:
+                    type: array
+                    description: >-
+                      The lease's other feature codes (e.g. packages.manage, which package publish requires), empty
+                      under the same rule as modules, so a page can tell a missing feature from an unusable lease
+                      before a gated write. The write gates are unchanged.
+                    items:
+                      type: string
+                      pattern: '^[a-z][a-z0-9._-]*$'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -1337,7 +1450,12 @@ paths:
         Any authenticated session. Only plugins enabled on this installation (and still served by the license
         service) are listed, filtered by the page role (platform scope = admin), its required_permission (no
         platform.admin fallback) and its required_module (lease). The web app mounts each page in
-        <iframe sandbox="allow-scripts allow-forms"> on the plugin origin.
+        <iframe sandbox="allow-scripts allow-forms"> on the plugin origin. unavailable lists the menu and
+        plugin_settings pages of this principal's role it cannot open now, with a stable reason: the platform
+        scope gets not_licensed, not_installed, disabled, uninstalled or permission_denied; a tenant only
+        not_enabled or permission_denied, and only for plugins whose installation covers it. Pages nobody may
+        confirm to this principal are not listed (the web app treats them as not found). A failed reason read
+        leaves unavailable empty instead of failing the list.
       security:
         - bearerAuth: []
       responses:
@@ -1348,11 +1466,14 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [items]
+                required: [items, unavailable]
                 properties:
                   items:
                     type: array
                     items: {$ref: '#/components/schemas/PluginUIPage'}
+                  unavailable:
+                    type: array
+                    items: {$ref: '#/components/schemas/PluginUIUnavailablePage'}
         '401':
           $ref: '#/components/responses/Unauthorized'
         '503':
@@ -2411,9 +2532,14 @@ paths:
       summary: Create a durable control upgrade rollout
       description: >-
         Requires control.upgrades.manage in a platform scope. The canonical request freezes the
-        sorted target cohort, canary subset, batch size, and mandatory automatic rollback. A replay
-        rechecks live RBAC and returns the original durable snapshot without another license call or
-        NATS publication. A changed request under the same idempotency key returns 409.
+        sorted target cohort, canary subset, batch size, and mandatory automatic rollback. The
+        request validates the input and the current target cohort, records the create intent and
+        returns 202 with its preparation; License issuance and the download and verification of the
+        forward and rollback artifacts run in the background, and the plan (state queued) exists
+        once the preparation is ready. A failed preparation keeps a stable failure_code; it is
+        retried by a new create. A replay rechecks live RBAC and returns the same preparation
+        without another license call, download, or plan. A changed request under the same
+        idempotency key returns 409.
       x-required-permissions: [control.upgrades.manage]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2424,12 +2550,12 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateControlUpgradeRolloutRequest'
       responses:
-        '201':
-          description: The rollout was created or replayed.
+        '202':
+          description: The create was accepted or replayed; its preparation is returned.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ControlUpgradeRolloutWriteResult'
+                $ref: '#/components/schemas/ControlUpgradeRolloutPreparationResult'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -2464,7 +2590,9 @@ paths:
       operationId: startControlUpgradeRollout
       x-summary-zh: "开始排队中的主控升级发布"
       summary: Start a queued control upgrade rollout
-      description: Requires control.upgrades.manage and a current expected revision.
+      description: >-
+        Requires control.upgrades.manage and a current expected revision. The plan ID of a create
+        whose preparation is not ready returns 409 control_upgrade_rollout_preparing.
       x-required-permissions: [control.upgrades.manage]
       parameters:
         - $ref: '#/components/parameters/ControlUpgradeRolloutID'
@@ -3893,6 +4021,28 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      operationId: disconnectPlatformDNSConfig
+      summary: "Disconnect the DNS provider - remove the saved credentials and disable every tenant copy"
+      x-summary-zh: "断开 DNS 服务商：撤销已保存的凭据并停用每个租户副本"
+      description: >-
+        Removes the provider and its encrypted credentials from the installation-wide DNS configuration and
+        disables the provider copy of every tenant (its credential is revoked). The CNAME domains, their tenant
+        zones, the TTL and the DNS records already written are kept. Afterwards CNAME allocation reports
+        dns_provider_not_configured, record repair and cleanup dns_not_configured and DNS-01 orders
+        acme_dns_provider_unavailable until a provider is saved again. A configuration without a provider is
+        returned unchanged.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: The configuration read back (provider_type absent, secret_saved false).
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSConfig'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /v1/dns/platform-config/connection-test:
     post:
       operationId: testPlatformDNSConnection
@@ -3945,7 +4095,7 @@ paths:
           description: provider_verification_rate_limited.
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
         '503':
-          description: provider_verification_unavailable or credential_encryption_unavailable.
+          description: provider_verification_unavailable, provider_proxy_unavailable (the DNS API HTTP proxy in system other settings could not be used) or credential_encryption_unavailable.
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
         '504':
           description: provider_verification_timeout.
@@ -4943,6 +5093,7 @@ paths:
         - {name: name, in: query, schema: {type: string, maxLength: 128}}
         - {name: id, in: query, schema: {type: string, format: uuid}}
         - {name: owner, in: query, description: Platform-only owner filter., schema: {type: string, maxLength: 128}}
+        - {name: scope_id, in: query, description: Only rows of this tenant scope (a CC policy editor lists those of the policy's scope); a tenant identity may only name its own scope., schema: {type: string, format: uuid}}
       responses:
         '200':
           description: Matcher rows projected deterministically from real CC policy conditions.
@@ -5001,6 +5152,7 @@ paths:
     patch:
       operationId: updateSecurityPolicyMatcher
       summary: Replace a CC matcher using optimistic concurrency
+      description: A content edit re-expands, in the same write, every live CC policy whose rules use it (SecurityPolicyCCReference); disabling it while in use is 409 cc_reference_in_use, and content a using policy cannot run is a validation_error naming operator / values with reason unsupported or the rule refusal reason.
       x-summary-zh: 按版本号整体替换 CC 匹配器
       x-required-permissions: [security_policies.manage]
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
@@ -5023,6 +5175,7 @@ paths:
     delete:
       operationId: deleteSecurityPolicyMatcher
       summary: Soft-delete a CC matcher
+      description: Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.
       x-summary-zh: 删除 CC 匹配器（软删除）
       x-required-permissions: [security_policies.manage]
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
@@ -5059,6 +5212,7 @@ paths:
     post:
       operationId: disableSecurityPolicyMatcher
       summary: Disable a CC matcher
+      description: Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.
       x-summary-zh: 停用 CC 匹配器
       x-required-permissions: [security_policies.manage]
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
@@ -5095,6 +5249,7 @@ paths:
         - {name: name, in: query, schema: {type: string, maxLength: 128}}
         - {name: id, in: query, schema: {type: string, format: uuid}}
         - {name: owner, in: query, description: Platform-only owner filter., schema: {type: string, maxLength: 128}}
+        - {name: scope_id, in: query, description: Only rows of this tenant scope (a CC policy editor lists those of the policy's scope); a tenant identity may only name its own scope., schema: {type: string, format: uuid}}
       responses:
         '200':
           description: Filter rows projected deterministically from real CC rule actions.
@@ -5145,6 +5300,7 @@ paths:
     patch:
       operationId: updateSecurityPolicyFilter
       summary: Replace a CC filter using optimistic concurrency
+      description: A content edit re-expands, in the same write, every live CC policy whose rules use it (SecurityPolicyCCReference); disabling it while in use is 409 cc_reference_in_use, and content a using policy cannot run is a validation_error naming type / parameters with reason unsupported or the rule refusal reason.
       x-summary-zh: 按版本号整体替换 CC 过滤器
       x-required-permissions: [security_policies.manage]
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
@@ -5167,6 +5323,7 @@ paths:
     delete:
       operationId: deleteSecurityPolicyFilter
       summary: Soft-delete a CC filter
+      description: Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.
       x-summary-zh: 删除 CC 过滤器（软删除）
       x-required-permissions: [security_policies.manage]
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
@@ -5203,6 +5360,7 @@ paths:
     post:
       operationId: disableSecurityPolicyFilter
       summary: Disable a CC filter
+      description: Refused with 409 cc_reference_in_use (details.policies) while a live CC policy's rules use it.
       x-summary-zh: 停用 CC 过滤器
       x-required-permissions: [security_policies.manage]
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
@@ -5619,6 +5777,8 @@ paths:
         - $ref: '#/components/parameters/AnalyticsTenantID'
         - $ref: '#/components/parameters/AnalyticsSiteID'
         - $ref: '#/components/parameters/AnalyticsNodeID'
+        - $ref: '#/components/parameters/AnalyticsDomain'
+        - $ref: '#/components/parameters/AnalyticsListenPort'
       responses:
         '200': {$ref: '#/components/responses/AnalyticsSummaryOK'}
         '400': {$ref: '#/components/responses/AnalyticsBadRequest'}
@@ -5674,6 +5834,8 @@ paths:
         - $ref: '#/components/parameters/AnalyticsTenantID'
         - $ref: '#/components/parameters/AnalyticsSiteID'
         - $ref: '#/components/parameters/AnalyticsNodeID'
+        - $ref: '#/components/parameters/AnalyticsDomain'
+        - $ref: '#/components/parameters/AnalyticsListenPort'
         - $ref: '#/components/parameters/AnalyticsLimit'
         - $ref: '#/components/parameters/AnalyticsCursor'
       responses:
@@ -5704,6 +5866,8 @@ paths:
         - $ref: '#/components/parameters/AnalyticsTo'
         - $ref: '#/components/parameters/AnalyticsSiteID'
         - $ref: '#/components/parameters/AnalyticsNodeID'
+        - $ref: '#/components/parameters/AnalyticsDomain'
+        - $ref: '#/components/parameters/AnalyticsListenPort'
       responses:
         '200': {$ref: '#/components/responses/AnalyticsSummaryOK'}
         '400': {$ref: '#/components/responses/AnalyticsBadRequest'}
@@ -5760,6 +5924,8 @@ paths:
         - $ref: '#/components/parameters/AnalyticsTo'
         - $ref: '#/components/parameters/AnalyticsSiteID'
         - $ref: '#/components/parameters/AnalyticsNodeID'
+        - $ref: '#/components/parameters/AnalyticsDomain'
+        - $ref: '#/components/parameters/AnalyticsListenPort'
         - $ref: '#/components/parameters/AnalyticsLimit'
         - $ref: '#/components/parameters/AnalyticsCursor'
       responses:
@@ -5993,6 +6159,8 @@ paths:
     $ref: '../../control-error-pages.openapi.yaml#/paths/~1v1~1error-pages~1publication-snapshot'
   /v1/identity-verification/status:
     $ref: '../../control-identity-verification.openapi.yaml#/paths/~1v1~1identity-verification~1status'
+  /v1/identity-verification/methods:
+    $ref: '../../control-identity-verification.openapi.yaml#/paths/~1v1~1identity-verification~1methods'
   /v1/identity-verification/cases:
     $ref: '../../control-identity-verification.openapi.yaml#/paths/~1v1~1identity-verification~1cases'
   /v1/identity-verification/cases/{case_id}:
@@ -6220,7 +6388,7 @@ paths:
       operationId: listAgentGateways
       x-summary-zh: "列出独立部署的 Agent 网关（平台会话，需 system.gateway.manage）"
       summary: List standalone Agent Gateways (platform session, system.gateway.manage)
-      description: ADR 0013 §3.4. The co-located Gateway of an all-mode installation is not listed. standalone_access_open is false until the control plane opens ControlInternal/Redis/NATS to Gateways (GW-09); binding is refused until then.
+      description: ADR 0013 §3.4. items lists the standalone Gateways; local is the co-located Gateway as it last called ControlInternal in this control-api process, with the connected nodes not on a standalone Gateway. standalone_access_open is false until the control plane opens ControlInternal/Redis/NATS to Gateways (GW-09); binding is refused until then.
       responses:
         '200':
           description: Gateways that are not deleted.
@@ -6228,9 +6396,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items, installation_id, standalone_access_open]
+                required: [items, local, installation_id, standalone_access_open]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/AgentGateway'}}
+                  local: {$ref: '#/components/schemas/LocalAgentGateway'}
                   installation_id: {type: string, format: uuid}
                   standalone_access_open: {type: boolean}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -6938,6 +7107,21 @@ components:
       in: query
       required: false
       schema: {type: string, format: uuid}
+    AnalyticsDomain:
+      name: domain
+      in: query
+      required: false
+      description: >-
+        Summary and ranking only. Up to 64 space-separated domains (case-insensitive, a trailing dot ignored);
+        only requests to these hosts are counted. The summary and the ranking narrow by the same set.
+      schema: {type: string, maxLength: 16384}
+      example: cdn.example.com static.example.com
+    AnalyticsListenPort:
+      name: listen_port
+      in: query
+      required: false
+      description: Summary and ranking only. Only requests received on this server port are counted.
+      schema: {type: integer, minimum: 1, maximum: 65535}
     AnalyticsDimension:
       name: dimension
       in: path
@@ -7044,7 +7228,7 @@ components:
         step_up_token: {type: string}
     BillingBridgeLogEntry:
       type: object
-      required: [id, key_id, owner_scope_id, action, external_service_id, result, reason_code, http_status, duration_ms, source_ip, created_at]
+      required: [id, key_id, owner_scope_id, action, external_service_id, result, reason_code, http_status, duration_ms, source_ip, request_id, created_at]
       properties:
         id: {type: string, format: uuid}
         key_id: {type: string}
@@ -7052,10 +7236,11 @@ components:
         action: {type: string}
         external_service_id: {type: string, nullable: true}
         result: {type: string, enum: [success, failure, denied]}
-        reason_code: {type: string, nullable: true}
+        reason_code: {type: string, nullable: true, description: 'Denied: the internal reason (bridge.*). Failure: the error code answered, e.g. bridge_service_not_found (null before migration 709). Success: null.'}
         http_status: {type: integer}
         duration_ms: {type: integer}
         source_ip: {type: string, nullable: true}
+        request_id: {type: string, nullable: true, description: The call's X-Request-ID (null before migration 709).}
         created_at: {type: string, format: date-time}
     BillingBridgeSettings:
       type: object
@@ -7093,7 +7278,7 @@ components:
     BillingBridgePeriod: {type: string, enum: [month, quarter, year]}
     BillingBridgeProduct:
       type: object
-      required: [id, revision, name, periods, site_limit, node_limit]
+      required: [id, revision, name, periods, site_limit, node_limit, cname]
       properties:
         id: {type: string, format: uuid}
         revision: {type: integer, format: int64, minimum: 1}
@@ -7109,6 +7294,13 @@ components:
               wholesale_minor: {type: integer, format: int64, nullable: true, description: Reseller key only.}
         site_limit: {type: integer, format: int64}
         node_limit: {type: integer, format: int64}
+        cname:
+          type: object
+          required: [mode, domain]
+          description: The package's CNAME policy; its sites' CNAMEs are under domain (a CNAME domain of DNS 配置).
+          properties:
+            mode: {type: string, enum: [per_site, shared]}
+            domain: {type: string}
     BillingBridgeCreateService:
       type: object
       additionalProperties: false
@@ -7126,7 +7318,7 @@ components:
             username: {type: string, minLength: 3, maxLength: 120}
             display_name: {type: string, minLength: 1, maxLength: 128}
         product_id: {type: string, format: uuid}
-        product_revision: {type: integer, format: int64, minimum: 1}
+        product_revision: {type: integer, format: int64, minimum: 1, description: 'The published revision the caller saw; another one is 409 bridge_product_revision_changed. Left out: the published one.'}
         period: {$ref: '#/components/schemas/BillingBridgePeriod'}
     BillingBridgeSuspend:
       type: object
@@ -7144,12 +7336,12 @@ components:
       required: [product_id]
       properties:
         product_id: {type: string, format: uuid}
-        product_revision: {type: integer, format: int64, minimum: 1}
+        product_revision: {type: integer, format: int64, minimum: 1, description: 'The published revision the caller saw; another one is 409 bridge_product_revision_changed. Left out: the published one.'}
         period: {$ref: '#/components/schemas/BillingBridgePeriod'}
     BillingBridgeService:
       type: object
       required: [external_system, external_service_id, external_client_id, status, product, period, starts_at, ends_at,
-        suspended_at, user, console_url, created]
+        suspended_at, revision, user, console_url, created]
       properties:
         external_system: {$ref: '#/components/schemas/BillingBridgeExternalSystem'}
         external_service_id: {type: string}
@@ -7166,6 +7358,12 @@ components:
         starts_at: {type: string, format: date-time}
         ends_at: {type: string, format: date-time}
         suspended_at: {type: string, format: date-time, nullable: true}
+        revision:
+          type: integer
+          format: int64
+          description: >-
+            Subscription revision; every change, renewal, suspension or unsuspension moves it on. Key a
+            ChangePackage by it and the target so a retry keeps the key and a new change gets a new one.
         user:
           type: object
           required: [id, username, email]
@@ -7210,6 +7408,20 @@ components:
         server_certificate_expires_at: {type: [string, 'null'], format: date-time}
         source_ip: {type: [string, 'null'], description: Address the binding request came from.}
         allowed_ips: {type: array, items: {type: string}, description: 'Addresses ControlInternal, Redis and NATS accept from this Gateway (default source_ip; the nftables set mirrors them).'}
+        nodes_online: {type: integer, minimum: 0, description: Connected nodes whose current session came through this Gateway.}
+    LocalAgentGateway:
+      type: object
+      required: [address, server_name, status, instance_id, version, ready_at, last_seen_at, certificate_expires_at, nodes_online]
+      properties:
+        address: {type: string, description: 'Node endpoint it is published as (empty: not published).'}
+        server_name: {type: string}
+        status: {type: string, enum: [online, offline, not_reported], description: 'online: called within 3 minutes; not_reported: no call since control-api started.'}
+        instance_id: {type: string}
+        version: {type: string, description: Reported on ReportGatewayReady; empty until then.}
+        ready_at: {type: [string, 'null'], format: date-time}
+        last_seen_at: {type: [string, 'null'], format: date-time}
+        certificate_expires_at: {type: [string, 'null'], format: date-time, description: Expiry of the client certificate it last presented.}
+        nodes_online: {type: integer, minimum: 0}
     AgentGatewaySettings:
       type: object
       additionalProperties: false
@@ -7359,6 +7571,23 @@ components:
         required_permission: {type: string}
         required_module: {type: string}
         has_api: {type: boolean, description: the plugin declared a backend reachable through the proxy}
+    PluginUIUnavailablePage:
+      type: object
+      additionalProperties: false
+      required: [plugin_id, page_id, mount, title, reason]
+      properties:
+        plugin_id: {type: string}
+        page_id: {type: string}
+        mount: {enum: [menu, plugin_settings]}
+        menu_parent: {type: string, description: the menu group the page mounts under (menu pages)}
+        title:
+          type: object
+          additionalProperties: false
+          required: [zh-CN]
+          properties:
+            zh-CN: {type: string}
+            en-US: {type: string}
+        reason: {enum: [not_licensed, not_installed, disabled, uninstalled, permission_denied, not_enabled]}
     analyticsRealtimeCanonicalUUID:
       $ref: '../../control-analytics-realtime.openapi.yaml#/components/schemas/CanonicalUUID'
     analyticsRealtimeUnsignedInteger:
@@ -7847,7 +8076,6 @@ components:
         - status_3xx
         - status_4xx
         - status_5xx
-        - security_events
         - cache_hit_requests
         - cache_hit_bytes
         - unique_client_ips
@@ -7862,7 +8090,6 @@ components:
         status_3xx: {type: integer, format: uint64, minimum: 0}
         status_4xx: {type: integer, format: uint64, minimum: 0}
         status_5xx: {type: integer, format: uint64, minimum: 0}
-        security_events: {type: integer, format: uint64, minimum: 0}
         cache_hit_requests:
           type: integer
           format: uint64
@@ -7881,6 +8108,21 @@ components:
     AnalyticsSummaryMetrics:
       allOf:
         - $ref: '#/components/schemas/AnalyticsMetricValues'
+        - type: object
+          required: [security_events, security_event_rows]
+          properties:
+            security_events:
+              type: [integer, 'null']
+              format: uint64
+              minimum: 0
+              description: >-
+                Security events in requests (an aggregated CC challenge / 429 event counts its requests). Null
+                when domain or listen_port is given: the security facts record neither host nor port.
+            security_event_rows:
+              type: [integer, 'null']
+              format: uint64
+              minimum: 0
+              description: Security event records (an aggregated event is one); null like security_events.
       unevaluatedProperties: false
     AnalyticsSummaryResponse:
       type: object
@@ -7893,9 +8135,11 @@ components:
       allOf:
         - $ref: '#/components/schemas/AnalyticsMetricValues'
         - type: object
-          required: [hour]
+          required: [hour, security_events, security_event_rows]
           properties:
             hour: {type: string, format: date-time}
+            security_events: {type: integer, format: uint64, minimum: 0}
+            security_event_rows: {type: integer, format: uint64, minimum: 0}
       unevaluatedProperties: false
     AnalyticsTrendResponse:
       type: object
@@ -8192,12 +8436,14 @@ components:
         enabled: {type: boolean}
         conditions:
           type: array
-          minItems: 1
+          minItems: 0
           maxItems: 16
+          description: At least one, except a rule with cc_reference (the server replaces conditions, action and action_config with the expansion).
           items: {$ref: '#/components/schemas/SecurityPolicyCondition'}
         action: {$ref: '#/components/schemas/SecurityPolicyAction'}
         flow: {$ref: '#/components/schemas/SecurityPolicyFlow'}
         action_config: {$ref: '#/components/schemas/SecurityPolicyActionConfig'}
+        cc_reference: {$ref: '#/components/schemas/SecurityPolicyCCReference'}
         count_by:
           type: array
           minItems: 1
@@ -8208,6 +8454,30 @@ components:
           type: string
           enum: [client_ip, count_key]
           description: CC temporary_ban with count_by only. count_key bans the counted bucket (for example one TLS fingerprint); omitted bans the client.
+    SecurityPolicyCCReference:
+      type: object
+      additionalProperties: false
+      required: [matcher_id, filter1_id, action]
+      description: >-
+        CC only. The rule is built from a CC matcher and one or two CC filters of the policy's own scope
+        (live, enabled, not system rows). Saves expand it into the rule's conditions, action and
+        action_config the way imported system rule groups are expanded, then check it like an inline rule;
+        flow is the match mode (block forces stop). count_by and action_target are dropped. Editing the
+        matcher or a filter re-expands every policy using it in the same write (a new policy revision only
+        when the expansion changes; the bound sites then republish as after a policy edit) and is refused
+        whole when a policy cannot run the new content. A matcher or filter in use cannot be deleted or
+        disabled (409 cc_reference_in_use). Refusals name rules[n].cc_reference.matcher_id / filter1_id /
+        filter2_id with reason unavailable (not usable in the scope) or unsupported (the nodes cannot run it,
+        e.g. a url_auth filter).
+      x-description-zh: 仅 CC。规则由本作用域已启用的自建匹配器与一或两个过滤器组成；保存时展开为条件与动作并按内联规则校验。编辑匹配器/过滤器会在同一次写入里重新展开引用它的策略，节点无法执行则整笔拒绝；被引用时不能删除或停用（409 cc_reference_in_use）。
+      properties:
+        matcher_id: {type: string, format: uuid}
+        matcher_version: {type: integer, format: int64, minimum: 1, readOnly: true, description: Matcher revision expanded (set by the server).}
+        filter1_id: {type: string, format: uuid}
+        filter1_version: {type: integer, format: int64, minimum: 1, readOnly: true}
+        filter2_id: {type: string, format: uuid, description: "Optional. filter1 must then be a req_rate without a per-URI budget (the trigger) and filter2 a verification filter."}
+        filter2_version: {type: integer, format: int64, minimum: 1, readOnly: true}
+        action: {type: string, enum: [block, log]}
     SecurityPolicyCountKey:
       type: object
       additionalProperties: false
@@ -9124,6 +9394,14 @@ components:
         automatic_rollback:
           type: boolean
           const: true
+        start_when_ready:
+          type: boolean
+          const: true
+          description: >-
+            Start the plan once its preparation made it, as the creator's start with reason
+            operator_upgrade (the console's create-then-start). Omitted when not wanted; the
+            approval center's control.upgrade rule leaves the plan queued with start_failure_code
+            approval_required.
     ControlUpgradeRolloutActionRequest:
       type: object
       additionalProperties: false
@@ -9350,7 +9628,7 @@ components:
     ControlUpgradeRolloutList:
       type: object
       additionalProperties: false
-      required: [data, page, page_size, total]
+      required: [data, page, page_size, total, preparations]
       properties:
         data:
           type: array
@@ -9358,6 +9636,60 @@ components:
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, format: int64, minimum: 0 }
+        preparations:
+          description: >-
+            The newest 20 creates still preparing or failed, and ready ones whose plan was not
+            started as asked, newest first, independent of the page and the state filter; node_id
+            filters them too.
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ControlUpgradeRolloutPreparation' }
+    ControlUpgradeRolloutPreparation:
+      type: object
+      additionalProperties: false
+      required: [id, plan_id, state, phase, start_when_ready, node_ids, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid, description: The create intent ID. }
+        plan_id:
+          type: string
+          format: uuid
+          description: The ID the plan gets once the preparation is ready.
+        state: { type: string, enum: [preparing, failed, ready] }
+        phase: { type: string, enum: [queued, issuing, downloading, finalizing, starting, done] }
+        failure_code:
+          type: string
+          description: Set only when state is failed.
+          enum: [license_unavailable, license_outcome_unknown, license_rejected, grant_invalid,
+            artifact_download_failed, artifact_invalid, cohort_incompatible, permission_denied,
+            resource_unavailable, internal_error]
+        failure_reason:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,63}$'
+          description: >-
+            License's refusal code, or http_<status> for a refusal without one; set only with
+            failure_code or start_failure_code license_rejected.
+        start_when_ready: { type: boolean }
+        start_failure_code:
+          type: string
+          description: >-
+            Set only on a ready preparation whose plan was asked to start and was left queued.
+          enum: [approval_required, start_refused, license_unavailable, license_outcome_unknown,
+            license_rejected, grant_invalid, artifact_download_failed, artifact_invalid,
+            cohort_incompatible, permission_denied, resource_unavailable, internal_error]
+        node_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ControlUpgradeRolloutPreparationResult:
+      type: object
+      additionalProperties: false
+      required: [data, replayed]
+      properties:
+        data: { $ref: '#/components/schemas/ControlUpgradeRolloutPreparation' }
+        replayed: { type: boolean }
     ControlUpgradeRolloutDetailResult:
       type: object
       additionalProperties: false
@@ -9445,6 +9777,55 @@ components:
         status: {type: string, enum: [pending, accepted, revoked, expired]}
         created_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
+    ControlOriginAuthStatus:
+      type: object
+      additionalProperties: false
+      required: [cdn_without_origin_auth, origin_auth_enabled, baota, client_headers_forwarded, real_ip_header, key_only, visitor_ip_confirmed,
+        header, last_seen_at, last_confirmed_at]
+      properties:
+        cdn_without_origin_auth:
+          type: boolean
+          description: A CDN request without a confirmed visitor address came within the last hour and no confirmed one since.
+        origin_auth_enabled:
+          type: boolean
+          description: install-control.sh origin-auth is configured on this host (its origin-auth.conf exists).
+        baota:
+          type: boolean
+          description: >-
+            A BaoTa host (the installer's host profile says ENV=bt), whose site proxy rewrites X-Real-IP and
+            X-Forwarded-For with the CDN node: the source IP header reads only CF-Connecting-IP or True-Client-IP there.
+        client_headers_forwarded:
+          type: boolean
+          description: >-
+            The console nginx passes the client's own X-Real-IP and X-Forwarded-For to control-api as
+            X-Cdnca-Client-X-Real-IP and X-Cdnca-Client-X-Forwarded-For (current installs and converged consoles),
+            so the source IP header can read those two.
+        real_ip_header:
+          type: string
+          enum: ['', CF-Connecting-IP, True-Client-IP, X-Forwarded-For, X-Real-IP]
+          description: The --real-ip-header origin authentication takes the visitor address from; empty while it is off.
+        key_only:
+          type: boolean
+          description: >-
+            The last CDN request without a confirmed visitor address carried the origin key but real_ip_header held no
+            visitor address (X-Cdnca-Origin-Verified key_only): the CDN does not write the visitor IP into that header.
+        visitor_ip_confirmed:
+          type: boolean
+          description: >-
+            Within the last hour a request's visitor address was confirmed (by the source IP header or the origin key)
+            and no unconfirmed CDN request came since.
+        header:
+          type: string
+          enum: ['', CF-Connecting-IP, True-Client-IP, Ali-Cdn-Real-Ip, EO-Connecting-IP, Fastly-Client-IP, Cdn-Src-Ip]
+          description: The visitor address header of the last CDN request without a confirmed visitor address; empty when none came.
+        last_seen_at:
+          type: [string, 'null']
+          format: date-time
+          description: When that request came; null when none came.
+        last_confirmed_at:
+          type: [string, 'null']
+          format: date-time
+          description: When the last request with a confirmed visitor address came; null when none came.
     AdminAccessPolicy:
       type: object
       additionalProperties: false
@@ -10685,6 +11066,35 @@ components:
           type: string
           format: uuid
           description: Only on the update response that changed the CNAME of a package with sold subscriptions; poll GET /v1/admin/packages/{id}/cname-sync/{job_id}.
+    PackageProductPublication:
+      type: object
+      additionalProperties: false
+      required: [state, product_revision]
+      description: The product's sale state (package_offer_publication_heads). published puts product_revision on sale (it can be older than the product revision when a later edit was not republished); a withdrawn product cannot be published again.
+      properties:
+        state: {type: string, enum: [published, withdrawn]}
+        product_revision: {type: integer, format: int64, minimum: 1}
+    PackageProductRead:
+      type: object
+      additionalProperties: false
+      required: [id, owner_scope_id, spec, revision, created_at, updated_at, publication]
+      description: A product as the list and detail reads return it.
+      properties:
+        id: {type: string, format: uuid}
+        owner_scope_id:
+          type: string
+          format: uuid
+          description: The platform scope or the reseller tenant scope that owns the package; names are unique per owner.
+        spec:
+          $ref: '#/components/schemas/PackageProductSpec'
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        publication:
+          description: null when the product was never published (a draft).
+          oneOf:
+            - $ref: '#/components/schemas/PackageProductPublication'
+            - type: 'null'
     PackageCNAMESyncJob:
       type: object
       additionalProperties: false
@@ -10722,7 +11132,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/PackageProduct'
+            $ref: '#/components/schemas/PackageProductRead'
         total: {type: integer, format: int64, minimum: 0}
         page: {type: integer, minimum: 1, maximum: 1000000}
         limit: {type: integer, minimum: 1, maximum: 100}
@@ -11766,144 +12176,21 @@ components:
           items:
             $ref: '#/components/schemas/BatchNodeAdminStateItemResult'
     StreamProtocol:
-      type: string
-      enum: [tcp, udp]
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamProtocol'
     StreamFields:
-      type: object
-      required:
-        - package_subscription_id
-        - site_id
-        - name
-        - protocol
-        - listen_address
-        - listen_port
-        - upstream_port
-        - connect_timeout_ms
-        - response_timeout_ms
-        - max_connections_per_client
-        - proxy_protocol_inbound
-        - proxy_protocol_v1
-        - enabled
-      oneOf:
-        - required: [upstream_address]
-          properties:
-            upstream_address: {type: string, minLength: 1}
-            upstream_host: {type: string, maxLength: 0}
-        - required: [upstream_host, dns_policy]
-          properties:
-            upstream_address: {type: string, maxLength: 0}
-            upstream_host: {type: string, minLength: 1}
-      properties:
-        package_subscription_id: {type: string, format: uuid}
-        site_id: {type: string, format: uuid}
-        name: {type: string, minLength: 1, maxLength: 128}
-        remark: {type: string, maxLength: 256}
-        protocol: {$ref: '#/components/schemas/StreamProtocol'}
-        listen_address:
-          type: string
-          const: '*'
-          description: Current edge runtime binds both IPv4 and IPv6 wildcard listeners.
-        listen_port: {type: integer, minimum: 1, maximum: 65535}
-        upstream_address:
-          type: string
-          oneOf:
-            - {format: ipv4}
-            - {format: ipv6}
-        upstream_host:
-          type: string
-          maxLength: 253
-          description: Canonicalized with IDNA Lookup processing before an immutable runtime intent is created.
-        upstream_port: {type: integer, minimum: 1, maximum: 65535}
-        dns_policy: {$ref: '#/components/schemas/StreamDNSPolicy'}
-        geo_policy: {$ref: '#/components/schemas/StreamGeoPolicy'}
-        connect_timeout_ms: {type: integer, minimum: 50, maximum: 30000}
-        response_timeout_ms: {type: integer, minimum: 100, maximum: 600000}
-        max_connections_per_client: {type: integer, minimum: 1, maximum: 10000}
-        proxy_protocol_inbound:
-          type: boolean
-          description: Required exactly when an enabled geo policy uses trusted proxy CIDRs.
-        proxy_protocol_v1:
-          type: boolean
-          description: Valid only for TCP; UDP requests with this flag are rejected.
-        enabled: {type: boolean}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamFields'
     StreamDNSPolicy:
-      type: object
-      additionalProperties: false
-      required: [positive_min_ttl_seconds, positive_max_ttl_seconds, negative_ttl_seconds, stale_if_error_seconds, allow_private_addresses]
-      properties:
-        positive_min_ttl_seconds: {type: integer, minimum: 1, maximum: 300}
-        positive_max_ttl_seconds: {type: integer, minimum: 1, maximum: 86400}
-        negative_ttl_seconds: {type: integer, minimum: 1, maximum: 3600}
-        stale_if_error_seconds:
-          type: integer
-          minimum: 1
-          maximum: 86400
-          description: Must be greater than or equal to positive_max_ttl_seconds.
-        allow_private_addresses:
-          type: boolean
-          const: false
-          description: Domain upstream rebinding to private or otherwise non-routable addresses is rejected fail closed.
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamDNSPolicy'
     StreamGeoRegionCIDRs:
-      type: object
-      additionalProperties: false
-      required: [region, cidrs]
-      properties:
-        region: {type: string, pattern: '^[a-z][a-z0-9_-]{0,31}$'}
-        cidrs:
-          type: array
-          minItems: 1
-          maxItems: 256
-          uniqueItems: true
-          items: {type: string}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamGeoRegionCIDRs'
     StreamGeoPolicy:
-      type: object
-      additionalProperties: false
-      properties:
-        enabled: {type: boolean, default: false}
-        unknown_region_action: {type: string, enum: [allow, block], default: allow}
-        trusted_proxy_cidrs:
-          type: array
-          maxItems: 64
-          uniqueItems: true
-          items: {type: string}
-        blocked_regions:
-          type: array
-          maxItems: 256
-          uniqueItems: true
-          items: {type: string, pattern: '^[a-z][a-z0-9_-]{0,31}$'}
-        region_cidrs:
-          type: array
-          maxItems: 256
-          items: {$ref: '#/components/schemas/StreamGeoRegionCIDRs'}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamGeoPolicy'
     CreateStreamRequest:
-      unevaluatedProperties: false
-      allOf:
-        - $ref: '#/components/schemas/StreamFields'
-        - type: object
-          properties:
-            target_scope_id:
-              type: string
-              format: uuid
-              description: Required for a platform administrator and ignored only when omitted by a tenant identity.
-            owner_id:
-              type: string
-              format: uuid
-              description: Required for a platform administrator and fixed to the current user for a tenant identity.
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/CreateStreamRequest'
     UpdateStreamRequest:
-      unevaluatedProperties: false
-      allOf:
-        - $ref: '#/components/schemas/StreamFields'
-        - type: object
-          required: [expected_revision]
-          properties:
-            expected_revision: {type: integer, format: int64, minimum: 1}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/UpdateStreamRequest'
     StreamOwner:
-      type: object
-      additionalProperties: false
-      required: [id, display_name]
-      properties:
-        id: {type: string, format: uuid}
-        display_name: {type: string}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamOwner'
     RuntimeOrigin:
       type: object
       additionalProperties: false
@@ -11933,28 +12220,9 @@ components:
         response_timeout_ms: {type: integer, minimum: 100, maximum: 600000}
         proxy_protocol_v1: {type: boolean}
     StreamRuntimeListenerV2:
-      type: object
-      additionalProperties: false
-      required: [protocol, address, port]
-      properties:
-        protocol: {$ref: '#/components/schemas/StreamProtocol'}
-        address: {type: string, const: '*'}
-        port: {type: integer, minimum: 1, maximum: 65535}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamRuntimeListenerV2'
     StreamRuntimeEndpointV2:
-      type: object
-      additionalProperties: false
-      required: [port]
-      oneOf:
-        - required: [address]
-        - required: [host]
-      properties:
-        address:
-          type: string
-          oneOf:
-            - {format: ipv4}
-            - {format: ipv6}
-        host: {type: string, minLength: 1, maxLength: 253}
-        port: {type: integer, minimum: 1, maximum: 65535}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamRuntimeEndpointV2'
     StreamRuntimeDNSPolicyV2:
       type: object
       additionalProperties: false
@@ -11974,129 +12242,17 @@ components:
         stale_if_error_seconds: {type: integer, minimum: 0, maximum: 86400}
         allow_private_addresses: {type: boolean, const: false}
     StreamRuntimeGeoPolicyV2:
-      type: object
-      additionalProperties: false
-      required: [enabled, tenant_id, site_id, stream_id, revision, unknown_region_action, trusted_proxy_cidrs, blocked_regions, region_cidrs]
-      properties:
-        enabled: {type: boolean}
-        tenant_id: {type: string, format: uuid}
-        site_id: {type: string, format: uuid}
-        stream_id: {type: string, format: uuid}
-        revision: {type: integer, format: int64, minimum: 1, maximum: 9007199254740991}
-        unknown_region_action: {type: string, enum: [allow, block]}
-        trusted_proxy_cidrs:
-          type: array
-          maxItems: 64
-          uniqueItems: true
-          items: {type: string}
-        blocked_regions:
-          type: array
-          maxItems: 256
-          uniqueItems: true
-          items: {type: string, pattern: '^[a-z][a-z0-9_-]{0,31}$'}
-        region_cidrs:
-          type: array
-          maxItems: 256
-          items: {$ref: '#/components/schemas/StreamGeoRegionCIDRs'}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamRuntimeGeoPolicyV2'
     StreamRuntimeSpecV2:
-      type: object
-      additionalProperties: false
-      required: [schema_version, tenant_id, site_id, stream_id, revision, listener, endpoint, dns, geo, connect_timeout_ms, response_timeout_ms, max_connections_per_client, drain_timeout_ms, proxy_protocol_inbound, proxy_protocol_outbound]
-      properties:
-        schema_version: {type: string, const: 'cdnca.edge.l4/v2'}
-        tenant_id: {type: string, format: uuid}
-        site_id: {type: string, format: uuid}
-        stream_id: {type: string, format: uuid}
-        revision: {type: integer, format: int64, minimum: 1, maximum: 9007199254740991}
-        listener: {$ref: '#/components/schemas/StreamRuntimeListenerV2'}
-        endpoint: {$ref: '#/components/schemas/StreamRuntimeEndpointV2'}
-        dns: {$ref: '#/components/schemas/StreamRuntimeDNSPolicyV2'}
-        geo: {$ref: '#/components/schemas/StreamRuntimeGeoPolicyV2'}
-        connect_timeout_ms: {type: integer, minimum: 50, maximum: 30000}
-        response_timeout_ms: {type: integer, minimum: 100, maximum: 600000}
-        max_connections_per_client: {type: integer, minimum: 1, maximum: 10000}
-        drain_timeout_ms: {type: integer, const: 30000}
-        proxy_protocol_inbound: {type: boolean}
-        proxy_protocol_outbound: {type: boolean}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamRuntimeSpecV2'
     StreamRuntimeSpec:
-      oneOf:
-        - $ref: '#/components/schemas/StreamRuntimeSpecV1'
-        - $ref: '#/components/schemas/StreamRuntimeSpecV2'
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamRuntimeSpec'
     StreamPublishIntent:
-      type: object
-      additionalProperties: false
-      required: [id, version, operation, desired_state, resource_revision, configuration_source_revision, runtime_spec, state, automatic_request_id, publication_id, rollout_id, failure_code, created_at]
-      properties:
-        id: {type: string, format: uuid}
-        version: {type: integer, format: int64, minimum: 1}
-        operation: {type: string, enum: [create, update, delete]}
-        desired_state: {type: string, enum: [enabled, disabled, deleted]}
-        resource_revision: {type: integer, format: int64, minimum: 1}
-        configuration_source_revision: {type: integer, format: int64, minimum: 1}
-        runtime_spec: {$ref: '#/components/schemas/StreamRuntimeSpec'}
-        state: {type: string, enum: [unknown, pending, leased, retrying, reconciling, succeeded, failed, superseded]}
-        automatic_request_id:
-          oneOf:
-            - {type: string, format: uuid}
-            - {type: 'null'}
-        publication_id:
-          oneOf:
-            - {type: string, format: uuid}
-            - {type: 'null'}
-        rollout_id:
-          oneOf:
-            - {type: string, format: uuid}
-            - {type: 'null'}
-        failure_code:
-          description: >-
-            Why a failed publication ended, the automatic publication request's
-            terminal code (no_target_nodes, node_capability_unavailable,
-            node_artifacts_syncing, node_scope_conflict, site_config_invalid,
-            rbac_revoked, deployment_failed, apply_reverted, rollback_failed,
-            rollback_unexpected_state, cancelled, request_deadline_expired).
-            Clients show an unknown code as is. null unless state is failed.
-          oneOf:
-            - {type: string, pattern: '^[a-z0-9_]{1,128}$'}
-            - {type: 'null'}
-        created_at: {type: string, format: date-time}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamPublishIntent'
     Stream:
-      unevaluatedProperties: false
-      allOf:
-        - $ref: '#/components/schemas/StreamFields'
-        - type: object
-          required: [id, display_id, scope_id, owner, revision, publish_intent, created_at, updated_at]
-          properties:
-            id: {type: string, format: uuid}
-            display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$', readOnly: true}
-            scope_id: {type: string, format: uuid}
-            package_name:
-              type: [string, 'null']
-              readOnly: true
-              description: Purchased package snapshot name for this stream scope. List and detail reads resolve the persisted subscription; write and legacy replay responses may omit it or return null.
-            package_expires_at:
-              type: [string, 'null']
-              format: date-time
-              readOnly: true
-              description: Purchased subscription ends_at for this stream scope, not its usage cycle end. List and detail reads resolve the persisted subscription; write and legacy replay responses may omit it or return null.
-            owner:
-              oneOf:
-                - $ref: '#/components/schemas/StreamOwner'
-                - type: 'null'
-            revision: {type: integer, format: int64, minimum: 1}
-            publish_intent: {$ref: '#/components/schemas/StreamPublishIntent'}
-            created_at: {type: string, format: date-time}
-            updated_at: {type: string, format: date-time}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/Stream'
     StreamListResponse:
-      type: object
-      additionalProperties: false
-      required: [items, total, page, limit]
-      properties:
-        items:
-          type: array
-          items: {$ref: '#/components/schemas/Stream'}
-        total: {type: integer, format: int64, minimum: 0}
-        page: {type: integer, minimum: 1}
-        limit: {type: integer, minimum: 1, maximum: 100}
+      $ref: '../../control-l4-forward.openapi.yaml#/components/schemas/StreamListResponse'
     ErrorEnvelope:
       type: object
       additionalProperties: false
@@ -12136,6 +12292,27 @@ components:
                   items:
                     type: string
             - type: object
+              description: >-
+                On entitlement_feature_denied when the refusal names the feature code the local
+                license lease does not grant (package publish and save-republish: packages.manage).
+              additionalProperties: false
+              required: [required_feature]
+              properties:
+                required_feature:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_.:-]{0,127}$'
+            - type: object
+              description: >-
+                On bridge_product_revision_changed (billing bridge open / change): the product's published revision
+                now; show the product again before resubmitting.
+              additionalProperties: false
+              required: [current_product_revision]
+              properties:
+                current_product_revision:
+                  type: integer
+                  format: int64
+                  minimum: 1
+            - type: object
               description: Only on node_in_use (node deletion) when what holds the node is known.
               additionalProperties: false
               required: [reasons]
@@ -12145,6 +12322,43 @@ components:
                   minItems: 1
                   items:
                     $ref: '#/components/schemas/NodeInUseReason'
+            - type: object
+              description: >-
+                On 409 package_resource_quota_exceeded: the package resource the write would push above its limit (a site write: sites, domains, root_domains or http_ports; a stream write: stream_ports), its effective limit, the subscription's usage before the write and what the write adds (0 when re-enabling a stream over the limit). sites counts the subscription's undeleted websites against the current entitlement's site_limit (-1 unlimited). The admission check is unchanged.
+              additionalProperties: false
+              required: [resource, limit, used, requested]
+              properties:
+                resource:
+                  type: string
+                  enum: [sites, domains, root_domains, http_ports, stream_ports]
+                limit:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                used:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                requested:
+                  type: integer
+                  format: int64
+                  minimum: 1
+            - type: object
+              description: "Only on cc_reference_in_use (deleting or disabling a CC matcher / filter): the live CC rule groups (CC policies) whose rules use it."
+              x-description-zh: 仅 cc_reference_in_use（删除或停用 CC 匹配器/过滤器）：规则里用到它的 CC 规则组。
+              additionalProperties: false
+              required: [policies]
+              properties:
+                policies:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [id, name]
+                    properties:
+                      id: {type: string, format: uuid}
+                      name: {type: string}
             - type: object
               description: Only on supply_in_use (node updates, ADR 0012 ML-18).
               additionalProperties: false
@@ -12486,8 +12700,23 @@ components:
       description: >-
         {"error":{"code","message","request_id"}}. Codes (ADR 0019 §4.4): bridge_unauthenticated 401,
         entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404,
-        bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422,
+        bridge_product_revision_changed 409 (open / change named a product_revision that is no longer the published
+        one; details.current_product_revision is the published one), bridge_service_conflict 409, bridge_service_terminated 409, bridge_service_suspended 409 (SSO of a
+        suspended service), reseller_prepaid_insufficient 422,
         reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are.
+        A site route's bridge_validation_error naming one field has details {field, index (0-based line of origins;
+        absent for other fields), reason}: origin_scheme_unsupported, origin_scheme_mismatch, origin_has_path,
+        origin_has_userinfo, origin_port_invalid, origin_host_invalid, origin_duplicate, origins_count, or the site
+        service's <field>_<reason> (domains_invalid).
+        Site routes: bridge_site_not_found 404, bridge_site_domain_conflict / bridge_site_revision_conflict /
+        bridge_site_locked / bridge_site_busy (retry) / bridge_site_quota_exceeded / bridge_site_package_unavailable /
+        bridge_site_domain_ownership_required / bridge_site_domain_verified_by_other /
+        bridge_site_domain_claim_suspended / bridge_site_origin_auth_requires_https 409, bridge_site_domain_blocked
+        422, bridge_site_permission_denied / bridge_site_feature_denied / bridge_site_entitlement_denied 403.
+        request_id is the X-Request-ID response header, kept in the owner's billing bridge log row.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
       content:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}

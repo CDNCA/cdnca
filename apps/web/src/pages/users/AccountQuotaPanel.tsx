@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Alert, Button, Form, InputNumber, Table, Tag } from 'antd'
-import { useFeedbackMessage } from '@cdnca/ui'
+import { Alert, Button, Form, InputNumber, Tag } from 'antd'
+import { useFeedbackMessage, Table } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'

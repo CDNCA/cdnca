@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App as AntApp, Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space, Switch, Table, Tag, TimePicker, Typography, type TableColumnsType } from 'antd'
+import { App as AntApp, Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space, Switch, Tag, TimePicker, Typography, type TableColumnsType } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../api/auth'
 import {
   controlBackupApi,
+  type ControlBackupApiError,
   type ControlBackupBundle,
   type ControlBackupRun,
   type ControlBackupSettingsInput,
@@ -17,8 +18,9 @@ import {
 import { useSessionStore } from '../auth/session'
 import { controlBackupError, controlBackupMessage, type ControlBackupKey } from '../i18n/controlBackup'
 import { formatDateTime } from '../i18n/formatters'
-import { useFeedback, FeedbackWhen } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, Table } from '@cdnca/ui'
 import { MigrationPhases, RollbackPanel, StopMigrationButton } from './ControlMigrationControls'
+import { setPendingBackup, useBackupWait } from './controlBackupPending'
 
 function formatBytes(value: number): string {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`
@@ -36,6 +38,12 @@ function backupFailure(feedback: ReturnType<typeof useFeedback>, language: strin
       <div className="mono">{controlBackupMessage(language, 'requestId')}<Typography.Text copyable>{apiError.requestId}</Typography.Text></div>
     </> : reason)
   }
+}
+
+// While the backup's planned outage lasts, the run is read with a bounded backoff.
+function backupPollMs(startedAt: number): number {
+  const elapsed = Date.now() - startedAt
+  return elapsed < 60_000 ? 3_000 : elapsed < 5 * 60_000 ? 10_000 : 20_000
 }
 
 const stateColor: Record<ControlBackupRun['state'], string> = { queued: 'default', running: 'processing', succeeded: 'success', failed: 'error', stopped: 'warning' }
@@ -60,13 +68,47 @@ export default function ControlBackupPanel({ accessToken, canManage, frozen = fa
   // Keyed by the session, not the access token: a token renewal must not
   // empty the cache (that unmounted the settings form and lost the draft).
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
+  // A queued manual backup takes control-api and the Gateway down for a while:
+  // until its run id reads a final state the status is not polled and its
+  // failures are not reported; repeat backups, migration and deletes stay off.
+  const { pending, waiting } = useBackupWait()
+  const [finished, setFinished] = useState<{ run?: ControlBackupRun; error?: ApiError } | null>(null)
   // 5 s while a run is queued/running (the opened log follows it), else 15 s.
   const status = useQuery({ queryKey: ['control-backup', sessionEpoch], queryFn: () => controlBackupApi.status(accessToken),
-    refetchInterval: (query) => query.state.data?.runs.some((run) => run.state === 'queued' || run.state === 'running') ? 5_000 : 15_000 })
+    refetchInterval: (query) => waiting ? false : query.state.data?.runs.some((run) => run.state === 'queued' || run.state === 'running') ? 5_000 : 15_000 })
+  const runQuery = useQuery({ queryKey: ['control-backup-run', sessionEpoch, pending?.runID],
+    queryFn: () => controlBackupApi.run(accessToken, pending!.runID), enabled: waiting, retry: false, gcTime: 0,
+    refetchInterval: () => pending ? backupPollMs(pending.startedAt) : false })
   const failed = backupFailure(feedback, language, bt('errorGeneric'))
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['control-backup'] })
-  const backupNow = useMutation({ mutationFn: () => controlBackupApi.backupNow(accessToken), onSuccess: refresh,
+  const backupNow = useMutation({ mutationFn: () => controlBackupApi.backupNow(accessToken),
+    onSuccess: (run) => {
+      setFinished(null)
+      if (run.state === 'queued' || run.state === 'running') setPendingBackup({ runID: run.id, startedAt: Date.now(), state: run.state })
+      else setFinished({ run })
+      void refresh()
+    },
     onError: backupFailure(feedback, language, bt('backupNowFailed')) })
+  useEffect(() => {
+    const run = runQuery.data
+    if (!pending || !run || run.id !== pending.runID) return
+    if (run.state === 'queued' || run.state === 'running') {
+      if (run.state !== pending.state) setPendingBackup({ ...pending, state: run.state })
+      return
+    }
+    setPendingBackup(null)
+    setFinished({ run })
+    void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runQuery.data])
+  // The API answered and refused the run (gone or not allowed): the wait ends.
+  useEffect(() => {
+    const error = runQuery.error
+    if (!pending || !(error instanceof ApiError) || (error.status !== 403 && error.status !== 404)) return
+    setPendingBackup(null)
+    setFinished({ error })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runQuery.error])
   const deleteBackup = useMutation({ mutationFn: (id: string) => controlBackupApi.deleteBackup(accessToken, id), onSuccess: refresh,
     onError: backupFailure(feedback, language, bt('deleteFailed')) })
   const [restore, setRestore] = useState<{ commands: string[]; backup_id: string } | null>(null)
@@ -74,9 +116,10 @@ export default function ControlBackupPanel({ accessToken, canManage, frozen = fa
   // so an opened log shows new lines and the final state (X09 同类).
   const [logRunID, setLogRunID] = useState<string | null>(null)
   const data = status.data
-  const logRun = logRunID ? data?.runs.find((run) => run.id === logRunID) ?? null : null
+  const logRun = logRunID ? data?.runs.find((run) => run.id === logRunID) ??
+    [runQuery.data, finished?.run].find((run) => run?.id === logRunID) ?? null : null
   const held = data?.freeze?.mode === 'hold'
-  const writable = canManage && Boolean(data?.agent_installed) && !held
+  const writable = canManage && Boolean(data?.agent_installed) && !held && !waiting
   const latestMigration = data?.runs.find((run) => run.kind === 'migrate')
   const rollbackRunning = data?.runs.some((run) => run.kind === 'rollback' && (run.state === 'queued' || run.state === 'running'))
   const nextRun = data?.next_run_at ? formatDateTime(data.next_run_at) : ''
@@ -87,7 +130,7 @@ export default function ControlBackupPanel({ accessToken, canManage, frozen = fa
   // fix-btenv2: a finished migration onto a BaoTa host still needs the BaoTa site reverse proxy there.
   const btProxyNeeded = (run: ControlBackupRun) => run.kind === 'migrate' && run.state === 'succeeded' && run.target_env === 'bt'
 
-  const confirmBackup = () => modal.confirm({ title: bt('backupNowConfirmTitle'), content: bt('backupNowConfirm'), onOk: () => backupNow.mutateAsync().catch(() => undefined) })  // 失败已由 onError 弹窗说明
+  const confirmBackup = () => waiting ? undefined : modal.confirm({ title: bt('backupNowConfirmTitle'), content: bt('backupNowConfirm'), onOk: () => backupNow.mutateAsync().catch(() => undefined) })  // 失败已由 onError 弹窗说明
   const confirmDelete = (bundle: ControlBackupBundle) => {
     let typed = ''
     modal.confirm({
@@ -143,7 +186,19 @@ export default function ControlBackupPanel({ accessToken, canManage, frozen = fa
         {!frozen && <Button type="primary" disabled={!writable} loading={backupNow.isPending} onClick={confirmBackup}>{bt('backupNow')}</Button>}
       </Space>
     </div>
-    {status.isError && <FeedbackWhen title={controlBackupError(language, status.error instanceof ApiError ? status.error.code : undefined)} />}
+    {waiting && <Alert type="info" showIcon className="control-backup-waiting" message={bt('backupWaitingTitle')}
+      description={bt('backupWaitingDetail', { id: pending!.runID, state: bt(`state_${pending!.state}` as ControlBackupKey) })} />}
+    {pending && !waiting && <Alert type="error" showIcon className="control-backup-waiting" message={bt('backupWaitTimeout', { id: pending.runID })}
+      action={<Space wrap>
+        <Button size="small" onClick={() => setLogRunID(pending.runID)}>{bt('viewLog')}</Button>
+        <Button size="small" onClick={() => { setPendingBackup(null); void refresh() }}>{bt('backupWaitDismiss')}</Button>
+      </Space>} />}
+    {finished && <Alert type={finished.run?.state === 'succeeded' ? 'success' : 'error'} showIcon closable onClose={() => setFinished(null)}
+      className="control-backup-waiting"
+      message={finished.run ? bt(finished.run.state === 'succeeded' ? 'backupFinishedOk' : 'backupFinishedFailed') : controlBackupError(language, finished.error?.code)}
+      description={finished.run && finished.run.state !== 'succeeded' ? [runError(finished.run, bt), failedHint(finished.run)].filter(Boolean).join(' ') || undefined : undefined}
+      action={finished.run ? <Button size="small" onClick={() => setLogRunID(finished.run!.id)}>{bt('viewLog')}</Button> : undefined} />}
+    {status.isError && !waiting && <FeedbackWhen title={controlBackupError(language, status.error instanceof ApiError ? status.error.code : undefined)} />}
     {data && !data.agent_installed && <Alert type="warning" showIcon message={bt('agentMissing')} />}
     {held && <Alert type="error" showIcon message={bt('heldWarning')} />}
     {latestMigration && (latestMigration.state === 'running' || held) ? <div className="control-migration-progress" aria-labelledby="control-migration-progress-title">
@@ -267,25 +322,40 @@ function BackupSettings({ accessToken, canManage, settings, onSaved, bt }: {
   const stale = base !== null && base.revision !== settings.revision
   const frequency = Form.useWatch('frequency', form)
   const failure = (title: ControlBackupKey) => backupFailure(feedback, language, bt(title))
+  // A target refusal naming its field is shown on that input (Chinese text, never the server's sentence).
+  const markTargetField = (error: unknown, index?: number): boolean => {
+    if (!(error instanceof ApiError) || !error.field) return false
+    const target = (error as ControlBackupApiError).target
+    const at = index ?? ((form.getFieldValue('targets') as TargetValues[] | undefined) ?? []).findIndex((item) => item?.name === target || item?.stored_name === target)
+    if (at < 0) return false
+    const name = ['targets', at, error.field as keyof TargetValues] as ['targets', number, keyof TargetValues]
+    form.setFields([{ name, errors: [targetFieldError(error, bt, language)] }])
+    form.scrollToField(name, { focus: true })
+    return true
+  }
   const save = useMutation({
     mutationFn: (values: SettingsValues) => controlBackupApi.saveSettings(accessToken, { expected_revision: base?.revision ?? '',
       schedule: scheduleInput(values), keep_local: values.keep_local, keep_remote: values.keep_remote, targets: (values.targets ?? []).map(targetInput) }),
     onSuccess: (next) => { reset(next.settings); message.success(bt('saved')); onSaved() },
-    onError: failure('saveFailed'),
+    onError: (error) => { if (!markTargetField(error)) failure('saveFailed')(error) },
   })
   const probe = async (index: number) => {
     const fields = inputFields.map((key) => ['targets', index, key])
-    try { await form.validateFields(fields) } catch { return }
+    // 测试连接与保存一样，校验失败聚焦首个出错字段。
+    try { await form.validateFields(fields) } catch (error) {
+      const first = (error as { errorFields?: Array<{ name: (string | number)[] }> }).errorFields?.[0]
+      if (first) form.scrollToField(first.name, { focus: true })
+      return
+    }
     try {
       const result = await controlBackupApi.probe(accessToken, base?.revision ?? '', targetInput(form.getFieldValue(['targets', index]) as TargetValues))
       if (result.ok) message.success(bt('probeOk')); else feedback.error(bt('probeFailed'), result.message ?? bt('errorGeneric'))
     } catch (error) {
-      if (error instanceof ApiError && error.field) form.setFields([{ name: ['targets', index, error.field as keyof TargetValues], errors: [controlBackupError(language, error.code)] }])
-      failure('probeFailed')(error)
+      if (!markTargetField(error, index)) failure('probeFailed')(error)
     }
   }
   // getFieldsValue(true): stored_name/stored_auth are kept in the store without an input.
-  return <Form form={form} layout="vertical" disabled={!canManage} onFinish={() => save.mutate(form.getFieldsValue(true) as SettingsValues)}
+  return <Form form={form} layout="vertical" disabled={!canManage} scrollToFirstError={{ focus: true }} onFinish={() => save.mutate(form.getFieldsValue(true) as SettingsValues)}
     onValuesChange={(changed: Partial<SettingsValues>) => {
       // Switching the SFTP auth: the stored credential is not kept for the new type.
       changed.targets?.forEach((target, index) => {
@@ -334,6 +404,32 @@ function BackupSettings({ accessToken, canManage, settings, onSaved, bt }: {
   </Form>
 }
 
+// Same rules as nativebackup Target.Validate (remote.go), so a refusal is caught on the field before saving.
+const targetNamePattern = /^[a-z0-9][a-z0-9-]{0,31}$/
+const regionPattern = /^[a-z0-9-]{1,32}$/
+const bucketPattern = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/
+const prefixPattern = /^([A-Za-z0-9._-]+\/)*$/
+const hostPattern = /^[A-Za-z0-9.-]{1,253}$|^\[?[0-9A-Fa-f:.]+\]?$/
+const usernamePattern = /^[A-Za-z0-9._-]{1,64}$/
+const hostKeyPattern = /^SHA256:[A-Za-z0-9+/]{43}$/
+const validPrefix = (value: string) => value.length <= 255 && prefixPattern.test(value) &&
+  !value.replace(/\/$/, '').split('/').some((segment) => segment === '.' || segment === '..')
+// An absolute directory equal to its path.Clean form: no empty, . or .. segment and no trailing slash.
+const validRemoteDir = (value: string) => value === '/' ||
+  (value.startsWith('/') && !value.endsWith('/') && value.slice(1).split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..'))
+
+// The request field a refusal names → the message shown on that input.
+const targetFieldMessages: Record<string, ControlBackupKey> = {
+  name: 'targetNameInvalid', endpoint: 'error_control_backup_invalid_endpoint', region: 'regionInvalid', bucket: 'bucketInvalid',
+  prefix: 'prefixInvalid', access_key: 'required', secret_key: 'required', host: 'hostInvalid', port: 'portInvalid',
+  username: 'usernameInvalid', remote_dir: 'remoteDirInvalid', host_key_sha256: 'hostKeyRequired', password: 'required', private_key: 'required',
+}
+function targetFieldError(error: ApiError, bt: Translate, language: string): string {
+  return error.code === 'control_backup_invalid_settings'
+    ? bt(targetFieldMessages[error.field ?? ''] ?? 'errorGeneric')
+    : controlBackupError(language, error.code)
+}
+
 // Same rule as nativebackup Target.Validate: https://host[:port] only.
 function validEndpoint(raw: string): boolean {
   const value = raw.trim()
@@ -355,28 +451,33 @@ function TargetFields({ index, form, canManage, bt, onProbe, onRemove }: {
   // an SFTP target whose auth changed, needs them.
   const keeps = Boolean(storedName) && (kind === 's3' || auth === storedAuth)
   const secret = keeps ? { extra: bt('keepSecret') } : { rules: [{ required: true, message: bt('required') }] }
+  // Required with a format check; the format rule stays quiet on an empty value so only one message shows.
+  const checked = (key: ControlBackupKey, valid: (value: string) => boolean, required = true) => ({ required, rules: [
+    ...(required ? [{ required: true, whitespace: true, message: bt(key) }] : []),
+    { validator: (_: unknown, value?: string) => !value || valid(value) ? Promise.resolve() : Promise.reject(new Error(bt(key))) },
+  ] })
   return <div className="control-backup-target">
     <div className="control-backup-target-head"><Tag>{kind.toUpperCase()}</Tag></div>
     <div className="control-backup-target-fields">
-      <Form.Item name={[index, 'name']} label={bt('targetName')} rules={[{ required: true, message: bt('required') }]}><Input /></Form.Item>
+      <Form.Item name={[index, 'name']} label={bt('targetName')} {...checked('targetNameInvalid', (value) => targetNamePattern.test(value))}><Input /></Form.Item>
       <Form.Item name={[index, 'enabled']} label={bt('enabled')} valuePropName="checked"><Switch aria-label={bt('enabled')} /></Form.Item>
       {kind === 's3' ? <>
         <Form.Item name={[index, 'endpoint']} label={bt('endpoint')} rules={[{ required: true, message: bt('required') }, { validator: (_, value?: string) =>
           !value || validEndpoint(value) ? Promise.resolve() : Promise.reject(new Error(bt('error_control_backup_invalid_endpoint'))) }]}>
           <Input placeholder={bt('endpointPlaceholder')} />
         </Form.Item>
-        <Form.Item name={[index, 'region']} label={bt('region')}><Input placeholder={bt('regionPlaceholder')} /></Form.Item>
-        <Form.Item name={[index, 'bucket']} label={bt('bucket')}><Input /></Form.Item>
-        <Form.Item name={[index, 'prefix']} label={bt('prefix')}><Input /></Form.Item>
+        <Form.Item name={[index, 'region']} label={bt('region')} {...checked('regionInvalid', (value) => regionPattern.test(value))}><Input placeholder={bt('regionPlaceholder')} /></Form.Item>
+        <Form.Item name={[index, 'bucket']} label={bt('bucket')} {...checked('bucketInvalid', (value) => bucketPattern.test(value))}><Input /></Form.Item>
+        <Form.Item name={[index, 'prefix']} label={bt('prefix')} {...checked('prefixInvalid', validPrefix, false)}><Input /></Form.Item>
         <Form.Item name={[index, 'path_style']} label={bt('pathStyle')} valuePropName="checked"><Switch aria-label={bt('pathStyle')} /></Form.Item>
         <Form.Item name={[index, 'access_key']} label={bt('accessKey')} {...secret}><Input autoComplete="off" /></Form.Item>
         <Form.Item name={[index, 'secret_key']} label={bt('secretKey')} {...secret}><Input.Password autoComplete="new-password" /></Form.Item>
       </> : <>
-        <Form.Item name={[index, 'host']} label={bt('host')} rules={[{ required: true, message: bt('required') }]}><Input /></Form.Item>
-        <Form.Item name={[index, 'port']} label={bt('port')}><InputNumber min={1} max={65535} precision={0} /></Form.Item>
-        <Form.Item name={[index, 'username']} label={bt('username')}><Input /></Form.Item>
-        <Form.Item name={[index, 'remote_dir']} label={bt('remoteDir')}><Input placeholder={bt('remoteDirPlaceholder')} /></Form.Item>
-        <Form.Item name={[index, 'host_key_sha256']} label={bt('hostKey')}><Input placeholder={bt('hostKeyPlaceholder')} /></Form.Item>
+        <Form.Item name={[index, 'host']} label={bt('host')} {...checked('hostInvalid', (value) => hostPattern.test(value))}><Input /></Form.Item>
+        <Form.Item name={[index, 'port']} label={bt('port')} required rules={[{ required: true, message: bt('portInvalid') }]}><InputNumber min={1} max={65535} precision={0} /></Form.Item>
+        <Form.Item name={[index, 'username']} label={bt('username')} {...checked('usernameInvalid', (value) => usernamePattern.test(value))}><Input /></Form.Item>
+        <Form.Item name={[index, 'remote_dir']} label={bt('remoteDir')} {...checked('remoteDirInvalid', validRemoteDir)}><Input placeholder={bt('remoteDirPlaceholder')} /></Form.Item>
+        <Form.Item name={[index, 'host_key_sha256']} label={bt('hostKey')} {...checked('hostKeyRequired', (value) => hostKeyPattern.test(value))}><Input placeholder={bt('hostKeyPlaceholder')} /></Form.Item>
         <Form.Item name={[index, 'auth']} label={bt('sshAuthTarget')} initialValue="password">
           <Radio.Group options={[{ value: 'password', label: bt('authPassword') }, { value: 'private_key', label: bt('authKey') }]} />
         </Form.Item>
@@ -464,7 +565,7 @@ function MigrationWizard({ accessToken, canManage, ready, bt, failed, onQueued }
     <Alert type="warning" showIcon message={bt('migrationNotice')} />
     <p><Typography.Text code>{bt('migrationCli')}</Typography.Text></p>
     {!ready && <Alert type="info" showIcon message={bt('migrationNotReady')} />}
-    <Form form={form} layout="vertical" disabled={!canManage || !ready} initialValues={{ port: 22, user: 'root', auth: 'password', env: 'auto' }} onFinish={(values) => migrate.mutate(values)}
+    <Form form={form} layout="vertical" disabled={!canManage || !ready} scrollToFirstError={{ focus: true }} initialValues={{ port: 22, user: 'root', auth: 'password', env: 'auto' }} onFinish={(values) => migrate.mutate(values)}
       onValuesChange={(changed: Partial<MigrationValues>) => {
         if ('host' in changed || 'port' in changed) keyRequest.current.endpoint++
         if ('host_key_sha256' in changed) keyRequest.current.pin++
@@ -487,7 +588,10 @@ function MigrationWizard({ accessToken, canManage, ready, bt, failed, onQueued }
         <Form.Item name="host_key_sha256" label={bt('hostKey')} rules={[{ required: true, pattern: /^SHA256:[A-Za-z0-9+/]{43}$/, message: bt('hostKeyRequired') }]}><Input placeholder={bt('hostKeyPlaceholder')} style={{ width: 460, maxWidth: '100%' }} /></Form.Item>
         <Form.Item><Button disabled={!host} onClick={() => void fetchKey()}>{bt('fetchHostKey')}</Button></Form.Item>
       </Space>
-      <Form.Item name="confirm" label={bt('confirmHost')} rules={[{ validator: (_, value) => value === host.trim() && value ? Promise.resolve() : Promise.reject(new Error(bt('error_confirmation_mismatch'))) }]}><Input /></Form.Item>
+      {/* Compared only once the address is filled; an empty address is reported on its own field. */}
+      <Form.Item name="confirm" label={bt('confirmHost')} rules={[{ validator: (_, value?: string) => !host.trim() ? Promise.resolve()
+        : !value ? Promise.reject(new Error(bt('required')))
+          : value === host.trim() ? Promise.resolve() : Promise.reject(new Error(bt('error_confirmation_mismatch'))) }]}><Input /></Form.Item>
       <Button type="primary" danger htmlType="submit" loading={migrate.isPending}>{bt('startMigration')}</Button>
     </Form>
   </section>

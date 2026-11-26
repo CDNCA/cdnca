@@ -16,6 +16,7 @@ const zhCN = {
     trigger_window_seconds: '时间窗口(秒)', trigger_max_requests: '超过次数',
     triggerHelp: '同一客户端在时间窗口内请求超过该次数才弹验证；两项都留空表示每个未通过验证的请求都验证',
     triggerPair: '时间窗口和超过次数要同时填写，或同时留空', triggerEmpty: '留空：每次',
+    advanced: '高级设置', advancedCustomized: '已自定义',
   },
   waf: {
     request_body_limit: '请求体上限(含文件)', request_body_no_files_limit: '请求体上限(不含文件)',
@@ -50,6 +51,7 @@ const enUS = {
     trigger_window_seconds: 'Window (s)', trigger_max_requests: 'More than (requests)',
     triggerHelp: 'Challenge a client only after more requests than this within the window; leave both empty to challenge every unpassed request',
     triggerPair: 'Set both the window and the request count, or leave both empty', triggerEmpty: 'Empty: always',
+    advanced: 'Advanced settings', advancedCustomized: 'Customized',
   },
   waf: {
     request_body_limit: 'Body limit (with files)', request_body_no_files_limit: 'Body limit (without files)',

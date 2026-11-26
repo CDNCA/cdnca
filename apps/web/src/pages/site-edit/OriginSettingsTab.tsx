@@ -11,6 +11,8 @@ import {
   type SiteOriginPool,
   withInheritedOriginPorts,
 } from '../../api/sites'
+import { useSessionStore } from '../../auth/session'
+import { useRuntimeFeatureOff } from '../../components/useRuntimeFeatures'
 import '../../i18n/siteOriginForwarding'
 import { FormRow } from './SiteEditFields'
 import { SiteTabSummary } from './SiteTabSummary'
@@ -57,6 +59,11 @@ export default function OriginSettingsTab({
   const redirect = forwarding.follow_redirect
   const keepalive = originKeepalive(pool)
   const https = forwarding.scheme !== 'http'
+  // the site switch is stored either way, but nothing is signed
+  // while the platform's origin_auth runtime is off (the rules pages are blocked too), so say so and drop the link.
+  const accessToken = useSessionStore((state) => state.accessToken)
+  const originAuthOff = useRuntimeFeatureOff('origin_auth', accessToken)
+  const originAuthRunning = forwarding.origin_auth_enabled && !originAuthOff
   const protocol: OriginProtocolChoice = forwarding.scheme === 'follow' && forwarding.follow_port ? 'follow_port' : forwarding.scheme
   // Port-inherited origins follow the pool's port as the server stores it.
   const update = (changes: Partial<SiteOriginPool>) => onChange(withInheritedOriginPorts({ ...pool, ...changes }))
@@ -94,8 +101,8 @@ export default function OriginSettingsTab({
           value: tV4('summary.origin.timeoutValue', { read: seconds(pool.read_timeout_ms), connect: seconds(pool.connect_timeout_ms) }) },
         { key: 'keepalive', label: tV4('summary.origin.keepalive'), target: 'site-origin-reuse', tone: keepalive.enabled ? 'on' : 'off',
           value: keepalive.enabled ? `${tV4('summary.on')} · ${Math.round(keepalive.idleTimeoutMs / 1000)}${t('units.seconds')}` : tV4('summary.off') },
-        { key: 'auth', label: tV4('summary.origin.auth'), target: 'site-origin-auth', tone: forwarding.origin_auth_enabled ? 'on' : 'off',
-          value: forwarding.origin_auth_enabled ? tV4('summary.on') : tV4('summary.off') },
+        { key: 'auth', label: tV4('summary.origin.auth'), target: 'site-origin-auth', tone: originAuthRunning ? 'on' : 'off',
+          value: !forwarding.origin_auth_enabled ? tV4('summary.off') : originAuthRunning ? tV4('summary.on') : t('summary.originAuthNotRunning') },
       ]} />
       {originError ? <span className="site-field-error" role="alert">{originError}</span> : null}
 
@@ -217,18 +224,20 @@ export default function OriginSettingsTab({
       </section>
 
       <section className="site-basic-section" id="site-origin-auth">
+        {/* the heading names the switch and the link names itself. */}
         <h2>{t('sections.auth')}</h2>
-        <FormRow label={t('fields.originAuthSwitch')}>
-          <div className="site-form-inline">
-            <Switch aria-label={t('aria.originAuthSwitch')} disabled={readOnly} checked={forwarding.origin_auth_enabled}
-              onChange={(enabled) => update({ origin_auth_enabled: enabled })} />
-            <span className="site-form-row-help">{forwarding.origin_auth_enabled ? t('help.originAuthOn') : t('help.originAuthOff')}</span>
-          </div>
-        </FormRow>
-        {canReadOriginAuth && forwarding.origin_auth_enabled ? (
-          <FormRow label={t('fields.originAuth')} help={t('help.originAuth')}>
+        <div className="site-form-inline">
+          <Switch aria-label={t('aria.originAuthSwitch')} disabled={readOnly} checked={forwarding.origin_auth_enabled}
+            onChange={(enabled) => update({ origin_auth_enabled: enabled })} />
+          <span className="site-form-row-help">
+            {!forwarding.origin_auth_enabled ? t('help.originAuthOff') : originAuthRunning ? t('help.originAuthOn') : t('help.originAuthNotRunning')}
+          </span>
+        </div>
+        {canReadOriginAuth && originAuthRunning ? (
+          <div>
             <Link to="/site/origin-auth/rules">{t('actions.originAuthRules')}</Link>
-          </FormRow>
+            <p className="site-form-row-help">{t('help.originAuth')}</p>
+          </div>
         ) : null}
       </section>
 

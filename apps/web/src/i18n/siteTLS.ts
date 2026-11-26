@@ -35,6 +35,8 @@ const zhCN = {
   http3: {
     label: 'HTTP/3',
     help: '通过 QUIC 提供 HTTP/3 并下发 Alt-Svc；仅在 TLS 版本含 TLSv1.3 时生效。关闭后本站拒绝 QUIC 握手。',
+    packageExcluded: '当前套餐不含 HTTP/3',
+    managePackage: '管理套餐',
   },
   preferServerCiphers: {
     label: '优先使用服务端套件',
@@ -99,6 +101,8 @@ const enUS = {
   http3: {
     label: 'HTTP/3',
     help: 'Serves HTTP/3 over QUIC and sends Alt-Svc; only with TLSv1.3 in the TLS versions. Off: QUIC handshakes for this site are refused.',
+    packageExcluded: 'The current package does not include HTTP/3',
+    managePackage: 'Manage package',
   },
   preferServerCiphers: {
     label: 'Prefer server ciphers',

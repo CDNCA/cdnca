@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { DBPoolSample, DBPoolStatus } from '../api/controlDBPool'
@@ -39,6 +40,10 @@ describe('ControlDBPoolPanel', () => {
     expect(within(card).getByText('19 / 20')).toBeInTheDocument()
     expect(within(card).getByText('空闲 1 / 共 18')).toBeInTheDocument()
     expect(within(card).getAllByText('250.4 毫秒').length).toBeGreaterThan(0)
+    const details = within(card).getByRole('button', { name: /诊断详情/ })
+    expect(details).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(details)
+    expect(details).toHaveAttribute('aria-expanded', 'true')
     expect(within(card).getByText('节点市场安全策略监听（LISTEN）')).toBeInTheDocument()
     expect(within(card).getByText('已移出连接池（只占数据库连接数）')).toBeInTheDocument()
     expect(within(card).getByText(/连续 3 次采样满载（使用 ≥ 上限 − 1）或平均等待超过 100 毫秒/)).toBeInTheDocument()
@@ -60,7 +65,39 @@ describe('ControlDBPoolPanel', () => {
     renderWithProviders(<ControlDBPoolPanel accessToken="token" />)
     expect(await screen.findByText('连接池正常')).toBeInTheDocument()
     expect(screen.getByText('刚启动，10 秒后出第一个采样。')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /诊断详情/ }))
     expect(screen.getByText('当前没有常驻连接')).toBeInTheDocument()
+  })
+
+  it('keeps the normal card to the pool state and folds residents, rules and the sampling note under 诊断详情', async () => {
+    respond(status({ firing: false, firing_since: null, firing_reasons: [], current: sample({ in_use: 4, queued: 0, canceled: 0, reasons: [] }) }))
+    renderWithProviders(<ControlDBPoolPanel accessToken="token" />)
+    const card = (await screen.findByRole('heading', { name: /主控数据库连接池/ })).closest('section')!
+    expect(await within(card).findByText('连接池正常')).toBeInTheDocument()
+    expect(within(card).getByText('4 / 20')).toBeInTheDocument()
+    expect(within(card).getByText('空闲 16 / 共 18')).toBeInTheDocument()
+    expect(within(card).getByText('本周期排队')).toBeInTheDocument()
+    expect(within(card).getByText('最近 1 小时')).toBeInTheDocument()
+    expect(within(card).queryByText(/每 10 秒采样一次/)).not.toBeInTheDocument()
+    expect(within(card).queryByText(/LISTEN/)).not.toBeInTheDocument()
+    expect(within(card).queryByText(/连续 3 次采样满载/)).not.toBeInTheDocument()
+    expect(within(card).queryByText('常驻连接明细')).not.toBeInTheDocument()
+    const details = within(card).getByRole('button', { name: /诊断详情/ })
+    details.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(details).toHaveAttribute('aria-expanded', 'true')
+    expect(within(card).getByText(/每 10 秒采样一次/)).toBeInTheDocument()
+    expect(within(card).getByText('节点市场安全策略监听（LISTEN）')).toBeInTheDocument()
+    expect(within(card).getByText(/连续 3 次采样满载/)).toBeInTheDocument()
+  })
+
+  it('shows the alert reasons in the main area while saturated, without opening the details', async () => {
+    respond(status())
+    renderWithProviders(<ControlDBPoolPanel accessToken="token" />)
+    const card = (await screen.findByRole('heading', { name: /主控数据库连接池/ })).closest('section')!
+    expect(await within(card).findByText('连接池满载：请求在排队等待连接')).toBeInTheDocument()
+    expect(within(card).getByText(/原因：连接已用满、请求等不到连接而放弃/)).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: /诊断详情/ })).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('tells an older control without the route and a refused session apart from a failure', async () => {

@@ -435,9 +435,22 @@ components:
           enum: [draft, validated, active, superseded, rejected]
         snapshot_sha256:
           $ref: '#/components/schemas/SHA256'
+        active_snapshot_sha256:
+          $ref: '#/components/schemas/SHA256'
+          description: 生效 revision 的快照摘要；尚未激活任何 revision 时省略。与 snapshot_sha256 相等表示 head 与生效配置完全一致（例如草稿已恢复为生效配置）。
         pending_categories:
           $ref: '#/components/schemas/PendingCategories'
           description: head 相对 active（首次激活前相对项目默认配置）有差异的分类，按分类目录顺序；激活 head 会让这些分类一并生效。
+        configured:
+          type: boolean
+          description: 该 revision 保存了本分类自己的值。可选分类（node_monitoring、ddos_protection、access_log_fields）从未保存时为 false，value 为项目默认值；其余分类恒为 true。
+        active_configured:
+          type: boolean
+          description: >-
+            The active revision stores this category's own value; false before any activation. All categories
+            share one revision stream, so an active revision alone does not mean this category was published
+            (for example DDoS protection first saved as a draft while other categories are active).
+          x-description-zh: 生效 revision 保存了本分类自己的值；尚未激活任何 revision 时为 false。所有分类共用一条 revision 流，有生效 revision 不代表本分类已发布（例如其它分类已生效、DDoS 防护第一次保存为草稿）。
         value:
           oneOf:
             - $ref: '#/components/schemas/NginxLimits'

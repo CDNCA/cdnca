@@ -51,7 +51,7 @@ func TestActivationClientPendingSyncAndControllerConfirm(t *testing.T) {
 			}
 			requestDigest := sha256.Sum256(framed("cdnca-plugin-installation-candidate-sync-idempotency/v1",
 				append(canonical, proof...)))
-			batch := candidateSyncBatchWire{Schema: candidateSyncBatchSchema, RequestID: wire.RequestID,
+			batch := candidateSyncBatchWire{Schema: candidateSyncBatchSchemaFor(wire.Schema), RequestID: wire.RequestID,
 				RequestDigest: hex.EncodeToString(requestDigest[:]), CustomerID: uuid.New(), InstallationID: installationID,
 				Candidates: []candidateSyncCandidateWire{{AuthorizationID: authorizationID,
 					VerificationID: verificationID, PluginID: "acme.market", PluginVersion: "1.0.0", ResourceScope: "tenant", EntrypointType: "external_https",
@@ -127,7 +127,7 @@ func TestActivationClientPendingSyncAndControllerConfirm(t *testing.T) {
 	if !ed25519.Verify(installationPublic, framed(controllerConfirmRequestDomain, canonical), proof) {
 		t.Fatal("confirm proof invalid")
 	}
-	for code, want := range map[string]error{"controller_confirmation_unavailable": ErrFactDenied,
+	for code, want := range map[string]error{"controller_confirmation_unavailable": ErrApprovalStale,
 		"scope_approval_required": ErrConsentRequired, "lifecycle_stale": ErrRevisionConflict} {
 		confirmCode = code
 		if _, err := client.ConfirmPending(context.Background(), request); !errors.Is(err, want) {
