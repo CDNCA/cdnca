@@ -87,27 +87,27 @@ func (s *sessionDrainCommandSource) arm() {
 	}()
 }
 
+// stopSessionDrainCommands closes the subscription before releasing the pending
+// deliveries, so a pull still waiting at the server cannot take them back.
 func stopSessionDrainCommands(source *sessionDrainCommandSource, pending pendingDrainCommandSet, timeout time.Duration) {
+	if source != nil {
+		source.cancel()
+		_ = source.subscription.Close()
+		if source.next != nil {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case received := <-source.next:
+				retryDrainCommand(received.delivery, timeout, time.Second)
+			case <-timer.C:
+			}
+		}
+	}
 	for key, command := range pending {
 		for _, delivery := range command.deliveries {
 			retryDrainCommand(delivery, timeout, time.Second)
 		}
 		delete(pending, key)
-	}
-	if source == nil {
-		return
-	}
-	source.cancel()
-	_ = source.subscription.Close()
-	if source.next == nil {
-		return
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case received := <-source.next:
-		retryDrainCommand(received.delivery, timeout, time.Second)
-	case <-timer.C:
 	}
 }
 

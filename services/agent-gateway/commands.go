@@ -160,26 +160,28 @@ func (s *sessionFirewallCommandSource) arm() {
 	}()
 }
 
+// stopSessionCommands closes the subscription before naking: a pull this
+// session still has waiting at the server would otherwise take the naked
+// command, which then returns only after AckWait.
 func stopSessionCommands(source *sessionCommandSource, pending pendingCommandSet, timeout time.Duration) {
+	if source != nil {
+		source.cancel()
+		_ = source.subscription.Close()
+		if source.next != nil {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case result := <-source.next:
+				nakCommand(result.delivery, timeout)
+			case <-timer.C:
+			}
+		}
+	}
 	for key, command := range pending {
 		for _, delivery := range command.deliveries {
 			nakCommand(delivery, timeout)
 		}
 		delete(pending, key)
-	}
-	if source == nil {
-		return
-	}
-	source.cancel()
-	_ = source.subscription.Close()
-	if source.next != nil {
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		select {
-		case result := <-source.next:
-			nakCommand(result.delivery, timeout)
-		case <-timer.C:
-		}
 	}
 }
 
@@ -192,26 +194,27 @@ func nakCommand(delivery CommandDelivery, timeout time.Duration) {
 	_ = delivery.Nak(ctx)
 }
 
+// stopSessionFirewallCommands closes the subscription before releasing the pending
+// deliveries, so a pull still waiting at the server cannot take them back.
 func stopSessionFirewallCommands(source *sessionFirewallCommandSource, pending pendingFirewallCommandSet, timeout time.Duration) {
+	if source != nil {
+		source.cancel()
+		_ = source.subscription.Close()
+		if source.next != nil {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case result := <-source.next:
+				nakFirewallCommand(result.delivery, timeout)
+			case <-timer.C:
+			}
+		}
+	}
 	for key, command := range pending {
 		for _, delivery := range command.deliveries {
 			nakFirewallCommand(delivery, timeout)
 		}
 		delete(pending, key)
-	}
-	if source == nil {
-		return
-	}
-	source.cancel()
-	_ = source.subscription.Close()
-	if source.next != nil {
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		select {
-		case result := <-source.next:
-			nakFirewallCommand(result.delivery, timeout)
-		case <-timer.C:
-		}
 	}
 }
 

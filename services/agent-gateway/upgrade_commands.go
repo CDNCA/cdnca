@@ -343,27 +343,27 @@ func (s *sessionUpgradeCommandSource) arm() {
 	}()
 }
 
+// stopSessionUpgradeCommands closes the subscription before releasing the pending
+// deliveries, so a pull still waiting at the server cannot take them back.
 func stopSessionUpgradeCommands(source *sessionUpgradeCommandSource, pending pendingUpgradeCommandSet, timeout time.Duration) {
+	if source != nil {
+		source.cancel()
+		_ = source.subscription.Close()
+		if source.next != nil {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case result := <-source.next:
+				nakUpgradeCommand(result.delivery, timeout)
+			case <-timer.C:
+			}
+		}
+	}
 	for key, command := range pending {
 		for _, delivery := range command.deliveries {
 			nakUpgradeCommand(delivery, timeout)
 		}
 		delete(pending, key)
-	}
-	if source == nil {
-		return
-	}
-	source.cancel()
-	_ = source.subscription.Close()
-	if source.next == nil {
-		return
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case result := <-source.next:
-		nakUpgradeCommand(result.delivery, timeout)
-	case <-timer.C:
 	}
 }
 

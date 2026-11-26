@@ -80,27 +80,27 @@ func (s *sessionPortTransitionSource) arm() {
 	}()
 }
 
+// stopSessionPortTransitions closes the subscription before releasing the pending
+// deliveries, so a pull still waiting at the server cannot take them back.
 func stopSessionPortTransitions(source *sessionPortTransitionSource, pending pendingPortTransitionSet, timeout time.Duration) {
+	if source != nil {
+		source.cancel()
+		_ = source.subscription.Close()
+		if source.next != nil {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case received := <-source.next:
+				retryPortTransition(received.delivery, timeout, time.Second)
+			case <-timer.C:
+			}
+		}
+	}
 	for key, item := range pending {
 		for _, delivery := range item.deliveries {
 			retryPortTransition(delivery, timeout, time.Second)
 		}
 		delete(pending, key)
-	}
-	if source == nil {
-		return
-	}
-	source.cancel()
-	_ = source.subscription.Close()
-	if source.next == nil {
-		return
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case received := <-source.next:
-		retryPortTransition(received.delivery, timeout, time.Second)
-	case <-timer.C:
 	}
 }
 

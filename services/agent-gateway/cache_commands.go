@@ -89,26 +89,27 @@ func (s *sessionCacheCommandSource) arm() {
 	}()
 }
 
+// stopSessionCacheCommands closes the subscription before releasing the pending
+// deliveries, so a pull still waiting at the server cannot take them back.
 func stopSessionCacheCommands(source *sessionCacheCommandSource, pending pendingCacheCommandSet, timeout time.Duration) {
+	if source != nil {
+		source.cancel()
+		_ = source.subscription.Close()
+		if source.next != nil {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case result := <-source.next:
+				nakCacheCommand(result.delivery, timeout)
+			case <-timer.C:
+			}
+		}
+	}
 	for key, command := range pending {
 		for _, delivery := range command.deliveries {
 			nakCacheCommand(delivery, timeout)
 		}
 		delete(pending, key)
-	}
-	if source == nil {
-		return
-	}
-	source.cancel()
-	_ = source.subscription.Close()
-	if source.next != nil {
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		select {
-		case result := <-source.next:
-			nakCacheCommand(result.delivery, timeout)
-		case <-timer.C:
-		}
 	}
 }
 

@@ -2966,6 +2966,8 @@ func (g *Gateway) persistStatusAndAckCommandReceipt(ctx context.Context, nodeID 
 	publication, err := g.commands.PublishStatus(operationCtx, nodeID, deploymentStatus)
 	cancel()
 	if err != nil || publication.Stream == "" || publication.Sequence == 0 {
+		log.Printf("agent-gateway: warn: deployment status not persisted node_id=%s deployment_id=%q attempt=%d state=%s error=%v",
+			nodeID, deploymentStatus.GetDeploymentId(), deploymentStatus.GetAttempt(), deploymentStatus.GetState(), err)
 		return nil, status.Error(codes.Unavailable, "deployment status could not be persisted")
 	}
 	if !exists {
