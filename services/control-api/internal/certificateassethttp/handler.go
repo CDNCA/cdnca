@@ -75,6 +75,11 @@ type apiError struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	RequestID string `json:"request_id"`
+	Details   any    `json:"details,omitempty"`
+}
+
+type siteUnboundDetails struct {
+	CurrentRevision int64 `json:"current_revision"`
 }
 
 type assetList struct {
@@ -252,8 +257,15 @@ func (handler *Handler) dispatch(response http.ResponseWriter, request *http.Req
 			request.Context(), actor, tenantScopeID, matched.siteID,
 		)
 		if errors.Is(err, certificateasset.ErrNotFound) {
-			writeError(response, requestID, http.StatusNotFound,
-				"certificate_site_binding_not_found", "网站尚未绑定证书")
+			// An unbound site carries its binding revision (details.current_revision):
+			// the expected_revision of its next bind.
+			var unbound *certificateasset.SiteUnboundError
+			var details any
+			if errors.As(err, &unbound) {
+				details = siteUnboundDetails{CurrentRevision: unbound.Revision}
+			}
+			writeErrorDetails(response, requestID, http.StatusNotFound,
+				"certificate_site_binding_not_found", "网站尚未绑定证书", details)
 			return
 		}
 		writeValue(response, requestID, http.StatusOK, siteBindingDetail{
@@ -874,6 +886,8 @@ func writeServiceError(response http.ResponseWriter, requestID string, err error
 		status, code, message = http.StatusConflict, "certificate_asset_download_unavailable", "证书没有可下载的有效版本"
 	case errors.Is(err, certificateasset.ErrReferenced):
 		status, code, message = http.StatusConflict, "certificate_asset_referenced", "证书仍被网站引用"
+	case errors.Is(err, certificateasset.ErrSiteHTTPSEnabled):
+		status, code, message = http.StatusConflict, "certificate_asset_site_https_enabled", "网站已开启 HTTPS，请先换绑其他证书或关闭 HTTPS"
 	case errors.Is(err, certificateasset.ErrInvalidTransition):
 		status, code, message = http.StatusConflict, "certificate_asset_invalid_transition", "当前状态不允许此操作"
 	case errors.Is(err, certificateasset.ErrDomainNotCovered):
@@ -885,9 +899,13 @@ func writeServiceError(response http.ResponseWriter, requestID string, err error
 }
 
 func writeError(response http.ResponseWriter, requestID string, status int, code, message string) {
+	writeErrorDetails(response, requestID, status, code, message, nil)
+}
+
+func writeErrorDetails(response http.ResponseWriter, requestID string, status int, code, message string, details any) {
 	response.Header().Set("Content-Type", "application/json; charset=utf-8")
 	response.WriteHeader(status)
-	_ = json.NewEncoder(response).Encode(errorEnvelope{Error: apiError{Code: code, Message: message, RequestID: requestID}})
+	_ = json.NewEncoder(response).Encode(errorEnvelope{Error: apiError{Code: code, Message: message, RequestID: requestID, Details: details}})
 }
 
 func setSecurityHeaders(header http.Header) {

@@ -3000,6 +3000,7 @@ export const zhCN = {
       certificate_asset_auto_renew_unsupported: '手动上传的证书不能自动续签',
       certificate_asset_invalid_transition: '当前证书状态不允许此操作',
 	  certificate_asset_domain_not_covered: '证书不包含网站域名',
+	  certificate_asset_site_https_enabled: '网站已开启 HTTPS，请先换绑其他证书或关闭 HTTPS',
 	  domain_blocked: '该域名不允许申请证书',
 	  certificate_issuer_unavailable: '所选签发机构平台未配置，请改选其他签发机构',
 	  certificate_order_in_flight: '已有进行中的申请，请等待或查看申请记录',

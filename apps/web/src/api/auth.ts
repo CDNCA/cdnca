@@ -303,6 +303,8 @@ export class ApiError extends Error {
   declare requiredFeature?: string
   /** The package resource a package_resource_quota_exceeded refusal is for (error.details): usage before the change, what it adds, the limit. */
   declare packageQuota?: PackageQuotaRefusal
+  /** An unbound site's certificate binding revision, the expected_revision of its next bind (certificate_site_binding_not_found error.details.current_revision). */
+  declare siteBindingRevision?: number
 
   constructor(message: string, status = 0, code = 'network_error', requestId?: string, params?: LoginVerificationRequirement) {
     super(message)
@@ -437,6 +439,10 @@ export async function responseApiError(response: Response): Promise<ApiError> {
       count(details.limit) && count(details.used) && count(details.requested)) {
       error.packageQuota = { resource: details.resource, limit: Number(details.limit), used: Number(details.used), requested: Number(details.requested) }
     }
+  }
+  if (code === 'certificate_site_binding_not_found') {
+    const revision = (body?.error?.details as { current_revision?: unknown } | undefined)?.current_revision
+    if (Number.isSafeInteger(revision) && Number(revision) >= 0) error.siteBindingRevision = Number(revision)
   }
   attachFieldRefusal(error, body?.error?.details)
   // package publish/withdraw refusals name the spec field / state reason.

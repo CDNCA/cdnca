@@ -417,6 +417,7 @@ function errorMessage(error: ApiError, t: TFunction): string {
     'certificate_asset_revision_conflict', 'certificate_asset_idempotency_conflict',
 		'certificate_asset_referenced', 'certificate_asset_invalid_transition',
 		'certificate_asset_domain_not_covered', 'certificate_asset_auto_renew_unsupported',
+		'certificate_asset_site_https_enabled',
     'domain_blocked', 'certificate_issuer_unavailable', 'certificate_order_in_flight', 'certificate_target_required',
     'certificate_asset_envelope_unavailable', 'certificate_asset_internal_error',
     'certificate_dns_zone_unavailable', 'certificate_http01_not_serving', 'dns_provider_platform_managed',
@@ -777,7 +778,8 @@ function CertificateListPageContent({
   const [assetWriteError, setAssetWriteError] = useState<ApiError | null>(null)
 	  const [detail, setDetail] = useState<CertificateAssetDetail | null>(null)
 	  const [bindings, setBindings] = useState<CertificateAssetBinding[]>([])
-	  const [bindingRevisions, setBindingRevisions] = useState<Record<string, number>>({})
+	  const [bindRevisionLoading, setBindRevisionLoading] = useState(false)
+	  const [bindRevisionError, setBindRevisionError] = useState<string | null>(null)
 	  const [detailError, setDetailError] = useState<ApiError | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<CertificateAsset | null>(null)
@@ -1347,7 +1349,6 @@ function CertificateListPageContent({
 		  for (const binding of bindingList.items) assertBinding(queryOwner, binding, asset.id, versionIDs, undefined, asset.tenant_scope_id)
 		  queryClient.setQueryData([...detailPrefix, asset.id], value)
 		  queryClient.setQueryData([...bindingPrefix, asset.id], bindingList)
-		  setBindingRevisions(Object.fromEntries(bindingList.items.map((binding) => [binding.site_id, binding.revision])))
 		  setDetail(value)
 		  setBindings(bindingList.items.filter((binding) => binding.bound))
 		} catch (error) {
@@ -1556,19 +1557,42 @@ function CertificateListPageContent({
 		  return
 		}
 		setCommandError(null)
+		setBindRevisionError(null)
 		setBindTarget({ asset: detail.asset, version })
 		setDetail(null)
 	  }
 
-	  const submitBind = (values: AssetBindForm) => {
-		if (!bindTarget || !currentSessionAccess('certificates.manage')) return
+	  const submitBind = async (values: AssetBindForm) => {
+		const token = currentSessionAccess('certificates.manage')
+		if (!bindTarget || !token || bindRevisionLoading) return
+		const target = bindTarget
+		// 绑定修订号是网站级序列（与证书无关）：确认时读该网站当前修订号，随命令冻结；
+		// 网站绑着别的证书或已解绑时本证书的绑定列表里没有它（证书换绑 409）。读不到就不提交。
+		setCommandError(null)
+		setBindRevisionError(null)
+		setBindRevisionLoading(true)
+		let expectedRevision: number
+		try {
+		  expectedRevision = await certificatesApi.getSiteBindingRevision(token, values.site_id,
+			queryOwner[0] === 'platform' ? target.asset.tenant_scope_id : undefined)
+		} catch (error) {
+		  if (currentSessionMatches()) {
+			setBindRevisionError(assetT('bind.revisionFailed', {
+			  reason: errorMessage(error instanceof ApiError ? error : new ApiError('request failed'), assetT),
+			}))
+		  }
+		  return
+		} finally {
+		  setBindRevisionLoading(false)
+		}
+		if (!currentSessionMatches()) return
 		startCommand({
-		  kind: 'bind', target: bindTarget,
+		  kind: 'bind', target,
 		  input: {
 			site_id: values.site_id, version_id: values.version_id,
 			// 每个网站只有当前这条绑定生效，节点只发默认绑定（edgepublish 读 is_default）：总是设为默认
 			// （与网站 HTTPS 页一致）。
-			expected_revision: bindingRevisions[values.site_id] ?? 0, default: true,
+			expected_revision: expectedRevision, default: true,
 		  },
 		  key: writeKey(), requestID: requestID(),
 		})
@@ -2563,16 +2587,17 @@ function CertificateListPageContent({
 		<Modal
 		  className="identity-modal" title={assetT('bind.title')} open={canManage && bindTarget !== null}
 		  okText={commandUncertain ? assetT('actions.retrySameRequest') : assetT('bind.confirm')}
-		  cancelText={assetT('actions.cancel')} confirmLoading={commandMutation.isPending}
+		  cancelText={assetT('actions.cancel')} confirmLoading={commandMutation.isPending || bindRevisionLoading}
 		  cancelButtonProps={{ disabled: commandLocked }} closable={!commandLocked}
 		  maskClosable={!commandLocked} keyboard={!commandLocked}
-		  onCancel={() => { if (!commandLocked) { commandAttemptRef.current = null; setCommandAttempt(null); setBindTarget(null); setCommandError(null); bindForm.resetFields() } }}
+		  onCancel={() => { if (!commandLocked) { commandAttemptRef.current = null; setCommandAttempt(null); setBindTarget(null); setCommandError(null); setBindRevisionError(null); bindForm.resetFields() } }}
 		  onOk={() => commandUncertain
 			? commandAttempt && currentSessionAccess('certificates.manage') && commandMutation.mutate()
 			: void bindForm.validateFields().then(submitBind).catch(() => undefined)}
 		  destroyOnHidden
 		>
 		  {commandAlert}
+		  {bindRevisionError ? <FeedbackWhen title={bindRevisionError} /> : null}
 		  <Form form={bindForm} layout="vertical" requiredMark={false} disabled={commandLocked}>
 			<Form.Item name="site_id" label={assetT('bind.site')} extra={assetT('bind.siteHint')} rules={[
 			  { required: true, message: assetT('bind.siteRequired') },

@@ -878,10 +878,10 @@ func (s *Store) unbind(ctx context.Context, actor Actor, request UnbindRequest, 
 		if write.found {
 			return decodeReplay(write.response, &result)
 		}
-		var ignored uuid.UUID
-		err = tx.QueryRow(ctx, `SELECT id FROM sites
+		var httpsEnabled bool
+		err = tx.QueryRow(ctx, `SELECT https_enabled FROM sites
 			WHERE scope_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE`,
-			request.TenantScopeID, request.SiteID).Scan(&ignored)
+			request.TenantScopeID, request.SiteID).Scan(&httpsEnabled)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -897,6 +897,9 @@ func (s *Store) unbind(ctx context.Context, actor Actor, request UnbindRequest, 
 		}
 		if latest.Revision != request.ExpectedRevision {
 			return ErrRevisionConflict
+		}
+		if httpsEnabled && latest.Default {
+			return ErrSiteHTTPSEnabled
 		}
 		if err := s.supersedeRenewalDeliveriesTx(ctx, tx, actor, request.TenantScopeID, request.SiteID,
 			request.RequestID); err != nil {
@@ -1306,7 +1309,7 @@ func (s *Store) GetSiteBinding(
 		return Binding{}, Version{}, err
 	}
 	if !found || !binding.Bound {
-		return Binding{}, Version{}, ErrNotFound
+		return Binding{}, Version{}, &SiteUnboundError{Revision: binding.Revision}
 	}
 	version, err := loadVersion(ctx, s.pool, tenantScopeID, binding.AssetID, binding.VersionID, storeTime(s.now()))
 	if err != nil {

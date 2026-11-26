@@ -123,8 +123,10 @@ function Harness({
   )
 }
 
-function siteBindingNotFound(): ApiError {
-  return new ApiError('API request failed', 404, 'certificate_site_binding_not_found')
+function siteBindingNotFound(revision?: number): ApiError {
+  const error = new ApiError('API request failed', 404, 'certificate_site_binding_not_found')
+  if (revision !== undefined) error.siteBindingRevision = revision
+  return error
 }
 
 const otherAssetID = '77777777-7777-4777-8777-777777777777'
@@ -451,6 +453,36 @@ describe('HttpsSiteTab', () => {
     ])
     expect(screen.queryByText('解绑证书？')).toBeNull()
     expect(await screen.findByText('操作成功')).toBeInTheDocument()
+  })
+
+  // 证书换绑 409：解绑后网站修订号仍在（404 带 current_revision），再绑必须带它而不是 0。
+  it('binds again after an unbind with the revision the unbind left', async () => {
+    let current: CertificateAssetBinding | null = binding
+    mockCertificateRead(binding, true)
+    vi.mocked(certificatesApi.getSiteBinding).mockImplementation(async () => {
+      if (!current) throw siteBindingNotFound(4)
+      return { binding: current, version }
+    })
+    const unbind = vi.spyOn(certificatesApi, 'unbindAsset').mockImplementation(async () => {
+      current = null
+      return { ...binding, revision: 4, bound: false }
+    })
+    const rebound: CertificateAssetBinding = { ...binding, asset_id: otherAssetID, version_id: otherVersionID, revision: 5 }
+    const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue(rebound)
+    const user = userEvent.setup()
+    renderWithProviders(<Harness initial={disabledConfig} />)
+
+    await screen.findByText('边缘证书 · www.example.com')
+    await unbindCertificate(user)
+    await waitFor(() => expect(unbind).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('操作成功')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('button', { name: '解除绑定' })).toBeNull())
+
+    await user.click(await screen.findByRole('combobox', { name: '证书' }))
+    await user.click(await screen.findByText('备用证书 · api.example.com'))
+    await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))
+    expect(bind.mock.calls[0][1]).toBe(otherAssetID)
+    expect(bind.mock.calls[0][2]).toEqual({ site_id: siteID, version_id: otherVersionID, expected_revision: 4, default: true })
   })
 
   it('asks before unbinding while HTTPS is on, and keeps the binding when cancelled', async () => {

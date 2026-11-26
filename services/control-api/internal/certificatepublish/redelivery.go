@@ -130,6 +130,10 @@ type Redeliverer struct {
 
 	lastSweep time.Time
 	backoff   map[redeliveryKey]redeliveryBackoff
+	// bindingsChecked: scopes this process looked at once for bindings whose
+	// publication settled before it republished the sites
+	// (republishStaleBindingTx); later ones republish as they settle.
+	bindingsChecked map[uuid.UUID]bool
 }
 
 func NewRedeliverer(pool *pgxpool.Pool, assets redeliveryAssetStore, rollouts redeliveryRolloutStore, producer *Producer,
@@ -146,7 +150,7 @@ func NewRedeliverer(pool *pgxpool.Pool, assets redeliveryAssetStore, rollouts re
 	}
 	return &Redeliverer{pool: pool, assets: assets, rollouts: rollouts, producer: producer, siteNodes: siteNodes,
 		ready: ready, sync: sync, opaque: opaque, config: config, now: now,
-		backoff: map[redeliveryKey]redeliveryBackoff{}}, nil
+		backoff: map[redeliveryKey]redeliveryBackoff{}, bindingsChecked: map[uuid.UUID]bool{}}, nil
 }
 
 // RedeliverySweep is what one sweep did.
@@ -246,6 +250,15 @@ func (redeliverer *Redeliverer) sweepScope(ctx context.Context, scopeID uuid.UUI
 		return err
 	}
 	var failures []error
+	if !redeliverer.bindingsChecked[scopeID] {
+		if err := pgx.BeginFunc(ctx, redeliverer.pool, func(tx pgx.Tx) error {
+			return republishStaleBindingTx(ctx, tx, scopeID)
+		}); err != nil {
+			failures = append(failures, fmt.Errorf("republish stale certificate bindings: %w", err))
+		} else {
+			redeliverer.bindingsChecked[scopeID] = true
+		}
+	}
 	if len(plan.held) > 0 {
 		if err := pgx.BeginFunc(ctx, redeliverer.pool, func(tx pgx.Tx) error {
 			return recordRedeliveryRecoveriesTx(ctx, tx, scopeID, plan.held)

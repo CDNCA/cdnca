@@ -671,6 +671,14 @@ func TestCertificateAssetPostgresLifecycleIsolationAndTamperProtection(t *testin
 			t.Fatalf("unbound binding tombstone = %#v", tombstone)
 		}
 	}
+	// 证书换绑 409：未绑定网站的读取仍是 ErrNotFound，并带网站绑定修订号（从未绑定为 0）。
+	for siteID, want := range map[uuid.UUID]int64{tenantA.siteOne: 2, tenantA.siteThree: 0} {
+		var unbound *SiteUnboundError
+		_, _, err := store.GetSiteBinding(ctx, tenantA.actor, tenantA.actor.ScopeID, siteID)
+		if !errors.Is(err, ErrNotFound) || !errors.As(err, &unbound) || unbound.Revision != want {
+			t.Fatalf("unbound site %s binding error = %#v, want revision %d", siteID, err, want)
+		}
+	}
 	deleted, err := store.Delete(ctx, tenantA.actor, DeleteRequest{
 		TenantScopeID: tenantA.actor.ScopeID, AssetID: first.Asset.ID, ExpectedRevision: 4,
 		IdempotencyKey: "delete-unbound", RequestID: "request-delete-unbound",

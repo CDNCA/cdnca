@@ -30,6 +30,12 @@ type PublicationIntentStoreConfig struct {
 	RetryMaximum  time.Duration
 	MaxAttempts   int
 	Jitter        func(time.Duration) time.Duration
+	// Published, when set, runs in the transaction that settles a publish
+	// intent succeeded (the certificate is on every node of the site): the
+	// site's configuration is republished to reference it
+	// (certificatepublish.RequestBindingRepublicationTx). An error rolls the
+	// settlement back; the lease expires and the intent is settled again.
+	Published func(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID, bindingRevision int64) error
 }
 
 func DefaultPublicationIntentStoreConfig() PublicationIntentStoreConfig {
@@ -372,6 +378,11 @@ func (store *PublicationIntentStore) settlePublicationIntent(
 				}); err != nil {
 					return err
 				}
+			}
+		}
+		if state == "succeeded" && stored.Operation == "publish" && store.config.Published != nil {
+			if err := store.config.Published(ctx, tx, stored.TenantScopeID, stored.SiteID, stored.BindingRevision); err != nil {
+				return fmt.Errorf("republish site after certificate publication: %w", err)
 			}
 		}
 		return appendPublicationCompleteAudit(ctx, tx, stored, lease, state, failureCode, result)

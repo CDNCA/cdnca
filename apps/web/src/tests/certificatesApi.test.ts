@@ -232,6 +232,31 @@ describe('certificatesApi', () => {
     else await expect(result).rejects.toMatchObject({ status: 502, code: 'invalid_response' })
   })
 
+  // 证书换绑 409：网站绑定修订号按网站计；未绑定（含解绑后）的 404 带 error.details.current_revision。
+  it.each([
+    { body: { error: { code: 'certificate_site_binding_not_found', message: 'x', details: { current_revision: 4 } } }, status: 404, want: 4 },
+    { body: { error: { code: 'certificate_site_binding_not_found', message: 'x', details: { current_revision: 0 } } }, status: 404, want: 0 },
+    { body: { error: { code: 'certificate_site_binding_not_found', message: 'x', details: { current_revision: -1 } } }, status: 404, want: 0 },
+    { body: { error: { code: 'certificate_site_binding_not_found', message: 'x' } }, status: 404, want: 0 },
+  ])('reads an unbound site binding revision %#', async ({ body, status, want }) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(body, status))
+    await expect(certificatesApi.getSiteBindingRevision('token', 'site')).resolves.toBe(want)
+  })
+
+  it('reads a bound site binding revision and keeps other read failures', async () => {
+    vi.spyOn(certificatesApi, 'getSiteBinding').mockResolvedValueOnce({
+      binding: { tenant_scope_id: 'scope', site_id: 'site', asset_id: 'other', version_id: 'v', revision: 7, default: true, bound: true, changed_by: 'u', changed_at: '2026-01-01T00:00:00Z' },
+      version: {} as never,
+    })
+    await expect(certificatesApi.getSiteBindingRevision('token', 'site', 'scope')).resolves.toBe(7)
+    expect(certificatesApi.getSiteBinding).toHaveBeenCalledWith('token', 'site', 'scope')
+    vi.mocked(certificatesApi.getSiteBinding).mockRestore()
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ error: { code: 'certificate_asset_permission_denied', message: 'x' } }, 403))
+    await expect(certificatesApi.getSiteBindingRevision('token', 'site')).rejects.toMatchObject({
+      status: 403, code: 'certificate_asset_permission_denied',
+    })
+  })
+
   it('rejects a site binding whose version identity or state is inconsistent', async () => {
     const binding = {
       tenant_scope_id: 'scope', site_id: 'site', asset_id: 'asset', version_id: 'version',

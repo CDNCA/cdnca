@@ -60,10 +60,24 @@ var (
 	ErrDeleted                = errors.New("certificate asset is deleted")
 	ErrAutoRenewUnsupported   = errors.New("uploaded certificate cannot auto-renew")
 	ErrAssetDisabled          = errors.New("certificate asset is disabled")
-	ErrDownloadUnavailable    = errors.New("certificate has no downloadable version")
-	ErrACMEOrderMismatch      = errors.New("certificate does not match ACME order")
-	ErrInvalidStore           = errors.New("invalid certificate asset store")
+	// ErrSiteHTTPSEnabled: an unbind would leave an HTTPS site without a
+	// certificate (its configuration cannot be published, its nodes would
+	// keep serving the unbound one); rebind or turn HTTPS off first.
+	ErrSiteHTTPSEnabled    = errors.New("site serves HTTPS with this certificate")
+	ErrDownloadUnavailable = errors.New("certificate has no downloadable version")
+	ErrACMEOrderMismatch   = errors.New("certificate does not match ACME order")
+	ErrInvalidStore        = errors.New("invalid certificate asset store")
 )
+
+// SiteUnboundError is GetSiteBinding's ErrNotFound for a site with no bound
+// certificate. Revision is the site's latest binding fact sequence (0 when it
+// was never bound): the expected_revision of its next bind, which a client
+// cannot read from any asset's bindings once the site is unbound.
+type SiteUnboundError struct{ Revision int64 }
+
+func (*SiteUnboundError) Error() string { return "certificate site binding not found" }
+
+func (*SiteUnboundError) Is(target error) bool { return target == ErrNotFound }
 
 type Clock func() time.Time
 

@@ -2929,6 +2929,7 @@ export const enUS = {
       certificate_asset_auto_renew_unsupported: 'Uploaded certificates cannot auto-renew',
       certificate_asset_invalid_transition: 'The certificate state does not allow this operation',
 	  certificate_asset_domain_not_covered: 'The certificate does not cover the site domain',
+	  certificate_asset_site_https_enabled: 'The site serves HTTPS: bind another certificate or turn HTTPS off first',
 	  domain_blocked: 'Certificates cannot be requested for this domain',
 	  certificate_issuer_unavailable: 'The platform has not configured the selected CA. Choose another one.',
 	  certificate_order_in_flight: 'An order for these domains is already in progress. Wait for it or check the order records.',

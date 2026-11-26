@@ -515,6 +515,21 @@ export const certificatesApi = {
         isSiteBindingDetail(value) && value.binding.site_id === siteID,
     )
   },
+  /**
+   * The site's current binding revision, the expected_revision of its next bind: the bound fact's, or an
+   * unbound site's from its 404 certificate_site_binding_not_found (0 when never bound). Bindings are a
+   * per-site sequence, so another asset's binding or an unbind is never visible from this asset's list.
+   */
+  async getSiteBindingRevision(accessToken: string, siteID: string, targetScopeID?: string): Promise<number> {
+    try {
+      return (await certificatesApi.getSiteBinding(accessToken, siteID, targetScopeID)).binding.revision
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404 && error.code === 'certificate_site_binding_not_found') {
+        return error.siteBindingRevision ?? 0
+      }
+      throw error
+    }
+  },
 		listAssetBindings(accessToken: string, assetID: string, targetScopeID?: string): Promise<CertificateAssetBindingList> {
 			return request(accessToken, targetPath(`/v1/certificate-assets/${encodeURIComponent(assetID)}/bindings`, targetScopeID), isBindingList)
 	},

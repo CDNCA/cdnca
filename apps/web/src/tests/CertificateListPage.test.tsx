@@ -267,6 +267,7 @@ function allCertificateApiSpies() {
     vi.spyOn(certificatesApi, 'uploadAsset'),
     vi.spyOn(certificatesApi, 'activateAssetVersion'),
     vi.spyOn(certificatesApi, 'listAssetBindings'),
+    vi.spyOn(certificatesApi, 'getSiteBinding'),
     vi.spyOn(certificatesApi, 'bindAsset'),
     vi.spyOn(certificatesApi, 'unbindAsset'),
     vi.spyOn(certificatesApi, 'deleteAsset'),
@@ -289,6 +290,14 @@ async function chooseCertificatePageSize(user: ReturnType<typeof userEvent.setup
 
 // 高级筛选展开状态记在 localStorage，各用例从收起开始。
 beforeEach(() => { localStorage.removeItem('cdnca.advancedFilters.certificate-list') })
+
+// 证书换绑 409：绑定前读网站当前绑定修订号；默认网站从未绑定（404 带 current_revision 0）。
+function siteUnbound(revision: number): ApiError {
+  const error = new ApiError('API request failed', 404, 'certificate_site_binding_not_found')
+  error.siteBindingRevision = revision
+  return error
+}
+beforeEach(() => { vi.spyOn(certificatesApi, 'getSiteBinding').mockRejectedValue(siteUnbound(0)) })
 
 describe('CertificateListPage', () => {
   // CERT-05：同步状态等高级筛选全部由服务端执行（列表、总数一致），前端不再逐条拉发布回执推断。
@@ -753,6 +762,7 @@ describe('CertificateListPage', () => {
 		vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [asset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } })
 		vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({ ...assetDetail, versions: [assetDetail.versions[0], pendingVersion] })
 		vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [binding] })
+		vi.mocked(certificatesApi.getSiteBinding).mockResolvedValue({ binding, version: assetDetail.versions[0] })
 		const activate = vi.spyOn(certificatesApi, 'activateAssetVersion').mockResolvedValue({ ...pendingVersion, status: 'active' })
 		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, default: true })
 		const unbind = vi.spyOn(certificatesApi, 'unbindAsset').mockResolvedValue({ ...binding, revision: 2, bound: false })
@@ -789,6 +799,72 @@ describe('CertificateListPage', () => {
 		await user.click(within(detailDialog).getByRole('button', { name: '解绑' }))
 		await waitFor(() => expect(unbind).toHaveBeenCalledTimes(1))
 		expect(unbind.mock.calls[0].slice(1, 4)).toEqual([asset.id, binding.site_id, { expected_revision: 1 }])
+	})
+
+	// 证书换绑 409：绑定修订号是网站级序列，本证书的绑定列表里没有绑着别的证书或已解绑的网站。
+	describe('binding a site whose revision this certificate does not hold', () => {
+		const openBindDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+			renderWithProviders(<CertificateListPage />, ['/site/cert'])
+			await user.click(await screen.findByRole('button', { name: '查看详情' }))
+			await user.click(within(await findDialog('证书详情')).getByRole('button', { name: '绑定网站' }))
+			const dialog = await findDialog('绑定网站')
+			await user.type(within(dialog).getByLabelText('网站'), binding.site_id)
+			return dialog
+		}
+		beforeEach(() => {
+			authenticate()
+			vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [asset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } })
+			vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue(assetDetail)
+			vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [] })
+		})
+
+		it('sends the revision of the other certificate the site is bound to', async () => {
+			const other = { ...binding, asset_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', version_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', revision: 2 }
+			vi.mocked(certificatesApi.getSiteBinding).mockResolvedValue({
+				binding: other, version: { ...assetDetail.versions[0], id: other.version_id, asset_id: other.asset_id },
+			})
+			const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, revision: 3, default: true })
+			const user = userEvent.setup()
+			const dialog = await openBindDialog(user)
+			await user.click(within(dialog).getByRole('button', { name: '确认绑定' }))
+			await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))
+			expect(certificatesApi.getSiteBinding).toHaveBeenCalledWith(expect.any(String), binding.site_id, undefined)
+			expect(bind.mock.calls[0][2]).toEqual({
+				site_id: binding.site_id, version_id: assetDetail.versions[0].id, expected_revision: 2, default: true,
+			})
+		})
+
+		it('sends the revision an unbind left behind when the site is bound again', async () => {
+			vi.mocked(certificatesApi.getSiteBinding).mockRejectedValue(siteUnbound(4))
+			const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, revision: 5, default: true })
+			const user = userEvent.setup()
+			const dialog = await openBindDialog(user)
+			await user.click(within(dialog).getByRole('button', { name: '确认绑定' }))
+			await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))
+			expect(bind.mock.calls[0][2]).toMatchObject({ site_id: binding.site_id, expected_revision: 4 })
+		})
+
+		it('still refuses a revision changed by someone else after the read and asks to refresh', async () => {
+			vi.mocked(certificatesApi.getSiteBinding).mockRejectedValue(siteUnbound(4))
+			const bind = vi.spyOn(certificatesApi, 'bindAsset')
+				.mockRejectedValue(new ApiError('API request failed', 409, 'certificate_asset_revision_conflict'))
+			const user = userEvent.setup()
+			const dialog = await openBindDialog(user)
+			await user.click(within(dialog).getByRole('button', { name: '确认绑定' }))
+			expect(await screen.findByText('内容已被其他人修改，请刷新后再保存')).toBeInTheDocument()
+			expect(bind).toHaveBeenCalledTimes(1)
+			expect(bind.mock.calls[0][2]).toMatchObject({ expected_revision: 4 })
+		})
+
+		it('submits nothing when the site revision cannot be read', async () => {
+			vi.mocked(certificatesApi.getSiteBinding).mockRejectedValue(new ApiError('API request failed', 403, 'certificate_asset_permission_denied'))
+			const bind = vi.spyOn(certificatesApi, 'bindAsset')
+			const user = userEvent.setup()
+			const dialog = await openBindDialog(user)
+			await user.click(within(dialog).getByRole('button', { name: '确认绑定' }))
+			expect(await screen.findByText('读取网站当前证书绑定失败，未提交绑定，请重试：当前账号缺少证书资产权限')).toBeInTheDocument()
+			expect(bind).not.toHaveBeenCalled()
+		})
 	})
 
 	it('binds a never-activated first version (an issued ACME certificate) straight from the detail', async () => {

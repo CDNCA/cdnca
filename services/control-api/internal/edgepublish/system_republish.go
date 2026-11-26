@@ -99,8 +99,11 @@ const (
 	SystemTriggerPackageSuspension = "package_suspension"
 	// SystemTriggerCertificateRenewal: an automatic renewal's new version
 	// reached its nodes and the sites were switched to it (fix-dnscert3,
-	// migration 570); the sites go out referencing it without waiting for the
-	// tenant's publication.
+	// migration 570), or a binding the tenant changed (bound, rebound, a
+	// version activated) reached every node (certificatepublish
+	// RequestBindingRepublicationTx; same trigger, so a 719 schema and the
+	// previous release read it); the sites go out referencing it without
+	// waiting for the tenant's publication.
 	SystemTriggerCertificateRenewal = "certificate_renewal"
 
 	SystemOutcomePublished       = "published"

@@ -44,6 +44,8 @@ interface CertificateChoice {
 interface CertificateState {
   choices: CertificateChoice[]
   binding: CertificateAssetBinding | null
+  /** The site's binding revision (per site, kept after an unbind): the next bind's expected_revision. */
+  revision: number
 }
 
 type BindingAttempt =
@@ -151,6 +153,7 @@ async function loadCertificateState(
   }
 
   let siteBinding: Awaited<ReturnType<typeof certificatesApi.getSiteBinding>> | null
+  let unboundRevision = 0
   try {
     siteBinding = await certificatesApi.getSiteBinding(accessToken, siteId, targetScopeID)
   } catch (error) {
@@ -160,6 +163,8 @@ async function loadCertificateState(
       error.code === 'certificate_site_binding_not_found'
     ) {
       siteBinding = null
+      // An unbind leaves the site's revision behind: rebinding sends it, not 0.
+      unboundRevision = error.siteBindingRevision ?? 0
     } else {
       throw error
     }
@@ -187,7 +192,7 @@ async function loadCertificateState(
   }
 
   choices.sort((left, right) => left.asset.name.localeCompare(right.asset.name, 'zh-CN'))
-  return { choices, binding: siteBinding?.binding ?? null }
+  return { choices, binding: siteBinding?.binding ?? null, revision: siteBinding?.binding.revision ?? unboundRevision }
 }
 
 export default function HttpsSiteTab({
@@ -413,7 +418,7 @@ export default function HttpsSiteTab({
       kind: 'bind',
       assetID: choice.asset.id,
       versionID: choice.version.id,
-      expectedRevision: query.data?.binding?.revision ?? 0,
+      expectedRevision: query.data.revision,
       idempotencyKey,
       requestID,
     })

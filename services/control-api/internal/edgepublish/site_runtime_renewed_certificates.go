@@ -11,13 +11,16 @@ import (
 )
 
 // renewSiteRuntimeV2CertificateReferences points a stop overlay's TLS
-// listeners at their certificate's current version (fix-dnscert3 卡 2-B):
-// an overlay redelivers the last publication, whose certificate_version_id
-// may name a version the asset no longer serves (an automatic renewal, or
-// the tenant's activation, switched the site's binding since). The reference
-// moves only when the site is still bound to the same certificate and that
-// binding names the asset's active version; anything else is left for
-// validateSiteRuntimeV2CertificateReferences to refuse.
+// listeners at their site's current certificate version (fix-dnscert3 卡
+// 2-B): an overlay redelivers the last publication, whose
+// certificate_version_id may name a version the site no longer serves. The
+// reference moves to the version the site's latest binding names when that
+// is its asset's active version and either the binding kept the referenced
+// certificate (an automatic renewal, or the tenant's activation, switched the
+// version) or the binding's own publication succeeded, so every node holds
+// the new certificate (the tenant bound another one).
+// Anything else is left for validateSiteRuntimeV2CertificateReferences to
+// refuse.
 func renewSiteRuntimeV2CertificateReferences(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID,
 	document *siteRuntimeV2Document) error {
 	for siteIndex, site := range document.Sites {
@@ -39,15 +42,19 @@ func renewSiteRuntimeV2CertificateReferences(ctx context.Context, tx pgx.Tx, sco
 				return ErrTLSMaterialUnavailable
 			}
 			var next uuid.UUID
-			err = tx.QueryRow(ctx, `SELECT binding.version_id FROM certificate_asset_versions referenced
-				JOIN LATERAL (
-					SELECT action,asset_id,version_id FROM certificate_site_binding_facts
+			err = tx.QueryRow(ctx, `SELECT binding.version_id FROM (
+					SELECT sequence,action,asset_id,version_id,is_default FROM certificate_site_binding_facts
 					WHERE tenant_scope_id=$1 AND site_id=$3 ORDER BY sequence DESC LIMIT 1
-				) binding ON binding.action='bind' AND binding.asset_id=referenced.asset_id
-				WHERE referenced.tenant_scope_id=$1 AND referenced.id=$2 AND binding.version_id<>referenced.id
+				) binding
+				LEFT JOIN certificate_asset_versions referenced ON referenced.tenant_scope_id=$1 AND referenced.id=$2
+				WHERE binding.action='bind' AND binding.version_id<>$2
 				  AND binding.version_id=(SELECT activation.version_id FROM certificate_asset_activation_facts activation
-				    WHERE activation.tenant_scope_id=$1 AND activation.asset_id=referenced.asset_id
-				    ORDER BY activation.sequence DESC LIMIT 1)`, scopeID, versionID, siteID).Scan(&next)
+				    WHERE activation.tenant_scope_id=$1 AND activation.asset_id=binding.asset_id
+				    ORDER BY activation.sequence DESC LIMIT 1)
+				  AND (binding.asset_id=referenced.asset_id OR binding.is_default AND (
+				    SELECT state.state FROM certificate_publication_intent_state_facts state
+				    WHERE state.tenant_scope_id=$1 AND state.site_id=$3 AND state.binding_revision=binding.sequence
+				    ORDER BY state.sequence DESC LIMIT 1)='succeeded')`, scopeID, versionID, siteID).Scan(&next)
 			if errors.Is(err, pgx.ErrNoRows) {
 				renewed[current] = current
 				continue

@@ -279,6 +279,32 @@ func TestHandlerSiteBindingUsesStableNotFoundCode(t *testing.T) {
 	}
 }
 
+// 证书换绑 409：网站未绑定（含解绑后）时 404 带上网站绑定修订号，供下一次绑定作 expected_revision。
+func TestHandlerSiteBindingNotFoundCarriesCurrentRevision(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "unbound after binding", err: &certificateasset.SiteUnboundError{Revision: 3}, want: `"details":{"current_revision":3}`},
+		{name: "never bound", err: &certificateasset.SiteUnboundError{}, want: `"details":{"current_revision":0}`},
+		{name: "plain not found", err: certificateasset.ErrNotFound, want: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newFixture()
+			fixture.service.siteBindingErr = test.err
+			handler := fixture.handler(t, tenantSession(fixture.tenantID, "certificates.read"))
+			response := fixture.serve(handler, http.MethodGet,
+				"/v1/sites/"+fixture.siteID.String()+"/certificate-binding", "", nil)
+			assertResponse(t, response, http.StatusNotFound, "certificate_site_binding_not_found")
+			body := response.Body.String()
+			if test.want == "" && strings.Contains(body, "details") || test.want != "" && !strings.Contains(body, test.want) {
+				t.Fatalf("body = %s, want details %q", body, test.want)
+			}
+		})
+	}
+}
+
 func TestHandlerListUsesStrictBoundedPagination(t *testing.T) {
 	fixture := newFixture()
 	fixture.service.assetTotal = 31

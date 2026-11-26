@@ -2745,7 +2745,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Returns the current bound fact and its active immutable certificate version in one tenant-scoped read. An unbound site returns the stable certificate_site_binding_not_found error code.",
+   "description": "Returns the current bound fact and its active immutable certificate version in one tenant-scoped read. An unbound site returns the stable certificate_site_binding_not_found error code with error.details.current_revision, the site's binding revision (0 when never bound) that its next bind sends as expected_revision.",
    "permissions": [
     "certificates.read"
    ],
@@ -2799,7 +2799,7 @@
     },
     {
      "status": "404",
-     "description": "Certificate asset or version not found"
+     "description": "Site has no bound certificate (certificate_site_binding_not_found)"
     },
     {
      "status": "405",

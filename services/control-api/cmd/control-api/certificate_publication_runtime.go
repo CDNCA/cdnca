@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/certificateasset"
+	"github.com/cdnca/cdnca/services/control-api/internal/certificatepublish"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -43,8 +44,11 @@ type certificatePublicationRuntimeConfig struct {
 func defaultCertificatePublicationRuntimeConfig() certificatePublicationRuntimeConfig {
 	worker := certificateasset.DefaultPublicationWorkerConfig()
 	worker.WorkerID = "control-api-certificate-publication"
+	store := certificateasset.DefaultPublicationIntentStoreConfig()
+	// A binding whose certificate reached the nodes republishes the site.
+	store.Published = certificatepublish.RequestBindingRepublicationTx
 	return certificatePublicationRuntimeConfig{
-		Enabled: true, Store: certificateasset.DefaultPublicationIntentStoreConfig(),
+		Enabled: true, Store: store,
 		Worker: worker, Runner: certificateasset.DefaultPublicationRunnerConfig(),
 		ShutdownTimeout: 10 * time.Second,
 	}
