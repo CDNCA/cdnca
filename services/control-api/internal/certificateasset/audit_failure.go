@@ -23,6 +23,7 @@ var failureReasons = []struct {
 	{ErrNotFound, "not_found", true},
 	{ErrDeleted, "deleted", true},
 	{ErrReferenced, "still_referenced", true},
+	{ErrSiteHTTPSEnabled, "site_https_enabled", true},
 	{ErrAutoRenewUnsupported, "auto_renew_unsupported", true},
 	{ErrAssetDisabled, "asset_disabled", true},
 	{ErrDownloadUnavailable, "download_unavailable", true},

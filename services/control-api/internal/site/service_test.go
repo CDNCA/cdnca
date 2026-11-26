@@ -362,3 +362,25 @@ func TestCreatePoolTimeoutsFallBackToUserDefaultsThenSystemDefaults(t *testing.T
 		}
 	}
 }
+
+// A site without a package reads back cname_mode "site"; saving it unchanged is accepted, and only
+// the package CNAME requires a package subscription.
+func TestNormalizeFieldsAcceptsSiteCNAMEModeWithoutPackage(t *testing.T) {
+	base := func(mode string) SiteFields {
+		return SiteFields{Domains: []string{"www.example.com"}, HTTPPorts: []string{"80"}, HTTPSPorts: []string{"443"},
+			HTTPSEnabled: true, Origins: []string{"192.0.2.1"}, Enabled: true, CNAMEMode: mode}
+	}
+	for _, mode := range []string{"", "site", " Site "} {
+		fields := base(mode)
+		if err := normalizeFields(&fields); err != nil {
+			t.Errorf("mode %q without package: err = %v, want accepted", mode, err)
+		}
+	}
+	for _, mode := range []string{"package", "other"} {
+		fields := base(mode)
+		var fieldErr *FieldError
+		if err := normalizeFields(&fields); !errors.As(err, &fieldErr) || fieldErr.Field != "cname_mode" {
+			t.Errorf("mode %q without package: err = %v, want cname_mode invalid", mode, err)
+		}
+	}
+}

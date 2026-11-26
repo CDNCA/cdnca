@@ -398,7 +398,10 @@ func normalizeFields(fields *SiteFields) error {
 	fields.CNAMEMode = strings.ToLower(strings.TrimSpace(fields.CNAMEMode))
 	fields.CNAMEDomain = strings.ToLower(strings.TrimSpace(fields.CNAMEDomain))
 	fields.CNAMEHostname = strings.ToLower(strings.TrimSpace(fields.CNAMEHostname))
-	if fields.CNAMEMode != "" && ((fields.CNAMEMode != "site" && fields.CNAMEMode != "package") || fields.PackageSubscriptionID == nil) {
+	// A site without a package uses its own CNAME (mode site, as a read returns it); only the
+	// package CNAME needs a package subscription.
+	if fields.CNAMEMode != "" && ((fields.CNAMEMode != "site" && fields.CNAMEMode != "package") ||
+		(fields.CNAMEMode == "package" && fields.PackageSubscriptionID == nil)) {
 		return fieldError("cname_mode", "invalid")
 	}
 	if len(fields.HTTPPorts) == 0 {
