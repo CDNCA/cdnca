@@ -215,15 +215,15 @@ test('listening ports are read from /proc/net/tcp', () => {
   assert.equal(statusOf(run(host({ listen: [22] }), report('preflight_check_ports 80:a 443:b')), '端口占用'), '通过')
 })
 
-test('connectivity and clock skew against the licensing server', () => {
-  const ok = run(host(), report('preflight_check_remote 授权端 https://auth.example/'))
-  assert.equal(statusOf(ok, '连通性（授权端）'), '通过')
+test('connectivity and clock skew against the release site', () => {
+  const ok = run(host(), report('preflight_check_remote 发布站 https://www.example/'))
+  assert.equal(statusOf(ok, '连通性（发布站）'), '通过')
   assert.equal(statusOf(ok, '时间偏差'), '通过')
-  assert.equal(statusOf(run(host({ remoteDate: 'Wed, 15 Oct 2026 07:58:00 GMT' }), report('preflight_check_remote 授权端 https://a/')), '时间偏差'), '警告')
-  const skewed = run(host({ remoteDate: 'Wed, 15 Oct 2026 07:50:00 GMT' }), report('preflight_check_remote 授权端 https://a/'))
+  assert.equal(statusOf(run(host({ remoteDate: 'Wed, 15 Oct 2026 07:58:00 GMT' }), report('preflight_check_remote 发布站 https://a/')), '时间偏差'), '警告')
+  const skewed = run(host({ remoteDate: 'Wed, 15 Oct 2026 07:50:00 GMT' }), report('preflight_check_remote 发布站 https://a/'))
   assert.equal(statusOf(skewed, '时间偏差'), '不通过')
   assert.match(skewed.stderr, /相差 600 秒/)
-  assert.equal(statusOf(run(host({ curl: 'down' }), report('preflight_check_remote 授权端 https://a/ https://b/')), '连通性（授权端）'), '不通过')
+  assert.equal(statusOf(run(host({ curl: 'down' }), report('preflight_check_remote 发布站 https://a/ https://b/')), '连通性（发布站）'), '不通过')
   const untrusted = run(host({ curl: 'untrusted' }), report('preflight_check_remote 主控 https://10.0.0.1/'))
   assert.equal(statusOf(untrusted, '连通性（主控）'), '通过')
   assert.equal(statusOf(untrusted, '时间偏差'), '警告')
@@ -265,7 +265,7 @@ test('a fully supported Ubuntu 24.04 control host passes every local check', () 
   const result = run(host({ memMiB: 16384 }), report([
     'preflight_check_root', 'preflight_check_os control', 'preflight_check_arch control', 'preflight_check_kernel control',
     'preflight_check_cpu control', 'preflight_check_memory control', 'preflight_check_disk control', 'preflight_check_systemd',
-    'preflight_check_coexistence control', 'preflight_check_ports 443:a 80:b', 'preflight_check_remote 授权端 https://a/',
+    'preflight_check_coexistence control', 'preflight_check_ports 443:a 80:b', 'preflight_check_remote 发布站 https://a/',
     'preflight_check_selinux', 'preflight_check_firewall 443',
   ].join('\n')))
   assert.equal(result.status, 0, result.stderr)

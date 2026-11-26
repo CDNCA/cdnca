@@ -16,8 +16,8 @@ const (
 	nodeDownloadsSourceEnv   = "CONTROL_NODE_DOWNLOADS_SOURCE"
 )
 
-// nodeDownloadsRuntime keeps /downloads/edge-agent/latest current
-//. On by default on a native console whose release server is
+// nodeDownloadsRuntime keeps /downloads/edge-agent/latest current.
+// On by default on a native console whose release server is
 // known: CONTROL_NODE_DOWNLOADS_SOURCE, else LICENSE_SERVICE_URL (the
 // commercial authorization server that also serves /downloads). The
 // community build has no LICENSE_SERVICE_URL and sets the source to its

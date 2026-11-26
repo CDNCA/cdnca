@@ -32,6 +32,9 @@ const (
 
 	ReasonOpened = "package_opened"
 	ReasonEnded  = "package_ended"
+	// ReasonCommunityDefault: 社区版没有套餐，租户范围的网站与四层转发不绑套餐也照常下发，
+	// 作用域第一次改动它们时即开启自动发布（EnsureCommunityDefaultTx）。
+	ReasonCommunityDefault = "community_default"
 )
 
 // EnsureTx turns on automatic publication for a tenant scope
@@ -54,6 +57,23 @@ func EnsureTx(ctx context.Context, tx pgx.Tx, scopeID, actorScopeID, actorUserID
 		return false, err
 	}
 	return true, insertPackagePolicy(ctx, tx, scopeID, modeAutomatic, actorScopeID, actorUserID, ReasonOpened)
+}
+
+// EnsureCommunityDefaultTx turns on automatic publication, with the package
+// policy's parameters, for a tenant scope that has no policy yet (社区版：
+// 没有套餐，站点照常下发). A policy already written, manual included, is kept.
+func EnsureCommunityDefaultTx(ctx context.Context, tx pgx.Tx, scopeID, actorScopeID, actorUserID uuid.UUID) (bool, error) {
+	if ctx == nil || tx == nil || scopeID == uuid.Nil || actorScopeID == uuid.Nil || actorUserID == uuid.Nil {
+		return false, ErrInvalidInput
+	}
+	if err := lockPolicyScope(ctx, tx, scopeID); err != nil {
+		return false, err
+	}
+	_, found, err := latestPolicyMode(ctx, tx, scopeID)
+	if err != nil || found {
+		return false, err
+	}
+	return true, insertPackagePolicy(ctx, tx, scopeID, modeAutomatic, actorScopeID, actorUserID, ReasonCommunityDefault)
 }
 
 // StopTx returns a tenant scope to manual publication when a

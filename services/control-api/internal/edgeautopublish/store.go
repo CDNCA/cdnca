@@ -16,6 +16,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
+	"github.com/cdnca/cdnca/services/control-api/internal/packageautopublish"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -175,6 +176,17 @@ func EnqueueTx(ctx context.Context, tx pgx.Tx, input EnqueueInput) (EnqueueResul
 	policy, found, err := loadCurrentPolicy(ctx, tx, input.TargetScopeID)
 	if err != nil {
 		return EnqueueResult{}, err
+	}
+	if !found {
+		// 社区版没有套餐：作用域第一次改动网站或四层转发即按自动发布处理（参数同开通套餐），
+		// 由本次改动的操作者发布；已写过的策略（含手动）照旧。
+		if _, err := packageautopublish.EnsureCommunityDefaultTx(ctx, tx, input.TargetScopeID,
+			input.Actor.ScopeID, input.Actor.UserID); err != nil {
+			return EnqueueResult{}, err
+		}
+		if policy, found, err = loadCurrentPolicy(ctx, tx, input.TargetScopeID); err != nil {
+			return EnqueueResult{}, err
+		}
 	}
 	if !found || policy.Mode == ModeManual {
 		return EnqueueResult{}, nil

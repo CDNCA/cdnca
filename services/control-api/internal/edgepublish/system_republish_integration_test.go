@@ -53,6 +53,7 @@ func newWatcher(t *testing.T, scope *edgepublish.SystemRepublishScope) *edgeauto
 func TestSystemRepublishDeliversRefusedPublicationAfterCapabilityUpgrade(t *testing.T) {
 	scope := edgepublish.NewSystemRepublishScope(t)
 	nodeA, nodeB, nodeC := scope.AddNode(t, 12), scope.AddNode(t, 11), scope.AddNode(t, 11)
+	scope.UseManualPolicy(t) // the system channel of a manual scope
 	createRateLimitedStream(t, scope)
 	watcher := newWatcher(t, scope)
 	if _, err := watcher.SweepOnce(t.Context()); err != nil { // every node's current set is its baseline

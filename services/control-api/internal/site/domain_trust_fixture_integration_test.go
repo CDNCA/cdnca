@@ -147,6 +147,19 @@ func (f *trustFixture) setPolicy(policy string) {
 		f.admin.scopeID, policy, f.admin.userID, f.now)
 }
 
+// manualPublication makes actor's tenant scope a manual publication scope.
+// Without a policy the scope's first site write turns on automatic
+// publication (社区版 community_default); tests that build the scope's
+// requests and publications by hand keep it manual, so site writes enqueue
+// nothing of their own.
+func (f *trustFixture) manualPublication(actor trustActor) {
+	f.t.Helper()
+	f.exec(`INSERT INTO edge_automatic_publication_policy_facts(target_scope_id,revision,mode,node_ids,activation_timeout_ms,
+		observation_window_ms,required_consecutive_successes,max_attempts,deadline_window_seconds,actor_scope_id,actor_user_id,
+		reason,created_at) SELECT $1,COALESCE(max(revision),0)+1,'manual','{}',30000,15000,2,3,600,$1,$2,'manual_test',clock_timestamp()
+		FROM edge_automatic_publication_policy_facts WHERE target_scope_id=$1`, actor.scopeID, actor.userID)
+}
+
 func (f *trustFixture) key(prefix string) string {
 	f.seq++
 	return prefix + "-" + uuid.NewString()[:8]

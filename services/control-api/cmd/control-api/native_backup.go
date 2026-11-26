@@ -119,6 +119,9 @@ func runNativeBackup(args []string) error {
 	case "frozen-console":
 		return nativeBackupFrozenConsole(ctx)
 	case "agent":
+		// The timer that runs this is the root, unsandboxed step every upgrade reaches: the managed ClickHouse
+		// config converges here.
+		convergeClickHouseLogger(ctx)
 		return nativeBackupAgent(host).Tick(ctx)
 	case "install-units":
 		return nativebackup.InstallUnits(ctx, host)
@@ -632,8 +635,7 @@ func nativeBackupFrozenConsole(ctx context.Context) error {
 }
 
 // nativeBackupAnnounceGateway publishes the new host as a node entry point and
-// restarts the local Gateway so online nodes learn it before a migration
-//.
+// restarts the local Gateway so online nodes learn it before a migration.
 func nativeBackupAnnounceGateway(ctx context.Context, host *nativebackup.Host, args []string) error {
 	flags := flag.NewFlagSet("announce-gateway", flag.ContinueOnError)
 	target := flags.String("host", "", "the new control plane host (IP or name) as nodes reach it")

@@ -17,6 +17,7 @@ import (
 // 租户两种形式）、列表筛选与接入检查 published 对每一步给同一口径。
 func TestSitePublicationCurrentPackageLinePostgres(t *testing.T) {
 	f := newTrustFixture(t)
+	f.manualPublication(f.a)
 	ctx := context.Background()
 	created, err := f.createSite(f.a, f.a, "current-line.example.test")
 	if err != nil {

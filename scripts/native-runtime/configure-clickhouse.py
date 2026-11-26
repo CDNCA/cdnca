@@ -30,8 +30,13 @@ STATE = Path("/etc/cdnca-analytics")
 # Host port profile written by install-control.sh (a BaoTa host may
 # already run ClickHouse-like services on 8123/9000); absent = default ports.
 RUNTIME_PORTS = Path("/etc/cdnca-native-dependencies/runtime.env")
+# The vendor config.xml logs at trace with 10 x 1000M files: a 20G system disk
+# filled up (11-26 1129). The logger children merge by name into the vendor
+# <logger>, so its log/errorlog paths stay; size/count bound both files.
 LOOPBACK_DEFAULT = (b'<clickhouse>\n    <listen_host replace="replace">127.0.0.1</listen_host>\n'
-                    b'    <interserver_listen_host replace="replace">127.0.0.1</interserver_listen_host>\n</clickhouse>\n')
+                    b'    <interserver_listen_host replace="replace">127.0.0.1</interserver_listen_host>\n'
+                    b'    <logger>\n        <level>information</level>\n        <size>100M</size>\n        <count>5</count>\n    </logger>\n'
+                    b'</clickhouse>\n')
 _PROFILE_KEYS = {"ENV", "WEB_PORT", "NODE_DOWNLOAD_PORT", "PG_PORT", "REDIS_PORT", "CH_HTTP_PORT", "CH_TCP_PORT", "CH_MYSQL_PORT", "CH_POSTGRESQL_PORT", "CH_INTERSERVER_PORT"}
 _LOOPBACK_TAGS = (("CH_HTTP_PORT", "http_port", 8123), ("CH_TCP_PORT", "tcp_port", 9000), ("CH_MYSQL_PORT", "mysql_port", 9004),
                   ("CH_POSTGRESQL_PORT", "postgresql_port", 9005), ("CH_INTERSERVER_PORT", "interserver_http_port", 9009))

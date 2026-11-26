@@ -30,8 +30,8 @@ const loadFirewallActionFactsSQL = `
 		  AND (head.deployment_state='pending' OR head.lkg_revision>0)
 		ORDER BY head.site_id`
 
-// loadInheritedFirewallActionDefaultSQL: the scope's saved tenant default
-//; sites without a policy of their own deliver it. As a
+// loadInheritedFirewallActionDefaultSQL: the scope's saved tenant default;
+// sites without a policy of their own deliver it. As a
 // site policy: a pending default delivers its candidate, an active or failed
 // one its LKG (609 receipts), none without an LKG.
 const loadInheritedFirewallActionDefaultSQL = `

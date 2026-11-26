@@ -28,10 +28,11 @@ install_lang_init --lang "$lang"
   log() { printf '%s %s\n' "$PROGRESS_LABEL" "$*"; }
   warn() { printf '%s warning: %s\n' "$PROGRESS_LABEL" "$*"; }
   if [ "$role" = control ]; then
-    eval "$(fn summary_certificate)"; eval "$(fn control_install_summary)"
+    eval "$(fn summary_certificate)"; eval "$(fn control_install_summary)"; eval "$(fn gateway_direct_ports_hint)"
     summary_host_addresses() { printf '203.0.113.10|'; }
     public_certificate_lineage() { printf 'console.example.com'; }
     remote_gateway_access() { return 1; }
+    control_rerun_command() { :; } # 只用在省略的第 4 项
     say "root@console:~# bash install-control.sh --release-server https://www.cdnca.com/downloads/ce --lang $lang"
     progress_init; PROGRESS_TTY=true PROGRESS_COLOR=true
     progress_stage
@@ -50,7 +51,8 @@ install_lang_init --lang "$lang"
     CONTROL_DOMAIN=console.example.com GATEWAY_HOST=console.example.com ADMIN_USERNAME=admin INSTALL_ENV=plain MASTER_PORT=443
     GATEWAY_ENROLLMENT_PORT=24817 GATEWAY_AGENT_PORT=27305 PUBLIC_CERT_FILE=/etc/letsencrypt/live/console.example.com/fullchain.pem
     PUBLIC_CERT_PATH=/nonexistent SERVICE_NAME=cdnca-control-api GATEWAY_SERVICE_NAME=cdnca-agent-gateway WEB_SERVICE_NAME=cdnca-control-web
-    control_install_summary 2>&1 | sed -E "s/(Let's Encrypt[^;]*); [^0-9]*[^ ]*.*/\1/" | grep -vE '^  [3-6]\. |^.*(以上信息已保存|Saved to)'
+    CONTROL_INSTALLER_COPY=/var/lib/cdnca-control-install/install-control.sh
+    control_install_summary 2>&1 | sed -E "s/(Let's Encrypt[^;]*); [^0-9]*[^ ]*.*/\1/" | grep -vE '^  [3-6]\. |^     |^.*(以上信息已保存|Saved to)'
     spend 4; progress_done
   else
     eval "$(fn node_install_summary)"; eval "$(fn node_next_steps)"

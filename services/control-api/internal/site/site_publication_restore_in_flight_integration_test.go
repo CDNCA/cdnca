@@ -20,6 +20,7 @@ import (
 //	主动停用 → synced（site_disabled）；暂停中 → synced（package_suspended，作用域有在途请求也不变）。
 func TestSitePublicationRestoreInFlightPostgres(t *testing.T) {
 	f := newTrustFixture(t)
+	f.manualPublication(f.a)
 	ctx := context.Background()
 	created, err := f.createSite(f.a, f.a, "restore.example.test")
 	if err != nil {

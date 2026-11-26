@@ -320,7 +320,7 @@ class TestNativeRuntimePortProfile(unittest.TestCase):
         runtime = importlib.util.module_from_spec(importlib.util.spec_from_file_location(
             "native_control_runtime_ports", Path(__file__).with_name("configure-control-runtime.py")))
         runtime.__spec__.loader.exec_module(runtime)
-        # No profile on this host: the defaults stay byte-for-byte what earlier releases wrote.
+        # No profile on this host: the default loopback bytes (listeners and bounded logger).
         self.assertEqual(runtime.CLICKHOUSE_URL, "http://127.0.0.1:8123")
         self.assertEqual(runtime.LOOPBACK_CONTENT, runtime._clickhouse.LOOPBACK_DEFAULT)
 

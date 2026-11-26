@@ -71,7 +71,8 @@ DEPS_CLAMD_ARGS=()
 # The upstream build's libcurl looks for the EL bundle; Debian keeps it here.
 DEPS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 DEPS_CLAM_ENABLE=(clamav-daemon.socket clamav-daemon.service clamav-freshclam.service)
-DEPS_LOOPBACK_CONTENT=$'<clickhouse>\n    <listen_host replace="replace">127.0.0.1</listen_host>\n    <interserver_listen_host replace="replace">127.0.0.1</interserver_listen_host>\n</clickhouse>\n'
+# Same bytes as configure-clickhouse.py LOOPBACK_DEFAULT: loopback listeners plus a bounded logger (information, 100M x 5).
+DEPS_LOOPBACK_CONTENT=$'<clickhouse>\n    <listen_host replace="replace">127.0.0.1</listen_host>\n    <interserver_listen_host replace="replace">127.0.0.1</interserver_listen_host>\n    <logger>\n        <level>information</level>\n        <size>100M</size>\n        <count>5</count>\n    </logger>\n</clickhouse>\n'
 DEPS_CLAM_DROPIN_CONTENT=$'[Socket]\nSocketMode=0660\nSocketUser=clamav\nSocketGroup=clamav\n'
 DEPS_PROTECTED_PATHS=(/var/lib/postgresql /etc/postgresql /var/lib/clickhouse /etc/clickhouse-server /etc/clamav /etc/redis/redis.conf /var/lib/redis /etc/cdnca-control/control.env /var/lib/cdnca-control /var/lib/cdnca-edge /var/lib/site-runtime)
 DEPS_NGINX_GUARDS=(/etc/nginx /usr/sbin/nginx /lib/systemd/system/nginx.service /etc/systemd/system/nginx.service /etc/systemd/system/nginx.service.d /run/systemd/system/nginx.service /run/systemd/system/nginx.service.d)

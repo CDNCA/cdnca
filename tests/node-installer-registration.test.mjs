@@ -81,12 +81,8 @@ test('register_node prints readable Chinese errors and fails closed', () => {
     ['409', 'node_already_registered', /已注册.*「更多 → 重装此节点」获取重装命令/],
     ['429', 'node_registration_rate_limited', /过于频繁/],
     ['503', 'node_registration_unavailable', /未启用节点注册/],
-    // 主控授权拒绝（entitlementguard → httpapi writeError）：不是连通性问题，指向授权/套餐。
-    ['403', 'entitlement_feature_denied', /主控授权不含节点管理功能（nodes\.manage）/],
-    ['403', 'entitlement_quota_denied', /主控授权.*节点数/],
-    ['409', 'entitlement_quota_exceeded', /节点数已达主控授权上限/],
-    ['403', 'entitlement_unavailable', /主控尚无有效授权租约/],
-    ['403', 'entitlement_state_denied', /主控授权状态不允许/],
+    // 社区版节点创建不做授权拒绝，其他错误码走通用提示（HTTP 状态 + 错误码 + 连通性）。
+    ['403', 'forbidden', /节点注册失败（HTTP 403，forbidden）/],
   ]) {
     const result = run(`parse_args --control-plane https://control.example --registration-key-stdin
 read_enrollment_token <<<'${key}'

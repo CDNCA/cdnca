@@ -19,6 +19,7 @@ import (
 // 承担本站的节点上的结果：失败请求被之后的发布覆盖即不再算；已退役/移出线路组节点的失败部署不计入。
 func TestSitePublicationOutcomeFollowsServingNodesPostgres(t *testing.T) {
 	f := newTrustFixture(t)
+	f.manualPublication(f.a)
 	ctx := context.Background()
 	created, err := f.createSite(f.a, f.a, "stalled.example.test")
 	if err != nil {
@@ -200,6 +201,7 @@ func TestSitePublicationOutcomeFollowsServingNodesPostgres(t *testing.T) {
 // 网站停用拒绝；在途时 409 publish_in_flight。
 func TestSiteRepublishPostgres(t *testing.T) {
 	f := newTrustFixture(t)
+	f.manualPublication(f.a)
 	ctx := context.Background()
 	created, err := f.createSite(f.a, f.a, "republish.example.test")
 	if err != nil {

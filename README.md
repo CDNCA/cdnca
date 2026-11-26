@@ -214,7 +214,7 @@ Back in **Node list**, open the **Pending initialization** tab. The node has reg
 
 ### Step 6: Create a line group and make it the platform default
 
-Go to **Nodes → Line groups**, click **Add Group**, add the node, and set the resolved value (the hostname visitors' CNAMEs point to). After saving, click **Set as Platform Default**. The Community Edition has no packages, so every site uses the platform default line group; without one, sites cannot be published.
+Go to **Nodes → Line groups**, click **Add Group**, and add the node. The resolved value can be left blank (it is generated); to set it yourself, enter a single subdomain label of 1 to 63 lowercase letters, digits and hyphens (for example `cdn`), without the domain part. After saving, click **Set as Platform Default**. The Community Edition has no packages, so every site uses the platform default line group; without one, sites cannot be published.
 
 <a href="docs/images/readme/en/install-6-line-group.png"><img src="docs/images/readme/en/install-6-line-group.png" width="720" alt="Platform default line group"></a>
 
@@ -239,6 +239,8 @@ curl -I --resolve www.example.com:80:203.0.113.11 http://www.example.com/
 ```
 
 Your origin's response (for example `HTTP/1.1 200 OK`) means the node is fetching from the origin. Then, at your DNS provider, CNAME the site domain to the CNAME shown in the site list. DNS is checked every 10 minutes; once it passes, the status shows **Access ready**.
+
+The control plane creates the CNAME through your DNS provider's API: in **Nodes → DNS configuration**, enter the DNS provider's API keys and save, then on the **CNAME domains** tab click **Add domain** and add a domain hosted in that DNS account (the first one added is the default CNAME domain). Once that is set up, sites created earlier get their CNAME automatically.
 
 <a href="docs/images/readme/en/install-9-site-ready.png"><img src="docs/images/readme/en/install-9-site-ready.png" width="720" alt="Site access ready"></a>
 

@@ -1082,7 +1082,7 @@ preflight_check_remote() {
   fi
   skew=$((local_epoch - remote_epoch)); [ "$skew" -ge 0 ] || skew=$((-skew))
   if [ "$skew" -gt 300 ]; then
-    preflight_record fail 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒（超过 300 秒，激活与签名校验会被拒绝）" "clock differs from $label by ${skew} s (over 300 s; activation and signature checks will be refused)")" "$(msg '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试' 'enable NTP: timedatectl set-ntp true, or install chrony and retry')"
+    preflight_record fail 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒（超过 300 秒，签名校验会被拒绝）" "clock differs from $label by ${skew} s (over 300 s; signature checks will be refused)")" "$(msg '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试' 'enable NTP: timedatectl set-ntp true, or install chrony and retry')"
   elif [ "$skew" -gt 60 ]; then
     preflight_record warn 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒" "clock differs from $label by ${skew} s")" "$(msg '建议开启 NTP 同步：timedatectl set-ntp true' 'enabling NTP is recommended: timedatectl set-ntp true')"
   else
@@ -1155,7 +1155,7 @@ preflight_label() {
     内核) printf 'Kernel' ;; 内存) printf 'Memory' ;; 磁盘空间) printf 'Disk space' ;; 数据盘) printf 'Data disk' ;; root权限) printf 'Root' ;;
     端口占用) printf 'Ports' ;; 必需命令) printf 'Required commands' ;; 时间偏差) printf 'Clock skew' ;;
     防火墙) printf 'Firewall' ;; 主控共存) printf 'Control plane on this host' ;; 节点共存) printf 'Node on this host' ;;
-    主控) printf 'control plane' ;; 授权端) printf 'licensing server' ;; 端口规划) printf 'Port plan' ;; 端口调整) printf 'Port changes' ;;
+    主控) printf 'control plane' ;; 发布站) printf 'release site' ;; 端口规划) printf 'Port plan' ;; 端口调整) printf 'Port changes' ;;
     管理端域名) printf 'Management domain' ;; 管理端网页) printf 'Management web' ;; 管理端HTTPS) printf 'management HTTPS' ;;
     节点升级下载) printf 'node upgrade downloads' ;;
     宝塔环境) printf 'BaoTa environment' ;; 宝塔站点证书) printf 'BaoTa site certificate' ;; 宝塔防火墙) printf 'BaoTa firewall' ;;
@@ -3157,11 +3157,6 @@ register_node() {
     node_registration_limit) fail "$(msg '待初始化节点过多，请先在管理端处理「待初始化」列表' 'too many pending nodes; handle the "Pending" list in the console first')" ;;
     node_registration_unavailable) fail "$(msg '管理端未启用节点注册，请检查主控配置' 'node registration is disabled on the console; check the control plane configuration')" ;;
     validation_error) fail "$(msg '注册信息无效（请检查 /etc/machine-id）' 'invalid registration data (check /etc/machine-id)')" ;;
-    entitlement_feature_denied) fail "$(msg '主控授权不含节点管理功能（nodes.manage），请到授权门户确认套餐，主控刷新授权后重试' 'the control plane licence does not grant node management (nodes.manage); check the plan in the licensing portal and retry after the control plane refreshes its licence')" ;;
-    entitlement_quota_denied) fail "$(msg '主控授权未包含节点数配额（nodes.count），请到授权门户确认套餐' 'the control plane licence has no node quota (nodes.count); check the plan in the licensing portal')" ;;
-    entitlement_quota_exceeded) fail "$(msg '节点数已达主控授权上限，请先删除不用的节点或升级套餐' 'the node count has reached the control plane licence limit; delete unused nodes or upgrade the plan')" ;;
-    entitlement_unavailable) fail "$(msg '主控尚无有效授权租约，请先在主控完成激活并确认授权在线后重试' 'the control plane has no verified licence lease yet; finish activation and retry once the licence is online')" ;;
-    entitlement_state_denied) fail "$(msg '主控授权状态不允许新增节点（已过期、暂停或吊销），请到授权门户处理' 'the control plane licence state does not allow new nodes (expired, suspended or revoked); resolve it in the licensing portal')" ;;
     *) fail "$(msg "节点注册失败（HTTP ${status}${code:+，${code}}），请检查与管理端 ${CONTROL_PLANE} 的 HTTPS 连通性后重试" "node registration failed (HTTP ${status}${code:+, ${code}}); check HTTPS connectivity to ${CONTROL_PLANE} and retry")" ;;
   esac
 }

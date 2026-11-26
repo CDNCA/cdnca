@@ -335,6 +335,19 @@ func (scope *SystemRepublishScope) EnableAutomaticPolicy(t *testing.T, nodeIDs .
 	}
 }
 
+// UseManualPolicy makes the scope a manual publication scope: without a
+// policy its first site or stream write through the services turns on
+// automatic publication (社区版 community_default).
+func (scope *SystemRepublishScope) UseManualPolicy(t *testing.T) {
+	t.Helper()
+	if _, err := scope.Pool.Exec(t.Context(), `INSERT INTO edge_automatic_publication_policy_facts(target_scope_id,revision,mode,
+		node_ids,activation_timeout_ms,observation_window_ms,required_consecutive_successes,max_attempts,deadline_window_seconds,
+		actor_scope_id,actor_user_id,reason,created_at) VALUES($1,1,'manual','{}',30000,15000,2,3,600,$1,$2,'syspub_test',
+		clock_timestamp())`, scope.ScopeID, scope.UserID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // AutomaticService is the edge publication service of the automatic worker.
 func (scope *SystemRepublishScope) AutomaticService(t *testing.T, coordinator AutomaticPublicationCoordinator) *Service {
 	t.Helper()

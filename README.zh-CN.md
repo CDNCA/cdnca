@@ -214,7 +214,7 @@ bash install-control.sh --release-server https://www.cdnca.com/downloads/ce --la
 
 ### 第 6 步：建线路组并设为平台默认
 
-打开「节点管理 → 线路分组」，点「新增分组」，把节点加进去，填解析值（访客 CNAME 指向的域名）；保存后点「设为平台默认」。社区版没有套餐，网站一律走平台默认线路组，没有它网站无法发布。
+打开「节点管理 → 线路分组」，点「新增分组」，把节点加进去；解析值可以留空（自动生成），自己填时只填一段子域名标签（1 到 63 位小写字母、数字和连字符，如 `cdn`），不带域名部分。保存后点「设为平台默认」。社区版没有套餐，网站一律走平台默认线路组，没有它网站无法发布。
 
 <a href="docs/images/readme/install-6-line-group.png"><img src="docs/images/readme/install-6-line-group.png" width="720" alt="平台默认线路组"></a>
 
@@ -239,6 +239,8 @@ curl -I --resolve www.example.com:80:203.0.113.11 http://www.example.com/
 ```
 
 返回源站的响应（如 `HTTP/1.1 200 OK`）即说明节点回源正常。然后在域名的 DNS 服务商处把网站域名 CNAME 到网站列表里显示的 CNAME 地址；后台每 10 分钟检查一次解析，通过后状态显示「接入已就绪」。
+
+CNAME 地址由主控通过 DNS 服务商的 API 生成：先在「节点管理 → DNS配置」填写 DNS 服务商的 API 密钥并保存，再到「CNAME域名」页签点「新增域名」，添加一个托管在该 DNS 账号下的域名（第一个添加的即默认 CNAME 域名）。配置好后，已经建好的网站会自动生成 CNAME 地址。
 
 <a href="docs/images/readme/install-9-site-ready.png"><img src="docs/images/readme/install-9-site-ready.png" width="720" alt="网站接入已就绪"></a>
 

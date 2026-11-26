@@ -14,7 +14,7 @@ const packages = [
   'postgresql-client-17\tinstalled\t17.11-1.pgdg24.04+2',
   ...['clickhouse-server', 'clickhouse-client', 'clickhouse-common-static'].map((name) => `${name}\tinstalled\t25.3.6.56`),
 ].join('\n')
-const loopback = '<clickhouse>\n    <listen_host replace="replace">127.0.0.1</listen_host>\n    <interserver_listen_host replace="replace">127.0.0.1</interserver_listen_host>\n</clickhouse>\n'
+const loopback = '<clickhouse>\n    <listen_host replace="replace">127.0.0.1</listen_host>\n    <interserver_listen_host replace="replace">127.0.0.1</interserver_listen_host>\n    <logger>\n        <level>information</level>\n        <size>100M</size>\n        <count>5</count>\n    </logger>\n</clickhouse>\n'
 
 function dependencyFixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'cdnca-dependencies-test-'))

@@ -12,8 +12,8 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// buildNodeGatewayAddressRuntime wires 维护升级 → 节点设置「更换主控连接地址」
-//: the admin API always mounts (reads work everywhere); writes
+// buildNodeGatewayAddressRuntime wires 维护升级 → 节点设置「更换主控连接地址」:
+// the admin API always mounts (reads work everywhere); writes
 // need the edge publication signer and edge NATS (else
 // gateway_address_unavailable) and an MFA step-up (else step_up_required).
 func buildNodeGatewayAddressRuntime(pool *pgxpool.Pool, identityService *identity.Service, signer *edgePublishArtifactSigner,

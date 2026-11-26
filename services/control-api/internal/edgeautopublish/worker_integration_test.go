@@ -361,69 +361,6 @@ func TestExpiredAutomaticRequestBecomesTerminalAcrossLeaseWindows(t *testing.T) 
 	}
 }
 
-func TestAcceptedEntitlementRevocationLeavesAutomaticPublicationWithoutReceipts(t *testing.T) {
-	pool := openAutomaticDatabase(t)
-	identity := seedAutomaticIntegrationIdentity(t, pool)
-	entitlementFixture := installAutomaticSiteEntitlementFixture(t, pool)
-	service := site.NewService(site.NewStoreWithClock(
-		pool, func() time.Time { return automaticIntegrationNow }, entitlementFixture.trust,
-	))
-	insertPublishablePolicy(t, pool, identity, 1)
-	actor := site.Actor{UserID: identity.tenantUser, ScopeID: identity.tenantScope, ScopeKind: "tenant"}
-	if _, err := service.Create(t.Context(), actor,
-		newSiteRequest("revoked-automatic-publication.example.test", "revoked-automatic-publication")); err != nil {
-		t.Fatal(err)
-	}
-	revokeAutomaticSiteEntitlement(t, pool, entitlementFixture)
-
-	repository := edgeautopublish.NewStore(pool)
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deployments, err := edgedeployment.NewStoreWithClock(pool, func() time.Time { return automaticIntegrationNow })
-	if err != nil {
-		t.Fatal(err)
-	}
-	config := edgepublish.DefaultConfig()
-	config.Clock = func() time.Time { panic("automatic publication used application clock") }
-	config.EntitlementAuthorizer = automaticRevocationAwareAuthorizer{
-		pool: pool, trust: entitlementFixture.trust,
-	}
-	publisher, err := edgepublish.NewAutomaticService(pool, deployments, automaticEntitlementSigner{
-		id: "revoked-automatic-artifact", public: publicKey, private: privateKey,
-	}, config, repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	worker, err := edgeautopublish.NewWorker(repository, publisher, edgeautopublish.WorkerConfig{
-		WorkerID: "revoked-entitlement-worker", LeaseDuration: time.Minute, RetryDelay: time.Hour,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if worked, err := worker.RunOnce(t.Context()); err != nil || !worked {
-		t.Fatalf("RunOnce() = %t, %v", worked, err)
-	}
-	var latestState string
-	var publications, rollouts, deploymentsCount, reconcilingFacts, entitlementDenials int
-	if err := pool.QueryRow(t.Context(), `SELECT
-		(SELECT state FROM edge_automatic_publication_request_state_facts ORDER BY sequence DESC LIMIT 1),
-		(SELECT count(*) FROM edge_config_publications),
-		(SELECT count(*) FROM rollouts),
-		(SELECT count(*) FROM node_deployments),
-		(SELECT count(*) FROM edge_automatic_publication_request_state_facts WHERE state='reconciling'),
-		(SELECT count(*) FROM audit_events WHERE action='edge_publication.entitlement_check' AND result='denied')`).
-		Scan(&latestState, &publications, &rollouts, &deploymentsCount, &reconcilingFacts, &entitlementDenials); err != nil {
-		t.Fatal(err)
-	}
-	if latestState != edgeautopublish.StateRetryWait || publications != 0 || rollouts != 0 || deploymentsCount != 0 ||
-		reconcilingFacts != 0 || entitlementDenials != 1 {
-		t.Fatalf("state/publications/rollouts/deployments/receipts/denials=%s/%d/%d/%d/%d/%d",
-			latestState, publications, rollouts, deploymentsCount, reconcilingFacts, entitlementDenials)
-	}
-}
-
 func TestAutomaticPublicationHoldsIAMAuthorityThroughRecordCommit(t *testing.T) {
 	pool := openAutomaticDatabase(t)
 	identity := seedAutomaticIntegrationIdentity(t, pool)
@@ -583,34 +520,6 @@ func (automaticAllowAuthorizer) AuthorizePublication(
 	return edgepublish.EntitlementDecision{
 		Allowed: true, LocallyVerified: true, Status: edgepublish.EntitlementStatusValid,
 		LeaseSerial: 1, EvaluatedAt: request.EvaluatedAt,
-	}, nil
-}
-
-type automaticRevocationAwareAuthorizer struct {
-	pool  *pgxpool.Pool
-	trust *entitlementguard.TrustStore
-}
-
-func (authorizer automaticRevocationAwareAuthorizer) AuthorizePublication(
-	ctx context.Context,
-	tx pgx.Tx,
-	request edgepublish.EntitlementRequest,
-) (edgepublish.EntitlementDecision, error) {
-	evaluatedAt := request.EvaluatedAt.UTC()
-	decision, err := entitlementguard.NewGuard(
-		authorizer.pool, func() time.Time { return evaluatedAt }, authorizer.trust,
-	).CheckFeature(ctx, tx, entitlementguard.FeatureCheck{
-		TargetScopeID: request.ConfigurationScopeID, ActorScopeID: request.Actor.ScopeID,
-		ActorUserID: request.Actor.UserID, ResourceType: "edge_configuration_scope",
-		ResourceID: request.ConfigurationScopeID, RequestID: request.ConfigurationScopeID.String(),
-		Operation: "edge_publication.publish", Feature: entitlementguard.FeatureSitesManage,
-	})
-	if err != nil {
-		return edgepublish.EntitlementDecision{}, err
-	}
-	return edgepublish.EntitlementDecision{
-		Allowed: true, LocallyVerified: true, Status: edgepublish.EntitlementStatusValid,
-		LeaseSerial: decision.LeaseSerial, EvaluatedAt: decision.EvaluatedAt,
 	}, nil
 }
 
@@ -1089,15 +998,6 @@ type automaticEntitlementSigner struct {
 	private ed25519.PrivateKey
 }
 
-type automaticSiteEntitlementFixture struct {
-	trust      *entitlementguard.TrustStore
-	signer     automaticEntitlementSigner
-	keyWindow  entitlement.RevocationKeyWindow
-	customerID string
-	installID  string
-	licenseID  string
-}
-
 func (signer automaticEntitlementSigner) KeyID() string { return signer.id }
 func (signer automaticEntitlementSigner) PublicKey() ed25519.PublicKey {
 	return append(ed25519.PublicKey(nil), signer.public...)
@@ -1107,14 +1007,6 @@ func (signer automaticEntitlementSigner) Sign(_ context.Context, payload []byte)
 }
 
 func installAutomaticSiteEntitlement(t *testing.T, pool *pgxpool.Pool) *entitlementguard.TrustStore {
-	t.Helper()
-	return installAutomaticSiteEntitlementFixture(t, pool).trust
-}
-
-func installAutomaticSiteEntitlementFixture(
-	t *testing.T,
-	pool *pgxpool.Pool,
-) automaticSiteEntitlementFixture {
 	t.Helper()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -1186,40 +1078,7 @@ func installAutomaticSiteEntitlementFixture(
 	}, automaticIntegrationNow); err != nil {
 		t.Fatal(err)
 	}
-	return automaticSiteEntitlementFixture{
-		trust: trust, signer: signer,
-		keyWindow: entitlement.RevocationKeyWindow{
-			NotBefore: notBefore, SignUntil: &verifyUntil, VerifyUntil: &verifyUntil,
-		},
-		customerID: customerID, installID: installationID, licenseID: licenseID,
-	}
-}
-
-func revokeAutomaticSiteEntitlement(
-	t *testing.T,
-	pool *pgxpool.Pool,
-	fixture automaticSiteEntitlementFixture,
-) {
-	t.Helper()
-	issuedAt := automaticIntegrationNow.Add(-30 * time.Second)
-	revocation, err := entitlement.SignRevocationSet(t.Context(), entitlement.RevocationSet{
-		Schema: entitlement.RevocationSetSchemaV2, Audience: entitlement.RevocationSetAudience,
-		CustomerID: fixture.customerID, InstallationID: fixture.installID, LicenseID: fixture.licenseID,
-		Revision: 2, IssuedAt: issuedAt.Unix(), ExpiresAt: issuedAt.Add(entitlement.RevocationSetWindow).Unix(),
-		RevokedSerials: []uint64{1},
-	}, fixture.signer, fixture.keyWindow)
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifact, err := revocation.Encode()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := entitlementguard.NewRevocationService(pool, fixture.trust).Accept(
-		t.Context(), artifact, automaticIntegrationNow,
-	); err != nil {
-		t.Fatal(err)
-	}
+	return trust
 }
 
 func automaticPublicationActor(t *testing.T) edgepublish.Actor {

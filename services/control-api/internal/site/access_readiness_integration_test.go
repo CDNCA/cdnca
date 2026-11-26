@@ -159,6 +159,7 @@ func TestSiteAccessReadinessPostgres(t *testing.T) {
 // ②解析目标只含已发布端点 IP；③最近一次发布不含本站 = 未发布，含本站才看节点回执。
 func TestSiteAccessReadinessPublishedFactsPostgres(t *testing.T) {
 	f := newTrustFixture(t)
+	f.manualPublication(f.a)
 	ctx := context.Background()
 	created, err := f.createSite(f.a, f.a, "published.example.test")
 	if err != nil {

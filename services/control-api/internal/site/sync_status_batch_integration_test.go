@@ -19,6 +19,7 @@ import (
 // 每一步之后逐站比较；管理员形式 (NULL) 与租户形式 (ARRAY[scope]) 都比。
 func TestSiteSyncStatusBatchMatchesPerSitePostgres(t *testing.T) {
 	f := newTrustFixture(t)
+	f.manualPublication(f.a)
 	ctx := context.Background()
 	scope, user := f.a.scopeID, f.a.userID
 	const siteCount = 8

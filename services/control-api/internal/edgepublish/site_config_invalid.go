@@ -9,8 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// SiteConfigInvalidError is a stored site the publication cannot compile
-//.
+// SiteConfigInvalidError is a stored site the publication cannot compile.
 // Retrying cannot change it; the next save of the site does. It unwraps to
 // ErrInvalidInput, so manual publications keep answering validation_error.
 type SiteConfigInvalidError struct {

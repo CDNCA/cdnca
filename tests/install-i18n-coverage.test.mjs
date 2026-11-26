@@ -60,7 +60,6 @@ const allowed = [
   /^\s*连通性（\*）\) .*'Connectivity/, // preflight_label：连通性（标签）
   /printf '%s\\n' '# cdnca：SSH/, // 写入 jail.d 的注释
   /^\s*printf '#/, // 写入 runtime.env / 生成脚本的注释
-  /grep -Eo '公网 IP/, // 解析授权端 403 正文，不输出
   /printf 'Language \/ 语言:/, // 首屏语言选择本身就是双语
   /ce_location='# \/downloads\/ce\/ 未启用/, // install-site 写进 nginx 配置的注释
   /: "\s*正在(安装|下载)|: "\s*下载 %s/, // awk 进度：en ? 英文 : 中文
@@ -143,7 +142,7 @@ test('control --cleanup-failed list and BaoTa steps are English with --lang en',
 test('preflight labels with full-width brackets translate in English and stay Chinese by default', () => {
   const preflight = read('scripts/lib/install-preflight.sh')
   const label = (lang, value) => run([preflight, `preflight_label '${value}'`], ['--lang', lang]).stdout
-  assert.equal(label('en', '连通性（授权端）'), 'Connectivity (licensing server)')
+  assert.equal(label('en', '连通性（发布站）'), 'Connectivity (release site)')
   assert.equal(label('en', '管理端网页（本机回环）'), 'management web (loopback)')
   assert.equal(label('zh', '管理端网页（本机回环）'), '管理端网页（本机回环）')
 })

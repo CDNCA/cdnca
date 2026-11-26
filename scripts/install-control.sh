@@ -234,7 +234,7 @@ PROGRESS_ROLE=control
 PROGRESS_STAGES=(
   '环境预检并填写管理端地址^Preflight checks and management address|10|120|interactive'
   '安装基础工具^Install base tools|20|180|'
-  '确认激活凭据与管理员账号^Activation credential and administrator account|0|90|interactive'
+  '设置管理员账号^Administrator account|0|90|interactive'
   '下载并校验安装包^Download and verify the package|30|300|'
   '安装依赖（PostgreSQL、ClickHouse、Redis、ClamAV、RustFS）^Install dependencies (PostgreSQL, ClickHouse, Redis, ClamAV, RustFS)|180|600|'
   '生成主控身份与证书^Create control identity and certificates|20|150|'
@@ -254,9 +254,8 @@ Rocky/AlmaLinux/RHEL 9/10 compatible; fresh single control plane)
 
 Usage: install-control.sh [options]
   --lang zh|en                     Screen language; default from CDNCA_INSTALL_LANG or LANG (zh* = Chinese, otherwise English)
-  --licensing-server URL          Licensing server HTTPS address
-  --licensing-server-fallback URL  Fallback licensing server HTTPS address
-  --activation-code-file FILE      Read the one-time activation credential from a root-only file; - means stdin
+  --release-server URL            Community Edition release site HTTPS address, e.g. https://www.cdnca.com/downloads/ce (a path is the release directory; a bare domain reads its /downloads/; local files work too)
+  --release-server-fallback URL    Fallback release site HTTPS address
   --master-host HOST               Public domain or IP of the management console; asked interactively when omitted
   --master-port PORT               Management HTTPS port; default 443
   --domain HOST                    Management domain; defaults to --master-host
@@ -1469,7 +1468,7 @@ preflight_check_remote() {
   fi
   skew=$((local_epoch - remote_epoch)); [ "$skew" -ge 0 ] || skew=$((-skew))
   if [ "$skew" -gt 300 ]; then
-    preflight_record fail 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒（超过 300 秒，激活与签名校验会被拒绝）" "clock differs from $label by ${skew} s (over 300 s; activation and signature checks will be refused)")" "$(msg '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试' 'enable NTP: timedatectl set-ntp true, or install chrony and retry')"
+    preflight_record fail 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒（超过 300 秒，签名校验会被拒绝）" "clock differs from $label by ${skew} s (over 300 s; signature checks will be refused)")" "$(msg '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试' 'enable NTP: timedatectl set-ntp true, or install chrony and retry')"
   elif [ "$skew" -gt 60 ]; then
     preflight_record warn 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒" "clock differs from $label by ${skew} s")" "$(msg '建议开启 NTP 同步：timedatectl set-ntp true' 'enabling NTP is recommended: timedatectl set-ntp true')"
   else
@@ -1542,7 +1541,7 @@ preflight_label() {
     内核) printf 'Kernel' ;; 内存) printf 'Memory' ;; 磁盘空间) printf 'Disk space' ;; 数据盘) printf 'Data disk' ;; root权限) printf 'Root' ;;
     端口占用) printf 'Ports' ;; 必需命令) printf 'Required commands' ;; 时间偏差) printf 'Clock skew' ;;
     防火墙) printf 'Firewall' ;; 主控共存) printf 'Control plane on this host' ;; 节点共存) printf 'Node on this host' ;;
-    主控) printf 'control plane' ;; 授权端) printf 'licensing server' ;; 端口规划) printf 'Port plan' ;; 端口调整) printf 'Port changes' ;;
+    主控) printf 'control plane' ;; 发布站) printf 'release site' ;; 端口规划) printf 'Port plan' ;; 端口调整) printf 'Port changes' ;;
     管理端域名) printf 'Management domain' ;; 管理端网页) printf 'Management web' ;; 管理端HTTPS) printf 'management HTTPS' ;;
     节点升级下载) printf 'node upgrade downloads' ;;
     宝塔环境) printf 'BaoTa environment' ;; 宝塔站点证书) printf 'BaoTa site certificate' ;; 宝塔防火墙) printf 'BaoTa firewall' ;;
@@ -2101,9 +2100,9 @@ run_preflight() {
   preflight_check_ports "${ports[@]}"
   preflight_check_commands bash awk sed grep df uname id 'apt-get|dnf' -- curl jq openssl sha256sum xxd uuidgen file tar unzip python3 git flock ss timeout
   if [ -n "$LICENSING_SERVER" ]; then
-    preflight_check_remote 授权端 "${LICENSING_SERVER%/}/" "${LICENSING_SERVER_FALLBACK:+${LICENSING_SERVER_FALLBACK%/}/}"
+    preflight_check_remote 发布站 "${LICENSING_SERVER%/}/" "${LICENSING_SERVER_FALLBACK:+${LICENSING_SERVER_FALLBACK%/}/}"
   else
-    preflight_record fail 授权端 "$(msg '未提供 --licensing-server' 'no --licensing-server given')" "$(msg '请从授权门户复制完整的安装命令' 'copy the complete install command from the license portal')"
+    preflight_record fail 发布站 "$(msg '未提供 --release-server' 'no --release-server given')" "$(msg '请传入发布站地址，如 --release-server https://www.cdnca.com/downloads/ce' 'pass the release site, e.g. --release-server https://www.cdnca.com/downloads/ce')"
   fi
   preflight_check_selinux
   if [ "$INSTALL_ENV" = bt ]; then
@@ -3273,31 +3272,6 @@ except Exception:
 PY_NATIVE_CONTROL
 }
 
-# The authorization server only serves the master package to the license's
-# registered master IP (or a valid 授权IP下载文件 IP). Probe once so a refusal is
-# reported in plain Chinese instead of a generic download failure.
-check_master_download_authorization() {
-  local url code body observed='' denied=0 total=0
-  body="${TEMP_DIR}/master-download-probe"
-  for url in "$@"; do
-    total=$((total + 1))
-    rm -f -- "$body"
-    code=$(curl -q --proto '=https' --proto-redir '=https' -s --connect-timeout 10 --max-time 30 \
-      --max-filesize 65536 -o "$body" -w '%{http_code}' "$url") || code=000
-    if [ "$code" = 403 ]; then
-      denied=$((denied + 1))
-      [ -n "$observed" ] || observed=$(grep -Eo '公网 IP [0-9A-Fa-f:.]+' "$body" 2>/dev/null | head -n 1 | sed 's/^公网 IP //' || true)
-    else
-      return 0
-    fi
-  done
-  [ "$denied" -eq "$total" ] || return 0
-  printf '[cdnca-control] %s\n' "$(msg '错误：授权服务器拒绝向本机下载主控安装包（HTTP 403）。' 'error: the licensing server refused to serve the control package to this host (HTTP 403).')" >&2
-  [ -z "$observed" ] || printf '[cdnca-control] %s%s\n' "$(msg '授权服务器看到的本机公网 IP：' 'public IP of this host as seen by the licensing server: ')" "$observed" >&2
-  printf '[cdnca-control] %s\n' "$(msg '请在授权门户“我的授权”确认主控 IP 与本机出口 IP 一致；迁移或换机时在“授权IP下载文件”填写本机 IP 后重试。' 'Make sure the control IP under "My licenses" in the license portal matches the egress IP of this host; when moving hosts enter this host IP under "Licensed IP download file", then retry.')" >&2
-  fail 'master_download_ip_not_registered'
-}
-
 download_native_support() {
   local archive="$TEMP_DIR/cdnca-control-native.tar" trust="$TEMP_DIR/native-install-trust.json" required_schema=cdnca.native-management.install/v2
   log 'downloading one signed management, Gateway, Web and runtime-support release'
@@ -3562,9 +3536,9 @@ download_node_assets() {
 # the publisher key (artifact_trust): nodes accept no artifact key outside it
 # or the offline-root-verified signer trust document, so it runs after that step.
 # Nodes download upgrade artifacts from this control plane: control-api caches
-# each license-signed artifact under ${DOWNLOAD_DIR}/edge-agent/upgrades/sha256
+# each release-signed artifact under ${DOWNLOAD_DIR}/edge-agent/upgrades/sha256
 # (verified against the signed digest and size) and points executions there,
-# so nodes never contact the licensing server. root_ca "system" means the
+# so nodes never contact the release site. root_ca "system" means the
 # node's own OS trust bundle (public WebPKI certificate); otherwise the
 # document embeds the root of upgrade_download_root_ca_file. The document is
 # built by control-api from control.env (download host/port from
@@ -3689,7 +3663,7 @@ write_node_install_defaults() {
 }
 
 # 安装器比签名包新时（例如新安装器配旧签名包），ws 安装第 10 步才会因 control-api 缺
-# gateway-entrypoint 子命令失败。在激活（消耗激活码）之前用无参调用探测：新版报该子命令自己的用法，
+# gateway-entrypoint 子命令失败。在生成主控身份之前用无参调用探测：新版报该子命令自己的用法，
 # 旧版只报总用法。探测不连数据库。
 assert_control_binary_matches_installer() {
   [ "${GATEWAY_TRANSPORT:-tcp}" = ws ] || return 0
@@ -5062,7 +5036,7 @@ origin_auth_usage() {
 Usage: install-control.sh origin-auth [--secret-file FILE] [--real-ip-header H]
   Enable CDN origin authentication on an installed control plane: once the CDN sends the key file content in the
   X-Cdnca-Origin-Key origin header, the console nginx takes the client IP from header H.
-  --secret-file FILE   Origin key file (32-256 chars of [A-Za-z0-9_-], may be shared with the licensing server);
+  --secret-file FILE   Origin key file (32-256 chars of [A-Za-z0-9_-]);
                        default /etc/cdnca-control/origin-auth.secret, created (root 0600) when missing
   --real-ip-header H   CF-Connecting-IP / X-Forwarded-For (rightmost hop) / True-Client-IP / X-Real-IP; default
                        X-Forwarded-For. BaoTa mode accepts only CF-Connecting-IP or True-Client-IP
@@ -5073,7 +5047,7 @@ EOF
   cat <<'EOF'
 用法: install-control.sh origin-auth [--secret-file FILE] [--real-ip-header H]
   给已安装的主控启用 CDN 回源鉴权：CDN 回源头 X-Cdnca-Origin-Key 填密钥文件内容后，管理端 nginx 按 H 取客户端 IP。
-  --secret-file FILE   回源密钥文件（32–256 个 [A-Za-z0-9_-]，可与授权端共用）；默认 /etc/cdnca-control/origin-auth.secret，
+  --secret-file FILE   回源密钥文件（32–256 个 [A-Za-z0-9_-]）；默认 /etc/cdnca-control/origin-auth.secret，
                        不存在时生成（root 0600）
   --real-ip-header H   CF-Connecting-IP / X-Forwarded-For（取最右一跳）/ True-Client-IP / X-Real-IP；默认 X-Forwarded-For
                        宝塔环境只能用 CF-Connecting-IP 或 True-Client-IP
@@ -5974,7 +5948,7 @@ summary_certificate() {
 
 # 安装完成摘要：屏幕打印一次，同样内容写 /root/cdnca-install-summary.txt（0600）。
 # 口令只来自交互输入或 --admin-password-file，安装器从不生成口令，所以摘要只提示
-# “使用你设置的口令”，口令、激活凭据、令牌一律不进屏幕摘要、文件与日志。
+# “使用你设置的口令”，口令、令牌一律不进屏幕摘要、文件与日志。
 CONTROL_SUMMARY_FILE=${CONTROL_SUMMARY_FILE:-/root/cdnca-install-summary.txt}
 control_install_summary() {
   local addresses public_ip private_ip url node_page web_line verify=install-control.sh
@@ -6293,7 +6267,7 @@ check_main() {
       if jq -e '.document.trusted_keys | any(.[]; (.usage // "installation-ban") == "installation-ban")' <<<"$body" >/dev/null 2>&1; then
         ok "$(msg 'signer-trust.json 200，含 installation-ban 公钥' 'signer-trust.json 200 with an installation-ban key')"
       else bad "$(msg 'signer-trust.json 不含 usage=installation-ban 的公钥（节点安装会被拒）' 'signer-trust.json has no usage=installation-ban key (node installs are refused)')"; fi
-    else bad "$(msg 'signer-trust.json 取不到：授权端尚未发布签名者信任文档，或主控未同步（control-api signer-revocation import-edge-trust）' 'signer-trust.json unavailable: the licensing server has not published the signer trust document, or the control plane has not synced it')"; fi
+    else bad "$(msg 'signer-trust.json 取不到：签名者信任文档尚未导入或主控未同步（control-api signer-revocation import-edge-trust --in 文件）' 'signer-trust.json unavailable: the signer trust document has not been imported or the control plane has not synced it (control-api signer-revocation import-edge-trust --in FILE)')"; fi
   else ok "$(msg 'signer-trust.json 不适用（社区版，EDGE_SIGNER_TRUST_ENABLED 未开）' 'signer-trust.json not applicable (community build)')"; fi
   local defaults_body=''
   if body=$(check_fetch ${via[@]+"${via[@]}"} "$origin/downloads/node-install-defaults"); then
@@ -6509,7 +6483,7 @@ migrate_main() {
     --bundle "/var/lib/cdnca-control-backup/bundles/$backup_id" --wait-nodes "$MIGRATE_WAIT_NODES"; then
     fail 'restored, but verification failed; the old control plane stays frozen - inspect journalctl -u cdnca-control-api'
   fi
-  log "$(msg '迁移完成。下一步：把管理端与 Gateway 域名的 DNS 改到本机，节点会自动重连；在授权门户把主控 IP 改为本机。' 'migration finished. Next: point the console and Gateway DNS names at this host (nodes reconnect automatically) and change the control IP to this host in the license portal.')"
+  log "$(msg '迁移完成。下一步：把管理端与 Gateway 域名的 DNS 改到本机，节点会自动重连。' 'migration finished. Next: point the console and Gateway DNS names at this host (nodes reconnect automatically).')"
   log "$(msg '切换 DNS 后最长 10 分钟，本机 control-api 自动按新地址重新发布节点安装信任文档（控制台节点安装命令随之更新）；也可立即执行' 'within 10 minutes of the DNS switch control-api republishes the node install trust document for the new address (the console node install command follows); or run now:') /data/cdnca-native-root/cdnca/current/bin/control-api native-backup verify-migration --bundle /var/lib/cdnca-control-backup/bundles/$backup_id"
   if [ "$INSTALL_ENV" = bt ]; then
     # 恢复时 control-api 已按端口档案写好 bt-proxy.conf（与全新安装同文）。

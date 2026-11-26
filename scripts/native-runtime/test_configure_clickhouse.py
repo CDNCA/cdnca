@@ -4,11 +4,13 @@ from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 import uuid
+import xml.etree.ElementTree as ET
 
 
 SPEC = importlib.util.spec_from_file_location("native_clickhouse", Path(__file__).with_name("configure-clickhouse.py"))
@@ -547,6 +549,15 @@ class TestNativeClickHousePortProfile(unittest.TestCase):
             ports = CH.native_clickhouse_ports(Path(directory) / "runtime.env")
             self.assertEqual(ports, {"http": 8123, "tcp": 9000})
             self.assertEqual(CH.native_clickhouse_loopback_content(ports), CH.LOOPBACK_DEFAULT)
+
+    def test_logger_is_bounded_and_matches_the_dependency_helper(self):
+        # The vendor logger (trace, 10 x 1000M) filled a 20G disk (11-26 1129).
+        logger = ET.fromstring(CH.LOOPBACK_DEFAULT).find("logger")
+        self.assertEqual({child.tag: child.text for child in logger}, {"level": "information", "size": "100M", "count": "5"})
+        self.assertNotIn("replace", logger.attrib)  # merge by name: the vendor log/errorlog paths stay
+        script = Path(__file__).with_name("install-ubuntu-dependencies.sh").read_text()
+        shell = re.search(r"^DEPS_LOOPBACK_CONTENT=\$'(.*)'$", script, re.M)[1].replace("\\n", "\n")
+        self.assertEqual(shell.encode(), CH.LOOPBACK_DEFAULT)
 
     def test_profile_moves_http_and_native_ports(self):
         with tempfile.TemporaryDirectory() as directory:
