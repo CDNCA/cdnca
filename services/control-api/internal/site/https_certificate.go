@@ -16,11 +16,12 @@ type certificateBindingQueryer interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-// siteCertificateBound: the site's current certificate binding fact is a bind
-// (the same reading as the list projection, status_recovery.go).
+// siteCertificateBound: the site's current certificate binding fact is a default bind — the binding the
+// edge actually serves (edgepublish loadSiteRuntimeV2TLSBindings and certificate redelivery read only
+// is_default); the same reading as the list projection, status_recovery.go.
 func siteCertificateBound(ctx context.Context, q certificateBindingQueryer, siteID uuid.UUID) (bool, error) {
 	var bound bool
-	err := q.QueryRow(ctx, `SELECT COALESCE((SELECT action='bind' FROM certificate_site_binding_facts
+	err := q.QueryRow(ctx, `SELECT COALESCE((SELECT action='bind' AND is_default FROM certificate_site_binding_facts
 		WHERE site_id=$1 ORDER BY sequence DESC LIMIT 1),false)`, siteID).Scan(&bound)
 	return bound, err
 }

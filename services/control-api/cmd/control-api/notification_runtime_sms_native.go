@@ -51,7 +51,8 @@ func nativeSMSTemplateMapped(config notificationRuntimeConfig, templateID string
 
 type nativeSMSTemplate struct {
 	Code      string            `json:"code"`
-	Variables map[string]string `json:"variables"` // our variable -> provider variable
+	CodeEN    string            `json:"code_en,omitempty"` // English recipients' provider template
+	Variables map[string]string `json:"variables"`         // our variable -> provider variable
 }
 
 type nativeSMSConfig struct {
@@ -120,7 +121,8 @@ func validNativeSMSConfig(config nativeSMSConfig) bool {
 		return false
 	}
 	for id, template := range config.Templates {
-		if !validNativeSMSText(id, 96) || !validNativeSMSText(template.Code, 64) || len(template.Variables) > notification.MaxTemplateVariables {
+		if !validNativeSMSText(id, 96) || !validNativeSMSText(template.Code, 64) || len(template.Variables) > notification.MaxTemplateVariables ||
+			template.CodeEN != "" && !validNativeSMSText(template.CodeEN, 64) {
 			return false
 		}
 		for ours, theirs := range template.Variables {
@@ -154,12 +156,24 @@ func (transport *nativeSMSTransport) Send(ctx context.Context, message notificat
 	}
 	defer clear(config.AccessKeySecret)
 	template, mapped := config.Templates[message.TemplateID]
+	params := message.Params
+	if base := notification.BaseTemplateID(message.TemplateID); !mapped && base != message.TemplateID {
+		// A translated message uses the entry of its Chinese
+		// template, with the English provider template when one is set
+		//; else the Chinese template with the Chinese values.
+		template, mapped = config.Templates[base]
+		if template.CodeEN != "" {
+			template.Code = template.CodeEN
+		} else {
+			params = notification.ChineseTemplateParams(params)
+		}
+	}
 	if !mapped {
 		return nativeSMSFailure(notificationruntime.ProviderPermanentFailure, "sms_template_unmapped"), nil
 	}
 	variables := make(map[string]string, len(template.Variables))
 	for ours, theirs := range template.Variables {
-		value, exists := message.Params[ours]
+		value, exists := params[ours]
 		if !exists {
 			return nativeSMSFailure(notificationruntime.ProviderPermanentFailure, "sms_template_unmapped"), nil
 		}

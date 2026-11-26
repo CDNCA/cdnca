@@ -321,9 +321,9 @@ func (s *Store) projectListStatus(ctx context.Context, tx pgx.Tx, items []ListIt
 		items[i].StatusRecovery, items[i].TrafficEnforcement = nil, nil
 	}
 	certificateRows, err := tx.Query(ctx, `SELECT site_id FROM (
-			SELECT DISTINCT ON (site_id) site_id,action FROM certificate_site_binding_facts
+			SELECT DISTINCT ON (site_id) site_id,action,is_default FROM certificate_site_binding_facts
 			WHERE site_id=ANY($1) ORDER BY site_id,sequence DESC
-		) current_binding WHERE action='bind'`, ids)
+		) current_binding WHERE action='bind' AND is_default`, ids)
 	if err != nil {
 		return err
 	}

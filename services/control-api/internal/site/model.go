@@ -708,25 +708,6 @@ type UpdateOriginRequest struct {
 	Pool             OriginPool
 	IdempotencyKey   string
 	RequestID        string
-	// primaryOrigins (UpdatePrimaryOrigins) replaces Pool: a first write builds it from the stored pool under
-	// the site lock; a replay never reads the pool. ExpectedRevision is then checked against the pool's own
-	// version (originPoolChangedSince). primaryScheme (http, https; "" keeps the stored one) is set first.
-	primaryOrigins []string
-	primaryScheme  string
-}
-
-// UpdatePrimaryOriginsRequest replaces only the primary origins ("host[:port]" lines, WithPrimaryOrigins) of a
-// site read at ExpectedRevision: the billing bridge's 客户区改源站. The write is refused (ErrRevisionConflict)
-// when the origin pool changed after that revision; other site writes since (a CNAME projection) are not a
-// conflict. Scheme (OriginSchemeHTTP / OriginSchemeHTTPS, "" keeps the stored one) is the 回源协议
-// (withOriginScheme).
-type UpdatePrimaryOriginsRequest struct {
-	ID               uuid.UUID
-	ExpectedRevision int64
-	Scheme           string
-	Origins          []string
-	IdempotencyKey   string
-	RequestID        string
 }
 
 type DeleteRequest struct {

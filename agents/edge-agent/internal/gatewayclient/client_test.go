@@ -199,6 +199,7 @@ func TestHeartbeatReportsRuntimeProbeState(t *testing.T) {
 		{name: "conservative defaults", current: "cfg-v1", wantOpenResty: agentv1.RuntimeState_RUNTIME_STATE_DEGRADED, wantFirewall: agentv1.RuntimeState_RUNTIME_STATE_STOPPED},
 		{name: "healthy runtimes", current: "cfg-v1", configureProbe: true, configureFirewall: true, wantOpenResty: agentv1.RuntimeState_RUNTIME_STATE_RUNNING, wantFirewall: agentv1.RuntimeState_RUNTIME_STATE_RUNNING, wantOpenCalls: 1, wantFirewallCalls: 1},
 		{name: "failed probes", current: "cfg-v1", configureProbe: true, configureFirewall: true, openRestyError: errors.New("unhealthy"), firewallError: errors.New("unavailable"), wantOpenResty: agentv1.RuntimeState_RUNTIME_STATE_DEGRADED, wantFirewall: agentv1.RuntimeState_RUNTIME_STATE_DEGRADED, wantOpenCalls: 1, wantFirewallCalls: 1},
+		{name: "stopped OpenResty", current: "cfg-v1", configureProbe: true, openRestyError: errors.Join(errors.New("master gone"), ErrOpenRestyStopped), wantOpenResty: agentv1.RuntimeState_RUNTIME_STATE_STOPPED, wantFirewall: agentv1.RuntimeState_RUNTIME_STATE_STOPPED, wantOpenCalls: 1},
 		{name: "firewall disabled", current: "cfg-v1", configureProbe: true, wantOpenResty: agentv1.RuntimeState_RUNTIME_STATE_RUNNING, wantFirewall: agentv1.RuntimeState_RUNTIME_STATE_STOPPED, wantOpenCalls: 1},
 	}
 	for _, test := range tests {

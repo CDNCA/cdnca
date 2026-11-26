@@ -36,7 +36,7 @@ const zhCN = {
     },
   },
   regional: {
-    empty: '暂无数据', labelSuffix: '：',
+    empty: '暂无区域或节点覆盖', labelSuffix: '：',
     actions: { add: '新增设置', confirm: '确定', removeItem: '删除{{item}}配置项' },
     fields: { scope: '配置范围', node: '节点选择', region: '区域选择', items: '配置项' },
     columns: { scope: '配置范围', items: '配置项', actions: '操作' },
@@ -139,7 +139,7 @@ const enUS: typeof zhCN = {
     },
   },
   regional: {
-    empty: 'No data', labelSuffix: ':',
+    empty: 'No regional or node overrides', labelSuffix: ':',
     actions: { add: 'Add setting', confirm: 'Confirm', removeItem: 'Remove {{item}} configuration item' },
     fields: { scope: 'Configuration scope', node: 'Select node', region: 'Select region', items: 'Configuration items' },
     columns: { scope: 'Configuration scope', items: 'Configuration items', actions: 'Actions' },

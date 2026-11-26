@@ -30,7 +30,8 @@ const (
 	alertIntentRetryBatch  = 100
 	// alertIntentDelayedSuffix marks the original event time of a notice sent
 	// after the notification channel recovered.
-	alertIntentDelayedSuffix = "（延后通知）"
+	alertIntentDelayedSuffix   = "（延后通知）"
+	alertIntentDelayedSuffixEN = " (delayed notice)"
 )
 
 // alertIntent is one owed alert: the event, its stable source event ID and
@@ -56,10 +57,19 @@ func (intent alertIntent) values(delayed bool) map[string]string {
 	return values
 }
 
+// context is values in both languages: the English template gets
+// the English delayed mark and standby IP list.
 func (intent alertIntent) context(delayed bool) notification.TemplateContext {
 	values := make(notification.TemplateContext, len(intent.params))
 	for name, value := range intent.values(delayed) {
-		values[name] = notification.PublicValue(value)
+		english := intent.params[name]
+		switch {
+		case name == "occurred_at" && delayed:
+			english += alertIntentDelayedSuffixEN
+		case name == "backup_addresses":
+			english = lineBackupAddressTextEN(english)
+		}
+		values[name] = notification.LocalizedValue(value, english)
 	}
 	return values
 }

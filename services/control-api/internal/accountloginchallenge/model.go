@@ -43,13 +43,15 @@ type Methods struct {
 }
 
 type CreateInput struct {
-	ScopeID         uuid.UUID
-	Identifier      string
-	Channel         notification.Channel
-	Source          string
-	HumanToken      string
-	IdempotencyKey  string
-	RequestID       string
+	ScopeID        uuid.UUID
+	Identifier     string
+	Channel        notification.Channel
+	Source         string
+	HumanToken     string
+	IdempotencyKey string
+	RequestID      string
+	// Locale is the requester's language for the code message.
+	Locale          string
 	passwordSubject *identity.PasswordLoginChallengeSubject
 }
 
@@ -89,6 +91,7 @@ type ContactRequest struct {
 	OTP               string
 	ExpiresAt         time.Time
 	RequestID         string
+	Locale            string
 }
 
 type ContactSender interface {

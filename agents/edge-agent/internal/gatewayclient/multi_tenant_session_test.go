@@ -9,6 +9,7 @@ import (
 	"github.com/cdnca/cdnca/libs/edgeconfig/siteobject"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -171,7 +172,16 @@ func TestMultiTenantSessionQueuesSupersedesAndReportsScopes(t *testing.T) {
 	clientConfig := testClientConfig(filepath.Join(root, "gateway-journal"))
 	clientConfig.Capabilities.Features = append(clientConfig.Capabilities.Features,
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_ACTIVE_CONFIG_IDENTITY, ApiVersion: 1})
-	client, err := New(clientConfig, &bufDialer{listener: listener}, applier, trust, dynamicTestOptions(t, root, applier)...)
+	// One OpenResty runs every scope: the probe answers for the node.
+	var openRestyStopped atomic.Bool
+	probe := RuntimeStatusProbe{OpenResty: func(context.Context, string) error {
+		if openRestyStopped.Load() {
+			return ErrOpenRestyStopped
+		}
+		return nil
+	}}
+	client, err := New(clientConfig, &bufDialer{listener: listener}, applier, trust,
+		append(dynamicTestOptions(t, root, applier), WithRuntimeStatusProbe(probe))...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,6 +250,7 @@ func TestMultiTenantSessionQueuesSupersedesAndReportsScopes(t *testing.T) {
 			entries[1].GetCurrentConfigVersionId() == b2.ConfigVersionId && entries[1].GetLastApplyResult().GetDeploymentId() == b2.DeploymentId
 	}
 	var scoped []*agentv1.ScopedConfigIdentity
+	var settledRuntime *agentv1.EdgeRuntimeStatus
 	heartbeatDeadline := time.After(10 * time.Second)
 	for scoped == nil {
 		gateway.mu.Lock()
@@ -256,7 +267,7 @@ func TestMultiTenantSessionQueuesSupersedesAndReportsScopes(t *testing.T) {
 				}
 			}
 			if settled(heartbeat.ScopedConfigIdentities) {
-				scoped = heartbeat.ScopedConfigIdentities
+				scoped, settledRuntime = heartbeat.ScopedConfigIdentities, heartbeat.Runtime
 			}
 		}
 		gateway.mu.Unlock()
@@ -281,6 +292,27 @@ func TestMultiTenantSessionQueuesSupersedesAndReportsScopes(t *testing.T) {
 			check.entry.LastApplyResult.GetState() != agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_HEALTHY {
 			t.Fatalf("scope %s entry = %+v, want current %s and healthy result for %s",
 				check.entry.ConfigurationScopeId, check.entry, check.command.ConfigVersionId, check.command.DeploymentId)
+		}
+	}
+	// Two active scopes have no
+	// node-wide version, and OpenResty is still checked.
+	if state := settledRuntime.GetOpenrestyState(); state != agentv1.RuntimeState_RUNTIME_STATE_RUNNING {
+		t.Fatalf("serving OpenResty reported %s with 2 active scoped configs", state)
+	}
+	// The scopes stay active; OpenResty itself stops.
+	openRestyStopped.Store(true)
+	stoppedDeadline := time.After(10 * time.Second)
+	for {
+		gateway.mu.Lock()
+		last := gateway.heartbeats[len(gateway.heartbeats)-1]
+		gateway.mu.Unlock()
+		if settled(last.ScopedConfigIdentities) && last.Runtime.GetOpenrestyState() == agentv1.RuntimeState_RUNTIME_STATE_STOPPED {
+			break
+		}
+		select {
+		case <-gateway.events:
+		case <-stoppedDeadline:
+			t.Fatalf("stopped OpenResty never reported STOPPED with 2 active scoped configs: last %s", last.Runtime.GetOpenrestyState())
 		}
 	}
 }

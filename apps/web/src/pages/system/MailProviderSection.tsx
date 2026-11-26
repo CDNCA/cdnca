@@ -135,7 +135,7 @@ export default function MailProviderSection({ accessToken, canManage, document, 
 
   return <section className="system-settings-config-card" aria-labelledby="system-settings-mail-provider-title">
     <h2 id="system-settings-mail-provider-title">{t('mailProvider.title')}</h2>
-    <Form.Item label={t('mailProvider.field')} extra={`${t('mailProvider.hint')}${notificationMode === 'auto' ? t('smsProviders.hintAuto') : notificationMode === 'explicit' ? t('smsProviders.hintRestart') : ''}`} {...fieldStatus('mail_provider')}>
+    <Form.Item label={t('mailProvider.field')} extra={notificationMode === 'auto' ? t('smsProviders.hintAuto') : notificationMode === 'explicit' ? t('smsProviders.hintRestart') : undefined} {...fieldStatus('mail_provider')}>
       <Select value={kind === 'smtp' ? '' : draft.mail_provider} disabled={!canManage} aria-label={t('mailProvider.field')} options={options}
         loading={plugins.isLoading} onChange={(value: string) => update('mail_provider', value)} />
     </Form.Item>

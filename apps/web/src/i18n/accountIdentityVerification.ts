@@ -10,7 +10,7 @@ const zhCN = {
   },
   advanced: { title: '高级' },
   lookup: { title: '查询本人案件', caseId: '案件 ID', placeholder: '输入案件 UUID' },
-  create: { title: '创建认证草稿', kind: '认证类型', evidenceToken: '可信证据令牌', evidencePlaceholder: '输入可信服务签发的令牌' },
+  create: { title: '创建认证草稿', kind: '草稿认证类型', evidenceToken: '可信证据令牌', evidencePlaceholder: '输入可信服务签发的令牌' },
   provider: {
     pending: '认证服务结果待确认', retrySameRequest: '使用同一服务请求重试', succeeded: '认证服务已完成',
     createDraft: '使用服务结果创建草稿', waiting: '等待认证服务处理', failed: '认证服务未完成，请重新发起。',
@@ -126,7 +126,7 @@ const enUS: MessageShape<typeof zhCN> = {
   },
   advanced: { title: 'Advanced' },
   lookup: { title: 'Find my case', caseId: 'Case ID', placeholder: 'Enter a case UUID' },
-  create: { title: 'Create verification draft', kind: 'Verification type', evidenceToken: 'Trusted evidence handle', evidencePlaceholder: 'Enter the handle issued by the trusted service' },
+  create: { title: 'Create verification draft', kind: 'Draft verification type', evidenceToken: 'Trusted evidence handle', evidencePlaceholder: 'Enter the handle issued by the trusted service' },
   provider: {
     pending: 'Verification service outcome is unknown', retrySameRequest: 'Retry the same service request', succeeded: 'Verification service completed',
     createDraft: 'Create a draft from the service result', waiting: 'Waiting for verification service', failed: 'Verification service did not complete. Start again.',

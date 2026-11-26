@@ -95,7 +95,7 @@ func TestEngineSignatureCombinations(t *testing.T) {
 			if current == nil || current.Signer.KeyID != test.signer {
 				t.Fatalf("installed signer = %+v, want %s", current, test.signer)
 			}
-			if err := f.deploy(); err != nil || f.manager.Status().State != StateActive || len(f.gate()) != 3 {
+			if _, err := f.deploy(); err != nil || f.manager.Status().State != StateActive || len(f.gate()) != 3 {
 				t.Fatalf("deploy %v status=%+v", err, f.manager.Status())
 			}
 		})

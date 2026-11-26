@@ -199,6 +199,12 @@ var FailureTexts = map[string]string{
 	FailureTLS: "TLS 握手失败", FailureHTTP: "HTTP 错误", FailureDNS: "解析错误", FailureOther: "其他",
 }
 
+// FailureTextsEN are FailureTexts in English.
+var FailureTextsEN = map[string]string{
+	FailureOK: "OK", FailureRefused: "Connection refused", FailureTimeout: "Timeout", FailureReset: "Connection reset",
+	FailureTLS: "TLS handshake failed", FailureHTTP: "HTTP error", FailureDNS: "Resolution error", FailureOther: "Other",
+}
+
 // Judge is one checkpoint's verdict for a probe of kind (tcping, ping, http,
 // https, dns): voted=false when the checkpoint did not answer. http(s): any
 // answer below 500 is reachable. dns: status ok and, with expect, at least

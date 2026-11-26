@@ -214,20 +214,34 @@ func (s *Store) enqueueTx(ctx context.Context, tx pgx.Tx, request EnqueueRequest
 		return EnqueueResult{}, err
 	}
 
+	locale, err := recipientLocale(ctx, tx, request.RecipientID)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
 	catalog := NewCatalog()
+	templates := make(map[Channel]TemplateRef, len(request.Templates))
+	for channel, ref := range request.Templates {
+		templates[channel] = ref
+	}
 	for _, channel := range channels {
 		ref, exists := request.Templates[channel]
 		if !exists || ref.Channel != channel {
 			return EnqueueResult{}, ErrTemplateSelection
 		}
-		definition, err := loadTemplate(ctx, tx, ref)
+		templateLocale := locale
+		if _, pinned := request.ContextValidationPolicies[channel]; pinned {
+			templateLocale = ""
+		}
+		definition, err := loadLocalizedTemplate(ctx, tx, ref, templateLocale)
 		if err != nil {
 			return EnqueueResult{}, err
 		}
 		if err := catalog.Register(definition); err != nil {
 			return EnqueueResult{}, err
 		}
+		templates[channel] = definition.Ref
 	}
+	contexts := localizedContexts(request.Contexts, templates)
 	now := storeTime(s.now())
 	availableAt := now
 	if request.Policy == DeliveryTenantSubscribed {
@@ -243,7 +257,7 @@ func (s *Store) enqueueTx(ctx context.Context, tx pgx.Tx, request EnqueueRequest
 			EventID: request.SourceEventID, EventType: request.EventType,
 		},
 		Policy: request.Policy, Switches: switches, Subscription: subscription,
-		Templates: request.Templates, Contexts: request.Contexts,
+		Templates: templates, Contexts: contexts,
 		ContextValidationPolicies: request.ContextValidationPolicies,
 	})
 	if err != nil {
@@ -273,7 +287,7 @@ func (s *Store) enqueueTx(ctx context.Context, tx pgx.Tx, request EnqueueRequest
 		return EnqueueResult{}, err
 	}
 	result := EnqueueResult{EventID: eventID, CreatedAt: now, Deliveries: make([]EnqueuedDelivery, 0, len(plan.Deliveries))}
-	smsParams, err := encodeTemplateParams(templateParams(request.Contexts[ChannelSMS]))
+	smsParams, err := encodeTemplateParams(smsTemplateParams(request.Contexts[ChannelSMS], templates[ChannelSMS]))
 	if err != nil {
 		return EnqueueResult{}, err
 	}
@@ -387,10 +401,11 @@ func (s *Store) enqueueDispatchTx(
 		if !exists || ref.Channel != channel {
 			return EnqueueResult{}, ErrTemplateSelection
 		}
-		definition, err := loadTemplate(ctx, tx, ref)
+		definition, err := loadLocalizedTemplate(ctx, tx, ref, request.Locale)
 		if err != nil {
 			return EnqueueResult{}, err
 		}
+		ref = definition.Ref
 		if !validDispatchTemplateSource(definition) {
 			return EnqueueResult{}, ErrRenderLimit
 		}

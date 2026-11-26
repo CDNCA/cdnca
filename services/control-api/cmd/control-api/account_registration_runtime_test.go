@@ -317,6 +317,72 @@ func TestAccountRegistrationProviderRendersPublishedVerificationTemplate(t *test
 	}
 }
 
+// TestAccountVerificationProviderReadsEnglishTemplateWhenSent: an
+// English verification template created on the template page while running
+// is used by the next send; when it is deleted or cannot be read, the
+// message falls back to the Chinese template instead of failing.
+func TestAccountVerificationProviderReadsEnglishTemplateWhenSent(t *testing.T) {
+	ref := notification.TemplateRef{ID: "account_login_verification", Version: 1, Channel: notification.ChannelSMS}
+	english := notification.TemplateRef{ID: "account_login_verification.en-us", Version: 1, Channel: notification.ChannelSMS}
+	catalog := notification.NewCatalog()
+	if err := catalog.Register(notification.TemplateDefinition{Ref: ref, Body: "登录验证码"}); err != nil {
+		t.Fatal(err)
+	}
+	var stored *notification.TemplateDefinition
+	var readErr error
+	transport := &registrationCaptureTransport{}
+	provider := &accountRegistrationContactProvider{
+		catalog: catalog, templates: map[notification.Channel]notification.TemplateRef{notification.ChannelSMS: ref},
+		providers: map[notification.Channel]notificationruntime.ProviderTransport{notification.ChannelSMS: transport},
+		translation: func(_ context.Context, got notification.TemplateRef) (notification.TemplateDefinition, error) {
+			if got != english {
+				t.Fatalf("translation read %+v", got)
+			}
+			if readErr != nil {
+				return notification.TemplateDefinition{}, readErr
+			}
+			if stored == nil {
+				return notification.TemplateDefinition{}, errors.New("no rows in result set")
+			}
+			return *stored, nil
+		},
+		timeout: time.Second, now: time.Now,
+	}
+	send := func(template notification.TemplateRef) {
+		t.Helper()
+		result := provider.SendLoginVerification(t.Context(), accountloginchallenge.ContactDelivery{
+			OutboxID: uuid.New(), Channel: notification.ChannelSMS, Template: template, Destination: "+8613900001234",
+			OTP: "123456", Body: "unused", IdempotencyKey: "verification-english", AttemptNumber: 1,
+		})
+		if result.Disposition != notification.SendAccepted {
+			t.Fatalf("result=%+v", result)
+		}
+	}
+	for _, test := range []struct {
+		name     string
+		created  *notification.TemplateDefinition
+		readErr  error
+		wantID   string
+		wantBody string
+	}{
+		{"missing", nil, nil, ref.ID, "登录验证码\n123456"},
+		{"created while running", &notification.TemplateDefinition{Ref: english, Body: "Sign-in code"}, nil, english.ID, "Sign-in code\n123456"},
+		{"edited while running", &notification.TemplateDefinition{Ref: english, Body: "Your sign-in code"}, nil, english.ID, "Your sign-in code\n123456"},
+		{"read fails", nil, errors.New("database unavailable"), ref.ID, "登录验证码\n123456"},
+	} {
+		stored, readErr = test.created, test.readErr
+		send(english)
+		if transport.message.TemplateID != test.wantID || transport.message.Body != test.wantBody {
+			t.Errorf("%s: sent %s %q, want %s %q", test.name, transport.message.TemplateID, transport.message.Body, test.wantID, test.wantBody)
+		}
+	}
+	stored, readErr = &notification.TemplateDefinition{Ref: english, Body: "Sign-in code"}, nil
+	send(ref)
+	if transport.message.TemplateID != ref.ID || transport.message.Body != "登录验证码\n123456" {
+		t.Errorf("chinese delivery sent %s %q", transport.message.TemplateID, transport.message.Body)
+	}
+}
+
 func TestAccountVerificationProvidersObserveEmailAndSMSCalls(t *testing.T) {
 	started := time.Date(2026, 9, 28, 10, 0, 0, 654321000, time.UTC)
 	for _, test := range []struct {

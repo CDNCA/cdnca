@@ -304,7 +304,7 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 			if err := service.contacts.Enqueue(ctx, tx, ContactRequest{
 				ScopeID: normalized.ScopeID, ChallengeID: challengeID, Channel: normalized.Channel,
 				Template: template, Destination: normalized.Identifier, DestinationDigest: normalized.IdentifierDigest,
-				OTP: otp, ExpiresAt: expiresAt, RequestID: normalized.RequestID,
+				OTP: otp, ExpiresAt: expiresAt, RequestID: normalized.RequestID, Locale: normalized.Locale,
 			}); err != nil {
 				return err
 			}

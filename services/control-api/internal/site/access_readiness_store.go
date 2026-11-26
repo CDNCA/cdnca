@@ -58,7 +58,7 @@ SELECT site.id, site.enabled, site.https_enabled,
 		  AND endpoint.config_revision=line.current_revision AND endpoint.published
 		  AND NOT EXISTS (SELECT 1 FROM node_serving_holds hold WHERE hold.node_id=endpoint.node_id AND hold.held)
 		  AND presence.confirmed_session_epoch IS NOT NULL AND presence.status='online' AND presence.last_seen_at > $2), 0),
-	binding.action='bind', version.not_before, version.not_after,
+	binding.action='bind' AND binding.is_default, version.not_before, version.not_after,
 	COALESCE(active.version_id=binding.version_id, false),
 	EXISTS (SELECT 1 FROM certificate_asset_revocation_facts revoked WHERE revoked.tenant_scope_id=binding.tenant_scope_id
 		AND revoked.asset_id=binding.asset_id AND revoked.version_id=binding.version_id),
@@ -83,15 +83,15 @@ LEFT JOIN LATERAL (
 	ORDER BY (line_group.tenant_scope_id=site.scope_id) DESC LIMIT 1
 ) line ON true
 LEFT JOIN LATERAL (
-	SELECT fact.tenant_scope_id, fact.action, fact.asset_id, fact.version_id FROM certificate_site_binding_facts fact
+	SELECT fact.tenant_scope_id, fact.action, fact.is_default, fact.asset_id, fact.version_id FROM certificate_site_binding_facts fact
 	WHERE fact.tenant_scope_id=site.scope_id AND fact.site_id=site.id ORDER BY fact.sequence DESC LIMIT 1
 ) binding ON true
 LEFT JOIN certificate_asset_versions version
-  ON binding.action='bind' AND version.tenant_scope_id=binding.tenant_scope_id AND version.asset_id=binding.asset_id
+  ON binding.action='bind' AND binding.is_default AND version.tenant_scope_id=binding.tenant_scope_id AND version.asset_id=binding.asset_id
  AND version.id=binding.version_id
 LEFT JOIN LATERAL (
 	SELECT activation.version_id FROM certificate_asset_activation_facts activation
-	WHERE binding.action='bind' AND activation.tenant_scope_id=binding.tenant_scope_id AND activation.asset_id=binding.asset_id
+	WHERE binding.action='bind' AND binding.is_default AND activation.tenant_scope_id=binding.tenant_scope_id AND activation.asset_id=binding.asset_id
 	ORDER BY activation.sequence DESC LIMIT 1
 ) active ON true
 LEFT JOIN LATERAL site_publication_outcome_618(site.scope_id, site.id) outcome ON true

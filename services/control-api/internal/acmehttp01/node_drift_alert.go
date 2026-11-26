@@ -161,8 +161,10 @@ func (s *NodeStore) alertDriftTx(ctx context.Context, tx pgx.Tx, site siteKey, e
 		return fmt.Errorf("read drifting nodes: %w", err)
 	}
 	listed := strings.Join(names[:min(len(names), driftAlertListedNodes)], "、")
+	listedEN := strings.Join(names[:min(len(names), driftAlertListedNodes)], ", ")
 	if len(names) > driftAlertListedNodes {
 		listed += "等"
+		listedEN += " and more"
 	}
 	rows, err = tx.Query(ctx, `SELECT DISTINCT membership.user_id
 		FROM memberships membership
@@ -186,7 +188,7 @@ func (s *NodeStore) alertDriftTx(ctx context.Context, tx pgx.Tx, site siteKey, e
 	values := notification.TemplateContext{
 		"site_domain":     notification.PublicValue(domain),
 		"node_count":      notification.PublicValue(strconv.Itoa(len(drift))),
-		"node_names":      notification.PublicValue(listed),
+		"node_names":      notification.LocalizedValue(listed, listedEN),
 		"epoch_opened_at": notification.PublicValue(openedAt.UTC().Format(time.RFC3339)),
 	}
 	for _, recipient := range recipients {

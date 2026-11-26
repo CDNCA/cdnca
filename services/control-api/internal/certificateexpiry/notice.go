@@ -88,15 +88,17 @@ func (scanner *Scanner) notifyTx(ctx context.Context, tx pgx.Tx, fact Fact, now 
 		return fmt.Errorf("read certificate: %w", err)
 	}
 	listed := strings.Join(domains[:min(len(domains), noticeListedDomains)], "、")
+	listedEN := strings.Join(domains[:min(len(domains), noticeListedDomains)], ", ")
 	if len(domains) > noticeListedDomains {
 		listed += "等"
+		listedEN += " and more"
 	}
 	daysLeft := int(math.Ceil(fact.NotAfter.Sub(now).Hours() / 24))
-	values := map[string]string{
-		"certificate_name": name,
-		"not_after":        shanghai(fact.NotAfter),
-		"days_left":        strconv.Itoa(max(daysLeft, 0)),
-		"domains":          listed,
+	values := notification.TemplateContext{
+		"certificate_name": notification.PublicValue(name),
+		"not_after":        notification.PublicValue(shanghai(fact.NotAfter)),
+		"days_left":        notification.PublicValue(strconv.Itoa(max(daysLeft, 0))),
+		"domains":          notification.LocalizedValue(listed, listedEN),
 	}
 	templateID := eventType + ".zh-cn"
 	// The newest version of each channel's template, filled with exactly the
@@ -119,7 +121,7 @@ func (scanner *Scanner) notifyTx(ctx context.Context, tx pgx.Tx, fact Fact, now 
 		ref := notification.TemplateRef{ID: templateID, Version: uint64(version), Channel: notification.Channel(channel)}
 		context := notification.TemplateContext{}
 		for _, variable := range variables {
-			context[variable] = notification.PublicValue(values[variable])
+			context[variable] = values[variable]
 		}
 		templates[ref.Channel], contexts[ref.Channel] = ref, context
 	}

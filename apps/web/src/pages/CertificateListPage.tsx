@@ -117,7 +117,6 @@ interface AssetUploadForm {
 interface AssetBindForm {
 	site_id: string
 	version_id: string
-	default: boolean
 }
 
 interface AssetTarget {
@@ -1094,7 +1093,7 @@ function CertificateListPageContent({
 	  useEffect(() => {
 		if (!bindTarget) return
 		bindForm.resetFields()
-		bindForm.setFieldsValue({ site_id: '', version_id: bindTarget.version.id, default: false })
+		bindForm.setFieldsValue({ site_id: '', version_id: bindTarget.version.id })
 	  }, [bindForm, bindTarget])
 
   const uploadMutation = useMutation<void, unknown, void>({
@@ -1567,7 +1566,9 @@ function CertificateListPageContent({
 		  kind: 'bind', target: bindTarget,
 		  input: {
 			site_id: values.site_id, version_id: values.version_id,
-			expected_revision: bindingRevisions[values.site_id] ?? 0, default: values.default,
+			// 每个网站只有当前这条绑定生效，节点只发默认绑定（edgepublish 读 is_default）：总是设为默认
+			// （与网站 HTTPS 页一致）。
+			expected_revision: bindingRevisions[values.site_id] ?? 0, default: true,
 		  },
 		  key: writeKey(), requestID: requestID(),
 		})
@@ -2583,7 +2584,6 @@ function CertificateListPageContent({
 			  />
 			</Form.Item>
 			<Form.Item name="version_id" label={assetT('bind.version')} hidden><Input /></Form.Item>
-			<Form.Item name="default" label={assetT('bind.default')} valuePropName="checked"><Switch /></Form.Item>
 		  </Form>
 		</Modal>
 		<Modal

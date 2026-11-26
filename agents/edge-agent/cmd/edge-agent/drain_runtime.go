@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cdnca/cdnca/agents/edge-agent/internal/deployment"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/drainruntime"
 )
 
@@ -78,26 +77,16 @@ func newDrainPlanHandler(stateRoot string, manager drainPlanManager, resumeInter
 	}, nil
 }
 
-func assembleDrainRuntime(config fileConfig, timeouts parsedTimeouts, manager *deployment.Manager, runtime *deployment.OpenResty,
-	dynamic *dynamicRoutingManager) (drainRuntimeController, error) {
+func assembleDrainRuntime(config fileConfig, timeouts parsedTimeouts, dynamic *dynamicRoutingManager) (drainRuntimeController, error) {
 	if !config.DrainRuntime.Enabled {
 		return nil, nil
 	}
-	if dynamic != nil {
-		// Dynamic routing: the plan waits for the workers the activation's
-		// reload replaced (an activation without a reload has none).
-		return newFormalDrainHandler(dynamic, timeouts.DrainResumeInterval), nil
+	if dynamic == nil {
+		return nil, fmt.Errorf("configure drain runtime: dynamic routing is required")
 	}
-	if manager == nil || runtime == nil {
-		return nil, fmt.Errorf("configure drain runtime: formal deployment runtime is required")
-	}
-	if err := runtime.ConfigureGenerationTracking(filepath.Join(config.DeploymentRoot, "shared", "nginx.pid")); err != nil {
-		return nil, fmt.Errorf("configure drain generation tracking: %w", err)
-	}
-	if err := manager.ConfigureGenerationRuntime(runtime); err != nil {
-		return nil, fmt.Errorf("configure deployment generation runtime: %w", err)
-	}
-	return newFormalDrainHandler(manager, timeouts.DrainResumeInterval), nil
+	// Dynamic routing: the plan waits for the workers the activation's
+	// reload replaced (an activation without a reload has none).
+	return newFormalDrainHandler(dynamic, timeouts.DrainResumeInterval), nil
 }
 
 func (handler *drainPlanHandler) Recover(ctx context.Context) error {

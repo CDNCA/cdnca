@@ -150,13 +150,19 @@ describe('VisitorIPSetting', () => {
     expect(screen.getByTestId('visitor-ip-status').getAttribute('data-state')).toBe(state)
   })
 
-  it('on a host with origin authentication applied shows one line and no choice', async () => {
+  // With the origin key on, a CDN request that did not match it
+  // still takes 源IP请求头 (control-api withVisitorIP), so the choice stays next to the origin-auth line.
+  it('on a host with origin authentication applied shows the origin-auth line and keeps the 源IP请求头 choice', async () => {
     mockStatus(originAuth)
-    renderSetting({ saved: '', value: '' })
-    const line = await screen.findByText('已应用回源密钥校验')
+    renderSetting({ saved: 'CF-Connecting-IP', value: 'CF-Connecting-IP' })
+    const line = await screen.findByTestId('visitor-ip-origin-auth')
     expect(line.getAttribute('data-state')).toBe('origin_auth')
-    expect(screen.queryByRole('combobox')).toBeNull()
-    expect(screen.queryByTestId('visitor-ip-settings')).toBeNull()
+    expect(screen.getByTestId('visitor-ip-settings')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '源IP请求头' })).toBeInTheDocument()
+    // The confirmed origin-auth line names the deployment's header; the selection line says it governs the rest.
+    expect(screen.getByTestId('visitor-ip-origin-auth').textContent).toBe('已应用回源密钥校验，访客 IP 取自 True-Client-IP')
+    expect(screen.getByTestId('visitor-ip-status').textContent).toBe('未通过回源密钥的请求：访客 IP 取自 CF-Connecting-IP')
+    expect(screen.getByTestId('visitor-ip-settings').textContent).not.toMatch(/密钥值|secret|origin_auth_key/i)
   })
 
   // 密钥通过但所选头没有访客 IP（key_only）、或连厂商头都没有时，设置处不读作已确认。
@@ -165,11 +171,12 @@ describe('VisitorIPSetting', () => {
       text: '已应用回源密钥校验 · 回源密钥已通过，但 True-Client-IP 里没有访客 IP，检查 CDN 回源请求头' },
     { name: 'a CDN header without the key', body: status({ origin_auth_enabled: true, real_ip_header: 'True-Client-IP', cdn_without_origin_auth: true, header: 'EO-Connecting-IP', last_seen_at: '2026-11-23T08:00:00Z' }),
       text: '已应用回源密钥校验 · 最近经 CDN 的请求未取得访客 IP' },
-    { name: 'confirmed', body: originAuth, text: '已应用回源密钥校验' },
+    { name: 'confirmed', body: originAuth, text: '已应用回源密钥校验，访客 IP 取自 True-Client-IP' },
   ])('on an origin-auth host says when the visitor IP is still missing: $name', async ({ body, text }) => {
     mockStatus(body)
     renderSetting({ saved: '', value: '' })
-    await waitFor(() => expect(screen.getByTestId('visitor-ip-status').textContent).toBe(text))
+    await waitFor(() => expect(screen.getByTestId('visitor-ip-origin-auth').textContent).toBe(text))
+    expect(screen.getByRole('combobox', { name: '源IP请求头' })).toBeInTheDocument()
   })
 
   it('stays usable when the status cannot be read', async () => {

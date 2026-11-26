@@ -59,21 +59,19 @@ export function VisitorIPSetting({ value, saved, disabled, onChange, field }: {
 }) {
   const { t } = useTranslation('controlOriginAuth')
   const { status } = useControlOriginAuthStatus()
-  if (status?.origin_auth_enabled) {
-    // the key alone does not confirm the visitor IP; a CDN request that
-    // matched the key without it (key_only), or gave none, is said here too, until a confirmed one comes.
-    const unresolved = status.cdn_without_origin_auth
-    return <Typography.Paragraph id={anchorID} tabIndex={-1} data-testid="visitor-ip-status" data-state="origin_auth"
-      type={unresolved ? 'warning' : undefined}
-      style={{ marginBottom: 0, scrollMarginTop: 'var(--section-scroll-offset, 8px)' }}>
-      {t('status.originAuth')}
-      {unresolved ? ` · ${status.key_only && status.real_ip_header !== ''
-        ? t('status.keyOnly', { header: status.real_ip_header }) : t('status.unresolved')}` : null}
-    </Typography.Paragraph>
-  }
   const effective = saved !== '' && sourceIPHeaderReadable(saved, status) ? saved : ''
   const unresolved = status?.cdn_without_origin_auth === true
+  // With the origin key on, a request nginx confirmed carries the visitor IP the deployment's header gave; a CDN
+  // request that did not match the key still takes 源IP请求头 (control-api withVisitorIP), so the selector stays.
+  // The key alone does not confirm the visitor IP; a CDN request that matched it without one (key_only), or gave none, is said too.
+  const originAuth = status?.origin_auth_enabled === true
   return <div data-testid="visitor-ip-settings">
+    {originAuth ? <Typography.Paragraph data-testid="visitor-ip-origin-auth" data-state="origin_auth" type={unresolved ? 'warning' : undefined}
+      style={{ marginBottom: 12 }}>
+      {status.visitor_ip_confirmed && status.real_ip_header !== '' ? t('status.originAuthHeader', { header: status.real_ip_header }) : t('status.originAuth')}
+      {unresolved ? ` · ${status.key_only && status.real_ip_header !== ''
+        ? t('status.keyOnly', { header: status.real_ip_header }) : t('status.unresolved')}` : null}
+    </Typography.Paragraph> : null}
     <Form.Item label={<span id={anchorID} tabIndex={-1} style={{ scrollMarginTop: 'var(--section-scroll-offset, 8px)' }}>{t('fieldLabel')}</span>}
       {...field} style={{ marginBottom: 8 }}>
       <Select<string> value={value} onChange={onChange} disabled={disabled} virtual={false} aria-label={t('fieldLabel')}
@@ -83,9 +81,12 @@ export function VisitorIPSetting({ value, saved, disabled, onChange, field }: {
           disabled: !sourceIPHeaderReadable(header, status) && header !== value,
         }))]} />
     </Form.Item>
-    <Typography.Text type={unresolved ? 'warning' : 'secondary'} data-testid="visitor-ip-status" data-state={effective === '' ? 'direct' : 'header'}>
-      {effective === '' ? t('status.direct') : t('status.header', { header: effective })}
-      {unresolved ? ` · ${t('status.unresolved')}` : null}
+    <Typography.Text type={unresolved && !originAuth ? 'warning' : 'secondary'} data-testid="visitor-ip-status" data-state={effective === '' ? 'direct' : 'header'}>
+      {/* With the origin key on, the selection governs only the requests nginx did not confirm (withVisitorIP). */}
+      {originAuth
+        ? (effective === '' ? t('status.unverifiedDirect') : t('status.unverifiedHeader', { header: effective }))
+        : (effective === '' ? t('status.direct') : t('status.header', { header: effective }))}
+      {unresolved && !originAuth ? ` · ${t('status.unresolved')}` : null}
     </Typography.Text>
   </div>
 }

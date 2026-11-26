@@ -73,6 +73,8 @@ var (
 
 	statusLabels = map[string]string{StatusOpen: "待处理", StatusProcessing: "处理中",
 		StatusPendingCustomer: "待用户回复", StatusResolved: "已解决", StatusClosed: "已关闭"}
+	statusLabelsEN = map[string]string{StatusOpen: "Open", StatusProcessing: "In progress",
+		StatusPendingCustomer: "Awaiting your reply", StatusResolved: "Resolved", StatusClosed: "Closed"}
 )
 
 var (

@@ -312,8 +312,15 @@ func smtpEmailAction(message notificationruntime.ProviderMessage) theme.EmailAct
 		return theme.EmailAction{}
 	}
 	label := "设置新密码"
-	if message.TemplateID == identity.TenantMemberInvitationTemplate {
+	english := notification.BaseTemplateID(message.TemplateID) != message.TemplateID
+	if english {
+		label = "Set a new password"
+	}
+	if notification.BaseTemplateID(message.TemplateID) == identity.TenantMemberInvitationTemplate {
 		label = "接受邀请"
+		if english {
+			label = "Accept invitation"
+		}
 	}
 	return theme.EmailAction{URL: message.ActionURL, Label: label}
 }

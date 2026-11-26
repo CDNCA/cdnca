@@ -1147,6 +1147,50 @@
    ]
   },
   {
+   "operation_id": "setAccountLocale",
+   "method": "PUT",
+   "path": "/v1/account/locale",
+   "summary": "Set the caller's console language; notifications to the caller use templates in this language (Chinese when no English version exists)",
+   "summary_zh": "设置调用者的界面语言；发给该用户的通知按此语言选模板（英文缺失时用中文）",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Any signed-in session (platform or tenant). zh-TW receives the Simplified Chinese templates.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "locale",
+      "type": "string: zh-CN / zh-TW / en-US",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "204",
+     "description": "Language saved."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
    "operation_id": "listAccountMessages",
    "method": "GET",
    "path": "/v1/account/messages",

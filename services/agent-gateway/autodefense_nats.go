@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -61,7 +62,9 @@ func (config NATSAutoDefenseBusConfig) validate() error {
 // until the node reports the latest revision.
 // Receipts: consumed by control-api (control_api_autodefense_receipts).
 // Reports: display only, limits retention for a day, bounded per node; the 10 minute duplicate window makes
-// node/scope/seq publication idempotent across Agent retries and gateway reconnects.
+// node/scope/seq publication idempotent across Agent retries and gateway reconnects. Its max_bytes is reserved
+// in the fixed JetStream budget next to the installer's native profile (max_file_store 32 GiB, the profile about
+// 26.1 GiB): 1 GiB fits, 8 GiB was refused (10047) and the gateway ran without the channel (CC-STATS-LIVE-EMPTY-1).
 func (config NATSAutoDefenseBusConfig) StreamConfigs() []*nats.StreamConfig {
 	return []*nats.StreamConfig{
 		{Name: config.CommandStream, Subjects: []string{config.CommandSubjectPrefix + ".*"}, Retention: nats.WorkQueuePolicy,
@@ -71,7 +74,7 @@ func (config NATSAutoDefenseBusConfig) StreamConfigs() []*nats.StreamConfig {
 			Discard: nats.DiscardNew, MaxMsgs: 1_000_000, MaxAge: 7 * 24 * time.Hour,
 			MaxMsgSize: maxAutoDefenseReceiptBytes, Storage: nats.FileStorage, Replicas: 1, Duplicates: 2 * time.Minute},
 		{Name: config.ReportStream, Subjects: []string{config.ReportSubjectPrefix + ".*"}, Retention: nats.LimitsPolicy,
-			Discard: nats.DiscardOld, MaxMsgsPerSubject: 100_000, MaxBytes: 8 << 30, MaxAge: 24 * time.Hour,
+			Discard: nats.DiscardOld, MaxMsgsPerSubject: 100_000, MaxBytes: 1 << 30, MaxAge: 24 * time.Hour,
 			MaxMsgSize: int32(contract.MaxReportBytes), Storage: nats.FileStorage, Replicas: 1, Duplicates: 10 * time.Minute},
 	}
 }
@@ -98,6 +101,18 @@ func NewNATSAutoDefenseBus(ctx context.Context, connection *nats.Conn, config NA
 		info, err := js.StreamInfo(expected.Name, nats.Context(op))
 		if errors.Is(err, nats.ErrStreamNotFound) {
 			info, err = js.AddStream(expected, nats.Context(op))
+		} else if err == nil && expected.MaxBytes > 0 && info.Config.MaxBytes != expected.MaxBytes {
+			// A stream created with another max_bytes (AUTODEFENSE_REPORTS was 8 GiB) is aligned in place so the
+			// fixed JetStream budget holds; shrinking drops the oldest display only reports. A failed update
+			// keeps the existing stream, which still works.
+			update := info.Config
+			update.MaxBytes = expected.MaxBytes
+			if updated, updateErr := js.UpdateStream(&update, nats.Context(op)); updateErr != nil {
+				log.Printf("agent-gateway: warn: align auto defense stream %s max_bytes %d -> %d failed, keeping it: %v",
+					expected.Name, info.Config.MaxBytes, expected.MaxBytes, updateErr)
+			} else {
+				info = updated
+			}
 		}
 		cancel()
 		if err != nil {

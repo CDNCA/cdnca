@@ -108,15 +108,32 @@ var carrierTexts = map[string]string{
 
 var regionTexts = map[string]string{"hk": "香港", "mo": "澳门", "tw": "台湾"}
 
+var carrierTextsEN = map[string]string{
+	dnspupprobe.CarrierTelecom: "China Telecom", dnspupprobe.CarrierUnicom: "China Unicom", dnspupprobe.CarrierMobile: "China Mobile",
+	dnspupprobe.CarrierEdu: "CERNET", dnspupprobe.CarrierBGP: "BGP", dnspupprobe.CarrierOther: "Other carriers",
+}
+
+var regionTextsEN = map[string]string{"hk": "Hong Kong", "mo": "Macao", "tw": "Taiwan"}
+
 // LineText is the alert's line name, e.g. "移动 · 广东".
 func LineText(carrier, area string) string {
+	return lineText(carrier, area, carrierTexts, regionTexts)
+}
+
+// lineValue is the line name in both languages (the province is the
+// administrator's own text).
+func lineValue(carrier, area string) notification.ContextValue {
+	return notification.LocalizedValue(LineText(carrier, area), lineText(carrier, area, carrierTextsEN, regionTextsEN))
+}
+
+func lineText(carrier, area string, carriers, regions map[string]string) string {
 	place := area
-	if text, ok := regionTexts[area]; ok {
+	if text, ok := regions[area]; ok {
 		place = text
 	} else if len(area) == 2 && area[0] < 0x80 {
 		place = strings.ToUpper(area)
 	}
-	return carrierTexts[carrier] + " · " + place
+	return carriers[carrier] + " · " + place
 }
 
 // lineAlerts moves every observed cell's alert state, alerts transitions
@@ -234,12 +251,13 @@ func (runner *Runner) alertLine(ctx context.Context, tx pgx.Tx, nodeID, scopeID 
 		return nil
 	}
 	sms := notification.TemplateContext{"node_name": notification.PublicValue(name),
-		"node_ip": notification.PublicValue(address), "line": notification.PublicValue(LineText(cell.Carrier, cell.Area))}
+		"node_ip": notification.PublicValue(address), "line": lineValue(cell.Carrier, cell.Area)}
 	eventType := EventTypeLineRecovered
 	if failing {
 		eventType = EventTypeLineUnreachable
 		sms["failed"] = notification.PublicValue(strconv.Itoa(cell.Failed))
-		sms["failure"] = notification.PublicValue(dnspupprobe.FailureTexts[cell.TopFailure()])
+		failure := cell.TopFailure()
+		sms["failure"] = notification.LocalizedValue(dnspupprobe.FailureTexts[failure], dnspupprobe.FailureTextsEN[failure])
 	}
 	email := notification.TemplateContext{"occurred_at": notification.PublicValue(now.UTC().Format(time.RFC3339))}
 	for key, value := range sms {

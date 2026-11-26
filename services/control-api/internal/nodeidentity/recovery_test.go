@@ -35,4 +35,11 @@ func TestRecoveryDurationText(t *testing.T) {
 			t.Fatalf("recoveryDurationText(%s) = %q, want %q", value, got, want)
 		}
 	}
+	for value, want := range map[time.Duration]string{
+		25 * time.Minute: "25m", 2*time.Hour + 5*time.Minute: "2h 5m", 3*24*time.Hour + 4*time.Hour + 1: "3d 4h",
+	} {
+		if got := recoveryDurationTextEN(value); got != want {
+			t.Fatalf("recoveryDurationTextEN(%s) = %q, want %q", value, got, want)
+		}
+	}
 }

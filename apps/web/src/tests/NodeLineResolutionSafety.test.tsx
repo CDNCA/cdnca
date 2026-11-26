@@ -592,9 +592,9 @@ describe('line resolution table status columns (NET-UX-5, fz-x2b published)', ()
     const cells = async (address: string) => Array.from((await screen.findByText(address)).closest('tr')!
       .querySelectorAll('td')).map((cell) => cell.textContent)
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
-    expect(headers).toEqual(expect.arrayContaining(['启用', '主备', '探测', '解析计划']))
-    expect(await cells('192.0.2.4')).toEqual(expect.arrayContaining(['已启用', '主', '正常', '已列入']))
-    expect(await cells('192.0.2.5')).toEqual(expect.arrayContaining(['已启用', '备', '未探测', '未列入']))
+    expect(headers).toEqual(expect.arrayContaining(['启用', '主备', '探测', '解析']))
+    expect(await cells('192.0.2.4')).toEqual(expect.arrayContaining(['已启用', '主', '正常', '生效']))
+    expect(await cells('192.0.2.5')).toEqual(expect.arrayContaining(['已启用', '备', '未探测', '未生效']))
     // No published field (unknown) renders the placeholder, never a guess.
     expect((await cells('192.0.2.6')).filter((text) => text === '—')).toHaveLength(2)
     expect(await cells('192.0.2.6')).toEqual(expect.arrayContaining(['已禁用', '—', '异常']))

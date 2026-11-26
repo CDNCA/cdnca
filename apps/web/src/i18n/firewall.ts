@@ -57,7 +57,7 @@ const zhCN = {
       autoSwitchHint: '当网站每秒拉黑次数超过以上值时，自动切换 ipset 方式拉黑。',
       blockPageLimit: '页面次数限制', blockPageTraffic: '页面不计流量', temporaryWhitelist: '临时白名单阈值',
       totalRequests: '总请求数', sameURLRequests: '同 URL 请求', whiteIPs: '白名单 IP', blackIPs: '黑名单 IP',
-      ipPlaceholder: '如 192.168.1.10, 192.168.1.0/25',
+      ipPlaceholder: '一行一个，支持 # 注释，如：\n192.168.1.10\n192.168.1.0/25',
     },
     node: {
       section: '节点访问与默认页', tls: '防止TLS握手攻击', rejectUnbound: '禁止节点IP及未绑定域名访问', defaultPage: '默认页防护',
@@ -89,7 +89,7 @@ const zhCN = {
       threshold: '404 阈值', wellKnownHint: '超过阈值后 300 秒内仅允许已验证通过的 IP 回源，仍可正常申请证书。',
       internal: '内置资源防护', internalDescription: '内置资源指防 CC 页面里的图片、JS 等静态资源。',
       triggerQPS: '触发阈值', blockDuration: '拉黑时长', rules: '资源规则',
-      rulesDescription: '每行配置一个统计窗口和最大请求次数，留空则不启用。',
+      rulesDescription: '留空或填 0 的行不启用。',
       period: '统计时长(秒)', maxRequests: '最大次数', emptyDisables: '为空则不启用',
     },
     waf: {
@@ -244,7 +244,7 @@ const enUS = {
       nonIPSetTitle: 'Non-ipset automatic switching', autoSwitchIPSet: 'Enable ipset automatically', siteBlockQPS: 'Site block rate', autoSwitchHint: 'Switch to ipset when traffic exceeds the threshold, then return to site-level blocking after recovery.',
       blockPageLimit: 'Block page rate limit', blockPageTraffic: 'Exclude block page traffic',
       temporaryWhitelist: 'Temporary allowlist limits', totalRequests: 'Total requests', sameURLRequests: 'Same URL requests',
-      whiteIPs: 'Allowlist IPs', blackIPs: 'Blocklist IPs', ipPlaceholder: 'e.g. 192.168.1.10, 192.168.1.0/25',
+      whiteIPs: 'Allowlist IPs', blackIPs: 'Blocklist IPs', ipPlaceholder: 'One per line; # starts a comment, e.g.\n192.168.1.10\n192.168.1.0/25',
     },
     node: {
       section: 'Node access and default page', tls: 'Prevent TLS handshake attacks',
@@ -266,7 +266,7 @@ const enUS = {
     diagnostics: {
       section: 'Diagnostics and built-in resources', log: 'Diagnostic logs', debugIP: 'Debug client IP', debugIPPlaceholder: 'e.g. 203.0.113.10',
       wellKnown: '.well-known protection', threshold: '404 threshold', wellKnownHint: 'After the threshold is exceeded, only verified IPs may reach the origin for 300 seconds.',
-      internal: 'Built-in resource protection', internalDescription: 'Built-in resources are the images and JavaScript used by CC pages.', triggerQPS: 'Trigger threshold', blockDuration: 'Block duration', rules: 'Resource rules', rulesDescription: 'Each row defines a time window and maximum request count. Zero disables the row.', period: 'Window (seconds)', maxRequests: 'Maximum requests', emptyDisables: 'Empty disables',
+      internal: 'Built-in resource protection', internalDescription: 'Built-in resources are the images and JavaScript used by CC pages.', triggerQPS: 'Trigger threshold', blockDuration: 'Block duration', rules: 'Resource rules', rulesDescription: 'Rows left empty or 0 are disabled.', period: 'Window (seconds)', maxRequests: 'Maximum requests', emptyDisables: 'Empty disables',
     },
     waf: {
       enable: 'WAF protection', enableDescription: 'Default state when no region or node override exists; either scope can override it.', limits: 'Per-request processing limits', limitsDescription: 'Control the scope of WAF inspection. Changes save automatically.', restore: 'Restore recommended values', warning: 'Higher values let WAF process more complex and larger requests but consume more CPU and memory. Requests exceeding any limit are blocked with HTTP 403.',

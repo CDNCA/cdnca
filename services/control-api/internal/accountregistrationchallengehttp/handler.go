@@ -13,6 +13,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/google/uuid"
 )
@@ -203,6 +204,7 @@ func (handler *Handler) create(
 		ScopeID: trusted.ScopeID, Username: body.Username, Email: body.Email, Phone: body.Phone,
 		Channel: body.VerificationChannel, Source: trusted.SourceIP, HumanToken: body.HumanToken,
 		IdempotencyKey: idempotencyKey, RequestID: requestID,
+		Locale: notification.LocaleFromAcceptLanguage(request.Header.Get("Accept-Language")),
 	})
 	if err != nil {
 		// Why the CAPTCHA was refused goes to the refusal log only.

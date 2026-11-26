@@ -235,3 +235,55 @@ func TestAutoDefenseGatewaySessionNATSRoundTrip(t *testing.T) {
 		t.Fatalf("stored receipt: %v", err)
 	}
 }
+
+// CC-STATS-LIVE-EMPTY-1: a report stream created with the old 8 GiB max_bytes is aligned to the expected value in
+// place and the bus (the AUTO_DEFENSE channel) still comes up.
+func TestAutoDefenseNATSAlignsExistingReportStreamMaxBytes(t *testing.T) {
+	natsURL := os.Getenv("CDNCA_TEST_NATS_URL")
+	if natsURL == "" {
+		t.Skip("CDNCA_TEST_NATS_URL is required")
+	}
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")
+	config := DefaultNATSAutoDefenseBusConfig()
+	config.CommandStream, config.ReceiptStream, config.ReportStream = "ADC_"+suffix, "ADR_"+suffix, "ADP_"+suffix
+	config.CommandSubjectPrefix = "cdnca.test." + suffix + ".commands"
+	config.ReceiptSubjectPrefix = "cdnca.test." + suffix + ".receipts"
+	config.ReportSubjectPrefix = "cdnca.test." + suffix + ".reports"
+	config.ConsumerPrefix = "autodefense_" + suffix
+	config.OperationTimeout = time.Second
+	connection := connectIntegrationNATS(t, natsURL)
+	js, err := connection.JetStream(nats.MaxWait(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stream := range []string{config.CommandStream, config.ReceiptStream, config.ReportStream} {
+		name := stream
+		t.Cleanup(func() { _ = js.DeleteStream(name) })
+	}
+	var expected *nats.StreamConfig
+	for _, stream := range config.StreamConfigs() {
+		if stream.Name == config.ReportStream {
+			expected = stream
+		}
+	}
+	old := *expected
+	old.MaxBytes = 8 << 30
+	if _, err := js.AddStream(&old); err != nil {
+		t.Fatal(err)
+	}
+	bus, err := NewNATSAutoDefenseBus(context.Background(), connection, config)
+	if err != nil || bus == nil {
+		t.Fatalf("bus: %v", err)
+	}
+	info, err := js.StreamInfo(config.ReportStream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Config.MaxBytes != expected.MaxBytes {
+		t.Fatalf("report stream max_bytes = %d, want %d", info.Config.MaxBytes, expected.MaxBytes)
+	}
+	service := &Gateway{}
+	if err := service.ConfigureAutoDefense(bus); err != nil {
+		t.Fatal(err)
+	}
+}

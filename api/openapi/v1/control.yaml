@@ -670,6 +670,28 @@ paths:
               schema: {type: object, additionalProperties: false, required: [marked], properties: {marked: {type: integer, minimum: 0}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/account/locale:
+    put:
+      operationId: setAccountLocale
+      x-summary-zh: "设置调用者的界面语言；发给该用户的通知按此语言选模板（英文缺失时用中文）"
+      summary: Set the caller's console language; notifications to the caller use templates in this language (Chinese when no English version exists)
+      description: Any signed-in session (platform or tenant). zh-TW receives the Simplified Chinese templates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [locale]
+              properties:
+                locale: {type: string, enum: [zh-CN, zh-TW, en-US]}
+      responses:
+        '204':
+          description: Language saved.
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /v1/tenant/members:
     get:
       operationId: listTenantMembers

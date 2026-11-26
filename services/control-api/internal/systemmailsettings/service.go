@@ -543,7 +543,8 @@ func ParseSMSTemplateMap(raw string) (map[string]SMSTemplate, error) {
 		return nil, ErrInvalidInput
 	}
 	for id, template := range result {
-		if !metadataPattern.MatchString(id) || !validMapText(template.Code) || len(template.Variables) > 32 {
+		if !metadataPattern.MatchString(id) || !validMapText(template.Code) || len(template.Variables) > 32 ||
+			template.CodeEN != "" && !validMapText(template.CodeEN) {
 			return nil, ErrInvalidInput
 		}
 		for ours, theirs := range template.Variables {

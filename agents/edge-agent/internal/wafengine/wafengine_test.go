@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,53 +25,13 @@ const (
 
 var testArtifactID = enginemodule.ArtifactID(enginemodule.Component, enginemodule.Platform{OpenRestyVersion: testNginx, Architecture: "amd64"})
 
-type fakeDelegate struct {
-	calls          []string
-	precheckFailOn func(gate bool) bool
-	reloadFail     func(call int) bool
-	gateFile       string
-	reloads        int
-}
-
-func (delegate *fakeDelegate) gatePresent() bool {
-	_, err := os.Stat(delegate.gateFile)
-	return err == nil
-}
-
-func (delegate *fakeDelegate) Precheck(_ context.Context, version, _ string) error {
-	gate := delegate.gatePresent()
-	delegate.calls = append(delegate.calls, fmt.Sprintf("precheck %s gate=%v", version, gate))
-	if delegate.precheckFailOn != nil && delegate.precheckFailOn(gate) {
-		return errors.New("nginx -t failed")
-	}
-	return nil
-}
-
-func (delegate *fakeDelegate) Reload(_ context.Context, version, _ string) error {
-	delegate.reloads++
-	delegate.calls = append(delegate.calls, fmt.Sprintf("reload %s gate=%v", version, delegate.gatePresent()))
-	if delegate.reloadFail != nil && delegate.reloadFail(delegate.reloads) {
-		return errors.New("start failed")
-	}
-	return nil
-}
-
-func (delegate *fakeDelegate) Healthy(context.Context, string) error { return nil }
-
-type fakeStopper struct{ stops int }
-
-func (stopper *fakeStopper) Stop(context.Context, string) error { stopper.stops++; return nil }
-
 type fixture struct {
-	t        *testing.T
-	root     string
-	state    string
-	release  string
-	manager  *Manager
-	delegate *fakeDelegate
-	stopper  *fakeStopper
-	runtime  *Runtime
-	signer   enginemoduletest.Signer
+	t       *testing.T
+	root    string
+	state   string
+	release string
+	manager *Manager
+	signer  enginemoduletest.Signer
 }
 
 func testSigner(name string) enginemoduletest.Signer {
@@ -134,11 +93,6 @@ func (f *fixture) useManager(trust Trust) {
 		f.t.Fatal(err)
 	}
 	f.manager = manager
-	f.delegate = &fakeDelegate{gateFile: filepath.Join(f.state, "waf-engine", "v1", "load.conf")}
-	f.stopper = &fakeStopper{}
-	if f.runtime, err = NewRuntime(f.delegate, f.stopper, manager); err != nil {
-		f.t.Fatal(err)
-	}
 }
 
 // install runs the node artifact set path: PrepareModule then Commit.
@@ -159,11 +113,9 @@ func (f *fixture) installDefault() {
 	}
 }
 
-func (f *fixture) deploy() error {
-	if err := f.runtime.Precheck(context.Background(), "v1", f.release); err != nil {
-		return err
-	}
-	return f.runtime.Reload(context.Background(), "v1", f.release)
+// deploy prepares the gate of release v1.
+func (f *fixture) deploy() (Gate, error) {
+	return f.manager.Prepare(context.Background(), "v1", f.release)
 }
 
 func (f *fixture) gate() map[string]string {
@@ -176,10 +128,11 @@ func (f *fixture) gate() map[string]string {
 	return result
 }
 
-func TestInstalledModuleIsGatedAndRestartsOnce(t *testing.T) {
+func TestInstalledModuleIsGated(t *testing.T) {
 	f := newFixture(t, true)
 	f.installDefault()
-	if err := f.deploy(); err != nil {
+	prepared, err := f.deploy()
+	if err != nil {
 		t.Fatal(err)
 	}
 	gate := f.gate()
@@ -189,12 +142,12 @@ func TestInstalledModuleIsGatedAndRestartsOnce(t *testing.T) {
 		!strings.Contains(gate["site-"+testSite+".conf"], "modsecurity on;") {
 		t.Fatalf("gate = %q", gate)
 	}
-	if f.stopper.stops != 1 || !strings.HasSuffix(f.delegate.calls[len(f.delegate.calls)-1], "gate=true") {
-		t.Fatalf("first load must restart: stops=%d calls=%v", f.stopper.stops, f.delegate.calls)
+	module := prepared.ModulePath
+	if !prepared.Required || !strings.Contains(gate["load.conf"], filepath.ToSlash(module)) {
+		t.Fatalf("gate decision = %+v, load.conf = %q", prepared, gate["load.conf"])
 	}
-	module := f.manager.LoadedModule()
 	if info, err := os.Stat(module); err != nil || info.Mode().Perm() != 0o555 {
-		t.Fatalf("loaded module %q: %v", module, err)
+		t.Fatalf("gated module %q: %v", module, err)
 	}
 	if status := f.manager.Status(); status.State != StateActive || status.Version != testVersion {
 		t.Fatalf("status = %+v", status)
@@ -202,35 +155,34 @@ func TestInstalledModuleIsGatedAndRestartsOnce(t *testing.T) {
 	if id, version := f.manager.Installed(); id != testArtifactID || version != testVersion {
 		t.Fatalf("installed = %s %s", id, version)
 	}
-	if err := f.deploy(); err != nil {
-		t.Fatal(err)
-	}
-	if f.stopper.stops != 1 {
-		t.Fatalf("same module must reload without restart: stops=%d", f.stopper.stops)
+	if again, err := f.deploy(); err != nil || again.ModulePath != module || len(f.gate()) != 3 {
+		t.Fatalf("second prepare = %+v, %v, gate=%v", again, err, f.gate())
 	}
 	if summary, ok := f.manager.Status().CheckSummary(); !ok || !strings.Contains(summary, testVersion) {
 		t.Fatalf("check = %q %v", summary, ok)
 	}
 }
 
-// A newer build replaces the module (a restart loads it); the previous build
-// stays on disk, older ones are pruned.
-func TestNewerModuleReplacesAndRestarts(t *testing.T) {
+// A newer build replaces the gated module; the previous build stays on disk,
+// older ones are pruned.
+func TestNewerModuleReplaces(t *testing.T) {
 	f := newFixture(t, true)
 	f.installDefault()
-	if err := f.deploy(); err != nil {
+	prepared, err := f.deploy()
+	if err != nil {
 		t.Fatal(err)
 	}
-	first := f.manager.LoadedModule()
+	first := prepared.ModulePath
 	signers := []enginemoduletest.Signer{f.signer}
 	if err := f.install(bundle(t, signers, enginemoduletest.Options{Version: "3.0.18-1.0.4-1", Module: "module 2"}), "3.0.18-1.0.4-1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.deploy(); err != nil {
+	prepared, err = f.deploy()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if second := f.manager.LoadedModule(); second == first || f.stopper.stops != 2 || f.manager.Status().Version != "3.0.18-1.0.4-1" {
-		t.Fatalf("loaded %q -> %q stops=%d status=%+v", first, second, f.stopper.stops, f.manager.Status())
+	if second := prepared.ModulePath; second == first || second == "" || f.manager.Status().Version != "3.0.18-1.0.4-1" {
+		t.Fatalf("gated %q -> %q status=%+v", first, second, f.manager.Status())
 	}
 	if _, err := os.Stat(first); err != nil {
 		t.Fatalf("previous build removed while a master may still hold it: %v", err)
@@ -278,23 +230,24 @@ func TestRejectedModuleKeepsTheInstalledOne(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t, true)
 			f.installDefault()
-			if err := f.deploy(); err != nil {
+			prepared, err := f.deploy()
+			if err != nil {
 				t.Fatal(err)
 			}
-			loaded := f.manager.LoadedModule()
-			err := f.install(test.content(f), test.version)
+			loaded := prepared.ModulePath
+			err = f.install(test.content(f), test.version)
 			if reason := artifactset.RejectReason(err); err == nil || reason != test.reason {
 				t.Fatalf("install err = %v reason %q, want %q", err, reason, test.reason)
 			}
 			if entries, _ := os.ReadDir(filepath.Join(f.root, "versions")); len(entries) != 1 {
 				t.Fatalf("rejected build left files: %v", entries)
 			}
-			if err := f.deploy(); err != nil {
+			if prepared, err = f.deploy(); err != nil {
 				t.Fatal(err)
 			}
 			if status := f.manager.Status(); status.State != StateActive || status.Version != testVersion ||
-				f.manager.LoadedModule() != loaded || len(f.gate()) != 3 {
-				t.Fatalf("rejection changed the active module: %+v loaded=%q", status, f.manager.LoadedModule())
+				prepared.ModulePath != loaded || len(f.gate()) != 3 {
+				t.Fatalf("rejection changed the active module: %+v gated=%q", status, prepared.ModulePath)
 			}
 		})
 	}
@@ -346,7 +299,7 @@ func TestUndoAndRemoveModule(t *testing.T) {
 	if err := f.manager.RemoveModule(); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.deploy(); err != nil {
+	if _, err := f.deploy(); err != nil {
 		t.Fatal(err)
 	}
 	if status := f.manager.Status(); status.State != StateDegraded || status.Reason != ReasonUnavailable || len(f.gate()) != 0 {
@@ -381,14 +334,14 @@ func TestEngineFailuresLeaveNoGateAndReportReason(t *testing.T) {
 				f.t.Fatal(err)
 			}
 			f.manager = manager
-			f.runtime, _ = NewRuntime(f.delegate, f.stopper, manager)
 		}, ReasonManifest},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t, true)
 			test.mutate(f)
-			if err := f.deploy(); err != nil {
+			prepared, err := f.deploy()
+			if err != nil {
 				t.Fatalf("engine failure must not fail the deployment: %v", err)
 			}
 			if gate := f.gate(); len(gate) != 0 {
@@ -397,8 +350,8 @@ func TestEngineFailuresLeaveNoGateAndReportReason(t *testing.T) {
 			if status := f.manager.Status(); status.State != StateDegraded || status.Reason != test.reason {
 				t.Fatalf("status = %+v, want %s", status, test.reason)
 			}
-			if f.stopper.stops != 0 || f.manager.LoadedModule() != "" {
-				t.Fatalf("restart without a module change: stops=%d loaded=%q", f.stopper.stops, f.manager.LoadedModule())
+			if !prepared.Required || prepared.ModulePath != "" {
+				t.Fatalf("gate decision after %s = %+v, want required without module", name, prepared)
 			}
 			if summary, ok := f.manager.Status().CheckSummary(); ok || !strings.Contains(summary, test.reason) {
 				t.Fatalf("check = %q %v", summary, ok)
@@ -421,65 +374,12 @@ func rewriteInstalled(f *fixture, current installed) {
 func TestNodeWithoutEngineStartsNormally(t *testing.T) {
 	f := newFixture(t, false)
 	f.installDefault()
-	if err := f.deploy(); err != nil {
+	prepared, err := f.deploy()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if f.stopper.stops != 0 || len(f.gate()) != 0 || f.manager.Status().State != StateNotRequired {
-		t.Fatalf("release without CRS touched the engine: stops=%d", f.stopper.stops)
-	}
-}
-
-func TestPrecheckFailureWithGateFallsBackWithoutModule(t *testing.T) {
-	f := newFixture(t, true)
-	f.installDefault()
-	f.delegate.precheckFailOn = func(gate bool) bool { return gate }
-	if err := f.deploy(); err != nil {
-		t.Fatal(err)
-	}
-	if status := f.manager.Status(); status.State != StateDegraded || status.Reason != ReasonModuleLoad || len(f.gate()) != 0 {
-		t.Fatalf("status = %+v gate=%v", status, f.gate())
-	}
-	if want := []string{"precheck v1 gate=true", "precheck v1 gate=false", "reload v1 gate=false"}; strings.Join(f.delegate.calls, "|") != strings.Join(want, "|") {
-		t.Fatalf("calls = %v", f.delegate.calls)
-	}
-	f.delegate.precheckFailOn = func(bool) bool { return true }
-	if err := f.runtime.Precheck(context.Background(), "v1", f.release); err == nil {
-		t.Fatal("a release that fails without the gate must fail the precheck")
-	}
-}
-
-func TestRestartFailureRetriesWithoutModuleThenRollsBack(t *testing.T) {
-	f := newFixture(t, true)
-	f.installDefault()
-	f.delegate.reloadFail = func(call int) bool { return call == 1 }
-	if err := f.deploy(); err != nil {
-		t.Fatal(err)
-	}
-	if status := f.manager.Status(); status.State != StateDegraded || status.Reason != ReasonRestart ||
-		f.manager.LoadedModule() != "" || f.stopper.stops != 2 || len(f.gate()) != 0 {
-		t.Fatalf("status=%+v loaded=%q stops=%d gate=%v", status, f.manager.LoadedModule(), f.stopper.stops, f.gate())
-	}
-	g := newFixture(t, true)
-	g.installDefault()
-	g.delegate.reloadFail = func(int) bool { return true }
-	if err := g.runtime.Precheck(context.Background(), "v1", g.release); err != nil {
-		t.Fatal(err)
-	}
-	if err := g.runtime.Reload(context.Background(), "v1", g.release); err == nil {
-		t.Fatal("restart failing with and without the module must fail the reload (manager rolls back)")
-	}
-	if g.manager.LoadedModule() != "?" {
-		t.Fatalf("unknown master state recorded as %q", g.manager.LoadedModule())
-	}
-	// Rollback: the previous release has no CRS; its Reload restarts again
-	// because the running module set is unknown.
-	h := newFixture(t, false)
-	g.delegate.reloadFail = nil
-	if err := g.runtime.Reload(context.Background(), "v0", h.release); err != nil {
-		t.Fatal(err)
-	}
-	if g.manager.LoadedModule() != "" {
-		t.Fatalf("after rollback loaded=%q", g.manager.LoadedModule())
+	if prepared.Required || prepared.ModulePath != "" || len(f.gate()) != 0 || f.manager.Status().State != StateNotRequired {
+		t.Fatalf("release without CRS touched the engine: %+v status=%+v", prepared, f.manager.Status())
 	}
 }
 
@@ -489,7 +389,7 @@ func TestGatePathMismatchDegrades(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.release, "nginx.conf"), []byte("include /elsewhere/waf-engine/v1/load[.]conf;\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.deploy(); err != nil {
+	if _, err := f.deploy(); err != nil {
 		t.Fatal(err)
 	}
 	if status := f.manager.Status(); status.Reason != ReasonGatePath || len(f.gate()) != 0 {

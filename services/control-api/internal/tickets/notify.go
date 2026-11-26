@@ -32,9 +32,11 @@ func (service *Service) notify(ctx context.Context, tx pgx.Tx, eventType string,
 		return
 	}
 	defer func() { _ = savepoint.Rollback(context.WithoutCancel(ctx)) }()
-	templates, contexts, err := activeTemplates(ctx, savepoint, strings.ReplaceAll(eventType, ".", "_"), map[string]string{
-		"ticket_no": strconv.FormatInt(value.ticketNo, 10), "subject": value.subject,
-		"status": value.status, "status_label": statusLabels[value.status], "username": value.username,
+	templates, contexts, err := activeTemplates(ctx, savepoint, strings.ReplaceAll(eventType, ".", "_"), notification.TemplateContext{
+		"ticket_no": notification.PublicValue(strconv.FormatInt(value.ticketNo, 10)), "subject": notification.PublicValue(value.subject),
+		"status":       notification.PublicValue(value.status),
+		"status_label": notification.LocalizedValue(statusLabels[value.status], statusLabelsEN[value.status]),
+		"username":     notification.PublicValue(value.username),
 	})
 	if err == nil {
 		// The overdue reminder job has no acting user.
@@ -59,7 +61,7 @@ func (service *Service) notify(ctx context.Context, tx pgx.Tx, eventType string,
 // activeTemplates picks the newest version of each channel's template and
 // fills exactly the variables that version declares (unknown ones render
 // empty), so an operator editing a template cannot break enqueueing.
-func activeTemplates(ctx context.Context, tx pgx.Tx, templateID string, values map[string]string) (
+func activeTemplates(ctx context.Context, tx pgx.Tx, templateID string, values notification.TemplateContext) (
 	map[notification.Channel]notification.TemplateRef, map[notification.Channel]notification.TemplateContext, error,
 ) {
 	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (channel) version,channel,variables FROM notification_templates
@@ -80,7 +82,7 @@ func activeTemplates(ctx context.Context, tx pgx.Tx, templateID string, values m
 		ref := notification.TemplateRef{ID: templateID, Version: uint64(version), Channel: notification.Channel(channel)}
 		context := notification.TemplateContext{}
 		for _, name := range variables {
-			context[name] = notification.PublicValue(values[name])
+			context[name] = values[name]
 		}
 		templates[ref.Channel], contexts[ref.Channel] = ref, context
 	}

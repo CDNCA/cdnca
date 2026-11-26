@@ -15,9 +15,10 @@
   align-items: stretch;
 }
 
-@media (min-width: 1680px) {
+/* Desktop: the four groups in one row (user 11-26). */
+@media (min-width: 1440px) {
   .sys-setting-v2 .sys-other-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -63,11 +64,6 @@
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* 访问与网络 holds the CDN origin authentication card (steps, command): a full row. */
-.sys-setting-v2 .sys-other-grid > .sys-other-card-wide {
-  grid-column: 1 / -1;
 }
 
 .sys-setting-v2 .sys-other-subtitle {

@@ -70,7 +70,7 @@ func (sender *NotificationContactSender) Enqueue(
 		ScopeID: request.ScopeID, SourceEventID: request.ChallengeID.String(),
 		AnonymousDispatchReference: reference, EventType: notification.EventTypeAccountRegistrationVerification,
 		SelectedChannel: request.Channel, Templates: map[notification.Channel]notification.TemplateRef{request.Channel: template},
-		AuditRequestID: request.RequestID,
+		AuditRequestID: request.RequestID, Locale: request.Locale,
 	})
 	if err != nil || len(enqueued.Deliveries) != 1 || enqueued.Deliveries[0].Channel != request.Channel ||
 		enqueued.Deliveries[0].OutboxID == uuid.Nil {

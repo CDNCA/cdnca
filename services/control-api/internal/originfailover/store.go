@@ -342,8 +342,9 @@ func (s *Store) switchTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value
 		return nil
 	}
 	return s.notify(ctx, tx, value, EventFailover, templateFailover, "origin-failover/"+siteID.String()+"/"+
-		strconv.FormatInt(value.state.sequence, 10), map[string]string{
-		"domain": value.domain, "switched_at": shanghai(now), "from_level": LevelName(from), "to_level": LevelName(target),
+		strconv.FormatInt(value.state.sequence, 10), notification.TemplateContext{
+		"domain": notification.PublicValue(value.domain), "switched_at": notification.PublicValue(shanghai(now)),
+		"from_level": LevelName(from), "to_level": LevelName(target),
 		"reason": reasonText(reason), "failback_mode": modeText(value.mode), "action": actionText(value.mode),
 	})
 }
@@ -361,12 +362,14 @@ func (s *Store) alertTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value 
 	if value.decision.FailbackReady && !value.state.ready {
 		target := FailbackTarget(value.levels, value.state.active)
 		return s.notify(ctx, tx, value, EventRecovered, templateRecovered, "origin-recovered/"+siteID.String()+"/"+entry,
-			map[string]string{"domain": value.domain, "recovered_at": shanghai(now), "level": LevelName(target),
+			notification.TemplateContext{"domain": notification.PublicValue(value.domain),
+				"recovered_at": notification.PublicValue(shanghai(now)), "level": LevelName(target),
 				"active_level": LevelName(value.state.active)})
 	}
 	if value.decision.AllDown && !wasAllDown {
 		return s.notify(ctx, tx, value, EventFailover, templateHold, "origin-all-down/"+siteID.String()+"/"+entry,
-			map[string]string{"domain": value.domain, "occurred_at": shanghai(now), "active_level": LevelName(value.state.active),
+			notification.TemplateContext{"domain": notification.PublicValue(value.domain),
+				"occurred_at": notification.PublicValue(shanghai(now)), "active_level": LevelName(value.state.active),
 				"failback_mode": modeText(value.mode), "action": actionText(value.mode)})
 	}
 	return nil
@@ -376,7 +379,7 @@ func (s *Store) alertTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value 
 // template, owner no longer a member) is logged and does not undo the
 // switch. The same source event is enqueued once.
 func (s *Store) notify(ctx context.Context, tx pgx.Tx, value evaluation, eventType, templateID, sourceEventID string,
-	values map[string]string,
+	values notification.TemplateContext,
 ) error {
 	if s.enqueuer == nil {
 		return nil
@@ -397,7 +400,7 @@ func (s *Store) notify(ctx context.Context, tx pgx.Tx, value evaluation, eventTy
 }
 
 func (s *Store) enqueue(ctx context.Context, tx pgx.Tx, value evaluation, eventType, templateID, sourceEventID string,
-	values map[string]string,
+	values notification.TemplateContext,
 ) error {
 	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (channel) channel, version, variables FROM notification_templates
 		WHERE template_id=$1 ORDER BY channel, version DESC`, templateID)
@@ -417,7 +420,7 @@ func (s *Store) enqueue(ctx context.Context, tx pgx.Tx, value evaluation, eventT
 		ref := notification.TemplateRef{ID: templateID, Version: uint64(version), Channel: notification.Channel(channel)}
 		context := notification.TemplateContext{}
 		for _, name := range variables {
-			context[name] = notification.PublicValue(values[name])
+			context[name] = values[name]
 		}
 		templates[ref.Channel], contexts[ref.Channel] = ref, context
 	}
@@ -520,36 +523,37 @@ func (s *Store) PoolStatus(ctx context.Context, siteID uuid.UUID) (PoolStatus, e
 
 func endpointKey(host string, port int) string { return host + "|" + strconv.Itoa(port) }
 
-// LevelName is the zh-CN name of a level in notices.
-func LevelName(level int) string {
+// LevelName is the name of a level in notices, in Chinese and English.
+func LevelName(level int) notification.ContextValue {
 	if level == 0 {
-		return "主源"
+		return notification.LocalizedValue("主源", "Primary origin")
 	}
-	return "备用源 " + strconv.Itoa(level)
+	return notification.LocalizedValue("备用源 "+strconv.Itoa(level), "Backup origin "+strconv.Itoa(level))
 }
 
-func reasonText(reason string) string {
+func reasonText(reason string) notification.ContextValue {
 	switch reason {
 	case "level_down":
-		return "当前级别的源站全部不可用"
+		return notification.LocalizedValue("当前级别的源站全部不可用", "Every origin at the current level is unavailable")
 	case "recovered":
-		return "更高级别的源站已恢复"
+		return notification.LocalizedValue("更高级别的源站已恢复", "A higher-level origin recovered")
 	}
-	return reason
+	return notification.PublicValue(reason)
 }
 
-func modeText(mode string) string {
+func modeText(mode string) notification.ContextValue {
 	if mode == "manual" {
-		return "手动"
+		return notification.LocalizedValue("手动", "Manual")
 	}
-	return "自动"
+	return notification.LocalizedValue("自动", "Automatic")
 }
 
-func actionText(mode string) string {
+func actionText(mode string) notification.ContextValue {
 	if mode == "manual" {
-		return "，主源恢复后请在该页点击“切回主源”"
+		return notification.LocalizedValue("，主源恢复后请在该页点击“切回主源”",
+			". After the primary origin recovers, click \"Switch back to primary origin\" on that page")
 	}
-	return ""
+	return notification.PublicValue("")
 }
 
 func shanghai(value time.Time) string {

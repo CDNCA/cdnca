@@ -8,7 +8,7 @@ const zhCN = {
   disabled: '未开启',
   unknown: '状态未知',
   loading: '加载中',
-  noScopes: '当前账号没有可授予 API 的权限，无法开启。',
+  noScopes: '当前账号没有可授予 API 的权限，无法创建密钥。',
   createCompatible: '创建兼容密钥',
   compatibleConfirm: '创建兼容密钥？',
   compatibleDescription: '兼容密钥拥有当前账号可授予的全部 {{count}} 项权限，且永不过期，用于旧接入。',
@@ -19,7 +19,7 @@ const zhCN = {
   keyInfo: '密钥信息',
   apiKey: 'api_key',
   apiSecret: 'api_secret',
-  secretHidden: '已隐藏，仅在开启或重置时显示一次',
+  secretHidden: '已隐藏',
   copy: '复制',
   copyKey: '复制 api_key',
   copySecret: '复制 api_secret',
@@ -47,7 +47,7 @@ const zhCN = {
   allowlistKeepDraft: '继续编辑',
   allowlistOrphaned: '你正在编辑的密钥已被撤销、到期或替换，未保存的白名单修改没有提交。',
   allowlistDismiss: '知道了',
-  expiredHelp: '密钥已于 {{time}} 到期，外部程序已无法调用。开启 API 会生成一把新的默认密钥；旧密钥可在高级密钥管理中查看或撤销。',
+  expiredHelp: '密钥已于 {{time}} 到期，外部程序已无法调用。可创建新密钥；旧密钥可在高级密钥管理中查看或撤销。',
   expiringSoon: '密钥将于 {{time}} 到期，到期后外部程序无法调用。如需继续使用，请在高级密钥管理中调整到期时间或创建新密钥。',
 } as const
 
@@ -70,7 +70,7 @@ const enUS = {
   keyInfo: 'Key information',
   apiKey: 'api_key',
   apiSecret: 'api_secret',
-  secretHidden: 'Hidden; shown only once when enabled or reset',
+  secretHidden: 'Hidden',
   copy: 'Copy',
   copyKey: 'Copy api_key',
   copySecret: 'Copy api_secret',
@@ -98,7 +98,7 @@ const enUS = {
   allowlistKeepDraft: 'Keep editing',
   allowlistOrphaned: 'The key you were editing was revoked, expired or replaced. Your unsaved allowlist edit was not submitted.',
   allowlistDismiss: 'Dismiss',
-  expiredHelp: 'The key expired at {{time}} and external programs can no longer call the API. Turning API access on generates a new default key; the old key stays in advanced key management to view or revoke.',
+  expiredHelp: 'The key expired at {{time}} and external programs can no longer call the API. Create a new key; the old key stays in advanced key management to view or revoke.',
   expiringSoon: 'The key expires at {{time}}. After that external programs cannot call the API. To keep using it, change its expiry or create a new key in advanced key management.',
 } as const
 

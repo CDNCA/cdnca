@@ -129,7 +129,7 @@ describe('开放接口目录', () => {
     // 本组每个接口都有结构化权限与中文摘要（与服务端 handler 的权限码一致）。
     for (const o of ops) {
       expect(o.permissions, o.operation_id).toHaveLength(1)
-      expect(o.permissions![0], o.operation_id).toMatch(o.method === 'GET' || o.operation_id === 'evaluateSecurityPolicy' ? /^security_policies\.read$/ : /^security_policies\.manage$/)
+      expect(o.permissions![0], o.operation_id).toMatch(o.method === 'GET' || o.operation_id === 'evaluateSecurityPolicy' || o.operation_id === 'parseUserAgent' ? /^security_policies\.read$/ : /^security_policies\.manage$/)
       expect(o.summary_zh, o.operation_id).toBeTruthy()
     }
     expect(JSON.stringify(ops)).not.toContain('SEC-ACCOUNT')

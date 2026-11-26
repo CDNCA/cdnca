@@ -104,7 +104,7 @@ const zhCN = {
       protected: '本站使用的是订阅规则库（只读），档位由规则库提供方设置。',
     },
     officialPacks: {
-      title: '官方系统规则包', hint: '平台提供并自动更新的官方规则包，下面是它们对本站是否生效；要开关请到「规则包」页按网站设置。',
+      title: '官方系统规则包', hint: '平台维护并自动更新，独立于本站 WAF 规则库；按平台、用户、网站三级设置决定是否对本站生效，按网站开关请到「规则包」页。',
       summary: '对本站生效 {{active}}/{{total}}', action: '动作：{{action}}', show: '查看 {{count}} 个规则包', hide: '收起规则包',
       active: '已生效', inactive: '未生效', none: '暂无官方系统规则包', loadFailed: '官方系统规则包读取失败。',
     },

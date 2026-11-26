@@ -19,7 +19,7 @@ const zhCN = {
   search: '搜索名称',
   actions: { edit: '编辑', view: '查看', delete: '删除', save: '保存', cancel: '取消', retry: '重试', reload: '重新加载', viewReferences: '查看引用', gotIt: '知道了', openPolicy: '打开策略' },
   confirmDelete: '删除字符串集合“{{name}}”？',
-  saved: '已保存字符串集合“{{name}}”（版本 {{revision}}），引用它的网站会自动重新发布。',
+  saved: '已保存字符串集合“{{name}}”（版本 {{revision}}）。',
   deleted: '已删除字符串集合“{{name}}”。',
   form: {
     createTitle: '添加字符串集合', editTitle: '编辑字符串集合 {{name}}', viewTitle: '查看字符串集合 {{name}}',
@@ -65,7 +65,7 @@ const enUS: typeof zhCN = {
   search: 'Search by name',
   actions: { edit: 'Edit', view: 'View', delete: 'Delete', save: 'Save', cancel: 'Cancel', retry: 'Retry', reload: 'Reload', viewReferences: 'View references', gotIt: 'Got it', openPolicy: 'Open policy' },
   confirmDelete: 'Delete string set "{{name}}"?',
-  saved: 'Saved string set "{{name}}" (revision {{revision}}); sites that use it are republished.',
+  saved: 'Saved string set "{{name}}" (revision {{revision}}).',
   deleted: 'Deleted string set "{{name}}".',
   form: {
     createTitle: 'Add string set', editTitle: 'Edit string set {{name}}', viewTitle: 'String set {{name}}',

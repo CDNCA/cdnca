@@ -21,7 +21,7 @@ func TestRuntimeStatusReportsMarketProbeRole(t *testing.T) {
 		})(client); err != nil {
 			t.Fatal(err)
 		}
-		if got := client.runtimeStatus(context.Background(), nil).GetMarketProbe(); got != role {
+		if got := client.runtimeStatus(context.Background(), nil, "").GetMarketProbe(); got != role {
 			t.Fatalf("heartbeat market_probe = %v, want %v", got, role)
 		}
 	}
@@ -38,10 +38,10 @@ func TestRuntimeStatusReportsTelemetryHealth(t *testing.T) {
 	})(client); err != nil {
 		t.Fatal(err)
 	}
-	if got := client.runtimeStatus(context.Background(), nil).GetTelemetry().GetErrorCode(); got != "L4_USAGE_LEDGER_FULL" {
+	if got := client.runtimeStatus(context.Background(), nil, "").GetTelemetry().GetErrorCode(); got != "L4_USAGE_LEDGER_FULL" {
 		t.Fatalf("heartbeat telemetry = %q", got)
 	}
-	if (&Client{}).runtimeStatus(context.Background(), nil).GetTelemetry() != nil {
+	if (&Client{}).runtimeStatus(context.Background(), nil, "").GetTelemetry() != nil {
 		t.Fatal("no probe must leave telemetry absent")
 	}
 }

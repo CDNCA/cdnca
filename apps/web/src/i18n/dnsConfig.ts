@@ -64,7 +64,7 @@ const zhCN = {
     },
     dnsComPlan: '请按 DNS.COM 账号实际购买的套餐选择。账号实际不支持某条线路时，该线路标为“套餐不支持”，访客按默认线路解析，不影响其他线路。',
   },
-  status: { ok: '没有错误', unconfigured: '未配置 DNS 服务商', unread: '未读取（配置加载失败或仍在加载）' },
+  status: { ok: '暂无错误', unconfigured: '未配置 DNS 服务商', unread: '未读取（配置加载失败或仍在加载）' },
   // 记录修复 / 清除 item failures: which domain, why, what to do.
   itemError: { repair: '域名 {{name}}：{{reason}}', cleanup: '记录 {{name}}：{{reason}}' },
   advice: {
@@ -204,7 +204,7 @@ const enUS: typeof zhCN = {
     },
     dnsComPlan: 'Choose the plan the DNS.COM account actually has. A line the account does not have is marked "not in plan" and its visitors get the default line; other lines are unaffected.',
   },
-  status: { ok: 'No errors', unconfigured: 'No DNS provider configured', unread: 'Not read (the configuration failed to load or is still loading)' },
+  status: { ok: 'No errors yet', unconfigured: 'No DNS provider configured', unread: 'Not read (the configuration failed to load or is still loading)' },
   itemError: { repair: 'Domain {{name}}: {{reason}}', cleanup: 'Record {{name}}: {{reason}}' },
   advice: {
     dns_no_serving_endpoint: 'Check that the site line group has online nodes',

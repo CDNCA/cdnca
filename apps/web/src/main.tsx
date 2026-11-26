@@ -10,6 +10,7 @@ import { AppRoutes } from './App'
 import { ApprovalPromptHost } from './approval/ApprovalPromptHost'
 import { setApiErrorObserver } from './api/auth'
 import { SessionQueryBoundary } from './auth/SessionQueryBoundary'
+import { AccountLocaleSync } from './auth/AccountLocaleSync'
 import { SessionBootstrap, SessionRefreshTimer } from './auth/SessionBootstrap'
 import { MigrationHoldGate } from './components/MigrationHoldGate'
 import { createSessionQueryClient } from './auth/sessionQueryClient'
@@ -48,6 +49,7 @@ function RoutedApplication() {
       <MigrationHoldGate>
         <SessionBootstrap>
           <SessionRefreshTimer />
+          <AccountLocaleSync />
           <SessionRegionGate />
           <PasswordChangeGate />
           <ApprovalPromptHost />

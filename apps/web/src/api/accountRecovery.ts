@@ -1,3 +1,4 @@
+import { requestLanguage } from './accountLocale'
 import { ApiError, networkApiError, responseApiError } from './auth'
 
 export interface AccountRecoveryRequest {
@@ -72,6 +73,7 @@ async function post(
   body: object,
   idempotencyKey: string,
   expectedStatus: 202 | 204,
+  language?: string,
 ): Promise<AccountRecoveryRequestResult | undefined> {
   let response: Response
 
@@ -82,6 +84,7 @@ async function post(
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': idempotencyKey,
+        ...(language ? { 'Accept-Language': language } : {}),
       },
       body: JSON.stringify(body),
     })
@@ -114,6 +117,7 @@ export const accountRecoveryApi = {
       input,
       idempotencyKey,
       202,
+      requestLanguage(),
     )
   },
   confirm(input: AccountRecoveryConfirmation, idempotencyKey: string) {

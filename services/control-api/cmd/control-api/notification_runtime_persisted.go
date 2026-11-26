@@ -161,7 +161,7 @@ func mergePersistedNativeSMS(
 	config.NativeSMS.AccessKeySecret = secret
 	config.NativeSMS.Templates = make(map[string]nativeSMSTemplate, len(templates))
 	for id, template := range templates {
-		config.NativeSMS.Templates[id] = nativeSMSTemplate{Code: template.Code, Variables: template.Variables}
+		config.NativeSMS.Templates[id] = nativeSMSTemplate{Code: template.Code, CodeEN: template.CodeEN, Variables: template.Variables}
 	}
 	if !validNativeSMSConfig(withDefaultNativeEndpoint(config.NativeSMS)) {
 		return errors.New("persisted native SMS settings are invalid")

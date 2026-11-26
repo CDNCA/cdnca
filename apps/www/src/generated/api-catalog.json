@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 724,
+ "total": 725,
  "api_key_count": 159,
  "groups": [
   {
@@ -50,7 +50,7 @@
   {
    "id": "account",
    "prefix": "/v1/account",
-   "count": 26,
+   "count": 27,
    "api_key_count": 0,
    "operations": [
     {
@@ -184,6 +184,18 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "markAccountInboxMessageRead"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/account/locale",
+     "summary": "Set the caller's console language; notifications to the caller use templates in this language (Chinese when no English version exists)",
+     "summary_zh": "设置调用者的界面语言；发给该用户的通知按此语言选模板（英文缺失时用中文）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "setAccountLocale"
     },
     {
      "method": "GET",

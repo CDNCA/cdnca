@@ -18,6 +18,7 @@ import (
 
 	"github.com/cdnca/cdnca/libs/passwordpolicy"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecovery"
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/google/uuid"
 )
 
@@ -212,6 +213,7 @@ func (handler *Handler) handleRequest(
 		Context: accountrecovery.RequestContext{
 			RequestID: requestID, TraceID: trusted.TraceID, SourceIP: canonicalIP(trusted.SourceIP),
 		},
+		Locale: notification.LocaleFromAcceptLanguage(request.Header.Get("Accept-Language")),
 	})
 	if err != nil {
 		handler.writeServiceError(writer, request, requestID, err)

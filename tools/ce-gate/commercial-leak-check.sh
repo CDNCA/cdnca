@@ -5,7 +5,7 @@
 # 专用名字（商业文件、钩子变量、fix-anchorsplit 合入后由主任务告知）放 STRICT，任何命中都失败。
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-BASE=56cdfd92
+BASE=${CE_GATE_BASE:-56cdfd92}
 BROAD='entitlementroot|trust[-_]?anchor|VerifyPins|anchorEntitlementTrust|anchorUpgradeTrust|\bgarble\b|licredund|commercial[-_]?(trust[-_]?)?anchor'
 STRICT='entitlementroot|VerifyPins|anchorEntitlementTrust|anchorUpgradeTrust|CDNCA_GARBLE|\bgarble\b|licredund|entitlement-trust-anchor|ENTITLEMENT_TRUST_ANCHOR_FILE|CONTROL_UPGRADE_TRUST_ANCHOR_FILE|commercial_trust_anchor|commercial_anchor|commercial-trust-anchor|embedded = "cdnca-offline-root/'
 # 内部开发痕迹：只查相对基线新增的行（迁移 SQL 等 golden 文件里基线就有，不拦）。
@@ -14,25 +14,41 @@ INTERNAL='USER-DECISIONS|主会话|主调度|集成头|(^|[^a-z])main session|Go
 PRIVATE=${CE_GATE_PRIVATE_PATTERNS:-$HOME/.cache/cdnca-pw/ce-gate/private-patterns.txt}
 [ -s "$PRIVATE" ] || { echo "commercial-leak-check: 缺仓库外词表 $PRIVATE" >&2; exit 1; }
 CUSTOMER=$(grep -vE '^[[:space:]]*(#|$)' "$PRIVATE" | paste -sd'|' -)
+for rev in "$BASE" HEAD; do
+  git rev-parse --verify --quiet "$rev^{commit}" >/dev/null || { echo "commercial-leak-check: 缺基线 $rev" >&2; exit 1; }
+done
 EXCLUDE=(-- . ':!CE-PROGRESS.md' ':!tools/ce-gate')
-fail=0
-strict=$(git grep -niE "$STRICT" "${EXCLUDE[@]}" | grep -viE 'garbled' || true)
-if [ -n "$strict" ]; then printf 'STRICT 命中:\n%s\n' "$strict"; fail=1; fi
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-{ git grep -niE "$BROAD" "${EXCLUDE[@]}" || true; } | sed -E 's/^[^:]*:[0-9]+://' | grep -viE 'garbled' | sort -u >"$tmp/now" || true
+# 搜索类命令输出落文件，只容忍「无匹配」（退出码 1）；git/grep 自身出错（≥2）即失败，不得当作无命中。
+search() {
+  local out=$1 rc=0; shift
+  "$@" >"$out" || rc=$?
+  if [ "$rc" -gt 1 ]; then echo "commercial-leak-check: 命令失败（退出码 $rc）: $*" >&2; exit 1; fi
+}
+fail=0
+search "$tmp/strict-all" git grep -niE "$STRICT" "${EXCLUDE[@]}"
+search "$tmp/strict" grep -viE 'garbled' "$tmp/strict-all"
+if [ -s "$tmp/strict" ]; then printf 'STRICT 命中:\n%s\n' "$(cat "$tmp/strict")"; fail=1; fi
+search "$tmp/broad-all" git grep -niE "$BROAD" "${EXCLUDE[@]}"
+sed -E 's/^[^:]*:[0-9]+://' "$tmp/broad-all" >"$tmp/broad-lines"
+search "$tmp/broad" grep -viE 'garbled' "$tmp/broad-lines"
+sort -u "$tmp/broad" >"$tmp/now"
 # baseline-hits.txt：基线 56cdfd92 的宽匹配命中行内容（一次性生成，见文件头部注释）。
 added=$(comm -23 "$tmp/now" tools/ce-gate/baseline-hits.txt)
 if [ -n "$added" ]; then printf '相对基线 %s 新增的命中行:\n%s\n' "$BASE" "$added"; fail=1; fi
 # 迁移 SQL 注释（主任务 10-29 建议）：注释里出现 recheck/redundan/anchor，且相对基线是新增的，就失败
 # （基线已有 rechecked、period anchor 等正常用法，清单在 baseline-migration-comment-hits.txt）。
-{ git grep -hiE -- '--.*(recheck|redundan|anchor)' -- 'services/control-api/migrations/*.sql' || true; } | sort -u >"$tmp/mig"
+search "$tmp/mig-all" git grep -hiE -- '--.*(recheck|redundan|anchor)' -- 'services/control-api/migrations/*.sql'
+sort -u "$tmp/mig-all" >"$tmp/mig"
 mig_added=$(comm -23 "$tmp/mig" tools/ce-gate/baseline-migration-comment-hits.txt)
 if [ -n "$mig_added" ]; then printf '迁移注释里新增的敏感词:\n%s\n' "$mig_added"; fail=1; fi
 # 内部开发痕迹：只查相对基线 diff 新增的行（排除迁移 SQL 和 tools/ce-gate）。
-internal_added=$(git diff "$BASE" HEAD -- . ':!CE-PROGRESS.md' ':!tools/ce-gate' ':!services/control-api/migrations/*.sql' |
-  grep -E '^\+[^+]' | grep -iE "$INTERNAL" || true)
-if [ -n "$internal_added" ]; then printf '新增行含内部开发痕迹:\n%s\n' "$internal_added"; fail=1; fi
-customer=$(git grep -niE "$CUSTOMER" "${EXCLUDE[@]}" ':!services/control-api/migrations/*.sql' ':!infra/clickhouse/migrations/*.sql' || true)
-if [ -n "$customer" ]; then printf '真实客户域名:\n%s\n' "$customer"; fail=1; fi
+git diff "$BASE" HEAD -- . ':!CE-PROGRESS.md' ':!tools/ce-gate' ':!services/control-api/migrations/*.sql' >"$tmp/diff" ||
+  { echo "commercial-leak-check: git diff $BASE HEAD 失败" >&2; exit 1; }
+search "$tmp/diff-added" grep -E '^\+[^+]' "$tmp/diff"
+search "$tmp/internal" grep -iE "$INTERNAL" "$tmp/diff-added"
+if [ -s "$tmp/internal" ]; then printf '新增行含内部开发痕迹:\n%s\n' "$(cat "$tmp/internal")"; fail=1; fi
+search "$tmp/customer" git grep -niE "$CUSTOMER" "${EXCLUDE[@]}" ':!services/control-api/migrations/*.sql' ':!infra/clickhouse/migrations/*.sql'
+if [ -s "$tmp/customer" ]; then printf '真实客户域名:\n%s\n' "$(cat "$tmp/customer")"; fail=1; fi
 [ $fail = 0 ] && { echo "commercial-leak-check: PASS"; exit 0; }
 echo "commercial-leak-check: FAIL" >&2; exit 1

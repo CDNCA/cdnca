@@ -174,9 +174,14 @@ type FirewallManager interface {
 	Apply(context.Context, firewall.FirewallVersion) (firewall.Result, error)
 }
 
+// ErrOpenRestyStopped is what an OpenResty probe returns when no OpenResty
+// master runs: the heartbeat reports STOPPED instead of DEGRADED.
+var ErrOpenRestyStopped = errors.New("OpenResty is not running")
+
 // RuntimeStatusProbe reads the local data-plane health used in heartbeats.
 // A nil Firewall probe means the firewall runtime is not enabled.
 type RuntimeStatusProbe struct {
+	// OpenResty checks the OpenResty serving an active configuration version.
 	OpenResty func(context.Context, string) error
 	Firewall  func(context.Context) error
 	// ErrorLog, when set, is the dynamic routing node's error.log summary
@@ -3172,7 +3177,7 @@ func (c *Client) heartbeatWithContext(ctx context.Context, epoch, sequence uint6
 		AgentVersion:            &hello.Capabilities.AgentVersion,
 		CurrentConfigVersionId:  hello.CurrentConfigVersionId,
 		PreviousConfigVersionId: hello.PreviousConfigVersionId,
-		Runtime:                 c.runtimeStatus(ctx, loadedConfigVersionID),
+		Runtime:                 c.runtimeStatus(ctx, loadedConfigVersionID, activeConfigVersionID(loadedConfigVersionID, hello.ScopedConfigIdentities)),
 		Resources:               &agentv1.ResourceUsage{},
 		ActiveDeployments:       activeDeployments,
 	}
@@ -3190,12 +3195,34 @@ func (c *Client) heartbeatWithContext(ctx context.Context, epoch, sequence uint6
 	return heartbeat, nil
 }
 
-func (c *Client) runtimeStatus(ctx context.Context, loadedConfigVersionID *string) *agentv1.EdgeRuntimeStatus {
-	openRestyState := agentv1.RuntimeState_RUNTIME_STATE_STOPPED
+// activeConfigVersionID is the version the OpenResty check probes: the
+// node-wide loaded one, else (several scopes have no node-wide version)
+// the first scope's current
+// release, since every scope runs in the one node OpenResty. "" = no active
+// configuration.
+func activeConfigVersionID(loadedConfigVersionID *string, scoped []*agentv1.ScopedConfigIdentity) string {
 	if loadedConfigVersionID != nil {
+		return *loadedConfigVersionID
+	}
+	for _, entry := range scoped {
+		if entry.CurrentConfigVersionId != nil {
+			return entry.GetCurrentConfigVersionId()
+		}
+	}
+	return ""
+}
+
+func (c *Client) runtimeStatus(ctx context.Context, loadedConfigVersionID *string, activeVersionID string) *agentv1.EdgeRuntimeStatus {
+	openRestyState := agentv1.RuntimeState_RUNTIME_STATE_STOPPED
+	if activeVersionID != "" {
 		openRestyState = agentv1.RuntimeState_RUNTIME_STATE_DEGRADED
-		if c.runtimeProbe.OpenResty != nil && c.runtimeProbe.OpenResty(ctx, *loadedConfigVersionID) == nil {
-			openRestyState = agentv1.RuntimeState_RUNTIME_STATE_RUNNING
+		if c.runtimeProbe.OpenResty != nil {
+			switch err := c.runtimeProbe.OpenResty(ctx, activeVersionID); {
+			case err == nil:
+				openRestyState = agentv1.RuntimeState_RUNTIME_STATE_RUNNING
+			case errors.Is(err, ErrOpenRestyStopped):
+				openRestyState = agentv1.RuntimeState_RUNTIME_STATE_STOPPED
+			}
 		}
 	}
 	firewallState := agentv1.RuntimeState_RUNTIME_STATE_STOPPED

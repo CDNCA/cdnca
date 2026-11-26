@@ -194,6 +194,21 @@ describe('NotificationSettingsPage', () => {
     expect(screen.getByText('标题（title）、正文（body）')).toBeInTheDocument()
   })
 
+  it('shows the language of each template version', async () => {
+    await changeLocale('zh-CN')
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    mockAdminReads({ items: [
+      { ...template, template_id: 'market.seller.defaulted.zh-cn', variables: ['currency', 'observed'] },
+      { ...template, template_id: 'market.seller.defaulted.en-us', variables: ['currency', 'observed'] },
+    ] })
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    const english = (await screen.findByText('market.seller.defaulted.en-us')).closest('tr')!
+    const chinese = screen.getByText('market.seller.defaulted.zh-cn').closest('tr')!
+    expect(within(english as HTMLElement).getByText('英文')).toBeInTheDocument()
+    expect(within(chinese as HTMLElement).getByText('中文')).toBeInTheDocument()
+    expect(within(english as HTMLElement).getByText('节点市场：供货方被判定失联')).toBeInTheDocument()
+  })
+
   // 新建模板没有名称字段，「名称」列按已有中文名 → 邮件主题 → 模板 ID 兜底，不再显示「—」。
   it('names a template created here by its mail subject, then by its template ID', async () => {
     await changeLocale('zh-CN')

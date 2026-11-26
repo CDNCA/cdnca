@@ -20,7 +20,7 @@ import {
   type TemplateWrite,
 } from '../api/notifications'
 import { useSessionStore } from '../auth/session'
-import { notificationTemplateName, notificationVariableName } from '../i18n/notificationTemplateNames'
+import { notificationTemplateLanguage, notificationTemplateName, notificationVariableName } from '../i18n/notificationTemplateNames'
 import NotificationDeliveryPolicyPanel, { type ChannelState } from './NotificationDeliveryPolicyPanel'
 import '../i18n/tickets'
 import type { EventSubscriptionRow } from './tickets/useEventSubscriptionRows'
@@ -627,6 +627,7 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
             { title: t('templates.id'), dataIndex: 'template_id' },
             { title: t('templates.version'), dataIndex: 'version', width: 90 },
             { title: t('templates.channel'), dataIndex: 'channel', width: 100, render: (channel: NotificationTemplate['channel']) => t(`channels.${channel}`) },
+            { title: t('templates.language'), key: 'language', width: 90, render: (_: unknown, item) => t(`templates.languages.${notificationTemplateLanguage(item.template_id)}`) },
             { title: t('templates.variables'), dataIndex: 'variables', render: (variables: string[]) => variables.map((v) => localized ? notificationVariableName(v) : v).join('、') },
             { title: t('templates.actions'), key: 'actions', width: 90, render: (_: unknown, item) => (
               <Button size="small" icon={<Eye size={14} />} aria-label={t('templates.viewLabel', { name: templateDisplayName(item), version: item.version, channel: t(`channels.${item.channel}`) })} onClick={() => setViewedTemplate(item)}>
@@ -663,6 +664,7 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
             <Descriptions.Item label={t('templates.id')}>{viewedTemplate.template_id}</Descriptions.Item>
             <Descriptions.Item label={t('templates.version')}>{viewedTemplate.version}</Descriptions.Item>
             <Descriptions.Item label={t('templates.channel')}>{t(`channels.${viewedTemplate.channel}`)}</Descriptions.Item>
+            <Descriptions.Item label={t('templates.language')}>{t(`templates.languages.${notificationTemplateLanguage(viewedTemplate.template_id)}`)}</Descriptions.Item>
             {viewedTemplate.channel === 'email' ? (
               <Descriptions.Item label={t('form.subject')}>{viewedTemplate.subject}</Descriptions.Item>
             ) : null}
@@ -730,7 +732,7 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
             }
           }}
         >
-          <Form.Item name="template_id" label={t('templates.id')} rules={[
+          <Form.Item name="template_id" label={t('templates.id')} extra={t('templates.idLanguageHelp')} rules={[
             { required: true, message: t('validation.required') },
             { pattern: /^[a-z][a-z0-9._-]{0,95}$/, message: t('validation.templateId') },
           ]}>

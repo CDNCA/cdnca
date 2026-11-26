@@ -235,6 +235,9 @@ type TemplateDefinition struct {
 type ContextValue struct {
 	value     string
 	sensitive bool
+	// en is the value's English text, used when the recipient
+	// gets the English template; "" keeps value.
+	en string
 }
 
 func PublicValue(value string) ContextValue {
@@ -349,6 +352,8 @@ type DispatchEnqueueRequest struct {
 	SelectedChannel            Channel
 	Templates                  map[Channel]TemplateRef
 	AuditRequestID             string
+	// Locale is the requester's language ("" = platform default).
+	Locale string
 }
 
 type EnqueuedDelivery struct {

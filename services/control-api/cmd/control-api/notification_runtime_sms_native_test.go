@@ -78,6 +78,51 @@ func TestAliyunSMSTransportSignsTemplateRequest(t *testing.T) {
 		form.Get("SignatureNonce") == "" || form.Get("Timestamp") == "" {
 		t.Fatalf("form=%v", form)
 	}
+	// An English message uses the template code mapped on its Chinese template.
+	// Without code_en the Chinese template gets the Chinese values.
+	english := nativeSMSTestMessage("+8613900000000")
+	english.TemplateID = "node.availability.offline.en-us"
+	english.Params = map[string]string{"node_name": "Primary origin", notification.ChineseParamPrefix + "node_name": "主源",
+		"occurred_at": "2026-10-17"}
+	if result, err := transport.Send(t.Context(), english); err != nil || result.Disposition != notificationruntime.ProviderAccepted {
+		t.Fatalf("english result=%+v err=%v", result, err)
+	}
+	mu.Lock()
+	englishForm := forms[len(forms)-1]
+	mu.Unlock()
+	if englishForm.Get("TemplateCode") != "SMS_100" || englishForm.Get("TemplateParam") != `{"name":"主源","time":"2026-10-17"}` {
+		t.Fatalf("english TemplateCode=%q TemplateParam=%s, want the Chinese template's SMS_100 with Chinese values",
+			englishForm.Get("TemplateCode"), englishForm.Get("TemplateParam"))
+	}
+	// With an English provider template set, English messages use
+	// it and Chinese messages keep the Chinese one.
+	withEnglish := nativeSMSTestConfig(t, server, notificationSMSProviderAliyun, "LTAI-test", secret)
+	entry := withEnglish.Templates["node.availability.offline.zh-cn"]
+	entry.CodeEN = "SMS_200"
+	withEnglish.Templates["node.availability.offline.zh-cn"] = entry
+	englishTransport, err := newNativeSMSTransport(withEnglish)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct{ templateID, want, wantParam string }{
+		{"node.availability.offline.en-us", "SMS_200", `{"name":"Primary origin","time":"2026-10-17"}`},
+		{"node.availability.offline.zh-cn", "SMS_100", `{"name":"edge-1","time":"2026-10-17"}`},
+	} {
+		message := nativeSMSTestMessage("+8613900000000")
+		message.TemplateID = test.templateID
+		if test.want == "SMS_200" {
+			message.Params = english.Params
+		}
+		if result, err := englishTransport.Send(t.Context(), message); err != nil || result.Disposition != notificationruntime.ProviderAccepted {
+			t.Fatalf("%s result=%+v err=%v", test.templateID, result, err)
+		}
+		mu.Lock()
+		got, param := forms[len(forms)-1].Get("TemplateCode"), forms[len(forms)-1].Get("TemplateParam")
+		mu.Unlock()
+		if got != test.want || param != test.wantParam {
+			t.Fatalf("%s TemplateCode=%q TemplateParam=%s, want %s %s", test.templateID, got, param, test.want, test.wantParam)
+		}
+	}
 	var templateParam map[string]string
 	if err := json.Unmarshal([]byte(form.Get("TemplateParam")), &templateParam); err != nil ||
 		len(templateParam) != 2 || templateParam["name"] != "edge-1" || templateParam["time"] != "2026-10-17" {

@@ -21,6 +21,7 @@ type PasswordCreateInput struct {
 	HumanToken     string
 	IdempotencyKey string
 	RequestID      string
+	Locale         string
 }
 
 func (service *Service) LoginChannelAvailable(channel string) bool {
@@ -53,7 +54,7 @@ func (service *Service) CreatePassword(ctx context.Context, input PasswordCreate
 	if err != nil {
 		return CreateResult{}, err
 	}
-	return service.Create(ctx, CreateInput{ScopeID: subject.ScopeID, Identifier: subject.Destination, Channel: notification.Channel(subject.Channel), Source: input.Source, HumanToken: input.HumanToken, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, passwordSubject: &subject})
+	return service.Create(ctx, CreateInput{ScopeID: subject.ScopeID, Identifier: subject.Destination, Channel: notification.Channel(subject.Channel), Source: input.Source, HumanToken: input.HumanToken, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, Locale: input.Locale, passwordSubject: &subject})
 }
 
 // publicSettingsTx is replaceable in unit tests.

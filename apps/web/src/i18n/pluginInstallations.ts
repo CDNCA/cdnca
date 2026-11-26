@@ -1,3 +1,4 @@
+import { addMissingCopy, communityCopyEnUS, communityCopyZhCN } from './communityCopy'
 import i18n from './index'
 
 export type PluginInstallationsMessageTree = { [key: string]: string | PluginInstallationsMessageTree }
@@ -302,6 +303,9 @@ function pseudoTree(tree: PluginInstallationsMessageTree): PluginInstallationsMe
   ]))
 }
 
+// 社区页面仍在用的补充文案（communityCopy）先并进本模块，资源包与伪语言随之完整。
+addMissingCopy(zhCN, communityCopyZhCN.pluginInstallations as PluginInstallationsMessageTree)
+addMissingCopy(enUS, communityCopyEnUS.pluginInstallations as PluginInstallationsMessageTree)
 const pseudo = pseudoTree(zhCN)
 export const pluginInstallationsMessages: Record<'zh-CN' | 'en-US' | 'qps-ploc' | 'qps-Ploc', PluginInstallationsMessageTree> = {
   'zh-CN': zhCN, 'en-US': enUS, 'qps-ploc': pseudo, 'qps-Ploc': pseudo,

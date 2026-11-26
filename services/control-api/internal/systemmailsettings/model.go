@@ -62,7 +62,8 @@ type Settings struct {
 	SMSAccessKeyReference string `json:"sms_access_key_reference"`
 	SMSSignatureName      string `json:"sms_signature_name"`
 	// SMSTemplateMap (aliyun/submail only) is a JSON object:
-	// {"<our template id>":{"code":"<provider template>","variables":{"<ours>":"<theirs>"}}}.
+	// {"<our template id>":{"code":"<provider template>","code_en":"<English provider template, optional>",
+	// "variables":{"<ours>":"<theirs>"}}}.
 	// Kept as text so Settings stays comparable.
 	SMSTemplateMap string `json:"sms_template_map"`
 	// MailProvider is the one system mail sender: "" or "smtp" = the
@@ -108,7 +109,10 @@ type SecretCipher interface {
 
 // SMSTemplate maps one of our notification templates to a provider template.
 type SMSTemplate struct {
-	Code      string            `json:"code"`
+	Code string `json:"code"`
+	// CodeEN (optional) is the provider template an English
+	// recipient's message uses; empty sends Code.
+	CodeEN    string            `json:"code_en,omitempty"`
 	Variables map[string]string `json:"variables"`
 }
 

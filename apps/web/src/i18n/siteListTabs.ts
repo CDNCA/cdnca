@@ -5,7 +5,7 @@ const zhCN = {
   defaults: {
     title: '站点默认设置',
     selectionScope: '默认设置',
-    description: '按用户、全局或网站分组维护站点默认配置，新增和批量操作会影响后续匹配范围内的站点设置。',
+    description: '默认值只在新建网站时带入，已建网站不变；指定分组的值优先，新建时手动填写的值又优先于默认值。',
     actions: { create: '新增设置', delete: '删除', enable: '启用', disable: '禁用', edit: '编辑', save: '确定', cancel: '取消', retry: '重试', retrySame: '用原请求重试' },
     columns: { id: 'ID', user: '用户', name: '设置项', value: '设置值', scope: '生效范围', actions: '操作' },
     scope: { global: '全部新建网站', group: '网站分组：{{name}}' },
@@ -143,7 +143,7 @@ const enUS: typeof zhCN = {
   defaults: {
     title: 'Site defaults',
     selectionScope: 'default settings',
-    description: 'Site defaults per user, globally or per site group. Adding and batch actions affect the settings of later sites in the matching scope.',
+    description: 'Defaults are applied only when a site is created; existing sites stay as they are. A group value wins, and values entered when creating win over defaults.',
     actions: { create: 'Add setting', delete: 'Delete', enable: 'Enable', disable: 'Disable', edit: 'Edit', save: 'OK', cancel: 'Cancel', retry: 'Retry', retrySame: 'Retry the same request' },
     columns: { id: 'ID', user: 'User', name: 'Setting', value: 'Value', scope: 'Scope', actions: 'Actions' },
     scope: { global: 'All new sites', group: 'Site group: {{name}}' },

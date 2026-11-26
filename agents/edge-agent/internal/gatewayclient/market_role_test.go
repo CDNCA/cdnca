@@ -87,7 +87,7 @@ func TestRuntimeStatusFollowsMarketRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	role = agentv1.MarketProbeRole_MARKET_PROBE_ROLE_JOIN_MARKET
-	if got := client.runtimeStatus(context.Background(), nil).GetMarketProbe(); got != role {
+	if got := client.runtimeStatus(context.Background(), nil, "").GetMarketProbe(); got != role {
 		t.Fatalf("heartbeat market_probe = %v", got)
 	}
 }

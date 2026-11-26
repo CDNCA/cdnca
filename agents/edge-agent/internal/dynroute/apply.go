@@ -700,6 +700,10 @@ func (runtime *Runtime) running() bool {
 	return alive
 }
 
+// Running reports whether the node OpenResty master named by the shared pid
+// file runs (the heartbeat's process check; it takes no runtime lock).
+func (runtime *Runtime) Running() bool { return runtime.running() }
+
 func (runtime *Runtime) waitControl(ctx context.Context) error {
 	deadline := time.Now().Add(15 * time.Second)
 	for {

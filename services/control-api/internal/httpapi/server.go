@@ -874,6 +874,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/account/inbox/unread-count", s.handleAdminInboxUnread)
 	mux.HandleFunc("POST /v1/account/inbox/{message_id}/read", s.handleAdminInboxRead)
 	mux.HandleFunc("POST /v1/account/inbox/read-all", s.handleAdminInboxReadAll)
+	mux.HandleFunc("PUT /v1/account/locale", s.handleSetAccountLocale)
 	mux.HandleFunc("PUT /v1/admin/admin-access-policy", s.handleUpdateAdminAccessPolicy)
 	mux.HandleFunc("GET /v1/admin/control-origin-auth", s.handleControlOriginAuthStatus)
 	mux.HandleFunc("POST /v1/auth/refresh", s.handleRefresh)

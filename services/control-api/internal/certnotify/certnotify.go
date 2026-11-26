@@ -159,11 +159,12 @@ func (n *Notifier) NotifyExpiring(ctx context.Context, limit int) (int, error) {
 				return err
 			}
 			eventType, source := EventExpiring, expiringSource+item.versionID.String()+"/"+strconv.Itoa(item.threshold)
-			values := map[string]string{
-				"certificate_name": item.name, "domains": domainList(item.sans), "not_after": shanghai(item.notAfter),
+			values := notification.TemplateContext{
+				"certificate_name": notification.PublicValue(item.name), "domains": domainList(item.sans),
+				"not_after": notification.PublicValue(shanghai(item.notAfter)),
 			}
 			if item.notAfter.After(now) {
-				values["days_left"] = strconv.Itoa(int(item.notAfter.Sub(now).Hours() / 24))
+				values["days_left"] = notification.PublicValue(strconv.Itoa(int(item.notAfter.Sub(now).Hours() / 24)))
 			} else {
 				eventType, source = EventExpired, expiredSource+item.versionID.String()
 			}
@@ -202,11 +203,12 @@ func RenewFailedTx(ctx context.Context, tx pgx.Tx, enqueuer Enqueuer, scopeID, o
 	if parent == nil {
 		return nil
 	}
-	expires := "未知"
+	expires := notification.LocalizedValue("未知", "Unknown")
 	if notAfter != nil {
-		expires = shanghai(*notAfter)
+		expires = notification.PublicValue(shanghai(*notAfter))
 	}
-	values := map[string]string{"domains": domainList(domains), "reason": failureReason(code), "not_after": expires}
+	values := notification.TemplateContext{"domains": domainList(domains),
+		"reason": notification.LocalizedValue(failureReason(code), failureReasonEN(code)), "not_after": expires}
 	recipients, err := certificateRecipients(ctx, tx, scopeID, owner)
 	if err != nil {
 		return err
@@ -240,7 +242,7 @@ func certificateRecipients(ctx context.Context, tx pgx.Tx, scopeID, owner uuid.U
 // enqueue sends one event under a savepoint: a recipient whose delivery
 // fails (or who was told already) never blocks the others.
 func (n *Notifier) enqueue(ctx context.Context, tx pgx.Tx, scopeID, recipient uuid.UUID, source, eventType string,
-	values map[string]string) (bool, error) {
+	templateContext notification.TemplateContext) (bool, error) {
 	var already bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM notification_events
 		WHERE scope_id=$1 AND recipient_user_id=$2 AND source_event_id=$3 AND event_type=$4)`,
@@ -251,10 +253,6 @@ func (n *Notifier) enqueue(ctx context.Context, tx pgx.Tx, scopeID, recipient uu
 		return false, nil
 	}
 	templateID := eventType + ".zh-cn"
-	templateContext := notification.TemplateContext{}
-	for name, value := range values {
-		templateContext[name] = notification.PublicValue(value)
-	}
 	request := notification.EnqueueRequest{
 		ScopeID: scopeID, RecipientID: recipient, SourceEventID: source, EventType: eventType,
 		Policy: notification.DeliveryTenantSubscribed,
@@ -280,21 +278,23 @@ func (n *Notifier) enqueue(ctx context.Context, tx pgx.Tx, scopeID, recipient uu
 	return true, savepoint.Commit(ctx)
 }
 
-// domainList is at most three names, then "等N个".
-func domainList(names []string) string {
+// domainList is at most three names, then "等N个" ("(N in total)").
+func domainList(names []string) notification.ContextValue {
 	sorted := slices.Clone(names)
 	slices.Sort(sorted)
 	if len(sorted) <= 3 {
-		return joinNames(sorted)
+		return notification.LocalizedValue(joinNames(sorted, "、"), joinNames(sorted, ", "))
 	}
-	return joinNames(sorted[:3]) + "等" + strconv.Itoa(len(sorted)) + "个"
+	total := strconv.Itoa(len(sorted))
+	return notification.LocalizedValue(joinNames(sorted[:3], "、")+"等"+total+"个",
+		joinNames(sorted[:3], ", ")+" ("+total+" in total)")
 }
 
-func joinNames(names []string) string {
+func joinNames(names []string, separator string) string {
 	result := ""
 	for index, name := range names {
 		if index > 0 {
-			result += "、"
+			result += separator
 		}
 		result += name
 	}
@@ -335,5 +335,33 @@ func failureReason(code string) string {
 		return "签发处理超时"
 	default:
 		return "签发失败（" + code + "）"
+	}
+}
+
+// failureReasonEN is failureReason in English.
+func failureReasonEN(code string) string {
+	switch code {
+	case "acme_rate_limited":
+		return "Too many certificate issuance requests"
+	case "acme_authorization_invalid":
+		return "The certificate authority failed to validate the domain (check DNS records or the DNS API)"
+	case "acme_order_rejected":
+		return "The certificate authority rejected the order"
+	case "acme_account_unavailable":
+		return "The certificate authority account is unavailable (the EAB credentials may be invalid)"
+	case "acme_directory_unavailable":
+		return "The certificate authority is temporarily unreachable"
+	case "acme_challenge_publish_failed", "acme_challenge_propagation_failed":
+		return "Failed to write or propagate the validation record"
+	case "acme_dns_provider_unavailable", "acme_dns_provider_invalid":
+		return "The DNS API is unavailable or misconfigured"
+	case "acme_dns_proxy_unavailable":
+		return "Cannot reach the DNS API through the HTTP proxy"
+	case "acme_http01_no_serving_node", "acme_http01_node_unsupported":
+		return "No node can complete file validation"
+	case "acme_timeout":
+		return "Issuance timed out"
+	default:
+		return "Issuance failed (" + code + ")"
 	}
 }

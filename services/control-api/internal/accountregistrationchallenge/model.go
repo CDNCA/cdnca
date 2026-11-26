@@ -37,6 +37,8 @@ type CreateInput struct {
 	HumanToken     string
 	IdempotencyKey string
 	RequestID      string
+	// Locale is the requester's language for the code message.
+	Locale string
 }
 
 type CreateResult struct {
@@ -92,6 +94,7 @@ type ContactRequest struct {
 	OTP               string
 	ExpiresAt         time.Time
 	RequestID         string
+	Locale            string
 }
 
 type ContactReceipt struct {

@@ -1314,9 +1314,9 @@ function OtherPanel() {
     { id: 'other-api', title: t('v2.other.groups.api'), sub: `${t('v2.other.summary.apiKey')} ${onOff(live.api_key_enabled)}` },
     { id: 'other-domain', title: t('v2.other.groups.domain'), sub: `${t(`domainOwnership.${live.domain_ownership_policy}`)} · ${t('v2.other.noticesValue', { days: noticeDays })}` },
   ] as const
-  const card = (index: number, body: ReactNode, impact = false, wide = false) => {
+  const card = (index: number, body: ReactNode, impact = false) => {
     const group = groups[index]
-    return <section id={group.id} className={`system-settings-config-card sys-setting-section-anchor sys-other-card${wide ? ' sys-other-card-wide' : ''}${impact ? ' sys-setting-v2-impact' : ''}`} aria-labelledby={`${group.id}-title`}>
+    return <section id={group.id} className={`system-settings-config-card sys-setting-section-anchor sys-other-card${impact ? ' sys-setting-v2-impact' : ''}`} aria-labelledby={`${group.id}-title`}>
       <div className="sys-other-card-head">
         <h2 id={`${group.id}-title`} className="system-settings-config-card-title">{group.title}</h2>
         {group.sub ? <span className="sys-other-card-sub">{group.sub}</span> : null}
@@ -1358,7 +1358,7 @@ function OtherPanel() {
             <Input value={draft.http_proxy} disabled={!canManage} onChange={(event) => update('http_proxy', event.target.value)}
               aria-label={t('fields.httpProxy')} autoComplete="off" spellCheck={false} style={{ width: '100%', maxWidth: 420 }} />
           </Form.Item>
-        </>, false, true)}
+        </>)}
         {card(1, <div className="sys-other-toggles">{toggleCard('disable_failed_sync_nodes', t('fields.disableFailedSyncNodes'), t('hints.disableFailedSyncNodes'))}</div>)}
         {card(2, <div className="sys-other-toggles">
           {toggleCard('api_key_enabled', t('fields.apiKeyEnabled'), t('hints.apiKeyEnabled'), true)}

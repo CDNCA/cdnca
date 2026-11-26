@@ -128,6 +128,17 @@ func lineBackupAddressText(addresses []string) string {
 	return strings.Join(addresses[:lineBackupAddressShown], "、") + " 等 " + strconv.Itoa(len(addresses)) + " 个"
 }
 
+// lineBackupAddressTextEN is the English form of a lineBackupAddressText
+// value (the intent keeps the Chinese text).
+func lineBackupAddressTextEN(text string) string {
+	list, total, more := strings.Cut(text, " 等 ")
+	list = strings.ReplaceAll(list, "、", ", ")
+	if !more {
+		return list
+	}
+	return list + " (" + strings.TrimSuffix(total, " 个") + " in total)"
+}
+
 // lineBackupObservedSQL reads the current revision of every general line
 // group per address family; $1/$2 narrow it to one line group when not null.
 const lineBackupObservedSQL = `SELECT published.tenant_scope_id,published.line_group_id,published.address_family::integer,

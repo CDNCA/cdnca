@@ -34,7 +34,7 @@ const zhCN = {
   user: {
     title: '已验证域名',
     conflictSelectionScope: '域名',
-    subtitle: '验证根域名所有权后长期有效（仅管理员可撤销），其他账户不能再添加该根域名下的任何域名；他人已先添加的同名站点可以认领，对方站点会被自动停用。',
+    subtitle: '验证根域名所有权后，其他账户不能再添加该根域名下的任何域名；他人已先添加的同名站点可以认领，对方站点会被自动停用。',
     add: '验证新域名', domain: '域名', domainPlaceholder: '例如 example.com 或 www.example.com', start: '获取验证信息',
     txtStep: '在域名的 DNS 中添加以下 TXT 记录，生效后点“立即检查”：', httpStep: '在网站根目录放置以下文件，内容为验证码：',
     recordName: '主机记录', recordValue: '记录值', fileURL: '文件地址', fileContent: '文件内容',
@@ -100,7 +100,7 @@ const enUS: Messages = {
   user: {
     title: 'Verified domains',
     conflictSelectionScope: 'domains',
-    subtitle: 'A verified root domain stays verified until an administrator revokes it; other accounts cannot add any domain under it. Sites others added first can be claimed; their sites are disabled.',
+    subtitle: 'Once a root domain is verified, other accounts cannot add any domain under it. Sites others added first can be claimed; their sites are disabled.',
     add: 'Verify a domain', domain: 'Domain', domainPlaceholder: 'e.g. example.com or www.example.com', start: 'Get verification details',
     txtStep: 'Add this TXT record to the domain DNS, then click Check now:', httpStep: 'Serve this file from the site root with the token as its content:',
     recordName: 'Name', recordValue: 'Value', fileURL: 'File URL', fileContent: 'File content',

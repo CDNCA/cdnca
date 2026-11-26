@@ -15,7 +15,7 @@ const zhCN = {
     entriesPlaceholder: '192.0.2.10\n198.51.100.0/24\n2001:db8::/32',
   },
   confirmDelete: '删除 IP 名单“{{name}}”？仍被安全策略引用的名单不能删除。',
-  saved: '已保存名单“{{name}}”（版本 {{revision}}），引用它的网站会自动重新发布。',
+  saved: '已保存名单“{{name}}”（版本 {{revision}}）。',
   deleted: '已删除名单“{{name}}”。',
   empty: '还没有 IP 名单',
   errors: {
@@ -40,7 +40,7 @@ const enUS: typeof zhCN = {
     entriesPlaceholder: '192.0.2.10\n198.51.100.0/24\n2001:db8::/32',
   },
   confirmDelete: 'Delete IP list "{{name}}"? A list a security policy still references cannot be deleted.',
-  saved: 'Saved list "{{name}}" (revision {{revision}}); sites that use it are republished.',
+  saved: 'Saved list "{{name}}" (revision {{revision}}).',
   deleted: 'Deleted list "{{name}}".',
   empty: 'No IP lists yet',
   errors: {

@@ -536,7 +536,7 @@ func enqueueRecoveryAlert(ctx context.Context, tx pgx.Tx, alerts RecoveryAlertEn
 	}
 	sms := notification.TemplateContext{
 		"node_name": notification.PublicValue(name), "node_ip": notification.PublicValue(address),
-		"expired_for": notification.PublicValue(recoveryDurationText(expiredFor)),
+		"expired_for": notification.LocalizedValue(recoveryDurationText(expiredFor), recoveryDurationTextEN(expiredFor)),
 		"not_after":   notification.PublicValue(issued.NotAfter.UTC().Format(time.DateTime)),
 	}
 	email := notification.TemplateContext{
@@ -573,5 +573,18 @@ func recoveryDurationText(value time.Duration) string {
 		return fmt.Sprintf("%d小时%d分钟", hours, minutes)
 	default:
 		return fmt.Sprintf("%d分钟", minutes)
+	}
+}
+
+// recoveryDurationTextEN is recoveryDurationText in English ("3d 4h", "25m").
+func recoveryDurationTextEN(value time.Duration) string {
+	days, hours, minutes := int64(value/(24*time.Hour)), int64(value%(24*time.Hour)/time.Hour), int64(value%time.Hour/time.Minute)
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd %dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
 	}
 }

@@ -754,7 +754,7 @@ describe('CertificateListPage', () => {
 		vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({ ...assetDetail, versions: [assetDetail.versions[0], pendingVersion] })
 		vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [binding] })
 		const activate = vi.spyOn(certificatesApi, 'activateAssetVersion').mockResolvedValue({ ...pendingVersion, status: 'active' })
-		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, default: false })
+		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, default: true })
 		const unbind = vi.spyOn(certificatesApi, 'unbindAsset').mockResolvedValue({ ...binding, revision: 2, bound: false })
 		const user = userEvent.setup()
 		renderWithProviders(<CertificateListPage />, ['/site/cert'])
@@ -774,10 +774,12 @@ describe('CertificateListPage', () => {
 			await user.click(bindButton)
 		const bindDialog = await findDialog('绑定网站')
 		await user.type(within(bindDialog).getByLabelText('网站'), binding.site_id)
+		// 没有「设为默认证书」开关：每个网站只有当前绑定生效，节点只发默认绑定，所以总是 default: true
+		expect(within(bindDialog).queryByRole('switch')).not.toBeInTheDocument()
 		await user.click(within(bindDialog).getByRole('button', { name: '确认绑定' }))
 			await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))
 			expect(bind.mock.calls[0][2]).toEqual({
-				site_id: binding.site_id, version_id: assetDetail.versions[0].id, expected_revision: 1, default: false,
+				site_id: binding.site_id, version_id: assetDetail.versions[0].id, expected_revision: 1, default: true,
 			})
 			await waitFor(() => expect(queryDialog('绑定网站')).not.toBeInTheDocument())
 			await waitFor(() => expect(queryDialog('证书详情')).not.toBeInTheDocument())
@@ -795,7 +797,7 @@ describe('CertificateListPage', () => {
 		const issued = { ...assetDetail.versions[0], status: 'default' as const }
 		vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({ ...assetDetail, versions: [issued] })
 		vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [] })
-		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, version_id: issued.id, default: false })
+		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, version_id: issued.id, default: true })
 		const user = userEvent.setup()
 		renderWithProviders(<CertificateListPage />, ['/site/cert'])
 
@@ -1425,7 +1427,7 @@ describe('CertificateListPage', () => {
 			{ id: binding.site_id, display_id: '7', domain: covered },
 			{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', display_id: '8', domain: 'other.invalid' },
 		], total: 2, page: 1, limit: 50 } as unknown as Awaited<ReturnType<typeof sitesApi.list>>)
-		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, default: false })
+		const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue({ ...binding, default: true })
 		const user = userEvent.setup()
 		renderWithProviders(<CertificateListPage />, ['/site/cert'])
 		await user.click(await screen.findByRole('button', { name: '查看详情' }))
@@ -2590,11 +2592,11 @@ describe('CertificateListPage', () => {
           .mockResolvedValueOnce({ ...asset, deleted_at: '2026-08-01T00:00:00Z' })
         calls = () => command.mock.calls as unknown[][]
       } else if (scenario === 'bind bound false' || scenario === 'bind default mismatch') {
-        const matchingBinding = { ...binding, default: false, bound: true }
+        const matchingBinding = { ...binding, default: true, bound: true }
         const command = vi.spyOn(certificatesApi, 'bindAsset')
           .mockResolvedValueOnce(scenario === 'bind bound false'
             ? { ...matchingBinding, bound: false }
-            : { ...matchingBinding, default: true })
+            : { ...matchingBinding, default: false })
           .mockResolvedValueOnce(matchingBinding)
         calls = () => command.mock.calls as unknown[][]
       } else {

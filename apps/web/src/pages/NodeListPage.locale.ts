@@ -267,7 +267,7 @@ const zhCN = {
   pending: {
     empty: '暂无待初始化节点',
     initializeTitle: '初始化节点 {{name}}？',
-    initializeContent: '初始化后节点转为正常，开始同步系统与网站配置并加入 DNS 解析。节点必须已执行安装命令并完成注册。',
+    initializeContent: '初始化后节点转为正常并开始同步系统与网站配置。在线路分组「配置解析」加入节点 IP 后，节点才进入 DNS 解析。节点必须已执行安装命令并完成注册。',
   },
   join: {
     initializedTitle: '节点 {{name}} 已初始化', connected: '已连接', inLineGroup: '已进线路组', inDNS: '已进入 DNS 解析',
@@ -344,7 +344,7 @@ const zhCN = {
     resetCancel: '取消',
     unavailable: '无法生成安装命令，请检查公网 Gateway 配置后重试。',
     initializeStep: '2. 节点初始化',
-    initializeDescription: '节点注册后出现在「待初始化」，点击「初始化」才会上线、同步配置并加入 DNS 解析。请在 24 小时内完成初始化。',
+    initializeDescription: '节点注册后出现在「待初始化」，点击「初始化」后上线并同步配置；在线路分组「配置解析」加入节点 IP 后才进入 DNS 解析。请在 24 小时内完成初始化。',
     initializeDetailsTitle: '节点 IP 如何确定',
     initializeDetails: '注册时记录节点访问主控的公网来源 IP；上线后节点按 IPv4/IPv6 默认出口自动上报地址，主控核验连接来源后，只回填为空的 IP，不会覆盖已有 IP。来源核验通过不代表入站服务可达。',
   },  // 重装此节点：同一节点换新机器或重置系统后重装，沿用节点 ID 与全部配置。
@@ -633,7 +633,7 @@ const enUS: typeof zhCN = {
   pending: {
     empty: 'No nodes pending initialization',
     initializeTitle: 'Initialize node {{name}}?',
-    initializeContent: 'The node becomes active, starts syncing system and site configuration, and joins DNS. It must have run the install command and completed registration.',
+    initializeContent: 'The node becomes active and starts syncing system and site configuration. It joins DNS once its IP is added under Line groups › Configure resolution. It must have run the install command and completed registration.',
   },
   join: {
     initializedTitle: 'Node {{name}} initialized', connected: 'Connected', inLineGroup: 'In a line group', inDNS: 'In DNS resolution',
@@ -710,7 +710,7 @@ const enUS: typeof zhCN = {
     resetCancel: 'Cancel',
     unavailable: 'Cannot generate the command. Check the public Gateway configuration and retry.',
     initializeStep: '2. Initialize the node',
-    initializeDescription: 'A registered node appears under Pending initialization. Click Initialize to bring it online, sync configuration and add it to DNS. Initialize it within 24 hours.',
+    initializeDescription: 'A registered node appears under Pending initialization. Click Initialize to bring it online and sync configuration; it joins DNS once its IP is added under Line groups › Configure resolution. Initialize it within 24 hours.',
     initializeDetailsTitle: 'How node IPs are set',
     initializeDetails: 'Registration records the public source IP seen by the control plane. Once online, the node reports its IPv4/IPv6 default egress addresses; after verifying the connection source, the control plane fills only empty IPs and never overwrites existing ones. Passing source verification does not prove inbound service reachability.',
   },

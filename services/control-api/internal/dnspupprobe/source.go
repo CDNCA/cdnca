@@ -156,6 +156,13 @@ var reasonTexts = map[string]string{
 	DegradeUnavailable:  "dnspup 服务暂不可用",
 }
 
+var reasonTextsEN = map[string]string{
+	DegradeQuota:        "The dnspup monthly quota is used up",
+	DegradeRateLimited:  "The dnspup request rate limit was exceeded",
+	DegradeUnauthorized: "The dnspup key was rejected (invalid, disabled, wrong source, or the tool is not enabled)",
+	DegradeUnavailable:  "The dnspup service is temporarily unavailable",
+}
+
 // Degrade pauses the dnspup source until until (only for the settings
 // revision that hit it: a new key is not paused by the old one's errors),
 // audits it and, once per pause, alerts the platform members holding
@@ -221,7 +228,7 @@ func (service *Service) alert(ctx context.Context, tx pgx.Tx, sequence int64, re
 	}
 	shanghai := time.FixedZone("CST", 8*3600)
 	values := notification.TemplateContext{
-		"reason_text": notification.PublicValue(reasonTexts[reason]), "code": notification.PublicValue(code),
+		"reason_text": notification.LocalizedValue(reasonTexts[reason], reasonTextsEN[reason]), "code": notification.PublicValue(code),
 		"until": notification.PublicValue(until.In(shanghai).Format("2006-01-02 15:04")),
 		"link":  notification.PublicValue(SettingsPagePath),
 	}

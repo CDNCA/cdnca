@@ -8,6 +8,10 @@ import {
   type ImportCertificateAssetInput,
 } from '../api/certificates'
 
+// 主控 Version.certificate_pem 是 Go []byte，encoding/json 输出 base64（OpenAPI format: byte）；回包按真实编码写。
+const chainPEM = '-----BEGIN CERTIFICATE-----\nMIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnVu\n-----END CERTIFICATE-----\n'
+const chainWire = btoa(chainPEM)
+
 function response(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status, headers: { 'Content-Type': 'application/json' },
@@ -128,7 +132,7 @@ describe('certificatesApi', () => {
         created_by: '11111111-1111-4111-8111-111111111111', updated_by: '11111111-1111-4111-8111-111111111111', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
       }
       const version = {
-        id: versionID, asset_id: assetID, tenant_scope_id: asset.tenant_scope_id, version: 1, status: 'active', fingerprint_sha256: 'ab'.repeat(32), certificate_pem: 'PUBLIC-PEM', sans: ['example.com'], subject: 'CN=example.com', serial_number: '1', public_key_algorithm: 'RSA', public_key_bits: 2048, signature_algorithm: 'SHA256-RSA', not_before: '2026-01-01T00:00:00Z', not_after: '2027-01-01T00:00:00Z', renewal_due: false, imported_by: asset.created_by, imported_at: asset.created_at,
+        id: versionID, asset_id: assetID, tenant_scope_id: asset.tenant_scope_id, version: 1, status: 'active', fingerprint_sha256: 'ab'.repeat(32), certificate_pem: chainWire, sans: ['example.com'], subject: 'CN=example.com', serial_number: '1', public_key_algorithm: 'RSA', public_key_bits: 2048, signature_algorithm: 'SHA256-RSA', not_before: '2026-01-01T00:00:00Z', not_after: '2027-01-01T00:00:00Z', renewal_due: false, imported_by: asset.created_by, imported_at: asset.created_at,
       }
       if (method === 'GET' && url.endsWith('/bindings')) return Promise.resolve(response({ items: [] }))
       if (method === 'GET' && url.includes('/certificate-binding')) {
@@ -156,19 +160,22 @@ describe('certificatesApi', () => {
 		}
 
     await certificatesApi.listAssets('token')
-    await certificatesApi.getAsset('token', assetID)
-		await certificatesApi.uploadAsset('token', upload, 'upload-key', 'upload-request')
-		await certificatesApi.activateAssetVersion('token', assetID, versionID, {
+    const fetched = await certificatesApi.getAsset('token', assetID)
+		const uploaded = await certificatesApi.uploadAsset('token', upload, 'upload-key', 'upload-request')
+		const activated = await certificatesApi.activateAssetVersion('token', assetID, versionID, {
 			expected_revision: 3,
 		}, 'activate-key', 'activate-request')
 		await certificatesApi.listAssetBindings('token', assetID)
-    await certificatesApi.getSiteBinding('token', binding.site_id)
+    const siteBinding = await certificatesApi.getSiteBinding('token', binding.site_id)
 		await certificatesApi.bindAsset('token', assetID, binding, 'bind-key', 'bind-request')
 		await certificatesApi.unbindAsset('token', assetID, binding.site_id, {
 			expected_revision: 1,
 		}, 'unbind-key', 'unbind-request')
     await certificatesApi.deleteAsset('token', assetID, { expected_revision: 5 }, 'delete-key', 'delete-request')
 
+    // 解码成 PEM 明文：上传回执比对（samePEMCertificateChain）用它
+    expect([fetched.versions[0].certificate_pem, uploaded.versions[0].certificate_pem, activated.certificate_pem,
+      siteBinding?.version.certificate_pem]).toEqual([chainPEM, chainPEM, chainPEM, chainPEM])
     expect(calls.map((call) => call.url)).toEqual([
       '/v1/certificate-assets',
       `/v1/certificate-assets/${assetID}`,
@@ -232,7 +239,7 @@ describe('certificatesApi', () => {
     }
     const version = {
       id: 'other-version', asset_id: 'asset', tenant_scope_id: 'scope', version: 1, status: 'active',
-      fingerprint_sha256: 'ab'.repeat(32), certificate_pem: 'PUBLIC', sans: ['example.com'], subject: 'CN=example.com',
+      fingerprint_sha256: 'ab'.repeat(32), certificate_pem: chainWire, sans: ['example.com'], subject: 'CN=example.com',
       serial_number: '1', public_key_algorithm: 'RSA', public_key_bits: 2048, signature_algorithm: 'SHA256-RSA',
       not_before: '2026-01-01T00:00:00Z', not_after: '2027-01-01T00:00:00Z', renewal_due: false,
       imported_by: 'user', imported_at: '2026-01-01T00:00:00Z',
@@ -262,7 +269,7 @@ describe('certificatesApi', () => {
       },
       versions: [{
         id: 'version', asset_id: 'asset', tenant_scope_id: 'scope', version: 1, status: 'active',
-        fingerprint_sha256: 'ab'.repeat(32), certificate_pem: 'PUBLIC', sans: ['example.com'], subject: 'CN=example.com',
+        fingerprint_sha256: 'ab'.repeat(32), certificate_pem: chainWire, sans: ['example.com'], subject: 'CN=example.com',
         serial_number: '1', public_key_algorithm: 'RSA', public_key_bits: 2048, signature_algorithm: 'SHA256-RSA',
         not_before: '2026-01-01T00:00:00Z', not_after: '2027-01-01T00:00:00Z', renewal_due: false,
         imported_by: 'user', imported_at: '2026-01-01T00:00:00Z', private_key_pem: 'PRIVATE',
@@ -271,5 +278,24 @@ describe('certificatesApi', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(value))
 
     await expect(certificatesApi.getAsset('token', 'asset')).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
+  it('rejects a version whose certificate_pem is not the contract base64 of a certificate PEM', async () => {
+    const version = {
+      id: 'version', asset_id: 'asset', tenant_scope_id: 'scope', version: 1, status: 'active',
+      fingerprint_sha256: 'ab'.repeat(32), sans: ['example.com'], subject: 'CN=example.com',
+      serial_number: '1', public_key_algorithm: 'RSA', public_key_bits: 2048, signature_algorithm: 'SHA256-RSA',
+      not_before: '2026-01-01T00:00:00Z', not_after: '2027-01-01T00:00:00Z', renewal_due: false,
+      imported_by: 'user', imported_at: '2026-01-01T00:00:00Z',
+    }
+    const asset = {
+      display_id: '1', tenant: { id: 'tenant', display_id: '1', name: 'Tenant' }, owner: null, owner_status: 'legacy_unknown',
+      id: 'asset', tenant_scope_id: 'scope', name: 'name', source: 'uploaded', revision: 1,
+      created_by: 'user', updated_by: 'user', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+    }
+    for (const bad of [chainPEM, btoa('not a certificate'), 'not base64!', '']) {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response({ asset, versions: [{ ...version, certificate_pem: bad }] }))
+      await expect(certificatesApi.getAsset('token', 'asset')).rejects.toMatchObject({ code: 'invalid_response' })
+    }
   })
 })

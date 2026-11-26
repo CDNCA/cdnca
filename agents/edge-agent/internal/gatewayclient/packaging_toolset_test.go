@@ -46,7 +46,7 @@ func TestPackagingToolsetReportDeclaredAndCarried(t *testing.T) {
 				declared++
 			}
 		}
-		carried := client.runtimeStatus(context.Background(), nil).PackagingToolset
+		carried := client.runtimeStatus(context.Background(), nil, "").PackagingToolset
 		if probe == nil && (declared != 0 || carried != nil) {
 			t.Fatalf("without the probe: declared %d, carried %v", declared, carried)
 		}

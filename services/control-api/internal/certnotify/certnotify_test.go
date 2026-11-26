@@ -1,6 +1,10 @@
 package certnotify
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
+)
 
 func TestValidNoticeDays(t *testing.T) {
 	for _, days := range [][]int{{30}, {30, 14, 7, 3, 1}, {60, 1}, DefaultNoticeDays} {
@@ -16,16 +20,19 @@ func TestValidNoticeDays(t *testing.T) {
 }
 
 func TestDomainListAndReason(t *testing.T) {
-	if got := domainList([]string{"b.test", "a.test"}); got != "a.test、b.test" {
-		t.Fatal(got)
+	if got := domainList([]string{"b.test", "a.test"}); got != notification.LocalizedValue("a.test、b.test", "a.test, b.test") {
+		t.Fatalf("%+v", got)
 	}
-	if got := domainList([]string{"d", "c", "b", "a"}); got != "a、b、c等4个" {
+	if got := domainList([]string{"d", "c", "b", "a"}); got != notification.LocalizedValue("a、b、c等4个", "a, b, c (4 in total)") {
 		t.Fatal(got)
 	}
 	if got := failureReason("acme_rate_limited"); got != "证书签发请求过于频繁" {
 		t.Fatal(got)
 	}
 	if got := failureReason("acme_weird"); got != "签发失败（acme_weird）" {
+		t.Fatal(got)
+	}
+	if got := failureReasonEN("acme_weird"); got != "Issuance failed (acme_weird)" {
 		t.Fatal(got)
 	}
 }

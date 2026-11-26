@@ -230,3 +230,17 @@ func TestSMTPHTMLAlternativeLegacyThemeShowsActionURL(t *testing.T) {
 		t.Fatalf("legacy page = %s", page)
 	}
 }
+
+func TestSMTPEmailActionLabelFollowsTemplateLanguage(t *testing.T) {
+	for templateID, want := range map[string]string{
+		"account_recovery_email":                           "设置新密码",
+		"account_recovery_email.en-us":                     "Set a new password",
+		identity.TenantMemberInvitationTemplate:            "接受邀请",
+		identity.TenantMemberInvitationTemplate + ".en-us": "Accept invitation",
+	} {
+		action := smtpEmailAction(notificationruntime.ProviderMessage{TemplateID: templateID, ActionURL: "https://console.example.com/reset"})
+		if action.Label != want {
+			t.Errorf("%s label = %q, want %q", templateID, action.Label, want)
+		}
+	}
+}

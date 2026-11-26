@@ -477,6 +477,7 @@
       "pages/NodeLineGroupsPage.css",
       "pages/NodeListPage.css",
       "pages/NodeSchedulingPage.css",
+      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
       "pages/SiteAnalysisPage.css",
@@ -500,7 +501,6 @@
       "pages/site-edit/CacheSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
       "pages/site-edit/SiteEditV4.css",
-      "pages/site-edit/SiteOfficialPacksCard.css",
       "pages/site-edit/SiteProtectionTabs.css",
       "pages/tickets/TicketsChat.css",
       "styles.css",
@@ -582,7 +582,6 @@
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
       "pages/DnsReconcilePage.css",
-      "pages/DoHServicePage.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
@@ -706,6 +705,7 @@
       "components/CacheOperationOutcome.css",
       "components/CnameLabelEditor.css",
       "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
       "pages/AccountLogPage.css",
       "pages/AccountMessagesPage.css",
       "pages/CacheOperationHistoryPage.css",
@@ -728,6 +728,7 @@
       "pages/StreamDetailPage.css",
       "pages/StreamListPage.css",
       "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemGlobalSettingsV2.css",
       "pages/WafLogsV2.css",
       "pages/dns-hub/DnsHubPage.css",
       "pages/lists/lists.css",
@@ -772,6 +773,7 @@
     "used_in": [
       "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
+      "pages/RegisterPage.css",
       "pages/SystemGlobalSettingsV2.css",
       "pages/market/MarketStorePage.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
@@ -839,6 +841,7 @@
     "group": "base",
     "used_in": [
       "@cdnca/ui/styles.css",
+      "components/FieldHelp.css",
       "pages/DnsReconcilePage.css",
       "pages/NodeRealtimePage.css",
       "pages/RegisterPage.css",
@@ -938,6 +941,7 @@
       "pages/NodeL2TopologyPage.css",
       "pages/NodeLineGroupsPage.css",
       "pages/NodeListPage.css",
+      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamListPage.css",
       "pages/plugin-market/PluginMarketPage.css"
@@ -1227,6 +1231,7 @@
     "used_in": [
       "pages/AnnouncementManagementPage.css",
       "pages/CacheOperationsPage.css",
+      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SystemGlobalSettingsV2.css",
       "pages/WafLogsV2.css",
@@ -1271,8 +1276,8 @@
     "used_in": [
       "@cdnca/ui/styles.css",
       "components/SiteCacheTabs.css",
-      "pages/CacheOperationsPage.css",
       "pages/FirewallPoliciesPage.css",
+      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/StreamListPage.css",
@@ -1291,6 +1296,7 @@
     "used_in": [
       "pages/AnnouncementManagementPage.css",
       "pages/NodeL2TopologyPage.css",
+      "pages/RegisterPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/node-market/NodeMarketV2.css",
@@ -1364,8 +1370,8 @@
     "group": "base",
     "used_in": [
       "pages/ControlUpgradesPage.css",
+      "pages/RegisterPage.css",
       "pages/SystemLogPage.css",
-      "pages/market/MarketStorePage.css",
       "pages/plugin-market/PluginMarketPage.css",
       "styles.css",
       "styles/adminHomeReference.css"

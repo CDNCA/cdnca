@@ -206,6 +206,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		result, err := handler.service.Create(ctx, accountloginchallenge.CreateInput{
 			ScopeID: trusted.ScopeID, Identifier: *body.Identifier, Channel: *body.Channel, Source: trusted.SourceIP,
 			HumanToken: body.HumanToken, IdempotencyKey: idempotencyKey, RequestID: requestID,
+			Locale: notification.LocaleFromAcceptLanguage(request.Header.Get("Accept-Language")),
 		})
 		if err != nil {
 			handler.writeServiceError(writer, requestID, err)

@@ -196,7 +196,7 @@ func TestRecoverExpiredCertificateSameKey(t *testing.T) {
 		t.Fatalf("recover audit events = %d, %v", audited, err)
 	}
 	if len(alerts.requests) == 0 || alerts.requests[0].EventType != EventTypeNodeCertificateRecovered ||
-		alerts.requests[0].Contexts[notification.ChannelSMS]["expired_for"] != notification.PublicValue("40天0小时") {
+		alerts.requests[0].Contexts[notification.ChannelSMS]["expired_for"] != notification.LocalizedValue("40天0小时", "40d 0h") {
 		t.Fatalf("recovery alerts = %+v", alerts.requests)
 	}
 }

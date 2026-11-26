@@ -57,7 +57,8 @@ describe('administrator overview responsive parity', () => {
     for (const grid of ['reference-layout', 'monitoring-grid']) {
       expect(layoutAt(width, `.admin-overview .dashboard-${grid}`, 'grid-template-columns')).toBe('minmax(0, calc(66.666667% - 5.333333px)) minmax(0, calc(33.333333% - 10.666667px))')
     }
-    expect(layoutAt(width, '.admin-overview .dashboard-operation-panels', 'grid-template-columns')).toBe('repeat(3, minmax(0, 1fr))')
+    // The overview renders a single operation panel (registrations), so it spans the full row.
+    expect(layoutAt(width, '.admin-overview .dashboard-operation-panels', 'grid-template-columns')).toBe('minmax(0, 1fr)')
     expect(layoutAt(width, '.admin-overview .dashboard-operation-panels', 'height')).toBe('262px')
   })
 })

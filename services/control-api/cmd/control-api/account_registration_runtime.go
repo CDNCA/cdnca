@@ -516,8 +516,30 @@ type accountRegistrationContactProvider struct {
 	catalog   *notification.Catalog
 	templates map[notification.Channel]notification.TemplateRef
 	providers map[notification.Channel]notificationruntime.ProviderTransport
-	timeout   time.Duration
-	now       func() time.Time
+	// translation reads a template's English translation when it is sent,
+	// so one created or deleted on the template page applies
+	// without a restart.
+	translation func(context.Context, notification.TemplateRef) (notification.TemplateDefinition, error)
+	timeout     time.Duration
+	now         func() time.Time
+}
+
+// readAccountVerificationTemplate reads one verification template version;
+// a verification template has no variables (the code is appended).
+func readAccountVerificationTemplate(
+	ctx context.Context, pool *pgxpool.Pool, ref notification.TemplateRef,
+) (notification.TemplateDefinition, error) {
+	definition := notification.TemplateDefinition{Ref: ref}
+	if err := pool.QueryRow(ctx, `SELECT subject,body,variables FROM notification_templates
+		WHERE template_id=$1 AND version=$2 AND channel=$3`, ref.ID, ref.Version, ref.Channel).Scan(
+		&definition.Subject, &definition.Body, &definition.Variables,
+	); err != nil {
+		return notification.TemplateDefinition{}, err
+	}
+	if len(definition.Variables) != 0 {
+		return notification.TemplateDefinition{}, errors.New("account verification template declares variables")
+	}
+	return definition, nil
 }
 
 func newAccountRegistrationContactProvider(
@@ -540,11 +562,8 @@ func newAccountRegistrationContactProvider(
 		if !exists || ref.Channel != channel {
 			return nil, errors.New("account registration notification template is unavailable")
 		}
-		definition := notification.TemplateDefinition{Ref: ref}
-		if err := pool.QueryRow(ctx, `SELECT subject,body,variables FROM notification_templates
-			WHERE template_id=$1 AND version=$2 AND channel=$3`, ref.ID, ref.Version, ref.Channel).Scan(
-			&definition.Subject, &definition.Body, &definition.Variables,
-		); err != nil || len(definition.Variables) != 0 || catalog.Register(definition) != nil {
+		definition, err := readAccountVerificationTemplate(ctx, pool, ref)
+		if err != nil || catalog.Register(definition) != nil {
 			return nil, errors.New("account registration notification template is unavailable")
 		}
 	}
@@ -562,6 +581,9 @@ func newAccountRegistrationContactProvider(
 	}
 	return &accountRegistrationContactProvider{
 		catalog: catalog, templates: templates, providers: providers, timeout: config.SendTimeout,
+		translation: func(ctx context.Context, ref notification.TemplateRef) (notification.TemplateDefinition, error) {
+			return readAccountVerificationTemplate(ctx, pool, ref)
+		},
 	}, nil
 }
 
@@ -685,16 +707,25 @@ func (provider *accountRegistrationContactProvider) sendVerification(
 		return registrationProviderFailure(notification.FailureTemporary, "provider_unavailable", 0)
 	}
 	var subject, body string
+	templateID := delivery.Template.ID
+	english := ref
+	english.ID = notification.LocalizedTemplateID(ref.ID, notification.LocaleEnUS)
 	if strings.Contains(delivery.Subject+delivery.Body, "{{.captcha}}") {
 		var ok bool
 		subject, body, ok = renderRegistrationVerification(delivery)
 		if !ok {
 			return registrationProviderFailure(notification.FailurePermanent, "template_unavailable", 0)
 		}
-	} else if delivery.Template == ref {
-		rendered, err := provider.catalog.Render(ref, notification.TemplateContext{})
-		if err != nil {
-			return registrationProviderFailure(notification.FailurePermanent, "template_unavailable", 0)
+	} else if delivery.Template == ref || delivery.Template == english {
+		rendered, ok := provider.renderTranslation(ctx, english, delivery.Template)
+		if !ok {
+			// The Chinese template when the English one is
+			// missing (deleted after enqueue) or cannot be read.
+			var err error
+			if rendered, err = provider.catalog.Render(ref, notification.TemplateContext{}); err != nil {
+				return registrationProviderFailure(notification.FailurePermanent, "template_unavailable", 0)
+			}
+			templateID = ref.ID
 		}
 		subject, body = rendered.Subject, rendered.Body+"\n"+delivery.OTP
 	} else {
@@ -704,7 +735,7 @@ func (provider *accountRegistrationContactProvider) sendVerification(
 		OutboxID: delivery.OutboxID, Channel: delivery.Channel, Contact: delivery.Destination,
 		Subject: subject, Body: body,
 		IdempotencyKey: delivery.IdempotencyKey, AttemptNumber: delivery.AttemptNumber,
-		TemplateID: delivery.Template.ID, Params: map[string]string{"code": delivery.OTP},
+		TemplateID: templateID, Params: map[string]string{"code": delivery.OTP},
 	}
 	sendCtx, cancel := context.WithTimeout(ctx, provider.timeout)
 	defer cancel()
@@ -715,6 +746,28 @@ func (provider *accountRegistrationContactProvider) sendVerification(
 	sendResult := mapAccountRegistrationProviderResult(delivery.Channel, result)
 	sendResult.Observation = observation
 	return sendResult
+}
+
+// renderTranslation renders the English translation read now, false when the
+// delivery names the Chinese template or the translation is unavailable.
+func (provider *accountRegistrationContactProvider) renderTranslation(
+	ctx context.Context, english, template notification.TemplateRef,
+) (notification.RenderedMessage, bool) {
+	if template != english || provider.translation == nil {
+		return notification.RenderedMessage{}, false
+	}
+	readCtx, cancel := context.WithTimeout(ctx, provider.timeout)
+	defer cancel()
+	definition, err := provider.translation(readCtx, english)
+	if err != nil {
+		return notification.RenderedMessage{}, false
+	}
+	catalog := notification.NewCatalog()
+	if catalog.Register(definition) != nil {
+		return notification.RenderedMessage{}, false
+	}
+	rendered, err := catalog.Render(english, notification.TemplateContext{})
+	return rendered, err == nil
 }
 
 func renderRegistrationVerification(

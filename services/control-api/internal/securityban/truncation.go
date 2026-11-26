@@ -127,13 +127,13 @@ func enqueueListTruncated(ctx context.Context, tx pgx.Tx, enqueuer AlertEnqueuer
 	if err != nil {
 		return err
 	}
-	kind := listKindSecurityBanDisplay
+	kind := notification.LocalizedValue(listKindSecurityBanDisplay, "Ban list")
 	if alert.Kind == ListKindSiteDrop {
-		kind = listKindSiteDropDisplay
+		kind = notification.LocalizedValue(listKindSiteDropDisplay, "Site drop list")
 	}
 	email := notification.TemplateContext{
 		"node_name": notification.PublicValue(name), "node_ip": notification.PublicValue(address),
-		"list_kind": notification.PublicValue(kind), "total": notification.PublicValue(strconv.Itoa(alert.Total)),
+		"list_kind": kind, "total": notification.PublicValue(strconv.Itoa(alert.Total)),
 		"limit": notification.PublicValue(strconv.Itoa(alert.Limit)), "truncated": notification.PublicValue(strconv.Itoa(alert.Cut)),
 		"occurred_at": notification.PublicValue(alert.At.UTC().Format(time.RFC3339)),
 	}

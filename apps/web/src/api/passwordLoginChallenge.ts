@@ -1,3 +1,4 @@
+import { requestLanguage } from './accountLocale'
 import { ApiError, networkApiError, responseApiError } from './auth'
 
 export interface PasswordLoginChallengeInput {
@@ -59,7 +60,7 @@ export async function sendPasswordLoginChallenge(
       signal,
       headers: {
         'Content-Type': 'application/json', 'Idempotency-Key': metadata.idempotencyKey,
-        'X-Request-ID': metadata.requestId,
+        'X-Request-ID': metadata.requestId, 'Accept-Language': requestLanguage(),
       },
       body: JSON.stringify({
         username: input.username, password: input.password, scope_id: input.scope_id,

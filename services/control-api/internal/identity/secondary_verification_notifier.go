@@ -40,9 +40,9 @@ func (notifier NotificationSecondaryVerificationNotifier) NotifySecondaryVerific
 }
 
 func SecondaryVerificationEnqueueRequest(notice SecondaryVerificationNotice) notification.EnqueueRequest {
-	deadline := "不限"
+	deadline := notification.LocalizedValue("不限", "No deadline")
 	if notice.Deadline != nil {
-		deadline = notice.Deadline.In(secondaryVerificationDeadlineZone).Format("2006-01-02 15:04:05")
+		deadline = notification.PublicValue(notice.Deadline.In(secondaryVerificationDeadlineZone).Format("2006-01-02 15:04:05"))
 	}
 	return notification.EnqueueRequest{
 		ScopeID: notice.ScopeID, RecipientID: notice.UserID, EventType: SecondaryVerificationEventType,
@@ -53,8 +53,8 @@ func SecondaryVerificationEnqueueRequest(notice SecondaryVerificationNotice) not
 			notification.ChannelSMS:   {ID: secondaryVerificationTemplate, Version: 1, Channel: notification.ChannelSMS},
 		},
 		Contexts: map[notification.Channel]notification.TemplateContext{
-			notification.ChannelEmail: {"username": notification.PublicValue(notice.Username), "deadline": notification.PublicValue(deadline)},
-			notification.ChannelSMS:   {"deadline": notification.PublicValue(deadline)},
+			notification.ChannelEmail: {"username": notification.PublicValue(notice.Username), "deadline": deadline},
+			notification.ChannelSMS:   {"deadline": deadline},
 		},
 		AuditRequestID: notice.RequestID,
 	}

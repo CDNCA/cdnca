@@ -24,6 +24,7 @@ describe('accountRecoveryApi', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': 'request-key',
+        'Accept-Language': 'zh-CN',
       },
       body: JSON.stringify({ username: 'jason' }),
     })

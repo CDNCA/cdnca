@@ -292,7 +292,32 @@ function isAssetSync(value: unknown): value is CertificateAssetSync {
       publicationFailureCodePattern.test(value.failure_code)))
 }
 
+// Version.certificate_pem 按契约是 base64（Go []byte、OpenAPI format: byte）：入口统一解码成 PEM 文本，页面只见明文
+// （上传回执比对要明文）。解不出证书 PEM 即视为无效回包。
+const decodedVersions = new WeakSet<object>()
+
+function decodeCertificatePEM(value: string): string | null {
+  if (value.length === 0 || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return null
+  let text: string
+  try {
+    text = atob(value)
+  } catch {
+    return null
+  }
+  return text.includes('-----BEGIN CERTIFICATE-----') ? text : null
+}
+
 function isAssetVersion(value: unknown): value is CertificateAssetVersion {
+  if (!isAssetVersionShape(value)) return false
+  if (decodedVersions.has(value)) return true
+  const pem = decodeCertificatePEM(value.certificate_pem)
+  if (pem === null) return false
+  value.certificate_pem = pem
+  decodedVersions.add(value)
+  return true
+}
+
+function isAssetVersionShape(value: unknown): value is CertificateAssetVersion {
   return isRecord(value) && !('private_key_pem' in value) && typeof value.id === 'string' && typeof value.asset_id === 'string' &&
     typeof value.tenant_scope_id === 'string' && Number.isSafeInteger(value.version) &&
     assetVersionStatuses.has(value.status as CertificateAssetVersionStatus) && typeof value.fingerprint_sha256 === 'string' &&

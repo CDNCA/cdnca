@@ -372,6 +372,7 @@ func (service *Service) finalizeCreate(
 			ScopeID: input.ScopeID, ChallengeID: challengeID, Channel: channel, Template: template,
 			Destination:       input.Destination,
 			DestinationDigest: input.DestinationDigest, OTP: otp, ExpiresAt: expiresAt, RequestID: input.RequestID,
+			Locale: input.Locale,
 		}); err != nil {
 			return retryable(err, ErrContactUnavailable)
 		}

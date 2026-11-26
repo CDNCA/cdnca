@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +25,7 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/dyntelemetry"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/dyntls"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/dynwaf"
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/gatewayclient"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/l4runtime"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/objectstore"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/wafengine"
@@ -291,6 +294,41 @@ func healthURLPort(value string) (int, error) {
 	return port, nil
 }
 
+// dynamicRoutingOpenRestyProbe is the heartbeat's OpenResty check
+// Every scope runs in the one
+// dynamic routing OpenResty, whose loopback health server answers /healthz
+// with 204 and no version: the check is that its master runs
+// (gatewayclient.ErrOpenRestyStopped otherwise) and the health server
+// answers, whatever the version.
+func dynamicRoutingOpenRestyProbe(running func() bool, healthURL string, timeout time.Duration) func(context.Context, string) error {
+	client := &http.Client{
+		Transport: &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: timeout}).DialContext, ResponseHeaderTimeout: timeout},
+		Timeout:   timeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	return func(ctx context.Context, _ string) error {
+		if !running() {
+			return gatewayclient.ErrOpenRestyStopped
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+		if err != nil {
+			return errors.New("build OpenResty health request")
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			return errors.New("OpenResty health request failed")
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 512))
+		response.Body.Close()
+		if response.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("OpenResty health answered %d", response.StatusCode)
+		}
+		return nil
+	}
+}
+
 // dynamicRoutingRunner recovers the runtime at daemon start and runs its
 // maintenance.
 type dynamicRoutingRunner interface {
@@ -298,10 +336,9 @@ type dynamicRoutingRunner interface {
 	Run(context.Context, dynroute.Intervals) error
 }
 
-// dynamicRoutingL4 runs the scopes' L4 forwards in the node's L4 runtime
-// (the one l4DeploymentBridge drives on a v8 node): a release is opened,
-// applied and, after the HTTP side is healthy, finished. No streams applies
-// the empty v1 configuration, as the bridge does for a release without L4.
+// dynamicRoutingL4 runs the scopes' L4 forwards in the node's L4 runtime: a
+// release is opened, applied and, after the HTTP side is healthy, finished.
+// No streams applies the empty v1 configuration.
 type dynamicRoutingL4 struct {
 	manager *l4runtime.Manager
 	dns     *l4runtime.DNSCoordinator

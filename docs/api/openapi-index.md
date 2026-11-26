@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 968 个 operation，并包含
-941 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 969 个 operation，并包含
+942 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -44,7 +44,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，688 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，689 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -63,6 +63,7 @@
 | `control.yaml` | `POST` | `/v1/account/inbox/read-all` | `markAllAccountInboxMessagesRead` |
 | `control.yaml` | `GET` | `/v1/account/inbox/unread-count` | `getAccountInboxUnreadCount` |
 | `control.yaml` | `POST` | `/v1/account/inbox/{message_id}/read` | `markAccountInboxMessageRead` |
+| `control.yaml` | `PUT` | `/v1/account/locale` | `setAccountLocale` |
 | `control.yaml` | `GET` | `/v1/account/messages` | `listAccountMessages` |
 | `control.yaml` | `POST` | `/v1/account/messages/{event_id}/delivered` | `markMessageDelivered` |
 | `control.yaml` | `POST` | `/v1/account/messages/{event_id}/read` | `markMessageRead` |

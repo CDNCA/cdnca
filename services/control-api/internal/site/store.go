@@ -849,32 +849,13 @@ func (s *Store) UpdateOrigin(
 		if deleted {
 			return ErrNotFound
 		}
-		if request.primaryOrigins == nil && currentRevision != request.ExpectedRevision {
+		if currentRevision != request.ExpectedRevision {
 			return ErrRevisionConflict
-		}
-		if request.primaryOrigins != nil {
-			// 客户区改源站 only replaces the primary origins: the version that matters is the pool's own
-			// (migration 703), so a CNAME projection or publication since the customer's read is no conflict.
-			changed, err := originPoolChangedSince(ctx, tx, request.ID, request.ExpectedRevision, currentRevision)
-			if err != nil {
-				return err
-			}
-			if changed {
-				return ErrRevisionConflict
-			}
 		}
 
 		previous, err := selectOriginPool(ctx, tx, request.ID)
 		if err != nil {
 			return err
-		}
-		if request.primaryOrigins != nil {
-			if request.Pool, err = WithPrimaryOrigins(withOriginScheme(previous, request.primaryScheme), request.primaryOrigins); err != nil {
-				return err
-			}
-			if err := normalizeOriginPool(&request.Pool); err != nil {
-				return err
-			}
 		}
 		// 网站级 L2 配置 is the platform's (仅管理员可设): a
 		// tenant's write keeps the stored one
@@ -1869,7 +1850,7 @@ func allocateSiteDisplayID(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, up
 }
 
 // replaceOriginPool writes pool as the site's; siteRevision is the site revision the write ends at (the pool's
-// own version, migration 703: originPoolChangedSince).
+// own version, migration 703).
 func replaceOriginPool(
 	ctx context.Context,
 	tx pgx.Tx,

@@ -250,7 +250,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (RequestResul
 		enqueued, err := s.dispatcher.EnqueueDispatchTx(ctx, tx, notification.DispatchEnqueueRequest{
 			ScopeID: target.ScopeID, SourceEventID: dispatchReference.String(),
 			AnonymousDispatchReference: dispatchReference, Templates: templates,
-			AuditRequestID: input.Context.RequestID,
+			AuditRequestID: input.Context.RequestID, Locale: input.Locale,
 		})
 		if err != nil || len(enqueued.Deliveries) == 0 {
 			return ErrDispatchUnavailable

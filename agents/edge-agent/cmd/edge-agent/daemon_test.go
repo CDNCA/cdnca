@@ -14,8 +14,6 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/challenge"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/dynroute"
 	"math/big"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -544,22 +542,6 @@ func TestExecuteSupportsOfflineConfigCheckAndVersion(t *testing.T) {
 	}
 }
 
-func TestHealthProbeRequiresExactActiveVersion(t *testing.T) {
-	version := "cfg-v2"
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("X-CDNCA-Config-Version", version)
-		_, _ = fmt.Fprintf(writer, "ok:%s\n", version)
-	}))
-	defer server.Close()
-	probe := newHealthProbe(server.URL+"/healthz", time.Second)
-	if err := probe(context.Background(), version); err != nil {
-		t.Fatalf("health probe error = %v", err)
-	}
-	if err := probe(context.Background(), "cfg-v3"); err == nil {
-		t.Fatal("health probe accepted a different active version")
-	}
-}
-
 func TestUpgradeReceiptProbeExecutesFixedCurrentArtifactVersion(t *testing.T) {
 	expected := updater.ActivationReceipt{CurrentVersion: "2.0.0"}
 	var path string
@@ -605,21 +587,6 @@ func TestUpgradeReceiptProbeRejectsUnfrozenOrInvalidVersionEvidence(t *testing.T
 				t.Fatalf("upgrade version probe error = %v", err)
 			}
 		})
-	}
-}
-
-func TestHealthProbeRejectsRedirects(t *testing.T) {
-	version := "cfg-v2"
-	target := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("X-CDNCA-Config-Version", version)
-		_, _ = fmt.Fprintf(writer, "ok:%s\n", version)
-	}))
-	defer target.Close()
-	redirect := httptest.NewServer(http.RedirectHandler(target.URL, http.StatusFound))
-	defer redirect.Close()
-
-	if err := newHealthProbe(redirect.URL, time.Second)(context.Background(), version); err == nil {
-		t.Fatal("health probe followed a redirect")
 	}
 }
 

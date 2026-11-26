@@ -10,6 +10,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountloginchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/refusalreason"
 	"github.com/google/uuid"
 )
@@ -88,6 +89,7 @@ func (handler *Handler) servePasswordChallenge(writer http.ResponseWriter, reque
 		Login:   identity.LoginInput{Username: *body.Username, Password: *body.Password, ScopeID: scopeID, Captcha: captcha},
 		Request: identity.RequestInfo{RequestID: requestID, UserAgent: request.UserAgent(), SourceIP: source.Unmap().String()},
 		Source:  source.Unmap().String(), HumanToken: body.HumanToken, IdempotencyKey: key, RequestID: requestID,
+		Locale: notification.LocaleFromAcceptLanguage(request.Header.Get("Accept-Language")),
 	})
 	if err != nil {
 		refusalreason.Record(request.Context(), refusalreason.Of(err))

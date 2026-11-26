@@ -22,6 +22,7 @@ coverage/
 
 # Locally built binaries and generated screenshots
 services/control-api/control-api
+services/control-api/cmd/control-api/control-api
 operator-quota-*.png
 
 tmp/

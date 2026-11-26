@@ -56,8 +56,6 @@ const (
 	ReasonPayload        = "payload_mismatch"
 	ReasonInstall        = "install_failed"
 	ReasonGatePath       = "gate_path_mismatch"
-	ReasonModuleLoad     = "module_load_failed"
-	ReasonRestart        = "restart_failed"
 	ReasonInvalidRelease = "invalid_engine_manifest"
 )
 
@@ -251,9 +249,6 @@ func (m *Manager) Prepare(_ context.Context, versionID, releasePath string) (Gat
 	if err != nil || !bytes.Contains(nginx, []byte("include "+filepath.ToSlash(m.gateDir(versionID))+"/load[.]conf;")) {
 		return degrade(ReasonGatePath, "")
 	}
-	if m.disabled(versionID) {
-		return degrade(ReasonModuleLoad, "")
-	}
 	current, module, reason, err := m.verifyInstalled()
 	if err != nil {
 		return degrade(reason, module.Version)
@@ -270,36 +265,6 @@ func (m *Manager) Prepare(_ context.Context, versionID, releasePath string) (Gat
 	gate.ModulePath = filepath.Join(current.Path, ModulePath)
 	m.setStatus(Status{State: StateActive, Version: module.Version, ConfigVersionID: versionID})
 	return gate, nil
-}
-
-// Disable records that the module could not be loaded for a release (nginx
-// -t or a restart failed with the gate) and removes the gate.
-func (m *Manager) Disable(versionID, reason string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := writeAtomic(filepath.Join(m.config.Root, "disabled", versionID), []byte(reason+"\n"), 0o644); err != nil {
-		return err
-	}
-	m.setStatus(Status{State: StateDegraded, Reason: reason, Version: m.status.Version, ConfigVersionID: versionID})
-	return m.removeGate(versionID)
-}
-
-func (m *Manager) disabled(versionID string) bool {
-	_, err := os.Stat(filepath.Join(m.config.Root, "disabled", versionID))
-	return err == nil
-}
-
-// LoadedModule is the module path the running master loaded ("" = none).
-func (m *Manager) LoadedModule() string {
-	content, err := os.ReadFile(filepath.Join(m.config.Root, "loaded"))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(content))
-}
-
-func (m *Manager) SetLoadedModule(module string) error {
-	return writeAtomic(filepath.Join(m.config.Root, "loaded"), []byte(module+"\n"), 0o644)
 }
 
 func (m *Manager) writeGate(versionID string, files map[string][]byte) error {

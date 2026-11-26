@@ -155,6 +155,12 @@ export const notificationVariableNames: Record<string, string> = {
 
 const localeSuffix = /\.(zh-cn|en-us)$/
 
+// notificationTemplateLanguage is the language of a template: .en-us IDs are
+// the English versions, every other template is Chinese.
+export function notificationTemplateLanguage(templateID: string): 'zh-CN' | 'en-US' {
+  return templateID.endsWith('.en-us') ? 'en-US' : 'zh-CN'
+}
+
 // notificationTemplateName returns the display name, or undefined for
 // operator-created templates without an entry.
 export function notificationTemplateName(templateID: string): string | undefined {

@@ -50,7 +50,6 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/toa"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/updater"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/urlauth"
-	"github.com/cdnca/cdnca/agents/edge-agent/internal/wafengine"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/xdp"
 	"github.com/cdnca/cdnca/agents/edge-agent/packaging/helper"
 	"github.com/cdnca/cdnca/libs/edgeconfig"
@@ -318,18 +317,6 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		return nil, fmt.Errorf("configure certificate manager: %w", err)
 	}
 
-	openResty, err := deployment.NewOpenResty(
-		config.OpenResty.Binary,
-		config.OpenResty.ConfigFile,
-		nil,
-		newHealthProbe(config.OpenResty.HealthURL, timeouts.HealthRequest),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("configure OpenResty runtime: %w", err)
-	}
-	if err := openResty.ConfigureGenerationTracking(filepath.Join(config.DeploymentRoot, "shared", "nginx.pid")); err != nil {
-		return nil, fmt.Errorf("configure OpenResty process tracking: %w", err)
-	}
 	l4StateRoot := filepath.Join(filepath.Dir(config.JournalDir), "l4-runtime")
 	l4OpenResty, err := l4runtime.NewOpenResty(config.OpenResty.Binary,
 		filepath.Join(l4StateRoot, "run", "nginx.pid"), timeouts.Reload)
@@ -347,15 +334,11 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if err != nil {
 		return nil, fmt.Errorf("configure L4 DNS coordinator: %w", err)
 	}
-	// The OWASP CRS engine extension is gated into each release around
-	// OpenResty (a node artifact set item, never part of the node package).
+	// The OWASP CRS engine extension (a node artifact set item, never part
+	// of the node package).
 	wafEngine, err := assembleWAFEngine(config, trust)
 	if err != nil {
 		return nil, fmt.Errorf("configure waf engine: %w", err)
-	}
-	wafRuntime, err := wafengine.NewRuntime(openResty, openResty, wafEngine)
-	if err != nil {
-		return nil, fmt.Errorf("configure waf engine runtime: %w", err)
 	}
 	// site_runtime 9: site objects fetched by digest (ADR 0009 section 8.2).
 	// One store per process: node artifact set segments live in it too, and
@@ -376,11 +359,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if err != nil {
 		return nil, err
 	}
-	l4Bridge := &l4DeploymentBridge{delegate: wafRuntime, manager: l4Manager, dns: l4DNS, healthInterval: timeouts.HealthInterval}
-	deploymentRuntime, http3Readiness, err := assembleHTTP3DeploymentRuntime(config, timeouts, l4Bridge)
-	if err != nil {
-		return nil, err
-	}
+	http3Readiness := checkHTTP3Readiness(config)
 	logHTTP3Readiness(os.Stderr, http3Readiness)
 	l4TOA := probeL4TOA(config.OpenResty.Binary)
 	l4TOAOwned := false
@@ -501,7 +480,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if err := manager.ConfigureCertificateVersionStore(certificateManager, config.CertificateRuntime.StateRoot); err != nil {
 		return nil, fmt.Errorf("configure deployment manager: %w", err)
 	}
-	drain, err := assembleDrainRuntime(config, timeouts, nil, openResty, dynamicManager)
+	drain, err := assembleDrainRuntime(config, timeouts, dynamicManager)
 	if err != nil {
 		return nil, err
 	}
@@ -616,7 +595,8 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	clientConfig.FetchTimeout = timeouts.ArtifactFetch
 	clientConfig.InitialBackoff = timeouts.InitialBackoff
 	clientConfig.MaximumBackoff = timeouts.MaximumBackoff
-	runtimeStatusProbe := gatewayclient.RuntimeStatusProbe{OpenResty: deploymentRuntime.Healthy,
+	runtimeStatusProbe := gatewayclient.RuntimeStatusProbe{
+		OpenResty:          dynamicRoutingOpenRestyProbe(dynamicRouting.Running, config.OpenResty.HealthURL, timeouts.HealthRequest),
 		MarketProbeRoleNow: marketRoleState.Role}
 	// Every node reports its packaging toolset (deb nodes read
 	// the scripts and helper digests; the refresh record is root-only there).
@@ -1175,118 +1155,6 @@ func (runtime l4LiveRuntime) ActiveConfigV2(ctx context.Context) (*l4runtime.Con
 }
 
 func (runtime l4LiveRuntime) WorkerPIDs() ([]int, error) { return runtime.openResty.WorkerPIDs() }
-
-type l4DeploymentBridge struct {
-	delegate       http3DeploymentLifecycle
-	manager        *l4runtime.Manager
-	dns            *l4runtime.DNSCoordinator
-	healthInterval time.Duration
-}
-
-func (bridge *l4DeploymentBridge) Precheck(ctx context.Context, versionID, releasePath string) error {
-	config, present, err := bridge.load(releasePath)
-	if err != nil {
-		return err
-	}
-	if present {
-		if config.VersionID != versionID {
-			return l4runtime.ErrInvalidConfig
-		}
-		if err := bridge.manager.PrecheckV2(ctx, config, bridge.dns); err != nil {
-			return err
-		}
-	}
-	return bridge.delegate.Precheck(ctx, versionID, releasePath)
-}
-
-func (bridge *l4DeploymentBridge) Reload(ctx context.Context, versionID, currentPath string) error {
-	config, present, err := bridge.load(currentPath)
-	if err != nil {
-		return err
-	}
-	if present && config.VersionID != versionID {
-		return l4runtime.ErrInvalidConfig
-	}
-	if err := bridge.manager.BeginRelease(ctx, versionID); err != nil {
-		return err
-	}
-	if present {
-		_, err = bridge.manager.ApplyV2(ctx, config, bridge.dns)
-	} else {
-		_, err = bridge.manager.Apply(ctx, l4runtime.Config{
-			SchemaVersion: l4runtime.SchemaVersionV1, VersionID: versionID,
-			Listeners: []l4runtime.Listener{}, UpstreamPools: []l4runtime.UpstreamPool{}, DrainTimeoutMS: 30000,
-		})
-	}
-	if err == nil {
-		err = bridge.delegate.Reload(ctx, versionID, currentPath)
-	}
-	if err != nil {
-		return errors.Join(err, bridge.abortRelease(versionID))
-	}
-	return nil
-}
-
-func (bridge *l4DeploymentBridge) Healthy(ctx context.Context, versionID string) error {
-	interval := bridge.healthInterval
-	if interval <= 0 {
-		interval = deployment.DefaultConfig().HealthInterval
-	}
-	for {
-		err := bridge.delegate.Healthy(ctx, versionID)
-		if err == nil {
-			break
-		}
-		// 健康截止时间由 deployment manager 的 waitHealthy 给出；截止前单次探测失败
-		// 不能撤销四层，否则 HTTP 稍后变健康时四层已回退。
-		if _, bounded := ctx.Deadline(); !bounded || ctx.Err() != nil {
-			return errors.Join(err, bridge.abortRelease(versionID))
-		}
-		timer := time.NewTimer(interval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return errors.Join(ctx.Err(), bridge.abortRelease(versionID))
-		case <-timer.C:
-		}
-	}
-	if err := bridge.manager.FinishRelease(ctx, versionID, true); err != nil {
-		return errors.Join(err, bridge.abortRelease(versionID))
-	}
-	return nil
-}
-
-func (bridge *l4DeploymentBridge) abortRelease(versionID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return bridge.manager.FinishRelease(ctx, versionID, false)
-}
-
-func (bridge *l4DeploymentBridge) load(root string) (l4runtime.ConfigV2, bool, error) {
-	file, err := os.Open(filepath.Join(root, edgeconfig.L4RuntimeV2ArtifactPath))
-	if errors.Is(err, os.ErrNotExist) {
-		return l4runtime.ConfigV2{}, false, nil
-	}
-	if err != nil {
-		return l4runtime.ConfigV2{}, false, err
-	}
-	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 16<<20))
-	decoder.DisallowUnknownFields()
-	var document l4StreamSetV2Document
-	if err := decoder.Decode(&document); err != nil || document.SchemaVersion != l4StreamSetV2Schema || len(document.Streams) == 0 {
-		return l4runtime.ConfigV2{}, false, l4runtime.ErrInvalidConfig
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return l4runtime.ConfigV2{}, false, l4runtime.ErrInvalidConfig
-	}
-	config, err := l4runtime.AggregateStreamRuntimeSpecsV2(document.VersionID, document.Revision, document.Streams, document.SiteSockets...)
-	if err != nil {
-		return l4runtime.ConfigV2{}, false, err
-	}
-	return config, true, nil
-}
 
 // l4DNSRefresher re-resolves the active L4 release's host forwards and
 // re-probes degraded ones in the background: a changed address
@@ -2051,40 +1919,6 @@ const l4StreamAPIVersion uint32 = 12
 // node). The control plane requires v3 .. v8 only for policies using them
 // (edgeconfig.CCV2PolicyAPIVersion).
 const ccAPIVersion uint32 = 8
-
-func newHealthProbe(healthURL string, timeout time.Duration) deployment.HealthProbe {
-	transport := &http.Transport{
-		Proxy:                 nil,
-		DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
-		ResponseHeaderTimeout: timeout,
-	}
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   timeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	return func(ctx context.Context, versionID string) error {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
-		if err != nil {
-			return errors.New("build OpenResty health request")
-		}
-		response, err := client.Do(request)
-		if err != nil {
-			return errors.New("OpenResty health request failed")
-		}
-		defer response.Body.Close()
-		body, err := io.ReadAll(io.LimitReader(response.Body, 513))
-		if err != nil || len(body) > 512 {
-			return errors.New("OpenResty health response is invalid")
-		}
-		if response.StatusCode != http.StatusOK || response.Header.Get("X-CDNCA-Config-Version") != versionID || string(body) != "ok:"+versionID+"\n" {
-			return errors.New("OpenResty health response does not match the active version")
-		}
-		return nil
-	}
-}
 
 func runClient(ctx context.Context, client clientRunner) error {
 	if client == nil {

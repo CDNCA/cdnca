@@ -40,7 +40,7 @@ func TestHTTPSRequiresBoundCertificatePostgres(t *testing.T) {
 	}
 
 	// A bound certificate (the fact the certificate service appends; FKs to the asset tables are skipped here).
-	bindFact := func(action string, sequence int64) {
+	bindFact := func(action string, sequence int64, isDefault bool) {
 		t.Helper()
 		if err := pgx.BeginFunc(ctx, f.pool, func(tx pgx.Tx) error {
 			if _, err := tx.Exec(ctx, `SET LOCAL session_replication_role = replica`); err != nil {
@@ -48,14 +48,23 @@ func TestHTTPSRequiresBoundCertificatePostgres(t *testing.T) {
 			}
 			_, err := tx.Exec(ctx, `INSERT INTO certificate_site_binding_facts (tenant_scope_id,site_id,sequence,action,asset_id,version_id,
 				is_default,expected_revision,resulting_revision,request_id,actor_scope_id,changed_by_user_id,changed_at)
-				VALUES ($1,$2,$3,$4,$5,$6,true,$7,$3,$8,$1,$9,now())`, f.a.scopeID, current.ID, sequence, action, uuid.New(), uuid.New(),
-				sequence-1, "bind-"+action, f.a.userID)
+				VALUES ($1,$2,$3,$4,$5,$6,$10,$7,$3,$8,$1,$9,now())`, f.a.scopeID, current.ID, sequence, action, uuid.New(), uuid.New(),
+				sequence-1, "bind-"+action, f.a.userID, isDefault)
 			return err
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	bindFact("bind", 1)
+	// A non-default binding is not served (edgepublish reads only is_default): it must not unlock HTTPS
+	// nor show as bound.
+	bindFact("bind", 1, false)
+	if got, _ := f.sites.Get(ctx, f.a.siteActor(), current.ID); got.HTTPSCertificateBound {
+		t.Fatal("non-default binding reports a usable certificate")
+	}
+	if _, err := update("https-on-nondefault", fields); !errors.As(err, &fieldErr) || fieldErr.Reason != ReasonCertificateRequired {
+		t.Fatalf("HTTPS on with only a non-default binding err=%v", err)
+	}
+	bindFact("bind", 2, true)
 	if got, _ := f.sites.Get(ctx, f.a.siteActor(), current.ID); !got.HTTPSCertificateBound {
 		t.Fatal("bound site reports no certificate")
 	}
@@ -68,7 +77,7 @@ func TestHTTPSRequiresBoundCertificatePostgres(t *testing.T) {
 	current = opened.Site
 
 	// Unbound later: HTTPS stays as it is and the site's other edits still save.
-	bindFact("unbind", 2)
+	bindFact("unbind", 3, true)
 	fields.Origins = []string{"192.0.2.1"}
 	fields.Domains = current.Domains
 	kept, err := update("https-kept-unbound", fields)

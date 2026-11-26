@@ -37,6 +37,8 @@ type RequestInput struct {
 	Username       string
 	IdempotencyKey string
 	Context        RequestContext
+	// Locale is the requester's language for the recovery mail.
+	Locale string
 }
 
 type RequestResult struct {
