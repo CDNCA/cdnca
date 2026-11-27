@@ -13,6 +13,7 @@ import (
 type Runtime struct {
 	consumer  *NATSConsumer
 	processor *Processor
+	replay    *strandedReplay
 	logger    *slog.Logger
 }
 
@@ -45,10 +46,12 @@ func NewRuntime(pool *pgxpool.Pool, connection *nats.Conn, consumerConfig NATSCo
 		return nil, err
 	}
 	processor.SetLogger(logger)
-	return &Runtime{consumer: consumer, processor: processor, logger: logger}, nil
+	replay := newStrandedReplay(pool, consumer, validator, store, logger)
+	return &Runtime{consumer: consumer, processor: processor, replay: replay, logger: logger}, nil
 }
 
 func (r *Runtime) Run(ctx context.Context) error {
+	r.replay.start(ctx)
 	for {
 		delivery, err := r.consumer.Next(ctx)
 		if errors.Is(err, ErrNoMessage) {
@@ -65,6 +68,12 @@ func (r *Runtime) Run(ctx context.Context) error {
 			r.logger.Error("deployment status disposition failed", "disposition", disposition, "error", err)
 		}
 	}
+}
+
+// ReplayDone reports whether the startup replay of stranded deployment
+// statuses has completed (deployment timeouts wait for it).
+func (r *Runtime) ReplayDone() bool {
+	return r != nil && r.replay != nil && r.replay.done.Load()
 }
 
 func (r *Runtime) Close() error {

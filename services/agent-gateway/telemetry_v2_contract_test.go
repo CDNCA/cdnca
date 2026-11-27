@@ -253,3 +253,39 @@ func TestTelemetryV2AcceptsClientBrowserAndOS(t *testing.T) {
 		t.Fatal("unknown client_browser family accepted")
 	}
 }
+
+// Fresh install 11-26: a release ran on the node while the control plane kept
+// its deployment at STARTED, so the node authorization did not carry the
+// config version of its access events. The gateway refused the batch for good
+// and logged "event is invalid", which pointed at the event content. The
+// reason now names the unauthorized site and config version; content faults
+// keep the old reason, and both stay refused.
+func TestTelemetryV2RejectionNamesUnauthorizedConfigVersion(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	const unpublished = "347c0488-eab4-5386-aa31-94a0562f424b"
+	for _, kind := range []agentv1.TelemetryKind{telemetryKindAccessV2, telemetryKindSecurityV2} {
+		t.Run(telemetryV2Type(kind), func(t *testing.T) {
+			batch := telemetryV2Batch(t, kind, now)
+			mutateTelemetryV2Payload(t, batch.Records[0], func(_ map[string]any, event map[string]any) {
+				event["config_version_id"] = unpublished
+			})
+			batch.BatchId = telemetryBatchID(batch.Records)
+			_, err := validateTelemetryBatch(batch, 1, nodeIdentity{NodeID: testNodeID}, telemetryTestAuthorization(),
+				DefaultTelemetryConfig(), now)
+			if err == nil || !strings.Contains(err.Error(), "config version "+unpublished+" is not in the node authorization") {
+				t.Fatalf("unauthorized config version refusal = %v", err)
+			}
+
+			batch = telemetryV2Batch(t, kind, now)
+			mutateTelemetryV2Payload(t, batch.Records[0], func(_ map[string]any, event map[string]any) {
+				event["origin_connect_us"] = float64(31)
+			})
+			batch.BatchId = telemetryBatchID(batch.Records)
+			_, err = validateTelemetryBatch(batch, 1, nodeIdentity{NodeID: testNodeID}, telemetryTestAuthorization(),
+				DefaultTelemetryConfig(), now)
+			if err == nil || !strings.Contains(err.Error(), "event is invalid") {
+				t.Fatalf("invalid content refusal = %v", err)
+			}
+		})
+	}
+}

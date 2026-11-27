@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -44,6 +45,7 @@ type Delivery interface {
 
 type NATSConsumer struct {
 	subscription *nats.Subscription
+	js           nats.JetStreamContext
 	config       NATSConsumerConfig
 }
 
@@ -77,7 +79,16 @@ func NewNATSConsumer(connection *nats.Conn, config NATSConsumerConfig) (*NATSCon
 	if err != nil {
 		return nil, fmt.Errorf("bind deployment status consumer: %w", err)
 	}
-	return &NATSConsumer{subscription: subscription, config: config}, nil
+	return &NATSConsumer{subscription: subscription, js: js, config: config}, nil
+}
+
+// pendingPullBackoff is the wait after a pull refused for MaxWaiting.
+const pendingPullBackoff = 50 * time.Millisecond
+
+// pullStillPending reports the 409 a pull gets while the consumer already
+// holds MaxWaiting pulls (nats.go returns it as a plain error).
+func pullStillPending(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "exceeded maxwaiting")
 }
 
 func (c *NATSConsumer) Next(ctx context.Context) (Delivery, error) {
@@ -92,6 +103,19 @@ func (c *NATSConsumer) Next(ctx context.Context) (Delivery, error) {
 			return nil, ctx.Err()
 		}
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
+			return nil, ErrNoMessage
+		}
+		if pullStillPending(err) {
+			// NATS stopped for a while holds every pull sent meanwhile; on
+			// resume the ones over MaxWaiting are answered 409 (11-26: that
+			// exited control-api). They expire within FetchTimeout: back off.
+			timer := time.NewTimer(pendingPullBackoff)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
 			return nil, ErrNoMessage
 		}
 		return nil, fmt.Errorf("fetch deployment status: %w", err)

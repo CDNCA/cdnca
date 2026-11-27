@@ -231,6 +231,20 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			}
 			continue
 		}
+		if pullStillPending(statusErr) {
+			// 11-26: NATS stopped for 8 s queued ~16 of these 500 ms pulls; on
+			// resume the overflow was answered 409 "Exceeded MaxWaiting" and,
+			// returned, it exited control-api. The queued pulls expire within
+			// a poll interval: wait it out and fetch again.
+			timer := time.NewTimer(d.config.PollInterval)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+			continue
+		}
 		if !errors.Is(statusErr, context.DeadlineExceeded) && !errors.Is(statusErr, nats.ErrTimeout) {
 			return statusErr
 		}

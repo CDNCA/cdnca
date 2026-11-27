@@ -17,6 +17,9 @@ var (
 	ErrPayloadConflict    = errors.New("deployment status payload conflict")
 	ErrInvalidTransition  = errors.New("invalid deployment status transition")
 	ErrProjectionConflict = errors.New("deployment status projection conflict")
+	// ErrSequenceGap: an earlier status of the running deployment is not
+	// stored yet. Retryable (nak with delay), never a refusal.
+	ErrSequenceGap = errors.New("deployment status arrived before an earlier one")
 )
 
 const (

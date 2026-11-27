@@ -508,6 +508,9 @@ func validateTelemetryPayload(
 		var capturePolicyRevision uint64
 		for index, event := range envelope.Events {
 			if !validTelemetryAccessEvent(event, envelope, authorization, now) {
+				if err := telemetryScopeUnauthorized("access", authorization, event.TenantID, event.SiteID, event.ConfigVersion); err != nil {
+					return nil, "", "", err
+				}
 				return nil, "", "", fmt.Errorf("telemetry access event is invalid")
 			}
 			if index == 0 {
@@ -538,6 +541,9 @@ func validateTelemetryPayload(
 		var capturePolicyRevision uint64
 		for index, event := range envelope.Events {
 			if !validTelemetrySecurityEvent(event, envelope, authorization, now) {
+				if err := telemetryScopeUnauthorized("security", authorization, event.TenantID, event.SiteID, event.ConfigVersion); err != nil {
+					return nil, "", "", err
+				}
 				return nil, "", "", fmt.Errorf("telemetry security event is invalid")
 			}
 			if index == 0 {
@@ -575,6 +581,9 @@ func validateTelemetryPayload(
 		var capturePolicyRevision uint64
 		for index, event := range envelope.Events {
 			if event.InstallationID != "" || !validTelemetryAccessEvent(event.telemetryAccessEvent, baseEnvelope, authorization, now) {
+				if err := telemetryScopeUnauthorized("access v2", authorization, event.TenantID, event.SiteID, event.ConfigVersion); err != nil {
+					return nil, "", "", err
+				}
 				return nil, "", "", fmt.Errorf("telemetry access v2 event is invalid")
 			}
 			if index == 0 {
@@ -612,6 +621,9 @@ func validateTelemetryPayload(
 		var capturePolicyRevision uint64
 		for index, event := range envelope.Events {
 			if event.InstallationID != "" || !validTelemetrySecurityEvent(event.telemetrySecurityEvent, baseEnvelope, authorization, now) {
+				if err := telemetryScopeUnauthorized("security v2", authorization, event.TenantID, event.SiteID, event.ConfigVersion); err != nil {
+					return nil, "", "", err
+				}
 				return nil, "", "", fmt.Errorf("telemetry security v2 event is invalid")
 			}
 			if index == 0 {
@@ -800,6 +812,19 @@ func validTelemetryAccessEvent(event telemetryAccessEvent, envelope telemetryAcc
 		(event.ClientBrowser == "" || slices.Contains(edgeconfig.TelemetryClientBrowsers, event.ClientBrowser)) &&
 		(event.ClientOS == "" || slices.Contains(edgeconfig.TelemetryClientOSes, event.ClientOS)) &&
 		telemetryBounded(event.UpstreamAddr, 64)
+}
+
+// telemetryScopeUnauthorized names, for a refused event, the usual cause of
+// a gateway refusal (N11): a site and config version the node authorization
+// does not carry, e.g. a release running on the node whose deployment the
+// control plane has not recorded as healthy. Only the log reason differs; the
+// rules do not (fresh install 11-26 logged it as "event is invalid").
+func telemetryScopeUnauthorized(kind string, authorization telemetryAuthorization, tenantID, siteID, configVersionID string) error {
+	if !canonicalUUID(siteID) || !canonicalUUID(configVersionID) ||
+		authorization.configBySite[telemetryScopeKey{siteID: siteID, configVersionID: configVersionID}] == tenantID {
+		return nil
+	}
+	return fmt.Errorf("telemetry %s event site %s config version %s is not in the node authorization", kind, siteID, configVersionID)
 }
 
 func validTelemetrySecurityEvent(event telemetrySecurityEvent, envelope telemetrySecurityEnvelope, authorization telemetryAuthorization, now time.Time) bool {

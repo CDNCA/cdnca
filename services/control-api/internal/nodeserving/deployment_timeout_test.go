@@ -1,6 +1,7 @@
 package nodeserving
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -37,4 +38,21 @@ func TestDeploymentTimeoutDueOneMinuteAfterDeadline(t *testing.T) {
 	if DeploymentTimeoutGrace != time.Minute {
 		t.Fatalf("grace = %v; migration 348 checks timed_out_at >= deadline_at + 1 minute", DeploymentTimeoutGrace)
 	}
+}
+
+// Until the status runtime's startup replay is done the timeouts touch
+// nothing (the store is not even read: nil here would panic).
+func TestDeploymentTimeoutsHoldUntilReady(t *testing.T) {
+	ready := false
+	evaluator := (&DeploymentTimeoutEvaluator{}).HoldUntil(func() bool { return ready })
+	if err := evaluator.Evaluate(context.Background()); err != nil {
+		t.Fatalf("held Evaluate = %v", err)
+	}
+	ready = true
+	defer func() {
+		if recover() == nil {
+			t.Fatal("a ready evaluator did not read the store")
+		}
+	}()
+	_ = evaluator.Evaluate(context.Background())
 }

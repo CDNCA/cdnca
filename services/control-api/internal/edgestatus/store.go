@@ -139,6 +139,16 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 				return err
 			}
 		} else if !validAdvance(deployment.action, deployment.state, state) {
+			// A skipped step may still arrive (11-26 fault injection: NATS
+			// stopped 8 s, control-api restarted, its unacknowledged STARTED
+			// came back only after AckWait while STAGED..HEALTHY arrived
+			// first). Terminating those stranded the deployment at STARTED
+			// and the node's heartbeats were dropped for good. Node sequences
+			// are contiguous, so wait for the missing one while the deployment
+			// runs; the deadline timeout (348) ends it if it never comes.
+			if envelope.Status.TransitionSequence > uint64(maxSequence)+1 && !deploymentEnded(deployment.state) {
+				return ErrSequenceGap
+			}
 			return ErrInvalidTransition
 		}
 		if err := insertEvent(ctx, tx, envelope, state, receivedAt, domain); err != nil {
@@ -556,6 +566,15 @@ func updateRunningConfig(ctx context.Context, tx pgx.Tx, deployment lockedDeploy
 // status projection signals, with the node ID as payload, when a node
 // artifact delivery (segment or set) to that node ends.
 const NodeArtifactDeliveryChannel = "cdnca_node_artifact_delivery"
+
+// deploymentEnded: no status can move the deployment any more.
+func deploymentEnded(state string) bool {
+	switch state {
+	case "healthy", "failed", "reverted", "rollback_failed", "cancelled":
+		return true
+	}
+	return false
+}
 
 func nodeArtifactDeliveryEnded(state string) bool {
 	return state == "healthy" || state == "failed" || state == "reverted" || state == "rollback_failed"

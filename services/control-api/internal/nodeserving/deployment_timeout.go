@@ -40,13 +40,26 @@ func DeploymentTimeoutDue(deadline, now time.Time) bool {
 // one-running-deployment indexes of migrations 288/291).
 type DeploymentTimeoutEvaluator struct {
 	store *Store
+	ready func() bool
 }
 
 func NewDeploymentTimeoutEvaluator(store *Store) *DeploymentTimeoutEvaluator {
 	return &DeploymentTimeoutEvaluator{store: store}
 }
 
+// HoldUntil makes Evaluate time nothing out until ready reports true. After a
+// long control-api stop a node's statuses can still be in the status stream
+// (the deployment healthy on the node); timing it out first would fail it for
+// good, so the timeouts wait for the status runtime's startup replay.
+func (evaluator *DeploymentTimeoutEvaluator) HoldUntil(ready func() bool) *DeploymentTimeoutEvaluator {
+	evaluator.ready = ready
+	return evaluator
+}
+
 func (evaluator *DeploymentTimeoutEvaluator) Evaluate(ctx context.Context) error {
+	if evaluator.ready != nil && !evaluator.ready() {
+		return nil
+	}
 	due, err := evaluator.store.overdueDeployments(ctx, deploymentTimeoutBatch)
 	if err != nil {
 		return err

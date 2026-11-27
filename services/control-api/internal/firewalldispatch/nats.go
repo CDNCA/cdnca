@@ -82,6 +82,12 @@ func (t *natsTransport) publish(ctx context.Context, subject string, payload []b
 	return &publishAck{stream: ack.Stream, sequence: ack.Sequence, duplicate: ack.Duplicate}, nil
 }
 
+// pullStillPending reports the 409 a pull gets while the consumer already
+// holds MaxWaiting pulls (nats.go returns it as a plain error).
+func pullStillPending(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "exceeded maxwaiting")
+}
+
 func (t *natsTransport) nextStatus(ctx context.Context) (statusDelivery, error) {
 	messages, err := t.statuses.Fetch(1, nats.Context(ctx))
 	if err != nil {

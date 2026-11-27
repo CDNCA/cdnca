@@ -1073,7 +1073,10 @@ func runServer() error {
 			_ = siteStatusRecoveryRuntime.Close(closeCtx)
 		}()
 	}
-	nodeServingWorker, err := openNodeServingWorker(pool)
+	// Set once the edge runtime opens below, before any worker runs.
+	var edgeStatusReplayDone func() bool
+	nodeServingWorker, err := openNodeServingWorker(pool,
+		deploymentTimeoutGate(&edgeStatusReplayDone, time.Now, deploymentTimeoutHoldWarning, slog.Default()))
 	if err != nil {
 		return runtimeStageError{stage: "initialize node serving runtime", err: err}
 	}
@@ -1268,6 +1271,7 @@ func runServer() error {
 		return err
 	}
 	defer edgeRuntime.Close()
+	edgeStatusReplayDone = edgeRuntime.statusReplayDone
 	nodePortTransitionRuntime, err := openNodePortTransitionProductionRuntime(
 		nodePortTransitionEnabled, cfg, pool, nats.Connect,
 	)
@@ -5827,6 +5831,13 @@ func (r *edgeDeploymentRuntime) Run(ctx context.Context) error {
 	r.ready.Store(true)
 	defer r.ready.Store(false)
 	return runRequiredWorkers(ctx, r.workers)
+}
+
+// statusReplayDone reports whether the deployment status runtime finished its
+// startup replay; a status runtime without one has nothing to wait for.
+func (r *edgeDeploymentRuntime) statusReplayDone() bool {
+	replay, ok := r.status.(interface{ ReplayDone() bool })
+	return !ok || replay.ReplayDone()
 }
 
 func (r *edgeDeploymentRuntime) Ready() error {

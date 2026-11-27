@@ -26,7 +26,11 @@ const nodeServingInterval = 10 * time.Second
 // openNodeServingWorker always runs: monitoring "pause" and per-node
 // auto-disable are platform policy, not optional runtimes. It stops only with
 // the process.
-func openNodeServingWorker(pool *pgxpool.Pool) (*nodeserving.Worker, error) {
+//
+// timeoutsReady holds the deployment timeouts until the deployment status
+// runtime finished its startup replay (see nodeserving HoldUntil); there is
+// no time limit.
+func openNodeServingWorker(pool *pgxpool.Pool, timeoutsReady func() bool) (*nodeserving.Worker, error) {
 	store, err := nodeserving.NewStore(pool)
 	if err != nil {
 		return nil, err
@@ -40,7 +44,7 @@ func openNodeServingWorker(pool *pgxpool.Pool) (*nodeserving.Worker, error) {
 	store.EnableAvailabilityAlerts(alerts)
 	// Deployment timeouts run first: config sync then sees them as failed.
 	return nodeserving.NewWorker(store, nodeServingInterval, slog.Default(),
-		nodeserving.NewDeploymentTimeoutEvaluator(store), nodeserving.NewMonitorEvaluator(store), nodeserving.NewAutoDisableEvaluator(store),
+		nodeserving.NewDeploymentTimeoutEvaluator(store).HoldUntil(timeoutsReady), nodeserving.NewMonitorEvaluator(store), nodeserving.NewAutoDisableEvaluator(store),
 		nodeserving.NewConfigSyncEvaluator(store, edgeautopublish.NewNodeSyncRetrier(pool)),
 		// A reinstalled host whose enrollment republication failed (no ticket or
 		// node artifact set yet) gets its scopes again.
@@ -112,4 +116,31 @@ func openOriginProbe(pool *pgxpool.Pool, edgeConnection natsRuntimeConnection,
 	}
 	return originfailover.NewRunner(pool, originfailover.NewStore(pool, alerts, time.Now),
 		originfailover.NewControllerProber(nil), peers, slog.Default().With("component", "origin_probe")).WithSources(sources), nil
+}
+
+// deploymentTimeoutHoldWarning is how long the deployment timeouts may wait
+// for the status replay before the wait is reported (and again every as long
+// while it lasts).
+const deploymentTimeoutHoldWarning = 15 * time.Minute
+
+// deploymentTimeoutGate is ready once replayDone (set when the edge runtime
+// opens, before any worker starts) reports true, and not before: a deployment
+// timed out ahead of the replay of statuses still in the stream would fail
+// for good although the node runs it (its telemetry then refused). There is
+// no time limit; a wait past warnAfter is logged.
+func deploymentTimeoutGate(replayDone *func() bool, now func() time.Time, warnAfter time.Duration,
+	logger *slog.Logger,
+) func() bool {
+	started := now()
+	warned := started
+	return func() bool {
+		if *replayDone != nil && (*replayDone)() {
+			return true
+		}
+		if at := now(); at.Sub(warned) >= warnAfter {
+			warned = at
+			logger.Warn("deployment timeouts held by pending deployment status replay", "held_for", at.Sub(started))
+		}
+		return false
+	}
 }
