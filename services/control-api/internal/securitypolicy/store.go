@@ -615,6 +615,10 @@ func requireOwnerCustomCC(ctx context.Context, tx pgx.Tx, scopeID, ownerID uuid.
 	if err != nil {
 		return err
 	}
+	// An owner without any package (community edition) has no package limits.
+	if len(ids) == 0 {
+		return nil
+	}
 	for _, id := range ids {
 		limits, err := packageaddon.LockRuntimeLimits(ctx, tx, scopeID, id, at)
 		if errors.Is(err, packageaddon.ErrSubscriptionInactive) {

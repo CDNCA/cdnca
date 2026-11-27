@@ -56,7 +56,9 @@ func siteServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs
 		     site.node_group_id,
 		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
 		     (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
-		     route.line_group_id, route.next_group_id)
+		     route.line_group_id, route.next_group_id,
+		     -- community edition: no package, no own group -> the platform default
+		     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND site.node_group_id IS NULL AND site.package_subscription_id IS NULL))
 		LEFT JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision
 		 AND endpoint.enabled AND endpoint.node_id IS NOT NULL
@@ -70,7 +72,9 @@ func siteServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
 		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		LEFT JOIN node_line_groups line_group ON pool.l2_mode='package' AND line_group.deleted_at IS NULL
-		 AND line_group.id=COALESCE(site.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
+		 AND line_group.id=COALESCE(site.node_group_id, (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+		     -- community edition: no package, no own group -> the platform default
+		     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND site.node_group_id IS NULL AND site.package_subscription_id IS NULL))
 		JOIN l2_topology_configs config ON config.deleted_at IS NULL AND (
 		     pool.l2_mode='custom' AND config.tenant_scope_id=site.scope_id AND config.id=pool.l2_config_id OR
 		     pool.l2_mode='package' AND config.tenant_scope_id=line_group.tenant_scope_id AND config.id=line_group.l2_config_id)

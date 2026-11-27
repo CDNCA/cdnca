@@ -157,6 +157,36 @@ func (f *Fixture) Site(domain string) uuid.UUID {
 	return site
 }
 
+// CommunitySite marks line the platform default line group and creates a
+// live site of the scope without a package or a line group of its own
+// (community edition), served by the platform default.
+func (f *Fixture) CommunitySite(domain string, line uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	Exec(f.t, f.pool, `UPDATE node_line_groups SET is_platform_default=true WHERE id=$1`, line)
+	site := uuid.New()
+	Exec(f.t, f.pool, `INSERT INTO sites(id,scope_id,display_id,owner_user_id,domain,origins,origin_hosts,created_by_user_id,updated_by_user_id)
+		VALUES($1,$2,(SELECT COALESCE(max(display_id),0)+1 FROM sites),$3,$4,ARRAY['192.0.2.10:80'],ARRAY['192.0.2.10'],$3,$3)`,
+		site, f.opts.Scope, f.opts.User, domain)
+	return site
+}
+
+// L2 makes an L2 configuration of line's scope, member its only member, the
+// L2 configuration of line (the group and its current revision), and gives
+// site an origin pool following its line group's L2 (l2_mode package).
+func (f *Fixture) L2(line, site, member uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	config := uuid.New()
+	Exec(f.t, f.pool, `INSERT INTO l2_topology_configs(id,tenant_scope_id,name,region,mode,load_method,
+		created_by_user_id,updated_by_user_id,created_at,updated_at) VALUES($1,$2,$3,'hk','global','rr',$4,$4,now(),now())`,
+		config, f.opts.LineScope, "pkgline-l2-"+config.String()[:8], f.opts.User)
+	Exec(f.t, f.pool, `INSERT INTO l2_topology_nodes(id,tenant_scope_id,config_id,node_id,created_by_user_id,updated_by_user_id,
+		created_at,updated_at) VALUES(gen_random_uuid(),$1,$2,$3,$4,$4,now(),now())`, f.opts.LineScope, config, member, f.opts.User)
+	Exec(f.t, f.pool, `UPDATE node_line_groups SET l2_config_id=$2 WHERE id=$1`, line, config)
+	Exec(f.t, f.pool, `UPDATE node_line_group_revisions SET l2_config_id=$2 WHERE line_group_id=$1`, line, config)
+	Exec(f.t, f.pool, `INSERT INTO site_origin_pools(site_id,l2_mode) VALUES($1,'package')`, site)
+	return config
+}
+
 // Node is the node of a line.
 func (f *Fixture) Node(line uuid.UUID) uuid.UUID {
 	if line == f.LineB {

@@ -111,6 +111,8 @@ func TestPackageFeatures(t *testing.T) {
 		{"PublishWaitsForConcurrentRevocation", testPackageFeaturePublishWaitsForConcurrentRevocation},
 		{"DisabledPublicationCanRemoveProtection", testPackageFeatureDisabledPublicationCanRemoveProtection},
 		{"SystemWAFStillNeedsSubscription", testPackageFeatureSystemWAFStillNeedsSubscription},
+		{"CommunitySiteWithoutPackage", testPackageFeatureCommunitySiteWithoutPackage},
+		{"CommunityOwnerCreatesCC", testPackageFeatureCommunityOwnerCreatesCC},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -169,10 +171,10 @@ func testPackageFeatureCustomCCOwnerAndDisable(t *testing.T, fixture bindingFixt
 	}
 	fields := securitypolicy.PolicyFields{Kind: policy.Kind, Name: policy.Name, Enabled: true, DefaultAction: policy.DefaultAction, Rules: policy.Rules}
 	request := securitypolicy.CreateRequest{TargetScopeID: actor.ScopeID, OwnerUserID: owner, Fields: fields, IdempotencyKey: "owner-cc", RequestID: "owner-cc"}
+	sub := insertFeatureSubscription(t, fixture.pool, actor.ScopeID, owner, bindingTestNow, false, false)
 	if _, err := service.Create(t.Context(), fixture.platform, request); !errors.Is(err, packageaddon.ErrFeatureDenied) {
 		t.Fatalf("another owner's rights / platform bypass: %v", err)
 	}
-	sub := insertFeatureSubscription(t, fixture.pool, actor.ScopeID, owner, bindingTestNow, false, false)
 	assignment := assignFeature(t, fixture.pool, actor.ScopeID, owner, sub, "custom_cc", bindingTestNow)
 	created, err := service.Create(t.Context(), actor, request)
 	if err != nil {
@@ -282,5 +284,50 @@ func testPackageFeatureSystemWAFStillNeedsSubscription(t *testing.T, fixture bin
 	})
 	if !errors.Is(err, packageaddon.ErrFeatureDenied) {
 		t.Fatalf("system WAF bypass: %v", err)
+	}
+}
+
+// 社区版网站没有套餐（package_subscription_id 为空）：启用中的 WAF / CC
+// 规则库照常绑定下发；网站挂了未开 WAF 的套餐时仍按套餐拒绝。
+func testPackageFeatureCommunitySiteWithoutPackage(t *testing.T, fixture bindingFixture) {
+	clock := &testClock{now: bindingTestNow}
+	store := newBindingStore(t, fixture.pool, newRecordingSigner(), clock, 5*time.Minute)
+	for _, site := range []tenantResources{fixture.tenantA, fixture.tenantB} {
+		if _, err := fixture.pool.Exec(t.Context(), `UPDATE sites SET package_subscription_id=NULL,package_id=NULL WHERE id=$1`, site.siteID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.Publish(t.Context(), tenantActor(fixture.tenantB), publishRequest(fixture.tenantB, "community-waf", 1, 0, 0)); err != nil {
+		t.Fatalf("community WAF publish: %v", err)
+	}
+	if _, err := store.Publish(t.Context(), fixture.platform, publishRequest(fixture.tenantA, "community-cc", 1, 0, 0)); err != nil {
+		t.Fatalf("community CC publish: %v", err)
+	}
+	sub := insertFeatureSubscription(t, fixture.pool, fixture.tenantB.scopeID, fixture.tenantB.userID, bindingTestNow, false, false)
+	linkFeatureSubscription(t, fixture.pool, fixture.tenantB.siteID, sub)
+	addPolicyVersion(t, fixture.pool, fixture.tenantB, 2)
+	if _, err := store.Publish(t.Context(), tenantActor(fixture.tenantB), publishRequest(fixture.tenantB, "package-no-waf", 2, 1, 0)); !errors.Is(err, packageaddon.ErrFeatureDenied) {
+		t.Fatalf("package without WAF: %v", err)
+	}
+}
+
+// 社区版用户没有任何套餐：照常新建启用中的 CC 规则库。
+func testPackageFeatureCommunityOwnerCreatesCC(t *testing.T, fixture bindingFixture) {
+	owner := uuid.New()
+	if _, err := fixture.pool.Exec(t.Context(), `INSERT INTO users(id,username,display_name,password_hash) VALUES($1,$2,'community owner','hash')`, owner, owner.String()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.pool.Exec(t.Context(), `INSERT INTO memberships(scope_id,user_id) VALUES($1,$2)`, fixture.tenantA.scopeID, owner); err != nil {
+		t.Fatal(err)
+	}
+	service := securitypolicy.NewService(securitypolicy.NewStoreWithClock(fixture.pool, func() time.Time { return bindingTestNow }))
+	policy := policyDocument(uuid.New(), fixture.tenantA.scopeID, "cc", "community cc", 1)
+	for i := range policy.Rules {
+		policy.Rules[i].ID = uuid.Nil
+	}
+	fields := securitypolicy.PolicyFields{Kind: policy.Kind, Name: policy.Name, Enabled: true, DefaultAction: policy.DefaultAction, Rules: policy.Rules}
+	if _, err := service.Create(t.Context(), fixture.platform, securitypolicy.CreateRequest{TargetScopeID: fixture.tenantA.scopeID, OwnerUserID: owner,
+		Fields: fields, IdempotencyKey: "community-cc-create", RequestID: "community-cc-create"}); err != nil {
+		t.Fatalf("community CC library create: %v", err)
 	}
 }

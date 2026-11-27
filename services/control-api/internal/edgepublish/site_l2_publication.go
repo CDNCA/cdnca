@@ -15,8 +15,8 @@ import (
 // Site L2 of a node-list publication (fix-autol2b: "L1 直接按网站原来的回源端口连 L2，L2 再按原端口回源站，端口一路透传"):
 // automatic, system and node-list publications carry no target snapshot,
 // so each site's L2 is worked out at publication from the site's own line
-// group (its node_group_id, else its package's primary group; the platform
-// default group is not used):
+// group (its node_group_id, else its package's primary group, else -- no
+// package and no own group, community edition -- the platform default group):
 //   - the line group's current revision names the L2 configuration and the
 //     probe settings; l2_mode off / custom apply as under a snapshot;
 //   - the L2 endpoints are the configuration's enabled members that are
@@ -206,7 +206,7 @@ func resolveSiteL2Publication(
 }
 
 // loadSiteL2LineGroups: each site's line group (its own, else its package's
-// primary group), current revision, live.
+// primary group, else the platform default), current revision, live.
 func loadSiteL2LineGroups(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs []uuid.UUID) (map[uuid.UUID]siteL2LineGroup, error) {
 	rows, err := tx.Query(ctx, `SELECT site.id,line_group.id,line_group.tenant_scope_id,revision.revision,
 		       revision.probe_interval_ms,revision.failure_threshold,revision.recovery_threshold,revision.l2_config_id
@@ -215,7 +215,9 @@ func loadSiteL2LineGroups(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sit
 		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
 		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id=COALESCE(site.node_group_id,
-		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
+		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+		     -- community edition: no package, no own group -> the platform default
+		     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND site.node_group_id IS NULL AND site.package_subscription_id IS NULL))
 		JOIN node_line_group_revisions revision ON revision.tenant_scope_id=line_group.tenant_scope_id
 		 AND revision.line_group_id=line_group.id AND revision.revision=line_group.current_revision
 		WHERE site.scope_id=$1 AND site.id=ANY($2::uuid[]) AND site.deleted_at IS NULL

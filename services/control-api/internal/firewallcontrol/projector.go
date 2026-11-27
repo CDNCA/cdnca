@@ -281,7 +281,9 @@ func siteServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sites [
 		     site.node_group_id,
 		     (subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
 		     (subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
-		     route.line_group_id, route.next_group_id)
+		     route.line_group_id, route.next_group_id,
+		     -- community edition: no package, no own group -> the platform default
+		     (SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND site.node_group_id IS NULL AND site.package_subscription_id IS NULL))
 		LEFT JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
 		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision
 		 AND endpoint.enabled AND endpoint.node_id IS NOT NULL

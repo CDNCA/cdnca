@@ -89,6 +89,13 @@ func TestRebindStatusCountsPackageDeniedSitesInOwnScopeOnly(t *testing.T) {
 	if status, err := store.RebindStatus(t.Context(), reader, "cc"); err != nil || status != (RebindStatus{}) {
 		t.Fatalf("cc counted the waf binding: %+v %v", status, err)
 	}
+	// 社区版网站没有套餐：仍待重新绑定，但不计为被套餐拒绝。
+	if _, err := fixture.pool.Exec(t.Context(), `UPDATE sites SET package_subscription_id=NULL,package_id=NULL WHERE id=$1`, fixture.siteID); err != nil {
+		t.Fatal(err)
+	}
+	if status, err := store.RebindStatus(t.Context(), reader, "waf"); err != nil || status.PendingSites != 1 || status.PackageDeniedSites != 0 {
+		t.Fatalf("site without a package: %+v %v", status, err)
+	}
 	// A session of another tenant scope never reads this scope: the count
 	// is of the actor's own scope, and a stranger is refused.
 	stranger := reader

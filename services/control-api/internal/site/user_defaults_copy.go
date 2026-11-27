@@ -109,7 +109,8 @@ func (defaults siteCreationUserDefaults) wafExtraRules() []securitypolicy.Rule {
 }
 
 // packageDenies: a CC or WAF library needs the site's package feature (as
-// publishing it does, securitybinding.CheckSitePolicyFeature); ACL never.
+// publishing it does, securitybinding.CheckSitePolicyFeature); ACL never,
+// nor a site without a package.
 func packageDenies(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID, kind string, now time.Time) bool {
 	err := securitybinding.CheckSitePolicyFeature(ctx, tx, scopeID, siteID, securitypolicy.Policy{Kind: kind, Enabled: true}, now)
 	return errors.Is(err, packageaddon.ErrFeatureDenied) || errors.Is(err, packageaddon.ErrSubscriptionInactive)

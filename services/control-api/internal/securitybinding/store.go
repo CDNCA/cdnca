@@ -413,6 +413,7 @@ func LockSiteSubscription(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.U
 
 // CheckSitePolicyFeature requires LockSiteSubscription before any policy or
 // binding lock. A disabled policy is a removal and does not need new rights.
+// A site without a package (community edition) has no package limits.
 func CheckSitePolicyFeature(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID, policy securitypolicy.Policy, at time.Time) error {
 	if !policy.Enabled || policy.Kind == securitypolicy.KindACL {
 		return nil
@@ -428,7 +429,7 @@ func CheckSitePolicyFeature(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid
 		return err
 	}
 	if subscriptionID == nil {
-		return packageaddon.ErrSubscriptionInactive
+		return nil
 	}
 	limits, err := packageaddon.LockRuntimeLimits(ctx, tx, scopeID, *subscriptionID, at)
 	if err != nil {

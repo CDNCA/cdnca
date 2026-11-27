@@ -68,7 +68,9 @@ func (resolver *PostgresPublicationTargetResolver) LoadPublicationTarget(ctx con
 		LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 		-- (a package's group may be the platform's)
 		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL
-			AND line_group.id=COALESCE(site.node_group_id,(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid)
+			AND line_group.id=COALESCE(site.node_group_id,(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+				-- community edition: no package, no own group -> the platform default
+				(SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND site.node_group_id IS NULL AND site.package_subscription_id IS NULL))
 			AND (line_group.tenant_scope_id=site.scope_id OR site.node_group_id IS NULL AND line_group.tenant_scope_id=
 				(SELECT id FROM access_scopes WHERE kind='platform' AND tenant_id IS NULL))
 		JOIN edge_target_snapshots snapshot ON snapshot.tenant_scope_id=line_group.tenant_scope_id

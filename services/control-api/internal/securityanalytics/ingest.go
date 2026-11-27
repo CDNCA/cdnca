@@ -156,6 +156,7 @@ func nodeServesSite(ctx context.Context, tx pgx.Tx, node, tenant, site uuid.UUID
 const siteServingNodes = `SELECT DISTINCT served.node_id FROM node_line_groups g
 	LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=s.scope_id
 		AND subscription.id=s.package_subscription_id AND subscription.deleted_at IS NULL
+	LEFT JOIN LATERAL (SELECT package_subscription_current_product_snapshot(subscription.id,now()) AS product_snapshot) subscription_current ON true
 	LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=s.scope_id AND route.site_id=s.id
 	CROSS JOIN LATERAL (
 		SELECT endpoint.node_id FROM node_line_endpoints endpoint
@@ -169,9 +170,11 @@ const siteServingNodes = `SELECT DISTINCT served.node_id FROM node_line_groups g
 		  AND snapshot.source_revision=g.current_revision) served
 	WHERE g.deleted_at IS NULL
 	  AND g.id IN (s.node_group_id,
-		(subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
-		(subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
-		route.line_group_id, route.next_group_id)
+		(subscription_current.product_snapshot->'spec'->>'node_group_id')::uuid,
+		(subscription_current.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+		route.line_group_id, route.next_group_id,
+		-- community edition: no package, no own group -> the platform default
+		(SELECT platform_default.id FROM node_line_groups platform_default WHERE platform_default.is_platform_default AND platform_default.deleted_at IS NULL AND s.node_group_id IS NULL AND s.package_subscription_id IS NULL))
 	  AND g.tenant_scope_id IN (s.scope_id, (SELECT node.scope_id FROM nodes node WHERE node.id=served.node_id))`
 
 // siteServedByNode (a condition on site s, node $3): node is one of

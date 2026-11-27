@@ -301,3 +301,28 @@ func subscriptionForSite(t *testing.T, fixture activationFixture) uuid.UUID {
 	}
 	return id
 }
+
+// 社区版网站没有套餐：认领与晋升前的套餐复核直接放行。
+func TestPackageFeatureClaimAndPromotionWithoutPackage(t *testing.T) {
+	fixture := newActivationFixture(t)
+	if _, err := fixture.pool.Exec(t.Context(), `UPDATE sites SET package_subscription_id=NULL,package_id=NULL WHERE id=$1`, fixture.siteID); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.pool.QueryRow(t.Context(), `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1`, fixture.scopeID).Scan(&fixture.sourceRevision); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(fixture.pool, func() time.Time { return fixture.now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedFeatureActiveIdentity(t, fixture)
+	created, err := store.Claim(t.Context(), fixture.actor, fixture.claimInput("community-claim"))
+	if err != nil {
+		t.Fatalf("community claim: %v", err)
+	}
+	fixture.markCandidateHealthy(t, created.Candidate.ID)
+	promoted, err := store.Promote(t.Context(), fixture.actor, created.Candidate.ID, created.Candidate.PromotionCAS())
+	if err != nil || promoted.Status != StatusPromoted {
+		t.Fatalf("community promote=%+v %v", promoted, err)
+	}
+}
