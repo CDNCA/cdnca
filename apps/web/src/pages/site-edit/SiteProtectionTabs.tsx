@@ -208,6 +208,8 @@ export function useSiteLibrary(kind: 'cc' | 'waf', { siteId, scopeId, accessToke
     enabled,
     retry: false,
     queryFn: ({ signal }) => securityPoliciesApi.getActivationStatus(accessToken, siteId, kind, signal),
+    // A release in flight is re-read until it is promoted or fails, so the switch and the active library settle by themselves.
+    refetchInterval: (query) => activationInFlight(query.state.data) ? 3000 : false,
   })
   const policies = policiesQuery.data?.items ?? []
   // A promoted withdrawal leaves the binding naming its last library with no active version: the site
@@ -218,6 +220,12 @@ export function useSiteLibrary(kind: 'cc' | 'waf', { siteId, scopeId, accessToke
   const activePolicy = policies.find((policy) => policy.id === boundPolicyID)
   const detachedPolicy = detached ? policies.find((policy) => policy.id === bindingPolicyID) : undefined
   return { policiesQuery, activationQuery, policies, boundPolicyID, activePolicy, detachedPolicy }
+}
+
+/** The latest release has not reached promoted or a failure yet. */
+export function activationInFlight(status: SecurityActivationStatus | undefined): boolean {
+  const state = status?.latest_candidate?.candidate_status
+  return state !== undefined && ['claimed', 'canary', 'expanding', 'healthy'].includes(state)
 }
 
 /** The site's library of this kind was withdrawn: the latest release is a promoted detach and no version is active. */
@@ -765,7 +773,7 @@ export function SiteWAFTab({ siteId, host, scopeKind, scopeId, accessToken, perm
     <section className="site-protection-section site-protection-section--waf">
       <div className="site-protection-section-head"><div><h2>{t('waf.libraries')}</h2><span>{t('waf.librariesHint')}</span></div></div>
       <div className="site-protection-library-grid">
-        <div className="site-protection-library-column"><div className="site-protection-library-head"><strong>{t('waf.available')}</strong><span>{policies.length}</span><div><Input allowClear aria-label={t('waf.search')} placeholder={t('waf.search')} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} /><Button icon={<RefreshCw size={14} />} onClick={() => void policiesQuery.refetch()}>{t('waf.refresh')}</Button></div></div>{shownPolicies.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('waf.noPolicies')} /> : shownPolicies.map((policy) => <article key={policy.id}><div><span className="site-protection-policy-index">{policy.rules?.length ?? 0}</span><span><strong>{policy.name}</strong><small>{t('waf.rules', { count: policy.rules?.length ?? 0 })}{policy.description ? ` · ${policy.description}` : ''}</small></span></div>{policy.id === boundPolicyID ? <Button disabled>{t('common.current')}</Button> : <Popconfirm title={t('waf.applyConfirm', { name: policy.name })} okText={t('waf.apply')} cancelText={t('waf.applyCancel')}
+        <div className="site-protection-library-column"><div className="site-protection-library-head"><strong>{t('waf.available')}</strong><span>{policies.length}</span><div><Input allowClear aria-label={t('waf.search')} placeholder={t('waf.search')} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} /><Button icon={<RefreshCw size={14} />} onClick={() => { void policiesQuery.refetch(); void activationQuery.refetch() }}>{t('waf.refresh')}</Button></div></div>{shownPolicies.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('waf.noPolicies')} /> : shownPolicies.map((policy) => <article key={policy.id}><div><span className="site-protection-policy-index">{policy.rules?.length ?? 0}</span><span><strong>{policy.name}</strong><small>{t('waf.rules', { count: policy.rules?.length ?? 0 })}{policy.description ? ` · ${policy.description}` : ''}</small></span></div>{policy.id === boundPolicyID ? <Button disabled>{t('common.current')}</Button> : <Popconfirm title={t('waf.applyConfirm', { name: policy.name })} okText={t('waf.apply')} cancelText={t('waf.applyCancel')}
           disabled={!canManage || !bindingKnown || apply.isPending} onConfirm={() => apply.mutate(policy)}><Button type="primary" loading={apply.isPending && apply.variables?.id === policy.id}
           disabled={!canManage || !bindingKnown || apply.isPending}>{t('waf.apply')}</Button></Popconfirm>}</article>)}</div>
         <div className="site-protection-library-column"><div className="site-protection-library-head"><strong>{t('waf.active')}</strong><span>{activePolicy ? 1 : 0}</span></div>{activePolicy ? <article><div><span className="site-protection-policy-index">{activePolicy.rules?.length ?? 0}</span><span><strong>{activePolicy.name}</strong><small>{t('waf.rules', { count: activePolicy.rules?.length ?? 0 })}</small></span></div><Tag color="success">{t('common.current')}</Tag></article> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={bindingKnown ? t('waf.noActivePolicy') : t('common.unconfirmed')} />}</div>

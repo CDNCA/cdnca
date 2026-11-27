@@ -8,7 +8,7 @@ import { firewallActionApi } from '../api/firewallAction'
 import { rulePacksApi } from '../api/rulePacks'
 import { securityPoliciesApi, type SecurityPolicy } from '../api/securityPolicies'
 import { securitySystemRulesApi } from '../api/securitySystemRules'
-import { SiteCCTab, siteLibraryDetached, SiteWAFTab } from '../pages/site-edit/SiteProtectionTabs'
+import { activationInFlight, SiteCCTab, siteLibraryDetached, SiteWAFTab } from '../pages/site-edit/SiteProtectionTabs'
 import { editCCRules, editWAFSourceRules, managedRuleNames } from '../pages/site-edit/sitePolicyEdits'
 import { renderWithProviders } from '../test/render'
 
@@ -178,6 +178,24 @@ describe('站点 CC/WAF 就地修改', () => {
     expect(vi.mocked(securityPoliciesApi.publishActivation).mock.calls[0]![1]).not.toMatchObject({ detach: true })
     expect(securityPoliciesApi.create).not.toHaveBeenCalled()
   })
+
+  // A withdrawal or release in flight is re-read until it settles, without a manual refresh; 刷新 re-reads it too.
+  it('WAF: a withdrawal in flight is re-read until promoted and the switch settles off', async () => {
+    const wafPolicy = { ...ccPolicy, id: 'w1', kind: 'waf' as const, name: '本站 WAF', version: 3, rules: [] }
+    vi.mocked(securityPoliciesApi.list).mockResolvedValue({ items: [wafPolicy], total: 1, page: 1, limit: 100 })
+    const b = { id: 'b', policy_id: 'w1', binding_revision: 6, active_policy_version: 0, last_claimed_policy_version: 3 }
+    vi.mocked(securityPoliciesApi.getActivationStatus)
+      .mockResolvedValueOnce({ binding: b, latest_candidate: { candidate_status: 'claimed' }, operation: null, latest_detach: true } as never)
+      .mockResolvedValue({ binding: b, latest_candidate: { candidate_status: 'promoted' }, operation: null, latest_detach: true } as never)
+    render('waf')
+    const card = await screen.findByRole('region', { name: '站点 WAF 规则库' })
+    const toggle = within(card).getByRole('switch', { name: '站点 WAF 规则库' })
+    await waitFor(() => expect(toggle).not.toBeChecked(), { timeout: 6000 })
+    expect(vi.mocked(securityPoliciesApi.getActivationStatus).mock.calls.length).toBeGreaterThan(1)
+    const calls = vi.mocked(securityPoliciesApi.getActivationStatus).mock.calls.length
+    await userEvent.click(screen.getByRole('button', { name: '刷新' }))
+    await waitFor(() => expect(vi.mocked(securityPoliciesApi.getActivationStatus).mock.calls.length).toBeGreaterThan(calls))
+  }, 10000)
 
   it('CC: 整理 / 去重 / 清空 edit the IP list and save at once', async () => {
     // the stored library follows each save (as the server does)
@@ -413,6 +431,11 @@ describe('站点 CC/WAF 就地修改', () => {
 })
 
 describe('规则编辑纯函数', () => {
+  it('activationInFlight is true only while the latest release is neither promoted nor failed', () => {
+    for (const state of ['claimed', 'canary', 'expanding', 'healthy']) expect(activationInFlight({ latest_candidate: { candidate_status: state } } as never)).toBe(true)
+    for (const state of ['promoted', 'failed', 'cancelled', 'expired']) expect(activationInFlight({ latest_candidate: { candidate_status: state } } as never)).toBe(false)
+    expect(activationInFlight(undefined)).toBe(false)
+  })
   it('siteLibraryDetached is true only for a promoted withdrawal with no active version', () => {
     const b = { id: 'b', policy_id: 'w1', binding_revision: 6, active_policy_version: 0, last_claimed_policy_version: 3 }
     expect(siteLibraryDetached({ binding: b, latest_candidate: { candidate_status: 'promoted' }, latest_detach: true } as never)).toBe(true)
