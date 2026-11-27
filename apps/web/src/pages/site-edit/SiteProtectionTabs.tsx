@@ -210,9 +210,20 @@ export function useSiteLibrary(kind: 'cc' | 'waf', { siteId, scopeId, accessToke
     queryFn: ({ signal }) => securityPoliciesApi.getActivationStatus(accessToken, siteId, kind, signal),
   })
   const policies = policiesQuery.data?.items ?? []
-  const boundPolicyID = activationQuery.data?.binding?.policy_id
+  // A promoted withdrawal leaves the binding naming its last library with no active version: the site
+  // has no library of this kind. That library stays as detachedPolicy, to be applied again.
+  const detached = siteLibraryDetached(activationQuery.data)
+  const bindingPolicyID = activationQuery.data?.binding?.policy_id
+  const boundPolicyID = detached ? undefined : bindingPolicyID
   const activePolicy = policies.find((policy) => policy.id === boundPolicyID)
-  return { policiesQuery, activationQuery, policies, boundPolicyID, activePolicy }
+  const detachedPolicy = detached ? policies.find((policy) => policy.id === bindingPolicyID) : undefined
+  return { policiesQuery, activationQuery, policies, boundPolicyID, activePolicy, detachedPolicy }
+}
+
+/** The site's library of this kind was withdrawn: the latest release is a promoted detach and no version is active. */
+export function siteLibraryDetached(status: SecurityActivationStatus | undefined): boolean {
+  return Boolean(status?.latest_detach) && status?.latest_candidate?.candidate_status === 'promoted' &&
+    (status?.binding?.active_policy_version ?? 0) === 0
 }
 
 /** A new library made for the site (unique per site, at most 128 characters). */
@@ -502,7 +513,7 @@ export function SiteWAFTab({ siteId, host, scopeKind, scopeId, accessToken, perm
   const isAdmin = scopeKind === 'platform'
   const [librarySearch, setLibrarySearch] = useState('')
   const tierName = useTierName()
-  const { policiesQuery, activationQuery, policies, boundPolicyID, activePolicy } = useSiteLibrary('waf', { siteId, scopeId, accessToken, enabled: canReadPolicies })
+  const { policiesQuery, activationQuery, policies, boundPolicyID, activePolicy, detachedPolicy } = useSiteLibrary('waf', { siteId, scopeId, accessToken, enabled: canReadPolicies })
   // Catalog set names identify the self-developed rules of each module.
   const catalogQuery = useQuery({
     queryKey: ['site-protection', scopeId, 'waf-catalog-names'],
@@ -604,6 +615,12 @@ export function SiteWAFTab({ siteId, host, scopeKind, scopeId, accessToken, perm
       const fields = { ...fieldsOf(activePolicy), rules: await applyTier(await applyModules(activePolicy.rules.filter((rule) => !isQuickBlockRuleID(rule.id)), modulesChanged)),
         ...(settingsChanged ? { waf_settings: wafSettingsFromDraft(settings) } : {}) }
       return saveSiteLibrary({ accessToken, siteId, policy: activePolicy, fields, status, target })
+    }
+    // Switching a withdrawn site back on applies its last library again (modules/tier as chosen here).
+    if (detachedPolicy) {
+      const fields = { ...fieldsOf(detachedPolicy), rules: await applyTier(await applyModules(detachedPolicy.rules.filter((rule) => !isQuickBlockRuleID(rule.id)), modulesChanged)),
+        ...(settingsChanged ? { waf_settings: wafSettingsFromDraft(settings) } : {}) }
+      return saveSiteLibrary({ accessToken, siteId, policy: detachedPolicy, fields, status, target })
     }
     // 一键启用：the system default WAF (系统设置 > 网站默认 > 安全设置), as the rules page's 使用系统默认.
     // CU-SITE-04: the default is the base; only the modules switched here change it (an unbound

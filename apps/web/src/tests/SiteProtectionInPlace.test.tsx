@@ -8,7 +8,7 @@ import { firewallActionApi } from '../api/firewallAction'
 import { rulePacksApi } from '../api/rulePacks'
 import { securityPoliciesApi, type SecurityPolicy } from '../api/securityPolicies'
 import { securitySystemRulesApi } from '../api/securitySystemRules'
-import { SiteCCTab, SiteWAFTab } from '../pages/site-edit/SiteProtectionTabs'
+import { SiteCCTab, siteLibraryDetached, SiteWAFTab } from '../pages/site-edit/SiteProtectionTabs'
 import { editCCRules, editWAFSourceRules, managedRuleNames } from '../pages/site-edit/sitePolicyEdits'
 import { renderWithProviders } from '../test/render'
 
@@ -160,6 +160,25 @@ describe('站点 CC/WAF 就地修改', () => {
   })
 
   // 名单保留整理/去重/清空；保存失败回滚到服务端值。
+  // A promoted withdrawal keeps the binding's policy ID with no active version: the site has no library,
+  // and switching the library back on applies the last one again.
+  it('WAF: after a promoted withdrawal the switch is off and switching it on applies the last library again', async () => {
+    const wafPolicy = { ...ccPolicy, id: 'w1', kind: 'waf' as const, name: '本站 WAF', version: 3, rules: [] }
+    vi.mocked(securityPoliciesApi.list).mockResolvedValue({ items: [wafPolicy], total: 1, page: 1, limit: 100 })
+    vi.mocked(securityPoliciesApi.getActivationStatus).mockResolvedValue({
+      binding: { id: 'b', policy_id: 'w1', binding_revision: 6, active_policy_version: 0, last_claimed_policy_version: 3 },
+      latest_candidate: { candidate_status: 'promoted' }, operation: null, latest_detach: true } as never)
+    render('waf')
+    const card = await screen.findByRole('region', { name: '站点 WAF 规则库' })
+    const toggle = within(card).getByRole('switch', { name: '站点 WAF 规则库' })
+    await waitFor(() => expect(toggle).not.toBeChecked())
+    await userEvent.click(toggle)
+    await waitFor(() => expect(securityPoliciesApi.publishActivation).toHaveBeenCalled())
+    expect(vi.mocked(securityPoliciesApi.publishActivation).mock.calls[0]![1]).toMatchObject({ site_id: siteID, policy_id: 'w1' })
+    expect(vi.mocked(securityPoliciesApi.publishActivation).mock.calls[0]![1]).not.toMatchObject({ detach: true })
+    expect(securityPoliciesApi.create).not.toHaveBeenCalled()
+  })
+
   it('CC: 整理 / 去重 / 清空 edit the IP list and save at once', async () => {
     // the stored library follows each save (as the server does)
     let stored: SecurityPolicy = { ...ccPolicy, rules: editCCRules(ccPolicy.rules, { blacklist: ['203.0.113.9'] }) }
@@ -394,6 +413,16 @@ describe('站点 CC/WAF 就地修改', () => {
 })
 
 describe('规则编辑纯函数', () => {
+  it('siteLibraryDetached is true only for a promoted withdrawal with no active version', () => {
+    const b = { id: 'b', policy_id: 'w1', binding_revision: 6, active_policy_version: 0, last_claimed_policy_version: 3 }
+    expect(siteLibraryDetached({ binding: b, latest_candidate: { candidate_status: 'promoted' }, latest_detach: true } as never)).toBe(true)
+    for (const state of ['claimed', 'canary', 'failed', 'cancelled']) {
+      expect(siteLibraryDetached({ binding: b, latest_candidate: { candidate_status: state }, latest_detach: true } as never)).toBe(false)
+    }
+    expect(siteLibraryDetached({ binding: { ...b, active_policy_version: 3 }, latest_candidate: { candidate_status: 'promoted' }, latest_detach: true } as never)).toBe(false)
+    expect(siteLibraryDetached({ binding: b, latest_candidate: { candidate_status: 'promoted' }, latest_detach: false } as never)).toBe(false)
+    expect(siteLibraryDetached(undefined)).toBe(false)
+  })
   it('editCCRules orders whitelist, crawler block, blacklist, own rules, then the default protection', () => {
     const rules = editCCRules(ccPolicy.rules, { presetNames: ['宽松', '滑块验证'], presetRules: [sliderRule], whitelist: ['10.0.0.1'], blacklist: ['10.0.0.2'],
       crawler: { mode: 'block', tokens: ['Baiduspider'] } })
